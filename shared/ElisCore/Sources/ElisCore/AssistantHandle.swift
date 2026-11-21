@@ -64,21 +64,29 @@ public enum AssistantHandle {
             if cyrillicStopwords.contains(token) { continue }
             var ascii = ""
             ascii.reserveCapacity(token.count)
+            var hasCyrillic = false
             for ch in token {
                 if let mapped = translitMap[ch] {
+                    if ch != "'" && ch != "’" {
+                        hasCyrillic = true
+                    }
                     ascii.append(mapped)
                 } else {
                     ascii.append(ch)
                 }
             }
-            if ascii.isEmpty || latinStopwords.contains(ascii) { continue }
+            if ascii.isEmpty { continue }
+            if !hasCyrillic && latinStopwords.contains(ascii) { continue }
             words.append(ascii)
         }
         return words
     }
 
     private static func isWordChar(_ ch: Character) -> Bool {
-        ("a"..."z").contains(ch) || ("0"..."9").contains(ch) || translitMap[ch] != nil
+        if ch.isASCII && (ch.isLetter || ch.isNumber) {
+            return true
+        }
+        return translitMap[ch] != nil
     }
 
     private static let cyrillicStopwords: Set<String> = [
