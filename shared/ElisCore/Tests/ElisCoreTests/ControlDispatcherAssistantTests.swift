@@ -67,6 +67,8 @@ struct ControlDispatcherAssistantTests {
         #expect(sent.kind == .sent && sent.text == "run the tests" && sent.to == ["claude1-uuid", "shell1-uuid"])
         #expect(chat.marks == ["claude1-uuid": .waiting, "shell1-uuid": .waiting])
         #expect(actions.streamInputs.isEmpty)
+        #expect(actions.sentEntries == [sent])
+        #expect(response?.result?.assistant?.entries == [sent])
     }
 
     @Test func sendSkipsBlockedAndMarksThem() async throws {
@@ -102,6 +104,8 @@ struct ControlDispatcherAssistantTests {
 
         #expect(response?.ok == true)
         #expect(response?.result?.assistant?.delivered == [])
+        #expect(response?.result?.assistant?.entries == nil)
+        #expect(actions.sentEntries.isEmpty)
         #expect(chat.entries(last: nil).isEmpty)
         #expect(chat.marks == ["codex1-uuid": .notDelivered])
     }

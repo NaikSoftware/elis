@@ -345,6 +345,8 @@ public protocol ControlActions {
     func assistantPeers() -> [AssistantPeer]?
     /// assistantInput writes a `user` entry, or a `reply` in its marked form, into the assistant's stream.
     func assistantInput(_ entry: AssistantEntry)
+    /// assistantSent reports the `sent` entry `assistant.send` appended, so the host can emit it.
+    func assistantSent(_ entry: AssistantEntry)
     /// assistantProviders lists the assistant CLIs installed here; nil on a host without the assistant.
     func assistantProviders() -> [SessionLauncher]?
     func assistantProviderChanged(_ provider: SessionLauncher)

@@ -1109,12 +1109,14 @@ final class MockControlActions: ControlActions {
     var peers: [AssistantPeer]?
     var providers: [SessionLauncher]?
     var streamInputs: [AssistantEntry] = []
+    var sentEntries: [AssistantEntry] = []
     var changedProviders: [SessionLauncher] = []
     var showWindows: [String?] = []
     var nextShowAssistantResponse = ControlResponse(ok: false, error: ControlActionsUnsupported.message("assistant.show"))
 
     func assistantPeers() -> [AssistantPeer]? { peers }
     func assistantInput(_ entry: AssistantEntry) { streamInputs.append(entry) }
+    func assistantSent(_ entry: AssistantEntry) { sentEntries.append(entry) }
     func assistantProviders() -> [SessionLauncher]? { providers }
     func assistantProviderChanged(_ provider: SessionLauncher) { changedProviders.append(provider) }
 

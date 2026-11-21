@@ -19,6 +19,8 @@ public extension ControlActions {
 
     func assistantInput(_: AssistantEntry) {}
 
+    func assistantSent(_: AssistantEntry) {}
+
     func assistantProviders() -> [SessionLauncher]? { nil }
 
     func assistantProviderChanged(_: SessionLauncher) {}

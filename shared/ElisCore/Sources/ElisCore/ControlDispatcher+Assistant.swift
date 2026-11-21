@@ -61,11 +61,14 @@ extension ControlDispatcher {
                 skippedIDs.append(peer.sessionID)
             }
         }
+        var sent: AssistantEntry?
         if !delivered.isEmpty {
-            chat.append(.sent, text: text, to: delivered.map(\.sessionID), now: Date().timeIntervalSince1970)
+            sent = chat.append(.sent, text: text, to: delivered.map(\.sessionID), now: Date().timeIntervalSince1970)
         }
         chat.markSkipped(skippedIDs)
-        return assistantSuccess(ControlAssistantResult(delivered: delivered.map { handle($0, in: directory) }, skipped: skipped))
+        if let sent { actions.assistantSent(sent) }
+        return assistantSuccess(ControlAssistantResult(entries: sent.map { [$0] }, delivered: delivered.map { handle($0, in: directory) },
+                                                       skipped: skipped))
     }
 
     private func dispatchAssistantReply(_ target: String?, _ args: ControlArgs, directory: AssistantDirectory) -> ControlResponse {
