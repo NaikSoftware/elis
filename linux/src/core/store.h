@@ -92,6 +92,7 @@ struct Settings {
     QString autoFollowAttention = QStringLiteral("off"); // off s5 s10 s30 s60 m5: idle time before the window follows a blocked session
     bool autoFollowStayOnActive = false;                  // hold the selection while the current session is active
     QString flaggedViewLayout = QStringLiteral("flat");   // flat (session : workspace) | plain | tree
+    QString sidebarDensity = QStringLiteral("default");   // default | compact
     // Key Mapping: the directory holding keymap.conf and hooks.conf; "" = the default
     QString configDirectory;
     QString restoreMode = QStringLiteral("none"); // none | rerun | live; takes effect at the next launch

@@ -660,34 +660,31 @@ private Q_SLOTS:
         QCOMPARE(term->font().pointSizeF(), base - 1);
     }
 
-    void recentButtonListsTheOtherRecentSessions()
+    void sessionPillListsWhatNeedsYouThenRecent()
     {
         Store store;
         MainWindow w(store, dir.filePath("recent.json"));
         w.restore({});
         const QString ws = store.addWorkspace("w");
-        const QString a = store.addSession(ws, "alpha", {}), b = store.addSession(ws, "beta", {});
+        const QString a = store.addSession(ws, "alpha", {}), b = store.addSession(ws, "beta", {}), c = store.addSession(ws, "gamma", {});
         store.select(a);
-        w.show();
-        QToolButton *clock = nullptr;
-        for (auto *t : w.findChildren<QToolButton *>())
-            if (t->defaultAction() && t->defaultAction()->text().startsWith(QLatin1String("Recent sessions")))
-                clock = t;
-        QVERIFY(clock && !clock->isEnabled()); // nowhere else to go yet
         store.select(b);
-        QVERIFY(clock->isEnabled());
+        store.select(c);
+        store.setStatus(a, "blocked");
+        w.show();
+        QAbstractButton *pill = nullptr;
+        for (auto *t : w.findChildren<QAbstractButton *>())
+            if (t->accessibleName() == QLatin1String("Session switcher"))
+                pill = t;
+        QVERIFY(pill && pill->isVisible());
+        pill->click();
+        auto *list = w.findChild<QFrame *>("palette")->findChild<QListWidget *>();
+        QTRY_VERIFY(list->isVisible());
         QStringList listed;
-        QTimer::singleShot(0, this, [&] {
-            auto *menu = qobject_cast<QMenu *>(QApplication::activePopupWidget());
-            QVERIFY(menu);
-            for (QAction *x : menu->actions())
-                listed << x->text();
-            menu->actions().first()->trigger();
-            menu->close();
-        });
-        clock->click();
-        QTRY_COMPARE(listed, QStringList{QStringLiteral("alpha\tw")});
-        QCOMPARE(store.selected, a);
+        for (int i = 0; i < list->count(); ++i)
+            listed << list->item(i)->text();
+        QCOMPARE(listed, (QStringList{"alpha", "beta"})); // the shown session is not a jump target
+        QTest::keyClick(list, Qt::Key_Escape);
     }
 
     void footerFilterNarrowsTheTreeAndTintReachesTheRow()

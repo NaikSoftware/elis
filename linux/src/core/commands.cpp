@@ -238,6 +238,14 @@ static QJsonObject sidebarCommand(Store &store, const QString &cmd, const QJsonO
         store.setSettings(s);
         return ok({{"text", s.flaggedViewLayout}});
     }
+    if (cmd == QLatin1String("sidebar.density")) {
+        if (mode != QLatin1String("default") && mode != QLatin1String("compact") && mode != QLatin1String("toggle"))
+            return fail(QStringLiteral("invalid sidebar density: %1").arg(mode));
+        Settings s = store.settings;
+        s.sidebarDensity = mode != QLatin1String("toggle") ? mode : s.sidebarDensity == QLatin1String("compact") ? QStringLiteral("default") : QStringLiteral("compact");
+        store.setSettings(s);
+        return ok({{"text", s.sidebarDensity}});
+    }
     // sidebar.expand | sidebar.collapse: workspace rows; collapse keeps the current workspace open
     const Workspace *cur = store.workspaceOf(store.selected);
     for (const Workspace &w : std::as_const(store.workspaces))

@@ -8,9 +8,11 @@ Legend: [x] done · [ ] todo · (fork) = fork-only feature, not in upstream docs
 
 ## Phase 1: sidebar, chrome, sessions
 
-- [x] Title bar strip: sidebar toggle, session name
-- [x] Title bar: file panel toggle (fork, left of the sidebar toggle); split button
-- [x] Sidebar rows: workspace = chevron + grid icon + name; session = terminal icon + name + status dot at the right
+- [x] Title bar strip in the window's toolbar row (KDE keeps its decoration and menu bar): file panel and sidebar toggles,
+  the centred session pill (agent logo · workspace › session · context · Ctrl+P), split (its pane state) and dashboard
+- [x] Sidebar rows: workspace = chevron + workspace-stack glyph + name in a tinted band; session = terminal glyph or agent
+  logo (split glyph when split) + name + status glyph at the right; selection pill in the group's tint, else the copper accent
+- [x] Sidebar density (Settings ▸ Appearance, `sidebar density`); app accent copper as the palette's Highlight
 - [x] Session icon = logo of the agent in its foreground process group (claude, codex, opencode, agy), sampled every 2 s (fork)
 - [x] Workspace "+" on hover: menu of Terminal + agents found on the login shell PATH, with logos; repeat button for the last choice (fork)
 - [x] Remembered folder per workspace (last cwd its panes reported); new sessions open there (fork)
@@ -49,7 +51,8 @@ Legend: [x] done · [ ] todo · (fork) = fork-only feature, not in upstream docs
 - [x] Session palette ⌃P, action palette ⌃⇧P (fuzzy, Ctrl-J/K, disabled actions greyed)
 - [x] Custom-commands palette ⌃⇧O → Ctrl+Alt+O (Ctrl+Shift+O is ⌘O, Open Directory, so its Shift becomes Alt)
 - [x] Ctrl-Tab MRU switcher (hold Ctrl, Tab walks, release switches; one tap flips back)
-- [x] Recent-sessions title-bar button (a menu under the clock, not a popover): the last 15 open sessions, then the recently closed ones (persisted with the window state); a closed Claude Code session reopens with `claude --resume <id>`
+- [x] Session switcher pill: opens the session palette with the sessions that need you, then the recent ones, then the
+  recently closed (persisted with the window state); a closed Claude Code session reopens with `claude --resume <id>`
 - [x] Flagged view layout (Settings ▸ General: Flat list `session : workspace`, Flat list names only, Workspace tree sharing the
   tree's collapse state), View ▸ Edit Flagged Sessions… / Edit Focused Workspaces… (live checklists; the empty flagged view links
   to the first). The flat list follows tree order, not a per-window flagged order of its own
@@ -126,7 +129,7 @@ Legend: [x] done · [ ] todo · (fork) = fork-only feature, not in upstream docs
   with run/after cursors; the CLI polls it), `workspace go|collapse|expand|flag`, `session context|reveal|collapse|expand|focus|resize|
   copy|paste|select-all|search`, `session text` (visible screen; `--all` and `--lines` page the scrollback through the view's
   scrollbar), `session new --parent` as `session.companion.new`, `surface zoom`, `sidebar [show|hide|toggle]|mode|flagged-layout|
-  expand|collapse|width`, `pick` (the palette; exits 0 picked/custom, 2 cancelled), `ask` (a dialog; buttons, hotkeys, line or
+  density|expand|collapse|width`, `pick` (the palette; exits 0 picked/custom, 2 cancelled), `ask` (a dialog; buttons, hotkeys, line or
   multiline input, choices with other; exits 0/2/3), `msg send|read|ack` (panes export `ELIS_PANE_ID`), `recent list|open <id>|clear`,
   `notify <body>`, repeated `--target` for `session close|move`. Read-back `context`, `collapsed`, `splitFocused`, `ask`,
   `sidebarFlaggedLayout`, `sidebarWidth`, `zoomedSurface`, `pickPending`, `askPending`. Absent features answer master's

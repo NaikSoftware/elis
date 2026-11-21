@@ -22,11 +22,15 @@ ctl session status active --target "$first"
 ctl session new --name server --cwd "$root" --no-select >/dev/null
 t=$(ctl session new --name tests --cwd "$root/tests" --no-select)
 ctl session status completed --target "$t"
-c=$(ctl session new --name "claude · copy" --cwd /tmp --workspace-name website --create-workspace)
+c=$(ctl session new --name "claude · copy" --cwd "$root" --workspace-name website --create-workspace)
+ctl session context "Landing page copy for the next release" --target "$c"
 ctl session status blocked --target "$c"
 ctl session new --name "dev server" --cwd /usr --workspace-name website --no-select >/dev/null
 ctl session new --name nvim --cwd "$HOME" --workspace-name dotfiles --create-workspace --no-select >/dev/null
-ctl session type $'ls -la /usr | head -12\n' --target "$c"
+ctl workspace tint purple --target elis
+ctl workspace tint orange --target website
+ctl workspace tint blue --target dotfiles
+ctl session type $'ls -la | head -12\n' --target "$c"
 # a stand-in agent: the sidebar only reads the foreground argv's name
 mkdir -p "$ELIS_STATE_DIR/fake" && ln -sf "$(command -v sleep)" "$ELIS_STATE_DIR/fake/claude"
 ctl session type "$ELIS_STATE_DIR/fake/claude 30"$'\n' --target "$first"

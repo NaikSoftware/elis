@@ -17,6 +17,7 @@ public:
         std::function<void()> run;
         bool enabled = true; // a disabled action still shows and matches, greyed out, and does nothing
         std::function<void()> preview; // runs when the row becomes current (the theme picker's live preview)
+        QString id; // what the row stands for, for a caller that reorders its items
     };
 
     explicit Palette(QWidget *window);

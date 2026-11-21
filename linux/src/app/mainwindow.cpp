@@ -69,6 +69,14 @@
 // A live pane's shell runs under its daemon, behind the attach client Konsole started; Konsole sees only the client.
 // A very light wash of the shown session's background tint over the terminal, so panels tell apart by colour.
 // Not in the stack's layout: it covers the whole stack and lets every mouse event through to the terminal.
+// elis's chrome glyphs: the text colour, dimmed as its title-bar and footer buttons are
+static QColor chromeInk()
+{
+    QColor c = QApplication::palette().color(QPalette::WindowText);
+    c.setAlphaF(0.58);
+    return c;
+}
+
 class TintWash : public QWidget
 {
 public:
@@ -102,6 +110,99 @@ protected:
 
 private:
     QColor m_color;
+};
+
+// elis's title-bar session switcher: one line naming the shown session, centred in the title strip, opening the
+// session palette. The context truncates first, then the workspace breadcrumb drops whole.
+class SessionPill : public QAbstractButton
+{
+public:
+    SessionPill()
+    {
+        setFocusPolicy(Qt::NoFocus);
+        setSizePolicy(QSizePolicy::Maximum, QSizePolicy::Fixed);
+        setAccessibleName(tr("Session switcher"));
+    }
+    void set(const QString &agent, const QString &workspace, const QString &session, const QString &context, const QString &hint)
+    {
+        m_agent = agent, m_workspace = workspace, m_session = session, m_context = context, m_hint = hint;
+        updateGeometry();
+        update();
+    }
+    QSize sizeHint() const override
+    {
+        const qreal w = pad * 2 + logo + gap + QFontMetricsF(bold()).horizontalAdvance(m_session) + parts(m_workspace, m_context, m_hint);
+        return QSize(qMin(472, qCeil(w)), 28);
+    }
+    QSize minimumSizeHint() const override { return QSize(160, 28); }
+
+protected:
+    void enterEvent(QEnterEvent *e) override { update(), QAbstractButton::enterEvent(e); }
+    void leaveEvent(QEvent *e) override { update(), QAbstractButton::leaveEvent(e); }
+    void paintEvent(QPaintEvent *) override
+    {
+        QPainter p(this);
+        p.setRenderHint(QPainter::Antialiasing);
+        // the application palette, as the sidebar and chrome glyphs: a style may give toolbar children a header palette
+        const QColor ink = QApplication::palette().color(QPalette::WindowText);
+        auto faded = [&](qreal a) { QColor c = ink; c.setAlphaF(a); return c; };
+        const QRectF box = QRectF(rect()).adjusted(0.5, 0.5, -0.5, -0.5);
+        p.setPen(QPen(faded(0.10), 1));
+        p.setBrush(faded(underMouse() && isEnabled() ? 0.12 : 0.07));
+        p.drawRoundedRect(box, 9, 9);
+        const QFontMetricsF fm(font()), bm(bold()), sm(small());
+        // the line is centred in the pill; what does not fit goes context first, then the workspace
+        qreal room = width() - pad * 2;
+        const qreal fixed = logo + gap + (m_hint.isEmpty() ? 0 : gap + sm.horizontalAdvance(m_hint));
+        const QString ws = m_workspace.isEmpty() ? QString() : m_workspace + QStringLiteral(" ›");
+        const bool showWs = !ws.isEmpty() && fixed + fm.horizontalAdvance(ws) + gap + bm.horizontalAdvance(m_session) <= room;
+        const qreal wsW = showWs ? fm.horizontalAdvance(ws) + gap : 0;
+        const QString name = bm.elidedText(m_session, Qt::ElideRight, qMax<qreal>(0, room - fixed - wsW));
+        const qreal nameW = bm.horizontalAdvance(name);
+        const qreal ctxRoom = room - fixed - wsW - nameW - gap;
+        const QString ctx = m_context.isEmpty() || ctxRoom < 40 ? QString() : fm.elidedText(m_context, Qt::ElideRight, ctxRoom);
+        const qreal used = fixed + wsW + nameW + (ctx.isEmpty() ? 0 : gap + fm.horizontalAdvance(ctx));
+        qreal x = pad + (room - used) / 2;
+        const qreal cy = height() / 2.0;
+        p.drawPixmap(QRectF(x, cy - logo / 2, logo, logo).toRect(), launcherIcon(m_agent, faded(0.7)).pixmap(int(logo)));
+        x += logo + gap;
+        auto text = [&](const QString &t, const QFont &f, const QColor &c) {
+            p.setFont(f);
+            p.setPen(c);
+            const qreal w = QFontMetricsF(f).horizontalAdvance(t);
+            p.drawText(QRectF(x, 0, w + 1, height()), Qt::AlignVCenter | Qt::AlignLeft, t);
+            x += w + gap;
+        };
+        if (showWs)
+            text(ws, font(), faded(0.58));
+        text(name, bold(), ink);
+        if (!ctx.isEmpty())
+            text(ctx, font(), faded(0.58));
+        if (!m_hint.isEmpty())
+            text(m_hint, small(), faded(isEnabled() ? 0.36 : 0.2));
+    }
+
+private:
+    static constexpr qreal pad = 12, gap = 9, logo = 14;
+    QFont bold() const
+    {
+        QFont f = font();
+        f.setWeight(QFont::DemiBold);
+        return f;
+    }
+    QFont small() const
+    {
+        QFont f = font();
+        f.setPointSizeF(f.pointSizeF() * 0.85);
+        return f;
+    }
+    qreal parts(const QString &ws, const QString &ctx, const QString &hint) const
+    {
+        const QFontMetricsF fm(font());
+        return (ws.isEmpty() ? 0 : gap + fm.horizontalAdvance(ws + QStringLiteral(" ›"))) + (ctx.isEmpty() ? 0 : gap + fm.horizontalAdvance(ctx))
+            + (hint.isEmpty() ? 0 : gap + QFontMetricsF(small()).horizontalAdvance(hint));
+    }
+    QString m_agent, m_workspace, m_session, m_context, m_hint;
 };
 
 static int shellPid(KParts::ReadOnlyPart *part)
@@ -197,10 +298,12 @@ MainWindow::MainWindow(Store &store, const QString &statePath)
 {
     m_tree = new Sidebar(store);
 
-    // footer: new session, new workspace, and the flagged view toggle, as elis's sidebar bar
-    auto footerButton = [](const QString &icon, const QString &tip) {
+    // footer: new workspace and new session on the left, the workspace filter and the flagged view on the right, as elis's sidebar bar
+    auto footerButton = [](const QString &glyph, const QString &tip) {
         auto *b = new QToolButton;
-        b->setIcon(QIcon::fromTheme(icon));
+        if (!glyph.isEmpty())
+            b->setIcon(chromeIcon(glyph, chromeInk()));
+        b->setIconSize(QSize(20, 20));
         b->setToolTip(tip);
         b->setAccessibleName(tip);
         b->setAutoRaise(true);
@@ -213,11 +316,16 @@ MainWindow::MainWindow(Store &store, const QString &statePath)
     m_hooks->pathPrefix = QCoreApplication::applicationDirPath();
     connect(m_events, &EventSource::event, m_hooks, &HookRunner::fire);
     connect(m_hooks, &HookRunner::failed, this, [this](const QString &hook, const QString &message) { notifyFailure(tr("Hook failed"), hook + QStringLiteral(": ") + message); });
-    auto *newSessionButton = footerButton(QStringLiteral("tab-new"), tr("New Session"));
-    connect(newSessionButton, &QToolButton::clicked, this, [this] { newSession(currentWorkspace()); });
-    auto *newWorkspaceButton = footerButton(QStringLiteral("list-add"), tr("New Workspace"));
+    auto *newSessionButton = footerButton(QStringLiteral("session-plus"), tr("New Session"));
+    auto *newSessionMenu = new QMenu(newSessionButton);
+    newSessionMenu->addAction(tr("New Session"), this, [this] { newSession(currentWorkspace()); });
+    newSessionMenu->addAction(tr("Open Directory…"), this, [this] { m_actions.value(QStringLiteral("open_directory"))->trigger(); });
+    newSessionButton->setMenu(newSessionMenu);
+    newSessionButton->setPopupMode(QToolButton::InstantPopup);
+    newSessionButton->setStyleSheet(QStringLiteral("QToolButton::menu-indicator{image:none;}"));
+    auto *newWorkspaceButton = footerButton(QStringLiteral("workspace-stack"), tr("New Workspace"));
     connect(newWorkspaceButton, &QToolButton::clicked, this, &MainWindow::newWorkspace);
-    m_flagButton = footerButton(QStringLiteral("flag"), tr("Flagged Sessions"));
+    m_flagButton = footerButton(QStringLiteral("flag-lucide"), tr("Flagged Sessions"));
     m_flagButton->setCheckable(true);
     connect(m_flagButton, &QToolButton::toggled, this, [this](bool on) {
         m_tree->setFlaggedView(on);
@@ -225,10 +333,10 @@ MainWindow::MainWindow(Store &store, const QString &statePath)
         m_saveTimer.start();
     });
     auto *footer = new QHBoxLayout;
-    footer->setContentsMargins(8, 4, 8, 6);
+    footer->setContentsMargins(10, 6, 10, 6);
     footer->setSpacing(2);
-    footer->addWidget(newSessionButton);
     footer->addWidget(newWorkspaceButton);
+    footer->addWidget(newSessionButton);
     footer->addStretch(1);
     m_filterButton = footerButton({}, tr("Toggle Workspace Filter"));
     connect(m_filterButton, &QToolButton::clicked, this, [this] { m_store.setFilter(!m_store.focusEnabled); });
@@ -242,6 +350,15 @@ MainWindow::MainWindow(Store &store, const QString &statePath)
     side->setContentsMargins(0, 6, 0, 0);
     side->setSpacing(0);
     side->addWidget(m_tree, 1);
+    auto *hairline = new QFrame; // elis's footer rule: the text colour at 10%
+    hairline->setFixedHeight(1);
+    hairline->setAutoFillBackground(true);
+    QPalette rule = hairline->palette();
+    QColor line = rule.color(QPalette::WindowText);
+    line.setAlphaF(0.10);
+    rule.setColor(QPalette::Window, line);
+    hairline->setPalette(rule);
+    side->addWidget(hairline);
     side->addLayout(footer);
 
     m_stack = new QStackedWidget;
@@ -281,15 +398,16 @@ MainWindow::MainWindow(Store &store, const QString &statePath)
 
     createMenus();
 
-    // title strip: sidebar toggle and the session name, as elis's title bar
+    // title strip: elis's title bar in the window's own toolbar row. The panel toggles, the session pill centred
+    // (or, with the pill hidden, the plain workspace / session / context labels), the pane buttons on the right.
     auto *strip = new QToolBar;
     strip->setObjectName(QStringLiteral("titleStrip"));
     strip->setMovable(false);
     strip->setFloatable(false);
-    strip->setIconSize(QSize(16, 16));
+    strip->setIconSize(QSize(20, 20)); // chromeIcon draws its 15-point glyph inside a 20-point box
     strip->toggleViewAction()->setVisible(false);
     // a plain button, not the checkable menu action: elis's toggle never renders pressed
-    const QColor ink = palette().color(QPalette::WindowText);
+    const QColor ink = chromeInk();
     m_chrome.insert(QStringLiteral("filePanel"), strip->addAction(chromeIcon(QStringLiteral("filepanel"), ink), tr("Toggle File Panel"),
                                                                   m_actions.value(QStringLiteral("toggle_file_panel")), &QAction::trigger));
     m_chrome.insert(QStringLiteral("sidebarToggle"), strip->addAction(chromeIcon(QStringLiteral("sidebar"), ink), tr("Toggle Sidebar"), m_sidebarAction, &QAction::trigger));
@@ -307,19 +425,25 @@ MainWindow::MainWindow(Store &store, const QString &statePath)
     m_context->setContentsMargins(10, 0, 0, 0);
     m_context->setForegroundRole(QPalette::PlaceholderText);
     m_chrome.insert(QStringLiteral("sessionContext"), strip->addWidget(m_context));
-    auto *spacer = new QWidget;
-    spacer->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Preferred);
-    strip->addWidget(spacer);
-    // the mouse form of the Ctrl-Tab switcher, dimmed while there is nowhere else to go
-    m_recentAction = strip->addAction(chromeIcon(QStringLiteral("clock"), ink), tr("Recent sessions (Ctrl+Tab)"), this, &MainWindow::recentMenu);
-    m_recentAction->setEnabled(false);
+    auto spacer = [] {
+        auto *w = new QWidget;
+        w->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Preferred);
+        return w;
+    };
+    strip->addWidget(spacer());
+    auto *pill = new SessionPill;
+    pill->setToolTip(tr("Session switcher"));
+    connect(pill, &QAbstractButton::clicked, m_actions.value(QStringLiteral("session_palette")), &QAction::trigger);
+    m_pill = pill;
+    m_recentAction = strip->addWidget(pill);
     m_chrome.insert(QStringLiteral("recentSessions"), m_recentAction);
-    m_chrome.insert(QStringLiteral("customCommands"), strip->addAction(QIcon::fromTheme(QStringLiteral("overflow-menu")), tr("Custom Commands"),
-                                                                       this, &MainWindow::customCommandPalette));
+    strip->addWidget(spacer());
     m_chrome.insert(QStringLiteral("split"),
                     strip->addAction(chromeIcon(QStringLiteral("split"), ink), tr("Split"), m_actions.value(QStringLiteral("toggle_split")), &QAction::trigger));
-    m_chrome.insert(QStringLiteral("dashboard"), strip->addAction(chromeIcon(QStringLiteral("grid"), ink), tr("Dashboard"), m_actions.value(QStringLiteral("dashboard")),
+    m_chrome.insert(QStringLiteral("dashboard"), strip->addAction(chromeIcon(QStringLiteral("dashboard"), ink), tr("Dashboard"), m_actions.value(QStringLiteral("dashboard")),
                                                                   &QAction::trigger));
+    m_chrome.insert(QStringLiteral("customCommands"), strip->addAction(QIcon::fromTheme(QStringLiteral("overflow-menu")), tr("Custom Commands"),
+                                                                       this, &MainWindow::customCommandPalette));
     addToolBar(Qt::TopToolBarArea, strip);
     m_strip = strip;
 
@@ -627,11 +751,26 @@ void MainWindow::createMenus()
             std::stable_sort(all.begin(), all.end(), [](Session *a, Session *b) { return a->displayName().compare(b->displayName(), Qt::CaseInsensitive) < 0; });
         }
         for (Session *s : all)
-            items.append({s->displayName(), m_store.workspaceOf(s->id)->name + QStringLiteral(" · ") + s->cwd, [this, id = s->id] { m_store.select(id); }});
+            items.append({s->displayName(), m_store.workspaceOf(s->id)->name + QStringLiteral(" · ") + s->cwd, [this, id = s->id] { m_store.select(id); }, true, {}, s->id});
         return items;
     };
     nav->addAction(action(QStringLiteral("session_palette"), tr("Go to Session…"), QStringLiteral("search"), QKeySequence(QStringLiteral("Ctrl+P")),
-                          [this, sessionItems] { m_palette->open(tr("Go to session…"), sessionItems(false)); }));
+                          [this, sessionItems] {
+                              // elis's switcher: the sessions that need you, the recent ones, then the recently closed
+                              QList<Palette::Item> items, rest;
+                              for (const Palette::Item &it : sessionItems(true)) {
+                                  const Session *s = m_store.session(it.id);
+                                  if (s->id == m_store.selected)
+                                      continue;
+                                  (s->status == QLatin1String("blocked") || s->status == QLatin1String("completed") ? items : rest) << it;
+                              }
+                              items << rest;
+                              for (const auto &c : m_store.closed.mid(0, 15)) {
+                                  const Workspace *w = m_store.workspace(c.workspaceId);
+                                  items.append({c.title, tr("closed") + (w ? QStringLiteral(" · ") + w->name : QString()), [this, id = c.id] { m_store.reopenClosed(id); }});
+                              }
+                              m_palette->open(tr("Jump to a session"), items);
+                          }));
     nav->addAction(action(QStringLiteral("command_palette"), tr("Action Palette…"), QStringLiteral("run-build"), QKeySequence(QStringLiteral("Ctrl+Shift+P")), [this] {
         QList<Palette::Item> items;
         for (QAction *a : actions())
@@ -1265,6 +1404,9 @@ void MainWindow::showSelected()
     const QString name = s ? s->displayName() : QString();
     m_title->setText(name);
     m_context->setText(s ? s->context : QString());
+    static_cast<SessionPill *>(m_pill)->set(s ? s->agent : QString(), s ? m_store.workspaceOf(s->id)->name.trimmed() : QString(), s ? name : QStringLiteral("Elis"),
+                                            s ? s->context : QString(),
+                                            m_actions.value(QStringLiteral("session_palette"))->shortcut().toString(QKeySequence::NativeText));
     m_workspaceLabel->setText(s ? m_store.workspaceOf(s->id)->name.left(24) + QStringLiteral("  /") : QString());
     setWindowTitle(name);
 }
@@ -1508,46 +1650,13 @@ void MainWindow::fillMoveMenu(QMenu *menu, const QStringList &ids)
     });
 }
 
-void MainWindow::recentMenu()
-{
-    QMenu menu;
-    for (const QString &id : m_store.recentOthers()) {
-        const Session *s = m_store.session(id);
-        QIcon dot;
-        if (s->status != QLatin1String("idle")) {
-            QPixmap pm(16, 16);
-            pm.fill(Qt::transparent);
-            QPainter p(&pm);
-            p.setRenderHint(QPainter::Antialiasing);
-            p.setPen(Qt::NoPen);
-            p.setBrush(statusColor(m_store.settings, s->status));
-            drawStatusGlyph(&p, QPointF(8, 8), 5, statusShape(m_store.settings, s->status));
-            p.end();
-            dot = QIcon(pm);
-        }
-        // the second column carries the workspace, as the switcher row's subtitle
-        menu.addAction(dot, s->displayName() + QLatin1Char('\t') + m_store.workspaceOf(id)->name, this, [this, id] { m_store.select(id); });
-    }
-    if (!m_store.closed.isEmpty())
-        menu.addSection(tr("Recently closed"));
-    const QColor ink = palette().color(QPalette::WindowText);
-    for (const auto &c : m_store.closed.mid(0, 15)) {
-        const Workspace *w = m_store.workspace(c.workspaceId);
-        // the agent's logo marks a session that reopens into its conversation
-        menu.addAction(c.resume.isEmpty() ? QIcon() : launcherIcon(QStringLiteral("claude"), ink),
-                       c.title + QLatin1Char('\t') + (w ? w->name : QString()), this, [this, id = c.id] { m_store.reopenClosed(id); });
-    }
-    QWidget *button = qobject_cast<QToolBar *>(m_strip)->widgetForAction(m_recentAction);
-    menu.exec(button ? button->mapToGlobal(QPoint(0, button->height())) : QCursor::pos());
-}
-
 void MainWindow::syncChrome()
 {
     if (m_flagButton->isChecked() != m_store.flaggedView)
         m_flagButton->setChecked(m_store.flaggedView); // sidebar.mode changed it
     // the filter button is dimmed while nothing is marked: there is nothing to filter to
-    const QColor ink = palette().color(QPalette::WindowText);
-    m_filterButton->setIcon(chromeIcon(m_store.focusEnabled ? QStringLiteral("gridFilled") : QStringLiteral("grid"), ink));
+    const QColor ink = chromeInk();
+    m_filterButton->setIcon(chromeIcon(m_store.focusEnabled ? QStringLiteral("focus-frame-fill") : QStringLiteral("focus-frame"), ink));
     m_filterButton->setEnabled(!m_store.focused.isEmpty());
     m_filterButton->setToolTip(m_store.focusEnabled ? tr("Show all workspaces") : tr("Show only focused workspaces"));
     QString e;
@@ -1555,7 +1664,13 @@ void MainWindow::syncChrome()
     m_actions.value(QStringLiteral("toggle_workspace_filter"))->setEnabled(!m_store.focused.isEmpty());
     m_actions.value(QStringLiteral("clear_focus"))->setEnabled(!m_store.focused.isEmpty());
     m_actions.value(QStringLiteral("undo_close"))->setEnabled(!m_store.pending.isEmpty());
-    m_recentAction->setEnabled(!m_store.recentOthers().isEmpty() || !m_store.closed.isEmpty());
+    // filled = pane shown: no split is an empty outline, a shown split fills both, a hidden one the main pane
+    const Session *front = m_store.session(m_store.selected);
+    const bool across = front && front->splitAxis == QLatin1String("horizontal");
+    const QString split = !front || !front->hasSplit ? QStringLiteral("split")
+                          : front->splitVisible     ? (across ? QStringLiteral("splitHFilled") : QStringLiteral("splitFilled"))
+                                                    : (across ? QStringLiteral("splitTop") : QStringLiteral("splitLeft"));
+    m_chrome.value(QStringLiteral("split"))->setIcon(chromeIcon(split, ink));
     bool shown = false;
     QAction *overlays = m_actions.value(QStringLiteral("toggle_overlay"));
     overlays->setEnabled(hasHideableOverlay(m_store.selected, &shown));

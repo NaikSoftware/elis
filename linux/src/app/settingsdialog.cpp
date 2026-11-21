@@ -191,6 +191,8 @@ void MainWindow::showSettings()
     terminal->addRow(tr("Theme"), themeRow);
     auto *window = new QFormLayout;
     window->addRow(tr("Sidebar font size"), sizeSpin(cur.sidebarFontSize, [](Settings &s, double v) { s.sidebarFontSize = v; }));
+    window->addRow(tr("Sidebar density"), picker({{tr("Default"), QStringLiteral("default")}, {tr("Compact"), QStringLiteral("compact")}}, cur.sidebarDensity,
+                                                 [](Settings &s, const QString &v) { s.sidebarDensity = v; }));
     window->addRow(tr("Palette and switcher font size"), sizeSpin(cur.interfaceFontSize, [](Settings &s, double v) { s.interfaceFontSize = v; }));
     // backgrounds only: text stays solid, as macOS and iOS glass does
     auto *clear = new QSlider(Qt::Horizontal);

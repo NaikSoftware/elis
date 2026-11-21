@@ -413,6 +413,8 @@ void MainWindow::applySettings()
         it.value()->setVisible(s.shows(it.key()));
     for (auto it = m_footer.begin(); it != m_footer.end(); ++it)
         it.value()->setVisible(s.shows(it.key()));
+    for (const char *label : {"workspaceName", "sessionName", "sessionContext"}) // the pill names the session itself
+        m_chrome.value(QLatin1String(label))->setVisible(s.shows(QLatin1String(label)) && !s.shows(QStringLiteral("recentSessions")));
     QFont sideFont = QApplication::font();
     if (s.sidebarFontSize > 0)
         sideFont.setPointSizeF(s.sidebarFontSize);
@@ -421,6 +423,7 @@ void MainWindow::applySettings()
     if (s.interfaceFontSize > 0)
         paletteFont.setPointSizeF(s.interfaceFontSize);
     m_palette->setFont(paletteFont);
+    m_tree->doItemsLayout(); // the density changes row heights
     m_tree->viewport()->update();
     applyGlass();
     const QString look = QStringList{s.theme, s.fontFamily, QString::number(s.fontSize), s.cursorStyle, s.cursorBlink, QString::number(s.windowTransparency)}
