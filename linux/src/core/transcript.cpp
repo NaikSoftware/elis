@@ -1,17 +1,34 @@
 #include "transcript.h"
 
+#include "elis_bridge.h"
+
 #include <QDir>
+#include <QJsonDocument>
 
 QString claudeHome(const QString &configDir, const QString &home)
 {
     return configDir.startsWith(QLatin1Char('/')) ? configDir : QDir(home).filePath(QStringLiteral(".claude"));
 }
 
-// shortcut: no reader yet; the shared Swift ElisCore reader fills this in (Linux phase 2 plan). Until then a valid read
-// answers the Mac's refusal for a host without the reader, which the phone reads as "Chat unavailable here".
-QJsonObject transcriptPage(const QString &claudeDirectory, const TranscriptRequest &request)
+static QJsonObject taken(char *reply)
 {
-    Q_UNUSED(claudeDirectory);
-    Q_UNUSED(request);
-    return {{"ok", false}, {"error", QStringLiteral("the Elis on this host is too old for session.transcript")}};
+    const QJsonObject response = QJsonDocument::fromJson(reply ? QByteArray(reply) : QByteArray()).object();
+    elis_free(reply);
+    return response.isEmpty() ? QJsonObject{{"ok", false}, {"error", QStringLiteral("the transcript reader gave no answer")}} : response;
+}
+
+static QByteArray json(const QJsonObject &args)
+{
+    return QJsonDocument(args).toJson(QJsonDocument::Compact);
+}
+
+QJsonObject transcriptArguments(const QJsonObject &args)
+{
+    return taken(elis_transcript_arguments(json(args).constData()));
+}
+
+QJsonObject transcriptPage(const QJsonObject &args, const QString &claudeDirectory, const QString &sessionId, const QString &pane)
+{
+    return taken(elis_transcript_read(json(args).constData(), claudeDirectory.toUtf8().constData(), sessionId.toUtf8().constData(),
+                                      pane.toUtf8().constData()));
 }

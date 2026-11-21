@@ -52,37 +52,26 @@ QString unsupportedReason(const QString &cmd)
 
 static const QStringList leftPane{"left", "top", "primary", "main"}, rightPane{"right", "bottom", "split"}; // main: ELIS_PANE
 
-// session.transcript: the Mac's ControlDispatcher+Transcript and Session.transcriptSource; arguments are checked before
-// the target, so every host gives the same first error.
+static std::function<QJsonObject()> s_deferred;
+
+std::function<QJsonObject()> takeDeferred()
+{
+    return std::exchange(s_deferred, nullptr);
+}
+
+// session.transcript: ElisCore checks the arguments before the target, as the Mac's dispatcher does, then the session's
+// agent pane names the transcript (the Mac's Session.transcriptSource) and the read is deferred to a worker.
 static QJsonObject sessionTranscript(Store &store, Terminals &terminals, const QString &target, const QJsonObject &args)
 {
-    if (args.contains("after") && args.contains("before"))
-        return fail(QStringLiteral("use either --after or --before, not both"));
-    TranscriptRequest request;
-    for (const auto &[key, slot] : {std::pair{"after", &request.after}, std::pair{"before", &request.before}}) {
-        if (!args.contains(QLatin1String(key)))
-            continue;
-        static const QRegularExpression digits(QStringLiteral("^[0-9]+$"));
-        const QString raw = args.value(QLatin1String(key)).toString();
-        bool number = false;
-        *slot = raw.toLongLong(&number);
-        if (!digits.match(raw).hasMatch() || !number)
-            return fail(QStringLiteral("%1 must be a byte offset").arg(QLatin1String(key)));
-    }
-    if (args.contains("maxBytes") && args.value("maxBytes").toInt() <= 0)
-        return fail(QStringLiteral("max-bytes must be greater than 0"));
-    request.maxBytes = qMin(args.value("maxBytes").toInt(transcriptPageBudget), transcriptPageBudget);
-    const QString raw = args.value("pane").toString();
-    if (raw == QLatin1String("scratch"))
-        return fail(QStringLiteral("session.transcript reads --pane left or right"));
-    if (!raw.isEmpty() && !leftPane.contains(raw) && !rightPane.contains(raw))
-        return fail(QStringLiteral("invalid pane: %1").arg(raw));
+    const QJsonObject checked = transcriptArguments(args);
+    if (!checked.value("ok").toBool())
+        return checked;
     QString error;
     const QString id = store.resolveSession(target, &error);
     if (id.isEmpty())
         return fail(error);
     const Session *s = store.session(id);
-    QString pane = raw.isEmpty() ? QString() : leftPane.contains(raw) ? QStringLiteral("left") : QStringLiteral("right");
+    QString pane = checked.value("result").toObject().value("pane").toString();
     if (const QString token = args.value("paneID").toString().trimmed(); !token.isEmpty()) {
         const qsizetype at = terminals.paneIds(id).indexOf(token);
         if (at < 0 && pane.isEmpty())
@@ -94,10 +83,10 @@ static QJsonObject sessionTranscript(Store &store, Terminals &terminals, const Q
         pane = s->agentPane.isEmpty() ? QStringLiteral("left") : s->agentPane;
     if (s->agent != QLatin1String("claude") || s->agentSessionId.isEmpty() || pane != s->agentPane)
         return fail(QStringLiteral("no adapter"));
-    request.sessionId = s->agentSessionId;
-    if (args.contains("transcript"))
-        request.held = args.value("transcript").toString();
-    return transcriptPage(claudeHome(qEnvironmentVariable("CLAUDE_CONFIG_DIR"), QDir::homePath()), request);
+    s_deferred = [args, home = claudeHome(qEnvironmentVariable("CLAUDE_CONFIG_DIR"), QDir::homePath()), claudeId = s->agentSessionId, pane] {
+        return transcriptPage(args, home, claudeId, pane);
+    };
+    return {{"deferred", true}};
 }
 
 // workspace.go: the visible workspaces in order, wrapping; lands on the workspace's first session

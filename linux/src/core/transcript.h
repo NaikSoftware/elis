@@ -3,22 +3,16 @@
 #include <QJsonObject>
 #include <QString>
 
-#include <optional>
-
-// session.transcript's seam to the transcript reader. The reader is ElisCore's ClaudeTranscript (Swift, shared with the
-// Mac); the spec docs/superpowers/specs/2026-11-20-phone-chat-mode-design.md owns the page shape.
-
-constexpr int transcriptPageBudget = 49152;
+// session.transcript through ElisBridge (linux/shared): ElisCore's own argument check and reader, shared with the Mac.
+// The spec docs/superpowers/specs/2026-11-20-phone-chat-mode-design.md owns the page shape.
 
 // ClaudeHome.directory: configDir (CLAUDE_CONFIG_DIR) when it is absolute, else <home>/.claude
 QString claudeHome(const QString &configDir, const QString &home);
 
-struct TranscriptRequest {
-    QString sessionId; // the Claude conversation id from the tree, never a path
-    std::optional<qint64> after, before;
-    std::optional<QString> held; // the id the caller holds; only compared
-    int maxBytes = transcriptPageBudget;
-};
+// The Mac's argument check: {"ok":true,"result":{"pane":…}} with the pane asked for (absent: the agent's pane), or
+// its refusal.
+QJsonObject transcriptArguments(const QJsonObject &args);
 
-// One page of <claudeDirectory>/projects/*/<id>.jsonl as the whole reply: {ok, result} or {ok: false, error}.
-QJsonObject transcriptPage(const QString &claudeDirectory, const TranscriptRequest &request);
+// One page of the Claude session sessionId under claudeDirectory as the Mac's whole reply. Blocks on file reads, and
+// ElisCore traps when it runs on the process's main thread: call it from a worker.
+QJsonObject transcriptPage(const QJsonObject &args, const QString &claudeDirectory, const QString &sessionId, const QString &pane);

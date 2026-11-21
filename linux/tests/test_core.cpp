@@ -21,6 +21,7 @@
 #include <QTest>
 #include <QUuid>
 #include <csignal>
+#include <future>
 
 class FakeTerminals : public Terminals
 {
@@ -57,22 +58,44 @@ public:
     }
 };
 
-// a session running claude in its left pane on conversation c1, as ControlDispatcherTranscriptTests' fixture
+// ControlDispatcherTranscriptTests' fixture: a Claude directory holding projects/-proj/c1.jsonl and a session running
+// claude on it in its left pane
 struct TranscriptFixture {
+    QTemporaryDir root;
     Store s;
     FakeTerminals t;
     QString id;
 
-    TranscriptFixture()
+    explicit TranscriptFixture(const QStringList &prompts = {QStringLiteral("hello")})
     {
+        qputenv("CLAUDE_CONFIG_DIR", root.path().toUtf8());
+        write(QStringLiteral("projects/-proj/c1.jsonl"), prompts, QStringLiteral("u"));
         id = dispatch(s, t, {{"cmd", "session.new"}}).value("result").toObject().value("id").toString();
         s.setAgent(id, QStringLiteral("claude"));
         s.setAgentSessionId(id, QStringLiteral("c1"));
     }
-    QJsonObject read(const QJsonObject &args = {}) { return dispatch(s, t, {{"cmd", "session.transcript"}, {"target", id}, {"args", args}}); }
+    ~TranscriptFixture() { qunsetenv("CLAUDE_CONFIG_DIR"); }
+    QString path() const { return root.filePath(QStringLiteral("projects/-proj/c1.jsonl")); }
+    // one user record per prompt, uuids <uuid>1, <uuid>2, ..., each the parent of the next
+    void write(const QString &relative, const QStringList &prompts, const QString &uuid)
+    {
+        QDir(root.path()).mkpath(QFileInfo(root.filePath(relative)).path());
+        QFile f(root.filePath(relative));
+        QVERIFY(f.open(QIODevice::WriteOnly));
+        for (int i = 0; i < prompts.size(); ++i)
+            f.write(("{\"type\":\"user\",\"uuid\":\"" + uuid + QString::number(i + 1) + "\",\"parentUuid\":"
+                     + (i ? "\"" + uuid + QString::number(i) + "\"" : QStringLiteral("null")) + ",\"isSidechain\":false,"
+                     "\"timestamp\":\"T\",\"message\":{\"role\":\"user\",\"content\":\"" + prompts[i] + "\"}}\n").toUtf8());
+    }
+    // a deferred read runs on a worker, as the control server runs it: ElisCore traps on the main thread
+    const QJsonObject read(const QJsonObject &args = {})
+    {
+        const QJsonObject r = dispatch(s, t, {{"cmd", "session.transcript"}, {"target", id}, {"args", args}});
+        const std::function<QJsonObject()> job = takeDeferred();
+        return r.value("deferred").toBool() && job ? std::async(std::launch::async, job).get() : r;
+    }
     QString error(const QJsonObject &args) { return read(args).value("error").toString(); }
 };
-static const QString tooOld = QStringLiteral("the Elis on this host is too old for session.transcript");
 
 class TestCore : public QObject
 {
@@ -959,7 +982,15 @@ private Q_SLOTS:
         QCOMPARE(call(s, t, "session.text", id, {{"pane", "top"}})["result"]["pane"].toString(), QStringLiteral("left"));
     }
 
-    // session.transcript: ControlDispatcherTranscriptTests' argument and refusal cases; the page cases come with the reader
+    // session.transcript: ControlDispatcherTranscriptTests' cases; ElisCore's own suite covers the reader
+    void transcriptRequestRoundTrips()
+    {
+        TranscriptFixture f;
+        const QJsonObject r = f.read({{"after", "12"}, {"transcript", "abc"}, {"maxBytes", 100}}); // elisctl's offsets are text
+        QVERIFY(r.value("ok").toBool());
+        QCOMPARE(r["result"]["reset"].toBool(), true);
+    }
+
     void afterAndBeforeAreExclusive()
     {
         TranscriptFixture f;
@@ -971,25 +1002,26 @@ private Q_SLOTS:
         TranscriptFixture f;
         QCOMPARE(f.error({{"after", "x"}}), QStringLiteral("after must be a byte offset"));
         QCOMPARE(f.error({{"before", "-1"}}), QStringLiteral("before must be a byte offset"));
-        QCOMPARE(f.error({{"after", 3}}), QStringLiteral("after must be a byte offset")); // offsets travel as text
     }
 
-    void maxBytesRejectsNonPositive()
+    void maxBytesClampsAndRejectsNonPositive()
     {
-        TranscriptFixture f;
+        TranscriptFixture f({QString(60, QLatin1Char('a')), QString(60, QLatin1Char('b')), QString(60, QLatin1Char('c'))});
+        QCOMPARE(f.read()["result"]["items"].toArray().size(), 3);
+        QCOMPARE(f.read({{"maxBytes", 1000000}})["result"]["items"].toArray().size(), 3);
+        QCOMPARE(f.read({{"maxBytes", 100}})["result"]["items"].toArray().size(), 1);
         QCOMPARE(f.error({{"maxBytes", 0}}), QStringLiteral("max-bytes must be greater than 0"));
-        QCOMPARE(f.error({{"maxBytes", 1000000}}), tooOld);
     }
 
     void paneAliasesResolveAsInSessionText()
     {
         TranscriptFixture f;
         f.t.panes.insert(f.id, {"p0", "p1"});
-        QCOMPARE(f.error({{"pane", "top"}}), tooOld);
-        QCOMPARE(f.error({}), tooOld); // the agent's pane
+        QVERIFY(f.read({{"pane", "top"}}).value("ok").toBool());
+        QVERIFY(f.read().value("ok").toBool()); // the agent's pane
         QCOMPARE(f.error({{"pane", "bottom"}}), QStringLiteral("no adapter"));
         QCOMPARE(f.error({{"pane", "bottom"}, {"paneID", "p1"}}), QStringLiteral("no adapter"));
-        QCOMPARE(f.error({{"pane", "bottom"}, {"paneID", "p0"}}), tooOld); // a token that resolves wins
+        QVERIFY(f.read({{"pane", "bottom"}, {"paneID", "p0"}}).value("ok").toBool()); // a token that resolves wins
         QCOMPARE(f.error({{"paneID", "zz"}}), QStringLiteral("unknown pane id: zz"));
         QCOMPARE(f.error({{"pane", "x"}}), QStringLiteral("invalid pane: x"));
     }
@@ -1011,11 +1043,47 @@ private Q_SLOTS:
         QCOMPARE(dispatch(f.s, f.t, {{"cmd", "session.transcript"}, {"target", "nope"}}).value("ok").toBool(), false);
     }
 
-    // until the shared reader lands a valid read answers what the phone reads as a host without Chat
-    void defaultRefusalReadsAsTooOld()
+    void readerRunsOffTheMainThread()
     {
         TranscriptFixture f;
-        QCOMPARE(f.read(), (QJsonObject{{"ok", false}, {"error", tooOld}}));
+        QVERIFY(f.read().value("ok").toBool());
+        QCOMPARE(dispatch(f.s, f.t, {{"cmd", "session.transcript"}, {"target", f.id}}), (QJsonObject{{"deferred", true}}));
+        QVERIFY(takeDeferred());
+        QVERIFY(!takeDeferred());
+    }
+
+    void missingFileIsTranscriptNotFound()
+    {
+        TranscriptFixture f;
+        QVERIFY(QFile::remove(f.path()));
+        QCOMPARE(f.read(), (QJsonObject{{"ok", false}, {"error", "transcript not found"}}));
+    }
+
+    void heldTranscriptIsOnlyCompared()
+    {
+        TranscriptFixture f;
+        f.write(QStringLiteral("projects/x.jsonl"), {"decoy"}, QStringLiteral("d"));
+        const QJsonObject result = f.read({{"after", "0"}, {"transcript", "../x"}})["result"].toObject();
+        QCOMPARE(result["reset"].toBool(), true);
+        QCOMPARE(result["items"].toArray().size(), 1);
+        QCOMPARE(result["items"][0]["text"].toString(), QStringLiteral("hello"));
+    }
+
+    void pageFieldsLandFlatOnResult()
+    {
+        TranscriptFixture f;
+        const QJsonObject result = f.read()["result"].toObject();
+        const qint64 size = QFileInfo(f.path()).size();
+        QCOMPARE(result["transcript"].toString(), QStringLiteral("c1"));
+        QCOMPARE(result["size"].toInteger(), size);
+        QCOMPARE(result["start"].toInteger(), 0);
+        QCOMPARE(result["next"].toInteger(), size);
+        QCOMPARE(result["items"].toArray().size(), 1);
+        QCOMPARE(result["items"][0]["uuid"].toString(), QStringLiteral("u1"));
+        QCOMPARE(result["items"][0]["text"].toString(), QStringLiteral("hello"));
+        QVERIFY(result["meta"].isObject());
+        QVERIFY(!result.contains("reset"));
+        QVERIFY(!result.contains("skipped"));
     }
 
     void claudeHomeHonorsAbsoluteConfigDir()
