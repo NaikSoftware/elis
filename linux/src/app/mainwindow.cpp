@@ -318,12 +318,7 @@ MainWindow::MainWindow(Store &store, const QString &statePath)
     connect(m_events, &EventSource::event, m_hooks, &HookRunner::fire);
     connect(m_hooks, &HookRunner::failed, this, [this](const QString &hook, const QString &message) { notifyFailure(tr("Hook failed"), hook + QStringLiteral(": ") + message); });
     auto *newSessionButton = footerButton(QStringLiteral("session-plus"), tr("New Session"));
-    auto *newSessionMenu = new QMenu(newSessionButton);
-    newSessionMenu->addAction(tr("New Session"), this, [this] { newSession(currentWorkspace()); });
-    newSessionMenu->addAction(tr("Open Directory…"), this, [this] { m_actions.value(QStringLiteral("open_directory"))->trigger(); });
-    newSessionButton->setMenu(newSessionMenu);
-    newSessionButton->setPopupMode(QToolButton::InstantPopup);
-    newSessionButton->setStyleSheet(QStringLiteral("QToolButton::menu-indicator{image:none;}"));
+    connect(newSessionButton, &QToolButton::clicked, this, [this] { newSession(currentWorkspace()); });
     auto *newWorkspaceButton = footerButton(QStringLiteral("workspace-stack"), tr("New Workspace"));
     connect(newWorkspaceButton, &QToolButton::clicked, this, &MainWindow::newWorkspace);
     m_flagButton = footerButton(QStringLiteral("flag-lucide"), tr("Flagged Sessions"));

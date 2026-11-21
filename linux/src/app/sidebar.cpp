@@ -297,10 +297,23 @@ void SidebarDelegate::paint(QPainter *p, const QStyleOptionViewItem &opt, const 
         p->drawRoundedRect(shape.adjusted(0.5, 0.5, -0.5, -0.5), 10.5, 10.5);
         p->restore();
     }
+    // a session row's fills are square; only a band's last row rounds its bottom corners, concentric with the band
+    const auto shape = [&](const QRectF &rect, qreal radius) {
+        QPainterPath path;
+        path.setFillRule(Qt::WindingFill);
+        if (!session || (band.isValid() && edge == Sidebar::Last)) {
+            path.addRoundedRect(rect, radius, radius);
+            if (session)
+                path.addRect(rect.adjusted(0, 0, 0, -rect.height() / 2));
+        } else {
+            path.addRect(rect);
+        }
+        return path.simplified(); // one outline, so a stroke does not trace the seam between the two shapes
+    };
     p->setPen(Qt::NoPen);
     if (session && tint.isValid()) {
         p->setBrush(faded(tint, 0.09));
-        p->drawRoundedRect(r, 8, 8);
+        p->drawPath(shape(r, 8));
     }
     if (selected) {
         // the group's tint, else the row's own, else the accent; dimmer while the window is in the background
@@ -308,10 +321,10 @@ void SidebarDelegate::paint(QPainter *p, const QStyleOptionViewItem &opt, const 
         const bool key = m_sidebar->isActiveWindow();
         p->setPen(QPen(faded(c, key ? 0.55 : 0.35), 1));
         p->setBrush(faded(c, key ? 0.20 : 0.12));
-        p->drawRoundedRect(r.adjusted(0.5, 0.5, -0.5, -0.5), 7.5, 7.5);
+        p->drawPath(shape(r.adjusted(0.5, 0.5, -0.5, -0.5), 7.5));
     } else if (opt.state & QStyle::State_MouseOver) {
         p->setBrush(faded(text, 0.07));
-        p->drawRoundedRect(r, 8, 8);
+        p->drawPath(shape(r, 8));
     }
 
     if (session && index.data(Status).toString() == QLatin1String("active")) {
@@ -328,7 +341,7 @@ void SidebarDelegate::paint(QPainter *p, const QStyleOptionViewItem &opt, const 
         g.setColorAt(1, alpha(base, 10));
         p->setPen(Qt::NoPen);
         p->setBrush(g);
-        p->drawRoundedRect(r, 8, 8);
+        p->drawPath(shape(r, 8));
     }
 
     qreal x = r.left() + chevronX;
