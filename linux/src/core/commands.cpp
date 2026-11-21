@@ -3,8 +3,10 @@
 #include "control.h"
 #include "hooks.h"
 #include "store.h"
+#include "transcript.h"
 
 #include <QDateTime>
+#include <QDir>
 #include <algorithm>
 #include <cstdlib>
 #include <QJsonArray>
@@ -49,6 +51,43 @@ QString unsupportedReason(const QString &cmd)
 }
 
 static const QStringList leftPane{"left", "top", "primary", "main"}, rightPane{"right", "bottom", "split"}; // main: ELIS_PANE
+
+static std::function<QJsonObject()> s_deferred;
+
+std::function<QJsonObject()> takeDeferred()
+{
+    return std::exchange(s_deferred, nullptr);
+}
+
+// session.transcript: ElisCore checks the arguments before the target, as the Mac's dispatcher does, then the session's
+// agent pane names the transcript (the Mac's Session.transcriptSource) and the read is deferred to a worker.
+static QJsonObject sessionTranscript(Store &store, Terminals &terminals, const QString &target, const QJsonObject &args)
+{
+    const QJsonObject checked = transcriptArguments(args);
+    if (!checked.value("ok").toBool())
+        return checked;
+    QString error;
+    const QString id = store.resolveSession(target, &error);
+    if (id.isEmpty())
+        return fail(error);
+    const Session *s = store.session(id);
+    QString pane = checked.value("result").toObject().value("pane").toString();
+    if (const QString token = args.value("paneID").toString().trimmed(); !token.isEmpty()) {
+        const qsizetype at = terminals.paneIds(id).indexOf(token);
+        if (at < 0 && pane.isEmpty())
+            return fail(QStringLiteral("unknown pane id: %1").arg(token));
+        if (at >= 0)
+            pane = at == 0 ? QStringLiteral("left") : QStringLiteral("right");
+    }
+    if (pane.isEmpty())
+        pane = s->agentPane.isEmpty() ? QStringLiteral("left") : s->agentPane;
+    if (s->agent != QLatin1String("claude") || s->agentSessionId.isEmpty() || pane != s->agentPane)
+        return fail(QStringLiteral("no adapter"));
+    s_deferred = [args, home = claudeHome(qEnvironmentVariable("CLAUDE_CONFIG_DIR"), QDir::homePath()), claudeId = s->agentSessionId, pane] {
+        return transcriptPage(args, home, claudeId, pane);
+    };
+    return {{"deferred", true}};
+}
 
 // workspace.go: the visible workspaces in order, wrapping; lands on the workspace's first session
 static QJsonObject workspaceGo(Store &store, const QJsonObject &args)
@@ -614,6 +653,8 @@ QJsonObject moreCommands(Store &store, Terminals &terminals, const QString &cmd,
         }
         return ok({{"id", id}});
     }
+    if (cmd == QLatin1String("session.transcript"))
+        return sessionTranscript(store, terminals, target, args);
     static const QStringList sessionCmds{"session.context", "session.collapse", "session.expand", "session.resize", "session.grid", "session.scroll", "session.text", "session.focus",
                                          "session.copy", "session.paste", "session.selectall", "session.search", "session.reveal", "ask.open"};
     if (!sessionCmds.contains(cmd)) {

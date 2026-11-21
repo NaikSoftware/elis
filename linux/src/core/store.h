@@ -26,6 +26,8 @@ struct Session {
     bool flagged = false;
     QString title;   // last title a program running in the session set (or its command's name), spinner glyphs stripped
     QString agent;   // launcher id of the coding agent in the foreground, "" for none; not persisted
+    QString agentPane; // left | right: the pane `agent` runs in, "" with none; not persisted
+    QString agentSessionId; // Claude Code's conversation id seen in the agent's pane; outlives claude, not persisted
     bool busy = false; // a program other than the shell holds the main pane's foreground; not persisted
     QString command; // run instead of a shell at creation, not persisted
     QString splitCwd, splitCommand; // the same for the split pane's first spawn, not persisted
@@ -191,7 +193,8 @@ public:
     void placeTint(const QString &id, const QStringList &parts); // an untinted row stays untinted
     void setCwd(const QString &id, const QString &cwd);
     void setTitle(const QString &id, const QString &title);
-    void setAgent(const QString &id, const QString &agent);
+    void setAgent(const QString &id, const QString &agent, const QString &pane = QStringLiteral("left"));
+    void setAgentSessionId(const QString &id, const QString &claudeId);
     void setBusy(const QString &id, bool busy);
     void setSettings(const Settings &s);
     void keyPressed(const QString &id, Key key);

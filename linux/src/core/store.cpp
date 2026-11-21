@@ -708,11 +708,21 @@ void Store::setTitle(const QString &id, const QString &title)
     }
 }
 
-void Store::setAgent(const QString &id, const QString &agent)
+void Store::setAgent(const QString &id, const QString &agent, const QString &pane)
 {
-    if (auto *s = session(id); s && s->agent != agent) {
+    const QString at = agent.isEmpty() ? QString() : pane;
+    if (auto *s = session(id); s && (s->agent != agent || s->agentPane != at)) {
         s->agent = agent;
-        Q_EMIT titleChanged(id); // a repaint, not a save
+        s->agentPane = at;
+        Q_EMIT changed(); // tree.changed too: the phone's Chat follows the agent and its pane
+    }
+}
+
+void Store::setAgentSessionId(const QString &id, const QString &claudeId)
+{
+    if (auto *s = session(id); s && s->agentSessionId != claudeId) {
+        s->agentSessionId = claudeId;
+        Q_EMIT changed();
     }
 }
 

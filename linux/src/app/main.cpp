@@ -22,7 +22,9 @@
 #include <QLocalSocket>
 #include <QLockFile>
 #include <QMessageBox>
+#include <QPointer>
 #include <QSocketNotifier>
+#include <QThreadPool>
 #include <QTimer>
 
 #include <csignal>
@@ -45,8 +47,20 @@ static void serve(QLocalServer &server, WindowLibrary &library)
                 const auto doc = QJsonDocument::fromJson(socket->readLine(maxRequestBytes + 1), &err);
                 const QJsonObject response = doc.isObject() ? library.dispatch(doc.object())
                                                             : QJsonObject{{"ok", false}, {"error", QStringLiteral("bad request: %1").arg(err.errorString())}};
-                socket->write(QJsonDocument(response).toJson(QJsonDocument::Compact) + '\n');
-                socket->disconnectFromServer();
+                auto send = [](QLocalSocket *to, const QJsonObject &r) {
+                    to->write(QJsonDocument(r).toJson(QJsonDocument::Compact) + '\n');
+                    to->disconnectFromServer();
+                };
+                const std::function<QJsonObject()> job = takeDeferred();
+                if (!response.value("deferred").toBool() || !job)
+                    return send(socket, response);
+                QThreadPool::globalInstance()->start([job, send, to = QPointer<QLocalSocket>(socket)] {
+                    const QJsonObject reply = job();
+                    QMetaObject::invokeMethod(qApp, [send, to, reply] {
+                        if (to)
+                            send(to, reply);
+                    });
+                });
             });
         }
     });

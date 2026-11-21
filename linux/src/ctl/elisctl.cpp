@@ -59,6 +59,9 @@ static const char *usage = R"(usage: elisctl <command> [args] [--target T] [--so
   session type <text> | --stdin [--pane left|right]
   session text [--all | --lines N] [--pane left|right]   the visible screen; --all adds the scrollback;
                                         --lines: the last N non-blank rows of screen + scrollback
+  session transcript [--pane left|right] [--pane-id ID] [--after N | --before N] [--transcript ID] [--max-bytes N]
+                                        a page of the Claude Code conversation the pane runs; pass next as --after
+                                        for what was appended, start as --before for older items
   session copy                          the pane's selected text
   session paste [--pane left|right]     paste the clipboard into the pane
   session select-all
@@ -510,6 +513,26 @@ int main(int argc, char **argv)
     }
     if (cmd == QLatin1String("session.text"))
         flag("all", "all");
+    if (cmd == QLatin1String("session.transcript")) {
+        if (opt.contains(QStringLiteral("after")) && opt.contains(QStringLiteral("before")))
+            return die(QStringLiteral("use either --after or --before, not both"));
+        for (const char *k : {"after", "before"}) // sent as text, as the Mac's ControlArgs
+            if (opt.contains(QLatin1String(k))) {
+                bool number = false;
+                const qint64 at = opt.value(QLatin1String(k)).toLongLong(&number);
+                if (!number || at < 0)
+                    return die(QStringLiteral("--after and --before must be 0 or greater"));
+                args.insert(QLatin1String(k), QString::number(at));
+            }
+        if (opt.contains(QStringLiteral("max-bytes"))) {
+            const int max = opt.value(QStringLiteral("max-bytes")).toInt();
+            if (max <= 0)
+                return die(QStringLiteral("--max-bytes must be greater than 0"));
+            args.insert("maxBytes", max);
+        }
+        copy("transcript", "transcript");
+        copy("pane-id", "paneID");
+    }
     if (cmd == QLatin1String("session.search")) {
         if (int(opt.contains(QStringLiteral("next"))) + opt.contains(QStringLiteral("prev")) + opt.contains(QStringLiteral("close")) > 1)
             return die(QStringLiteral("--next, --prev, and --close are mutually exclusive"));
@@ -690,6 +713,29 @@ int main(int argc, char **argv)
     if (!response.value("ok").toBool())
         return die(response.value("error").toString());
     const QJsonObject result = response.value("result").toObject();
+    if (cmd == QLatin1String("session.transcript")) { // the Mac's formatTranscript
+        const QJsonObject meta = result["meta"].toObject();
+        for (const char *k : {"title", "model", "permissionMode"})
+            if (meta.contains(QLatin1String(k)))
+                printf("%s: %s\n", k, qPrintable(meta[QLatin1String(k)].toString()));
+        for (const auto &v : meta["agents"].toArray()) {
+            const QJsonObject a = v.toObject();
+            QStringList words{a["state"].toString(), a["name"].toString(a["agentType"].toString()), a["description"].toString()};
+            words.removeAll(QString());
+            printf("agent: %s\n", qPrintable(words.join(QLatin1Char(' '))));
+        }
+        for (const auto &v : result["items"].toArray()) {
+            const QJsonObject item = v.toObject();
+            QString detail = item["text"].toString();
+            if (item["kind"].toString() == QLatin1String("tool")) {
+                QStringList words{item["name"].toString(), item["arg"].toString(), item["mark"].toString()};
+                words.removeAll(QString());
+                detail = words.join(QLatin1Char(' '));
+            }
+            printf("%s\n", qPrintable(detail.isEmpty() ? item["kind"].toString() : item["kind"].toString() + QStringLiteral("  ") + detail));
+        }
+        return printf("next %lld\n", result["next"].toInteger()), 0;
+    }
     if (cmd == QLatin1String("pick.open") || cmd == QLatin1String("ask.open")) {
         if (opt.contains(QStringLiteral("no-block")))
             return printf("%s\n", QJsonDocument(QJsonObject{{"id", result["id"]}}).toJson(QJsonDocument::Compact).constData()), 0;

@@ -5,6 +5,7 @@
 #include "hooks.h"
 #include "konsoleprivate.h"
 #include "launcher.h"
+#include "transcript.h"
 #include "library.h"
 #include "livehost.h"
 #include "palette.h"
@@ -1356,14 +1357,44 @@ void MainWindow::sampleAgents()
         const int fg = foregroundPid(part);
         if (part && !part->property("elisLive").toString().isEmpty())
             m_store.setCwd(s->id, liveCwd(s->id)); // Konsole tracks only its own child, the attach client
-        QList<QStringList> argvs;
-        for (int pid : groups.value(fg)) {
-            QFile f(QStringLiteral("/proc/%1/cmdline").arg(pid));
-            if (f.open(QIODevice::ReadOnly))
-                argvs << QString::fromUtf8(f.readAll()).split(QChar(0), Qt::SkipEmptyParts);
-        }
+        auto argvsOf = [](const QList<int> &group) {
+            QList<QStringList> argvs;
+            for (int pid : group) {
+                QFile f(QStringLiteral("/proc/%1/cmdline").arg(pid));
+                if (f.open(QIODevice::ReadOnly))
+                    argvs << QString::fromUtf8(f.readAll()).split(QChar(0), Qt::SkipEmptyParts);
+            }
+            return argvs;
+        };
+        const QList<QStringList> argvs = argvsOf(groups.value(fg));
         const QString agent = agentForGroup(argvs);
-        m_store.setAgent(s->id, agent);
+        // the focused pane's agent, else the other's, and the Claude id that pane reports (the Mac's applyAgentSamples)
+        struct Sample {
+            QString pane, agent;
+            QList<int> group;
+        };
+        QList<Sample> samples{{QStringLiteral("left"), agent, groups.value(fg)}};
+        if (KParts::ReadOnlyPart *right = m_panes.value(s->id).right; right && s->hasSplit) {
+            const QList<int> group = groups.value(foregroundPid(right));
+            samples << Sample{QStringLiteral("right"), agentForGroup(argvsOf(group)), group};
+        }
+        const QString focused = m_splitFocused.value(s->id) ? QStringLiteral("right") : QStringLiteral("left");
+        const Sample *pick = nullptr;
+        for (const Sample &sample : samples)
+            if (!sample.agent.isEmpty() && (!pick || sample.pane == focused))
+                pick = &sample;
+        m_store.setAgent(s->id, pick ? pick->agent : QString(), pick ? pick->pane : QString());
+        if (pick && pick->agent == QLatin1String("claude")) { // kept after claude exits: reopening the closed session resumes it
+            static const QString sessions = claudeHome(qEnvironmentVariable("CLAUDE_CONFIG_DIR"), QDir::homePath()) + QStringLiteral("/sessions");
+            for (int pid : pick->group)
+                if (const QString line = claudeResumeLine(sessions, pid); !line.isEmpty()) {
+                    s->resume = line;
+                    m_store.setAgentSessionId(s->id, line.section(QLatin1Char(' '), -1));
+                    break;
+                }
+        } else if (pick) { // another agent: the id no longer names what the session runs
+            m_store.setAgentSessionId(s->id, QString());
+        }
         m_store.setBusy(s->id, fg > 0 && fg != shellPid(part));
         // a plain command names the session while it runs (an agent names itself); idle, the folder does
         const int shell = shellPid(part);
@@ -1377,14 +1408,6 @@ void MainWindow::sampleAgents()
                    && (s->title == m_commandTitle.value(s->id) || s->title == commandTitle(s->foreground))) {
             m_store.setTitle(s->id, QString());
             m_commandTitle.remove(s->id);
-        }
-        if (agent == QLatin1String("claude")) { // kept after claude exits: reopening the closed session resumes it
-            static const QString sessions = QDir::homePath() + QStringLiteral("/.claude/sessions");
-            for (int pid : groups.value(fg))
-                if (const QString line = claudeResumeLine(sessions, pid); !line.isEmpty()) {
-                    s->resume = line;
-                    break;
-                }
         }
         if (agent == QLatin1String("antigravity")) { // agy sets no terminal title; its conversation title names the session
             static const QString agyData = QDir::homePath() + QStringLiteral("/.gemini/antigravity-cli");

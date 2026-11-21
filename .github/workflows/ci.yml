@@ -249,6 +249,27 @@ jobs:
           path: test-hang
           if-no-files-found: ignore
 
+  bridge:
+    # the Qt app's link to ElisCore, built as linux/CMakeLists.txt builds it; the Qt app itself needs KF6, which noble lacks
+    name: Linux ElisBridge
+    needs: changes
+    if: needs.changes.outputs.swift == 'true'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    container:
+      image: swift:6.3.2-noble
+    defaults:
+      run:
+        working-directory: linux/shared
+    steps:
+      - uses: actions/checkout@v7
+      - name: swift build
+        run: swift build -c release -Xswiftc -static-stdlib -Xlinker -soname=libElisBridge.so
+      - name: no Swift runtime needed
+        run: |
+          ldd .build/release/libElisBridge.so
+          ! ldd .build/release/libElisBridge.so | grep -i swift
+
   build:
     name: Build app
     needs: changes
