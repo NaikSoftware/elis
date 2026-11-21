@@ -85,7 +85,7 @@ Config lives in `~/.config/elis/` (or `$ELIS_STATE_DIR/config`): `keymap.conf`, 
 Inspect the live state with `elisctl tree --json`. Each session node carries
 `id`, `name`, `customName`, `cwd`, `title`, `active`, `status`, `blink`, `flagged`, `agent`, `unseen`, `parent`,
 `hasSplit`, `split`, `splitAxis`, `splitRatio`, `splitFocused`, `fontSize`, `splitFontSize`, `overlay`,
-and when set `context`, `collapsed`, `tint`/`tintOn`, `restoreCommand`/`splitRestoreCommand`,
+and when set `agentPane`, `agentSessionId` (the Claude Code conversation in that pane), `context`, `collapsed`, `tint`/`tintOn`, `restoreCommand`/`splitRestoreCommand`,
 `overlaySizePercent`, `overlayWidth`/`overlayHeight`, `paneOverlays`, `hiddenOverlays`, `hud`, `ask`.
 Workspace nodes carry `id`, `name`, `rememberedFolder`, `active`, `sessions`, and when set `focused`,
 `collapsed`, `tint`/`tintOn`.
@@ -235,6 +235,8 @@ elisctl ask "Deploy to $env?" --button yes=Deploy --button no=Cancel --default n
 
 - `session text [--all | --lines N] [--pane left|right]`: the visible screen; `--all` adds the scrollback;
   `--lines N` the last N non-blank rows. Read the other pane with `--pane right`.
+- `session transcript`: the Mac's read of a pane's Claude Code conversation; on Linux it checks its arguments and
+  answers `too old for session.transcript` until the transcript reader lands (reference.md).
 - `session type <text> | --stdin [--pane left|right]`: keystrokes into the main pane, or the other with `--pane right`.
 - `session copy` (the selection), `session paste`, `session select-all`.
 - `session search [needle] [--next | --prev | --close]`: Konsole's search bar; selects the session and prints the

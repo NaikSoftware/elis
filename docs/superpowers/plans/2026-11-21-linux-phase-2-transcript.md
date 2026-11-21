@@ -4,6 +4,10 @@ Roadmap: [2026-11-21-linux-elis-migration.md](2026-11-21-linux-elis-migration.md
 The spec [2026-11-20-phone-chat-mode-design.md](../specs/2026-11-20-phone-chat-mode-design.md) owns the shapes;
 `macos/ElisCore` is the reference code and its `ClaudeTranscript*Tests.swift` are the fixtures.
 
+Status 2026-11-21: the C++ reader port (tasks 2-3) is paused. The owner keeps shared logic in one place, and ElisCore
+already builds on Linux, so the reader will most likely be Swift ElisCore behind `transcriptPage` (`src/core/transcript.h`).
+Until then a valid read answers the Mac's `the Elis on this host is too old for session.transcript`.
+
 ## Layout
 
 - `linux/src/core/transcript.{h,cpp}` in `elis-core`: a C++ port of `ClaudeTranscript`, `ClaudeTranscriptIndex`,

@@ -50,7 +50,9 @@ there), `active`, `sessions`, plus `focused` (marked for the filter), `collapsed
 
 Session node:
 - `id`, `name` (shown name), `customName` (true when renamed), `cwd`, `title` (program-set title), `active`,
-  `agent` (the agent detected in the foreground: `claude`, `codex`, `opencode`, `agy`, or empty).
+  `agent` (the agent detected in the foreground: `claude`, `codex`, `opencode`, `agy`, or empty; the focused pane's
+  first), and when known `agentPane` (`left` or `right`, the pane `agent` runs in) and `agentSessionId` (Claude Code's
+  conversation id in that pane; it stays after claude exits and clears when another agent runs there).
 - `status` (`idle`|`active`|`completed`|`blocked`), `blink`, `flagged`, `unseen` (badge count).
 - `parent` (companion's parent id, empty for a top-level session), `collapsed` (parent with folded companions),
   `context`, `tint`/`tintOn`.
@@ -188,6 +190,12 @@ All take `--target` (workspace id, prefix, name, `active`) and `--window`.
   Errors: `use either --all or --lines, not both`,
   `--lines must be greater than 0`, `invalid pane: X`, `session has no split pane`, `session not realized`.
   Text under an overlay is the covered shell's, not the overlay's (use `session overlay text`).
+- `session transcript [--pane left|right] [--pane-id ID] [--after N | --before N] [--transcript ID] [--max-bytes N]`:
+  a page of the Claude Code conversation the pane runs (`--pane` defaults to the node's `agentPane`), as on the Mac.
+  Elis on Linux has no transcript reader yet: a valid read answers `the Elis on this host is too old for
+  session.transcript`. Errors: `use either --after or --before, not both`, `after must be a byte offset`,
+  `max-bytes must be greater than 0`, `invalid pane: X`, `session.transcript reads --pane left or right`,
+  `unknown pane id: X`, `no adapter` (the pane runs no Claude Code, or its id is unknown).
 - `session type <text> | --stdin [--pane left|right]`: sends the text to the main pane (or `--pane`) as keyboard input;
   a newline submits. Errors: `invalid pane: X`, `session has no split pane`, `session has no terminal` when the pane is gone.
 - `session copy`: prints the pane's selected text; `no selection` when none. Does not touch the clipboard.

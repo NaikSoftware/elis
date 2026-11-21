@@ -200,6 +200,7 @@ It prints the QR code and the link; Ctrl+C stops it. Nothing listens unless one 
 - `serve` listens on all interfaces by default; `--bind` restricts it. It reaches the phone over your LAN or a VPN such
   as Tailscale; `--host` only sets the address written into the link (e.g. the machine's Tailscale name or IP).
 - The session view is a polled plain-text snapshot of the pane (`session text`), not a terminal emulator.
+  Chat is not available yet: `session transcript` is there, but Elis on Linux has no transcript reader.
 
 ## Credits and license
 
