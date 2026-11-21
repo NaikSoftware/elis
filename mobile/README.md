@@ -20,6 +20,9 @@ flutter run                 # on a connected device or emulator
 flutter build apk           # build/app/outputs/flutter-apk/app-release.apk
 ```
 
+It builds on macOS and Linux. zig 0.17 comes from Homebrew, `ZIG=<path>`, or the `zig` on PATH (on Linux, the
+ziglang.org tarball). The NDK is read from `ANDROID_NDK_HOME` or the SDK's default location.
+
 `libvtshim` (`native/vtshim.c`) parses the pane's stream and, for direct input, exports the key, paste, wheel and focus
 encoders and the terminal's query replies (`vts_encode_*`, `vts_take_replies`); a new export joins the `FUNCS` list
 in `tool/build-vtshim.sh`.

@@ -227,9 +227,9 @@ int32_t vts_snapshot(Vt* v, uint32_t* out, int32_t cap) {
 }
 
 // Encoders return bytes written, 0 for nothing to send, or -needed when cap is short.
-static int32_t encoded(GhosttyResult r, size_t n) {
-  if (r == GHOSTTY_OUT_OF_SPACE) return -(int32_t)n;
-  return r == GHOSTTY_SUCCESS ? (int32_t)n : 0;
+static int32_t encoded(GhosttyResult r, const size_t* n) { // a pointer: argument order is unspecified, so n is read after the call
+  if (r == GHOSTTY_OUT_OF_SPACE) return -(int32_t)*n;
+  return r == GHOSTTY_SUCCESS ? (int32_t)*n : 0;
 }
 
 // mods: shift 1, ctrl 2, alt 4 (GhosttyMods). unshifted: the key's unshifted codepoint, 0 for none.
@@ -247,13 +247,13 @@ int32_t vts_encode_key(Vt* v, uint32_t key, uint32_t mods, uint32_t unshifted, c
   ghostty_key_event_set_utf8(v->key, utf8, utf8_len);
   ghostty_key_event_set_unshifted_codepoint(v->key, unshifted);
   size_t n = 0;
-  return encoded(ghostty_key_encoder_encode(v->keys, v->key, (char*)out, (size_t)cap, &n), n);
+  return encoded(ghostty_key_encoder_encode(v->keys, v->key, (char*)out, (size_t)cap, &n), &n);
 }
 
 // data is rewritten in place (unsafe control bytes become spaces).
 int32_t vts_encode_paste(Vt* v, char* data, size_t len, uint8_t* out, int32_t cap) {
   size_t n = 0;
-  return encoded(ghostty_paste_encode(data, len, vts_mode(v, 2004) == 1, (char*)out, (size_t)cap, &n), n);
+  return encoded(ghostty_paste_encode(data, len, vts_mode(v, 2004) == 1, (char*)out, (size_t)cap, &n), &n);
 }
 
 // One mouse event at pixel (x, y) of the 8x16 cells on_size reports, so an SGR-pixels (1016) program maps it back.
@@ -268,7 +268,7 @@ static int32_t encode_mouse(Vt* v, GhosttyMouseAction action, GhosttyMouseButton
   ghostty_mouse_event_set_mods(v->wheel, 0);
   ghostty_mouse_event_set_position(v->wheel, (GhosttyMousePosition){ .x = x, .y = y });
   size_t n = 0;
-  return encoded(ghostty_mouse_encoder_encode(v->mouse, v->wheel, (char*)out, (size_t)cap, &n), n);
+  return encoded(ghostty_mouse_encoder_encode(v->mouse, v->wheel, (char*)out, (size_t)cap, &n), &n);
 }
 
 int32_t vts_encode_wheel(Vt* v, int32_t up, uint16_t col, uint16_t row, uint8_t* out, int32_t cap) {
@@ -288,7 +288,7 @@ int32_t vts_encode_click(Vt* v, uint16_t col, uint16_t row, uint8_t* out, int32_
 int32_t vts_encode_focus(Vt* v, int32_t gained, uint8_t* out, int32_t cap) {
   if (vts_mode(v, 1004) != 1) return 0;
   size_t n = 0;
-  return encoded(ghostty_focus_encode(gained ? GHOSTTY_FOCUS_GAINED : GHOSTTY_FOCUS_LOST, (char*)out, (size_t)cap, &n), n);
+  return encoded(ghostty_focus_encode(gained ? GHOSTTY_FOCUS_GAINED : GHOSTTY_FOCUS_LOST, (char*)out, (size_t)cap, &n), &n);
 }
 
 // Drains the replies (DA, CPR, size reports...) WRITE_PTY collected during vts_write.
