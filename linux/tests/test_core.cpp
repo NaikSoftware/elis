@@ -1334,7 +1334,7 @@ private Q_SLOTS:
     void agentHooksInstallerRemovesAgtermQt()
     {
         QTemporaryDir tmp;
-        const QString home = tmp.path(), bundle = QStringLiteral(ELIS_SOURCE_SHARE "/agent-status"), pkg = Install::packageDir(home);
+        const QString home = tmp.path(), bundle = QStringLiteral(ELIS_SOURCE_AGENT_STATUS), pkg = Install::packageDir(home);
         const QString old = home + "/.config/agterm-qt/agent-status", settings = home + "/.claude/settings.json";
         const auto hook = [](const QString &command) { return QJsonObject{{"hooks", QJsonArray{QJsonObject{{"type", "command"}, {"command", command}}}}}; };
         const QString adapter = Install::shellQuote(old + "/agterm-claude-status.sh") + " ";
