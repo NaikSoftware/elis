@@ -83,6 +83,8 @@ struct ControlDispatcherAssistantTests {
         #expect(actions.calls.contains(.sessionType(target: "claude1-uuid", window: "w1",
                                                     ControlSessionTypeOptions(text: line, select: false, pane: nil))))
         #expect(response?.result?.assistant?.delivered == ["claude-1", "zsh"])
+        #expect(response?.result?.assistant?.deliveredIDs == ["claude1-uuid", "shell1-uuid"])
+        #expect(response?.result?.assistant?.cut == nil)
         #expect(response?.result?.assistant?.skipped == [])
         let sent = try #require(chat.entries(last: nil).last)
         #expect(sent.kind == .sent && sent.text == "run the tests" && sent.to == ["claude1-uuid", "shell1-uuid"])
@@ -90,6 +92,18 @@ struct ControlDispatcherAssistantTests {
         #expect(actions.streamInputs.isEmpty)
         #expect(actions.sentEntries == [sent])
         #expect(response?.result?.assistant?.entries == [sent])
+    }
+
+    @Test func sendRecordsTheTypedBodyAndReportsACut() async throws {
+        let (actions, chat) = (actions(), AssistantChat())
+        let text = "line one\n" + String(repeating: "x", count: 2000)
+
+        let response = await dispatch(.assistantSend, ControlArgs(text: text, recipients: ["zsh"]), actions: actions, chat: chat)
+
+        let typed = try AssistantLine.typed(text)
+        #expect(response?.result?.assistant?.cut == true)
+        #expect(chat.entries(last: nil).last?.text == typed.body)
+        #expect(typed.body.hasPrefix("line one x") && typed.body.count < text.count)
     }
 
     @Test func sendSkipsBlockedAndMarksThem() async throws {

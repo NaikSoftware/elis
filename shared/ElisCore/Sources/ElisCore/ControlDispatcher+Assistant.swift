@@ -62,9 +62,9 @@ extension ControlDispatcher {
     private func dispatchAssistantSend(_ args: ControlArgs, directory: AssistantDirectory) async -> ControlResponse {
         guard let tags = args.recipients, !tags.isEmpty else { return assistantFailure("assistant.send requires --to") }
         let text = args.text ?? ""
-        let line: String
+        let typed: AssistantLine.Typed
         let delivery: AssistantDelivery
-        do { line = try AssistantLine.make(text) } catch { return assistantFailure(error.message) }
+        do { typed = try AssistantLine.typed(text) } catch { return assistantFailure(error.message) }
         do { delivery = try AssistantTargets.resolve(tags, in: directory) } catch { return assistantFailure(error.message) }
 
         var delivered: [AssistantPeer] = []
@@ -74,7 +74,7 @@ extension ControlDispatcher {
         }
         for peer in delivery.targets {
             let response = await actions.typeSession(peer.sessionID, window: peer.window, options: ControlSessionTypeOptions(
-                text: line + "\n", select: false, pane: nil, paneID: nil))
+                text: typed.line + "\n", select: false, pane: nil, paneID: nil))
             if response.ok {
                 delivered.append(peer)
             } else {
@@ -84,12 +84,13 @@ extension ControlDispatcher {
         }
         var sent: AssistantEntry?
         if !delivered.isEmpty {
-            sent = chat.append(.sent, text: text, to: delivered.map(\.sessionID), now: Date().timeIntervalSince1970)
+            sent = chat.append(.sent, text: typed.body, to: delivered.map(\.sessionID), now: Date().timeIntervalSince1970)
         }
         chat.markSkipped(skippedIDs)
         if let sent { actions.assistantSent(sent) }
         return assistantSuccess(ControlAssistantResult(entries: sent.map { [$0] }, delivered: delivered.map { handle($0, in: directory) },
-                                                       skipped: skipped))
+                                                       deliveredIDs: delivered.map(\.sessionID), skipped: skipped,
+                                                       cut: typed.cut ? true : nil))
     }
 
     private func dispatchAssistantReply(_ target: String?, _ args: ControlArgs, directory: AssistantDirectory) -> ControlResponse {

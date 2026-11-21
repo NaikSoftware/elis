@@ -311,20 +311,24 @@ public struct ControlCursor: Codable, Sendable, Equatable {
     }
 }
 
-/// The `assistant.*` result: entries for `ask` and `read`, `delivered` handles and `skipped` for `send`,
-/// the selection and choices for `provider`.
+/// The `assistant.*` result: entries for `ask`, `reply`, `read` and `send`; `delivered` handles, their `deliveredIDs`,
+/// `skipped` and `cut` (the text was shortened to fit the line) for `send`; the selection and choices for `provider`.
 public struct ControlAssistantResult: Codable, Sendable, Equatable {
     public var entries: [AssistantEntry]?
     public var delivered: [String]?
+    public var deliveredIDs: [String]?
     public var skipped: [AssistantSkip]?
+    public var cut: Bool?
     public var provider: String?
     public var providers: [String]?
 
-    public init(entries: [AssistantEntry]? = nil, delivered: [String]? = nil, skipped: [AssistantSkip]? = nil,
-                provider: String? = nil, providers: [String]? = nil) {
+    public init(entries: [AssistantEntry]? = nil, delivered: [String]? = nil, deliveredIDs: [String]? = nil,
+                skipped: [AssistantSkip]? = nil, cut: Bool? = nil, provider: String? = nil, providers: [String]? = nil) {
         self.entries = entries
         self.delivered = delivered
+        self.deliveredIDs = deliveredIDs
         self.skipped = skipped
+        self.cut = cut
         self.provider = provider
         self.providers = providers
     }

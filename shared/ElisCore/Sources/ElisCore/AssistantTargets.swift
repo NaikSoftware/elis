@@ -131,18 +131,31 @@ public enum AssistantLine {
         return folded
     }
 
-    public static func make(_ text: String) throws(AssistantLineError) -> String {
+    /// Typed is the line typed into a session, the message body it carries, and whether that body was cut.
+    public struct Typed: Sendable, Equatable {
+        public let line: String
+        public let body: String
+        public let cut: Bool
+    }
+
+    public static func make(_ text: String) throws(AssistantLineError) -> String { try typed(text).line }
+
+    public static func typed(_ text: String) throws(AssistantLineError) -> Typed {
         if text.unicodeScalars.contains(where: { $0.value == 0 }) { throw .nul }
         let folded = fold(text)
         if folded.isEmpty { throw .empty }
         var budget = maxBytes - prefix.utf8.count - hint.utf8.count
         var body = ""
+        var cut = false
         for ch in folded {
             budget -= String(ch).utf8.count
-            if budget < 0 { break }
+            if budget < 0 {
+                cut = true
+                break
+            }
             body.append(ch)
         }
         while body.hasSuffix(" ") { body.removeLast() }
-        return prefix + body + hint
+        return Typed(line: prefix + body + hint, body: body, cut: cut)
     }
 }

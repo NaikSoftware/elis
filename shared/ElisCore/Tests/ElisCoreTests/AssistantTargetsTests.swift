@@ -58,6 +58,10 @@ import Testing
 
     @Test func lineFoldsNewlinesAndKeepsTheHint() throws {
         #expect(try AssistantLine.make("a\nb\t\"c\"") == "[Elis] a b \"c\" — reply: elisctl reply \"<answer>\"")
+        let folded = try AssistantLine.typed("a\nb ")
+        #expect(folded.body == "a b" && !folded.cut)
+        let cut = try AssistantLine.typed(String(repeating: "я", count: 5000))
+        #expect(cut.cut && cut.line == "[Elis] \(cut.body) — reply: elisctl reply \"<answer>\"")
         let long = try AssistantLine.make(String(repeating: "я", count: 5000))
         #expect(long.utf8.count <= AssistantLine.maxBytes && long.hasSuffix("elisctl reply \"<answer>\""))
     }
