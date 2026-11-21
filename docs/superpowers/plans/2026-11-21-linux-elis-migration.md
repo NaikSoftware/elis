@@ -45,8 +45,9 @@ where Qt/KDE has its own idiom.
   It brings roles (`ZMX_MANAGED`, `_CLAIM`, `_FOLLOW`, `_SCREEN_ONLY`), `zmx screen`, `zmx type`, and a rendered
   screen on reattach, which the Mac relay reads directly (`PhoneLinkClaim.swift`, `PhoneLinkTerminal.swift`,
   `PhoneLinkTitleFilter.swift`), so the C++ port follows it line for line.
-- **D4. Bluetooth.** As on the Mac, the relay offers TLS and Bluetooth. A spike on BlueZ (LE peripheral, L2CAP CoC
-  listener, normal user) comes first, as the Mac's did; only a failed spike leaves Linux TLS-only.
+- **D4. Bluetooth.** As on the Mac, the relay offers TLS and Bluetooth; Bluetooth is required, not optional.
+  A spike on BlueZ (LE peripheral, L2CAP CoC listener) comes first to pick the working mechanism, not to decide
+  whether to ship it: if one route fails, the spike tries the next until one works.
 
 Settled earlier and not reopened:
 - The relay and Chat are C++ ports that reuse the golden vectors
@@ -148,7 +149,8 @@ decoration and menu bar.
 ### Phase 6 — Bluetooth (D4)
 
 - Spike: BlueZ over D-Bus (`LEAdvertisingManager1` and `GattManager1`) with an LE L2CAP CoC socket on a dynamic
-  PSM, as a normal user, on this machine's adapter and a Pixel.
+  PSM, on this machine's adapter and a Pixel; if a route is refused (user permissions, bluetoothd policy, adapter
+  limits), the spike finds the setup that makes it work and the install documents it.
   Measure connect time and throughput against the Mac's numbers.
 - Then:
   - Noise `NNpsk0` (OpenSSL 3: X25519, ChaCha20-Poly1305, HKDF) with raw-DEFLATE frames: ctest against
