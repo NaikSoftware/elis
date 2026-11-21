@@ -153,16 +153,18 @@ replied, or not delivered. The dots clear when that next message is sent, so non
 ### Remote and phone
 
 A remote row is a target like any other: `assistant.send` types through the row's existing remote typing path.
-Its agent's `elisctl reply` reaches the origin's socket, not the viewing Mac, so the origin must forward the
-reply to the presenting Mac; that path is designed in the Mac phase and needs the owner's decision if any part
-is left out. The phone shows the Elis row and chat in a later phase.
+Its agent's `elisctl reply` reaches the origin's socket (another Mac, or an elis-server host), not the viewing app,
+so the origin forwards the reply to the app that sent the message; that route belongs to the shared reply contract,
+built with the first platform that shows remote rows, not deferred to the Mac UI.
+The phone shows the Elis row and chat in a later phase.
 
 ### Delivery order
 
-1. `ElisCore`: handles, targets, message line, provider argv and framing, protocol and dispatcher, tests.
+1. `ElisCore`, now: handles, targets, message line, chat transcript, provider argv and stream framing, system prompt,
+   and the whole `assistant.*` contract (reply included): protocol, dispatcher, `elisctl` CLI, tests.
 2. Linux, once the Linux phase 1 and the ElisBridge branch are on master: bridge functions, commands,
-   provider process, sidebar row, chat view, composer.
-3. Mac, on a Mac: SwiftUI row and chat, the provider process, and the remote reply route.
+   provider process, sidebar row, chat view, composer, user docs and skill.
+3. Mac, on a Mac: SwiftUI row and chat and the provider process over the same contract.
 
 ## Tests
 
