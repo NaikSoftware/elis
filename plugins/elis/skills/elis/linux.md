@@ -53,7 +53,7 @@ These answer `<cmd> is not supported on this platform (<reason>)`:
   Show a file by running a viewer as the overlay program (`less +N file`, `glow file`).
 
 Also absent from the CLI: `session wait` (use `events`), `clipboard set` (use `wl-copy`/`xclip`), `terminfo`, `overlay copy`,
-`session info` as an activity line, per-call status colour, shape, sound and pane, and
+per-call status colour, shape, sound and pane, and
 `session new --wait|--after|--before`.
 
 ## Keys

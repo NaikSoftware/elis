@@ -26,6 +26,7 @@ public final class ElisServer {
     public let catalog: CatalogRoot
     let actions: ServerActions
     let observer: PaneObserver
+    let ciPoller: CIPoller
     private var lock: StateDirectoryLock?
     private var socket: ServerControlSocket?
 
@@ -37,6 +38,7 @@ public final class ElisServer {
         self.lock = lock
         actions = ServerActions(store: store, catalog: catalog, identity: identity, panes: panes, events: events)
         observer = PaneObserver(store: store, panes: panes)
+        ciPoller = CIPoller(sessions: { store.workspaces.flatMap(\.sessions) }, apply: { store.setCI($1, forSession: $0.id) })
         observer.onRespawn = { [weak actions] session, daemon in actions?.streams.noteRespawn(session: session, daemon: daemon) }
         observer.onApplied = { [weak actions] in actions?.streams.catalogHub.refresh() }
         actions.paneExited = { [weak observer] session, identity in observer?.settleExited(session, identity: identity) }
@@ -105,6 +107,7 @@ public final class ElisServer {
         try socket.start()
         server.socket = socket
         server.observer.start()
+        server.ciPoller.start()
         return server
     }
 
@@ -130,6 +133,7 @@ public final class ElisServer {
     public func stop() {
         guard lock != nil else { return }
         observer.stop()
+        ciPoller.stop()
         socket?.stop()
         actions.streams.shutdown()
         socket = nil

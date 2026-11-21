@@ -23,7 +23,7 @@ public struct ControlDispatcher {
         case .eventsRead:
             return dispatchEventsRead(request)
         case .sessionNew, .sessionDuplicate, .sessionSelect, .sessionGo, .sessionClose, .sessionTerminate, .sessionRename,
-                .sessionReveal, .sessionMove, .sessionFlag, .sessionContext, .sessionInfo, .sessionSeen, .sessionStatus,
+                .sessionReveal, .sessionMove, .sessionFlag, .sessionContext, .sessionSeen, .sessionStatus,
                 .sessionRestore:
             return await dispatchSessionCommand(request)
         case .sessionTint, .workspaceTint:
@@ -258,8 +258,6 @@ public struct ControlDispatcher {
             return dispatchSessionFlag(request)
         case .sessionContext:
             return dispatchSessionContext(request)
-        case .sessionInfo:
-            return dispatchSessionInfo(request)
         case .sessionSeen:
             return actions.markSessionSeen(request.target, window: request.args?.window)
         case .sessionStatus:

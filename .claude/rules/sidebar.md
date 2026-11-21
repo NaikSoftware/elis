@@ -171,7 +171,7 @@ paths:
   selected rows included, whatever parts it stores; `RowContent.tint` reloads that row alone. The Tint submenu has
   no placement and checks an entry only when every target shares it. Stored parts stay for older readers and the
   agterm-linux fork; the app neither offers nor reads them.
-- A session with an info line (`session.info`, [[control-api]]) uses the `session-info-cell` identifier and a
+- A session with a CI line (`Session.effectiveCI`, [[control-api]]) uses the `session-info-cell` identifier and a
   taller row from `SidebarInfoMetrics`: the plain row, plus one line set 1.5 points smaller with a 9-point
   minimum, lifted 6 points into the plain row's bottom padding. The title row centers in a band of plain
   row height, so the name sits where a plain row puts it. `heightOfRowByItem` and the cell read the same `sessionInfo(forSession:)` gate.
@@ -181,8 +181,11 @@ paths:
   are drawn at 0.7 of the line's size, centered on cap height, because a full-size glyph reads oversized
   and low. A text-default symbol counts as emoji only with VS16, and VS15 always keeps text form.
 - `AppSettings.sessionInfoDisplay` (`always`|`flagged`|`off`, nil = always) decides where the line shows,
-  mirrored to `GhosttyApp.sessionInfoDisplay`. `flagged` shows it in the flagged view only. Hiding never
-  clears the line. The picker shares the Settings ▸ Interface Sidebar section's last row.
+  mirrored to `GhosttyApp.sessionInfoDisplay`, labelled "CI status". `flagged` shows it in the flagged view only
+  and polls only flagged sessions; `off` polls none. The picker shares the Settings ▸ Interface Sidebar section's last row.
+- A click on the line opens `CIStatusPanel` in an `NSPopover` and does nothing else: its
+  `NSClickGestureRecognizer` delays the mouse-down, so the row neither selects nor drags, while a moved press
+  fails the recognizer and drags as before. The panel reads the session live and closes when the line goes.
 
 ## Workspace focus
 

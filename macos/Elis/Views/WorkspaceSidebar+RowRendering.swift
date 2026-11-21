@@ -36,16 +36,15 @@ extension WorkspaceSidebar.Coordinator {
         return content + extras.top + extras.bottom
     }
 
-    /// sessionInfo is the info line a session row shows, shared by the height, the cell builder and the row diff.
-    /// The display setting gates drawing only, so a hidden line keeps its value and its timer.
+    /// sessionInfo is the CI line a session row shows, shared by the height, the cell builder and the row diff.
     func sessionInfo(forSession id: UUID) -> [SessionInfoSpan]? {
-        guard showsSessionInfo else { return nil }
-        return store.session(withID: id)?.effectiveInfo?.spans
+        store.session(withID: id).flatMap(sessionInfo(for:))
     }
 
     /// sessionInfo(for:) is the same line for a caller that already holds the session, sparing the id lookup.
     func sessionInfo(for session: Session) -> [SessionInfoSpan]? {
-        showsSessionInfo ? session.effectiveInfo?.spans : nil
+        guard showsSessionInfo, let ci = session.effectiveCI, !ci.isEmpty else { return nil }
+        return ci.spans
     }
 
     private var showsSessionInfo: Bool {
@@ -122,9 +121,13 @@ extension WorkspaceSidebar.Coordinator {
             cell.notice = notice
             cell.imageView?.setAccessibilityIdentifier("session-icon")
             cell.tint = session?.tint
-            if let info {
-                (cell as? SidebarInfoCellView)?.apply(spans: info, base: GhosttyApp.shared.sidebarFontSize,
-                                                      density: GhosttyApp.shared.sidebarDensity)
+            if let info, let infoCell = cell as? SidebarInfoCellView {
+                infoCell.apply(spans: info, base: GhosttyApp.shared.sidebarFontSize, density: GhosttyApp.shared.sidebarDensity)
+                let store = store
+                infoCell.onInfoClick = { anchor in
+                    guard let session = store.session(withID: node.id) else { return }
+                    CIStatusLine.showPanel(for: session, from: anchor)
+                }
             }
         }
         // the selection pill is a soft tint, so a selected row keeps the theme colors; a row tint overrides

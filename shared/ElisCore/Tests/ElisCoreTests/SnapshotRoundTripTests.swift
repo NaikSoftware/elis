@@ -540,15 +540,15 @@ struct SnapshotRoundTripTests {
         #expect(copy?.context == nil)
     }
 
-    @Test func sessionInfoIsNotSnapshottedOrDuplicated() throws {
+    @Test func ciIsNotSnapshottedOrDuplicated() throws {
         let store = makeStore()
         let ws = store.addWorkspace(name: "work")
         let session = try #require(store.addSession(toWorkspace: ws.id, cwd: "/a"))
-        store.setInfo(try SessionInfo.make(source: "3 agents", markdown: false, hideAfter: 0).get(), forSession: session.id)
+        store.setCI(CIStatus(branch: "main", sha: "abc", runs: [CIRun(workflow: "build", state: .passed, url: "u")]), forSession: session.id)
         let restored = makeStore()
         restored.restore(from: store.snapshot())
-        #expect(restored.workspaces[0].sessions[0].info == nil)
-        #expect(store.duplicateSession(session.id)?.info == nil)
+        #expect(restored.workspaces[0].sessions[0].ci == nil)
+        #expect(store.duplicateSession(session.id)?.ci == nil)
     }
 
     @Test func emptyRestoreCommandRoundTripsAsEmptyNotNil() throws {

@@ -21,9 +21,11 @@ enum SidebarInfoMetrics {
 /// `setColors`, so the selection and theme refresh paths recolor each fragment. On a selected row uncolored
 /// fragments follow the selection foreground while colored ones keep their color, as a row tint does.
 final class SidebarInfoCellView: SidebarCellView {
-    let infoField = NSTextField(labelWithString: "")
+    let infoField = SidebarInfoField(labelWithString: "")
     var titleBandHeight: NSLayoutConstraint?
     var infoTop: NSLayoutConstraint?
+    /// onInfoClick opens the CI panel; the line claims its click, so it neither selects the row nor starts a drag.
+    var onInfoClick: ((NSView) -> Void)?
     private var spans: [SessionInfoSpan] = []
     private var base = AppSettings.defaultSidebarFontSize
     private var selected = false
@@ -35,6 +37,20 @@ final class SidebarInfoCellView: SidebarCellView {
         titleBandHeight?.constant = AppSettings.sidebarRowHeight(fontSize: base, density: density)
         infoTop?.constant = -density.infoLineSpacing
         render()
+    }
+
+    override init(frame frameRect: NSRect) {
+        super.init(frame: frameRect)
+        let click = NSClickGestureRecognizer(target: self, action: #selector(infoClicked))
+        click.delaysPrimaryMouseButtonEvents = true
+        infoField.addGestureRecognizer(click)
+        infoField.onPress = { [weak self] in self?.infoClicked() }
+    }
+
+    required init?(coder _: NSCoder) { fatalError("init(coder:) is not supported") }
+
+    @objc private func infoClicked() {
+        onInfoClick?(infoField)
     }
 
     override func setColors(selected: Bool) {
@@ -106,5 +122,17 @@ final class SidebarInfoCellView: SidebarCellView {
         if let tint = span.color { return NSColor.tint(tint).withAlphaComponent(span.dim ? 0.55 : 1) }
         let alpha: CGFloat = selected ? (span.dim ? 0.6 : 0.85) : (span.dim ? 0.38 : span.bold ? 1 : 0.58)
         return foreground.withAlphaComponent(alpha)
+    }
+}
+
+/// SidebarInfoField is the CI line's label, pressable by VoiceOver as the mouse clicks it.
+final class SidebarInfoField: NSTextField {
+    var onPress: (() -> Void)?
+
+    override func accessibilityRole() -> NSAccessibility.Role? { .button }
+
+    override func accessibilityPerformPress() -> Bool {
+        onPress?()
+        return onPress != nil
     }
 }

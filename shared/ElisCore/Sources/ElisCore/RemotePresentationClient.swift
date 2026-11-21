@@ -29,8 +29,8 @@ public struct RemotePresentationEffects {
     public var agentSession: @MainActor (String?) -> Void
     /// agent carries the origin's running agent; nil also when the stream ends, since the origin no longer reports it.
     public var agent: @MainActor (PresentationAgent?) -> Void
-    /// info carries the origin's sidebar info line, nil for none; a snapshot sends it too.
-    public var info: @MainActor (PresentationInfo?) -> Void
+    /// ci carries the origin's CI status, nil for none; a snapshot sends it too.
+    public var ci: @MainActor (CIStatus?) -> Void
     public var layout: @MainActor (PresentationLayout) -> Void
     public var mode: @MainActor (PresentationMode) -> Void
     /// Shows an ask the origin handed over; false when it cannot, which the client reports as a refusal.
@@ -67,7 +67,7 @@ public struct RemotePresentationEffects {
                 context: @escaping @MainActor (String?) -> Void = { _ in },
                 agentSession: @escaping @MainActor (String?) -> Void = { _ in },
                 agent: @escaping @MainActor (PresentationAgent?) -> Void = { _ in },
-                info: @escaping @MainActor (PresentationInfo?) -> Void = { _ in },
+                ci: @escaping @MainActor (CIStatus?) -> Void = { _ in },
                 mode: @escaping @MainActor (PresentationMode) -> Void = { _ in },
                 askRequest: @escaping @MainActor (PresentationAsk) -> Bool = { _ in false },
                 askDismiss: @escaping @MainActor (PresentationAskRef) -> Void = { _ in },
@@ -96,7 +96,7 @@ public struct RemotePresentationEffects {
         self.context = context
         self.agentSession = agentSession
         self.agent = agent
-        self.info = info
+        self.ci = ci
         self.layout = layout
         self.mode = mode
         self.askRequest = askRequest
@@ -276,14 +276,14 @@ public final class RemotePresentationClient {
             effects.context(snapshot.context)
             effects.agentSession(snapshot.agentSession)
             effects.agent(snapshot.agent)
-            effects.info(snapshot.info)
+            effects.ci(snapshot.ci)
             effects.mail(snapshot.mail)
             if let respawns = snapshot.respawns { effects.respawns(respawns, true) }
         case .status(let status): effects.status(status)
         case .context(let context): effects.context(context)
         case .agentSession(let id): effects.agentSession(id)
         case .agent(let agent): effects.agent(agent)
-        case .info(let info): effects.info(info)
+        case .ci(let ci): effects.ci(ci)
         case .layout(let layout): applyLayout(layout)
         case .hud(let hud): effects.hud(hud)
         case .notify(let notify): effects.notify(notify)

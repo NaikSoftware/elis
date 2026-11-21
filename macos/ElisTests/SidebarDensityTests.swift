@@ -41,7 +41,7 @@ final class SidebarDensityTests: XCTestCase {
         let workspace = store.addWorkspace(name: "target")
         let plain = try XCTUnwrap(store.addSession(toWorkspace: workspace.id, cwd: "/tmp/plain"))
         let infoRow = try XCTUnwrap(store.addSession(toWorkspace: workspace.id, cwd: "/tmp/info"))
-        store.setInfo(try SessionInfo.make(source: "3 agents", markdown: false, hideAfter: 0).get(), forSession: infoRow.id)
+        store.setCI(CIStatus(branch: "main", sha: "abc", runs: [CIRun(workflow: "build", state: .passed, url: "u")]), forSession: infoRow.id)
         try mountSidebar(for: store)
         try assertMetrics(.standard, plain: plain.id, info: infoRow.id)
 

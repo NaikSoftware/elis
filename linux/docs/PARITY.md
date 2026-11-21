@@ -28,8 +28,8 @@ Legend: [x] done · [ ] todo · (fork) = fork-only feature, not in upstream docs
   `session|workspace tint` with a name or `#rrggbb`, `--tint` on new, parsed by ElisCore through ElisBridge.
   A tint colours icon and name, a workspace's band and a session's wash, as on the Mac; Linux also washes the terminal
   very lightly. elisctl has no deprecated `--on`/`--tint-on`; a raw `tintOn` is checked and ignored as on the Mac
-- [ ] `session info` (the Mac's sidebar info line) is not on Linux. The row's second line and Settings ▸ Interface ▸
-  Session info are drawn and wait for the CI summary to feed them. Linux's process-detail read (the node plus `pid`,
+- [x] The row's second line is the session's GitHub CI from `gh`, read back as the tree's `ci`, with its click panel and
+  Settings ▸ Interface ▸ CI status, as on the Mac (`session info` is gone on both). Linux's process-detail read (the node plus `pid`,
   `foreground`, `foregroundPid`, `liveCwd`, `profile`) has no Mac counterpart and is `session get` (`session.get`)
 - [x] Drag to reorder sessions and workspaces; drag a session to another workspace; multi-select
 - [x] Drop folders from the file manager onto the tree to open sessions there

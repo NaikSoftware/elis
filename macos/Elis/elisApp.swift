@@ -143,6 +143,7 @@ struct elisApp: App {
         actions.sessionTyper = controlServer
         SessionLaunchers.refresh()
         SessionAgentMonitor.start(library: library, zmxResolver: restored.foregroundResolver)
+        if !Self.isHostedUnitTest { CIStatusLine.start(library: library) }
         LinkOpener.shared.mode = { settingsModel.settings.effectiveLinkOpenMode }
         LinkOpener.shared.selectSession = { [weak actions] id, origin, pane in
             actions?.followSessionLink(id, from: origin, pane: pane)

@@ -672,20 +672,6 @@ public struct PresentationLinkRefusal: Codable, Equatable, Sendable {
     }
 }
 
-/// PresentationInfo is a session's local info line as the origin mirrors it. The viewer parses the source itself and
-/// runs no timer: `hideAfter` is the configured value for read-back, and the origin's expiry arrives as a clear.
-public struct PresentationInfo: Codable, Equatable, Sendable {
-    public var source: String
-    public var markdown: Bool
-    public var hideAfter: Double
-
-    public init(source: String, markdown: Bool, hideAfter: Double) {
-        self.source = source
-        self.markdown = markdown
-        self.hideAfter = hideAfter
-    }
-}
-
 /// PresentationSnapshot is the replaceable state a subscriber starts from.
 public struct PresentationSnapshot: Codable, Equatable, Sendable {
     public var status: PresentationStatus?
@@ -694,8 +680,8 @@ public struct PresentationSnapshot: Codable, Equatable, Sendable {
     public var layout: PresentationLayout?
     /// respawns is nil from an origin that predates parent respawn.
     public var respawns: PresentationRespawns?
-    /// info is nil from an origin that predates the info line, or with no local line set.
-    public var info: PresentationInfo?
+    /// ci is the origin's local CI status, nil for none.
+    public var ci: CIStatus?
     /// mail is nil from an origin that predates mail counts.
     public var mail: PresentationMail?
     /// agentSession is the origin's Claude conversation id, nil from an origin that predates it.
@@ -704,14 +690,14 @@ public struct PresentationSnapshot: Codable, Equatable, Sendable {
     public var agent: PresentationAgent?
 
     public init(status: PresentationStatus?, hud: PresentationHud?, context: String? = nil, layout: PresentationLayout? = nil,
-                respawns: PresentationRespawns? = nil, info: PresentationInfo? = nil, mail: PresentationMail? = nil,
+                respawns: PresentationRespawns? = nil, ci: CIStatus? = nil, mail: PresentationMail? = nil,
                 agentSession: String? = nil, agent: PresentationAgent? = nil) {
         self.status = status
         self.hud = hud
         self.context = context
         self.layout = layout
         self.respawns = respawns
-        self.info = info
+        self.ci = ci
         self.mail = mail
         self.agentSession = agentSession
         self.agent = agent
@@ -798,7 +784,7 @@ public struct PresentationFrame: Equatable, Sendable {
         case context(String?)
         case agentSession(String?)
         case agent(PresentationAgent?)
-        case info(PresentationInfo?)
+        case ci(CIStatus?)
         case layout(PresentationLayout)
         case hud(PresentationHud?)
         case notify(PresentationNotify)
@@ -870,7 +856,7 @@ public struct PresentationFrame: Equatable, Sendable {
             case .context: return "context"
             case .agentSession: return "agent.session"
             case .agent: return "agent"
-            case .info: return "info"
+            case .ci: return "ci"
             case .layout: return "layout"
             case .hud: return "hud"
             case .notify: return "notify"

@@ -81,13 +81,13 @@ add_custom_command(OUTPUT ${ELIS_ZMX}
   COMMENT "Building the patched zmx" USES_TERMINAL VERBATIM)
 add_custom_target(elis-zmx ALL DEPENDS ${ELIS_ZMX}) # not `zmx`, the output's own name
 
-add_library(elis-core STATIC src/core/store.cpp src/core/control.cpp src/core/launcher.cpp src/core/keymap.cpp src/core/hooks.cpp src/core/restore.cpp src/core/commands.cpp src/core/installers.cpp src/core/zmx.cpp src/core/transcript.cpp)
+add_library(elis-core STATIC src/core/store.cpp src/core/control.cpp src/core/launcher.cpp src/core/keymap.cpp src/core/hooks.cpp src/core/restore.cpp src/core/commands.cpp src/core/installers.cpp src/core/zmx.cpp src/core/transcript.cpp src/core/ci.cpp)
 target_include_directories(elis-core PUBLIC src/core)
 target_link_libraries(elis-core PUBLIC Qt6::Core ElisBridge PRIVATE Qt6::Sql)
 
 find_package(KF6Config REQUIRED)
 find_package(KF6WidgetsAddons REQUIRED)
-add_library(elis-ui STATIC src/app/mainwindow.cpp src/app/config.cpp src/app/settingsdialog.cpp src/app/sidebar.cpp src/app/palette.cpp src/app/overlay.cpp src/app/dashboard.cpp src/app/library.cpp src/app/attention.cpp src/app/konsoleprivate.cpp src/app/controlui.cpp src/app/help.cpp src/app/smoothwheel.cpp src/app/phone.cpp src/app/paneleadcover.cpp src/ctl/qrcodegen/qrcodegen.cpp
+add_library(elis-ui STATIC src/app/mainwindow.cpp src/app/config.cpp src/app/settingsdialog.cpp src/app/sidebar.cpp src/app/palette.cpp src/app/overlay.cpp src/app/dashboard.cpp src/app/library.cpp src/app/attention.cpp src/app/konsoleprivate.cpp src/app/controlui.cpp src/app/help.cpp src/app/smoothwheel.cpp src/app/phone.cpp src/app/paneleadcover.cpp src/app/cipanel.cpp src/ctl/qrcodegen/qrcodegen.cpp
   resources/resources.qrc)
 target_include_directories(elis-ui PUBLIC src/app)
 find_package(KF6Notifications REQUIRED)

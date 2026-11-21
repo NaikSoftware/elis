@@ -237,9 +237,9 @@ void MainWindow::showSettings()
                                        element(QStringLiteral("focusFilter"), tr("Workspace filter")), element(QStringLiteral("flaggedView"), tr("Flagged view")),
                                        element(QStringLiteral("workspaceAddSession"), tr("Workspace add-session")),
                                        element(QStringLiteral("workspaceIcons"), tr("Workspace icons")), element(QStringLiteral("sessionIcons"), tr("Session icons"))});
-              // where a session's second line shows; hiding never clears it
+              // where the CI line shows; Off also stops asking GitHub
               auto *info = new QHBoxLayout;
-              info->addWidget(new QLabel(tr("Session info")));
+              info->addWidget(new QLabel(tr("CI status")));
               info->addWidget(picker({{tr("Always"), QStringLiteral("always")}, {tr("Flagged"), QStringLiteral("flagged")}, {tr("Off"), QStringLiteral("off")}},
                                      cur.sessionInfoDisplay, [](Settings &s, const QString &v) { s.sessionInfoDisplay = v; }));
               info->addStretch(1);

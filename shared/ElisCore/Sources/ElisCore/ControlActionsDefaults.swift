@@ -370,10 +370,6 @@ public extension ControlActions {
         ControlResponse(ok: false, error: ControlActionsUnsupported.message("session.context"))
     }
 
-    func setSessionInfo(_: String?, window _: String?, info _: SessionInfo?) -> ControlResponse {
-        ControlResponse(ok: false, error: ControlActionsUnsupported.message("session.info"))
-    }
-
     func setSessionTint(_: String?, window _: String?, update _: ControlTintUpdate) -> ControlResponse {
         ControlResponse(ok: false, error: ControlActionsUnsupported.message("session.tint"))
     }

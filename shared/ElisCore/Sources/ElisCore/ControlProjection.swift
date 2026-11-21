@@ -363,13 +363,8 @@ public struct ControlSessionNode: Codable, Sendable, Equatable {
     public let collapsed: Bool?
     /// `page` for a page session, which has no terminal; omitted for a terminal session.
     public let content: String?
-    /// info is the sidebar info line's source as set (`Session.effectiveInfo`, so an attached row without a local
-    /// line shows its origin's). The three info fields are all present while a line is set, all omitted otherwise.
-    public let info: String?
-    /// infoMarkdown says whether `info` is read as markdown.
-    public let infoMarkdown: Bool?
-    /// infoHideAfter is the CONFIGURED expiry in seconds, 0 for none, never a countdown.
-    public let infoHideAfter: Double?
+    /// ci is the GitHub CI status the row's second line shows (`Session.effectiveCI`); omitted for none.
+    public let ci: CIStatus?
     /// The session's background watermark spec; nil/omitted when none is set. The read side of
     /// `session.background`.
     public let background: BackgroundWatermark?
@@ -458,14 +453,12 @@ public struct ControlSessionNode: Codable, Sendable, Equatable {
                 remoteOverlays: [ControlRemoteOverlayNode]? = nil, htmlOverlays: [ControlHtmlOverlayNode]? = nil,
                 hiddenOverlays: [String]? = nil, lastSelectedAt: Double? = nil,
                 tint: String? = nil, tintOn: [String]? = nil, parent: String? = nil, collapsed: Bool? = nil,
-                content: String? = nil, info: SessionInfo? = nil, remoteSessionID: String? = nil,
+                content: String? = nil, ci: CIStatus? = nil, remoteSessionID: String? = nil,
                 paneGrids: ControlPaneGrids? = nil) {
         self.paneGrids = paneGrids
         self.remoteSessionID = remoteSessionID
         self.content = content
-        self.info = info?.source
-        self.infoMarkdown = info?.markdown
-        self.infoHideAfter = info?.hideAfter
+        self.ci = ci
         self.parent = parent
         self.collapsed = collapsed
         self.id = id

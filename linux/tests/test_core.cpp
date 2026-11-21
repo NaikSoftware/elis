@@ -1,3 +1,4 @@
+#include "ci.h"
 #include "control.h"
 #include "hooks.h"
 #include "installers.h"
@@ -1255,6 +1256,27 @@ private Q_SLOTS:
         const QJsonObject gone = call(f.s, f.t, "tree")["result"]["tree"]["workspaces"][0]["sessions"][0].toObject();
         QVERIFY(!gone.contains("agentPane"));
         QCOMPARE(gone["agentSessionId"].toString(), QStringLiteral("c1")); // the id outlives claude
+    }
+
+    void ciIsReadBackWhileSetAndNoneOutsideGit()
+    {
+        Store s;
+        FakeTerminals t;
+        const QString w = s.addWorkspace("w"), a = s.addSession(w, "a", {});
+        QSignalSpy changed(&s, &Store::changed);
+        const QJsonObject ci{{"branch", "main"}, {"sha", "abc"}, {"runs", QJsonArray{QJsonObject{{"workflow", "build"}, {"state", "passed"}, {"url", "u"}}}}};
+        s.setCi(a, ci, {{QStringLiteral("✓ build"), false, false, false, false, QStringLiteral("green")}});
+        QCOMPARE(call(s, t, "tree")["result"]["tree"]["workspaces"][0]["sessions"][0]["ci"].toObject(), ci);
+        s.setCi(a, ci, s.session(a)->infoSpans);
+        QCOMPARE(changed.count(), 1); // an unchanged status emits nothing
+        s.setCi(a, {}, {});
+        QVERIFY(!call(s, t, "tree")["result"]["tree"]["workspaces"][0]["sessions"][0].toObject().contains("ci"));
+        QVERIFY(s.session(a)->infoSpans.isEmpty());
+
+        QTemporaryDir plain;
+        const QList<CiStatus> none = ciStatuses({plain.path(), QStringLiteral("relative")});
+        QCOMPARE(none.size(), 2);
+        QVERIFY(none[0].ci.isEmpty() && none[0].spans.isEmpty() && none[1].ci.isEmpty());
     }
 
     void contextFlagCollapseAndWorkspaceGo()

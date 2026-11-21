@@ -350,7 +350,7 @@ private struct InterfaceSettingsView: View {
         } label: {
             HStack(spacing: 6) {
                 Color.clear.frame(width: 18).accessibilityHidden(true)
-                Text("Session info").fixedSize()
+                Text("CI status").fixedSize()
             }
         }
         .accessibilityIdentifier("settings-session-info-display")
