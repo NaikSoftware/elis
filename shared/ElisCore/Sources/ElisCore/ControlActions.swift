@@ -341,4 +341,12 @@ public protocol ControlActions {
     func messagePanes(workspace: String?, window: String?) -> Result<[MessageRecipient], MessagePaneError>
     /// messageQueued reports a queued message so each recipient's store emits its `message` event.
     func messageQueued(_ messageID: UUID, from: String?, to recipients: [MessageRecipient])
+    /// assistantPeers lists the sessions the assistant can tag; nil on a host without the assistant.
+    func assistantPeers() -> [AssistantPeer]?
+    /// assistantInput writes a `user` entry, or a `reply` in its marked form, into the assistant's stream.
+    func assistantInput(_ entry: AssistantEntry)
+    /// assistantProviders lists the assistant CLIs installed here; nil on a host without the assistant.
+    func assistantProviders() -> [SessionLauncher]?
+    func assistantProviderChanged(_ provider: SessionLauncher)
+    func showAssistant(window: String?) -> ControlResponse
 }

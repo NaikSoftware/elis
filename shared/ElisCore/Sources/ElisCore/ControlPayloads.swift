@@ -310,3 +310,22 @@ public struct ControlCursor: Codable, Sendable, Equatable {
         self.column = column
     }
 }
+
+/// The `assistant.*` result: entries for `ask` and `read`, `delivered` handles and `skipped` for `send`,
+/// the selection and choices for `provider`.
+public struct ControlAssistantResult: Codable, Sendable, Equatable {
+    public var entries: [AssistantEntry]?
+    public var delivered: [String]?
+    public var skipped: [AssistantSkip]?
+    public var provider: String?
+    public var providers: [String]?
+
+    public init(entries: [AssistantEntry]? = nil, delivered: [String]? = nil, skipped: [AssistantSkip]? = nil,
+                provider: String? = nil, providers: [String]? = nil) {
+        self.entries = entries
+        self.delivered = delivered
+        self.skipped = skipped
+        self.provider = provider
+        self.providers = providers
+    }
+}

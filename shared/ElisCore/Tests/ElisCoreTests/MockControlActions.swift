@@ -210,6 +210,7 @@ final class MockControlActions: ControlActions {
     var nextQuickTypeResponse = ControlResponse(ok: true)
     var nextQuickTextResponse = ControlResponse(ok: true)
     var nextSessionTypeResponse = ControlResponse(ok: true)
+    var sessionTypeResponses: [String: ControlResponse] = [:]
     var nextSessionCopyResponse = ControlResponse(ok: true)
     var nextSessionPasteResponse = ControlResponse(ok: true)
     var nextSessionSelectAllResponse = ControlResponse(ok: true)
@@ -778,7 +779,7 @@ final class MockControlActions: ControlActions {
     func typeSession(_ target: String?, window: String?,
                      options: ControlSessionTypeOptions) async -> ControlResponse {
         calls.append(.sessionType(target: target, window: window, options))
-        return nextSessionTypeResponse
+        return target.flatMap { sessionTypeResponses[$0] } ?? nextSessionTypeResponse
     }
 
     func copySessionSelection(_ target: String?, window: String?) -> ControlResponse {
@@ -1102,5 +1103,23 @@ final class MockControlActions: ControlActions {
 
     func messageQueued(_ messageID: UUID, from: String?, to recipients: [MessageRecipient]) {
         queuedMessages.append(Queued(id: messageID.uuidString, from: from, recipients: recipients))
+    }
+
+    /// peers nil is a host without the assistant, as the `ControlActions` default.
+    var peers: [AssistantPeer]?
+    var providers: [SessionLauncher]?
+    var streamInputs: [AssistantEntry] = []
+    var changedProviders: [SessionLauncher] = []
+    var showWindows: [String?] = []
+    var nextShowAssistantResponse = ControlResponse(ok: false, error: ControlActionsUnsupported.message("assistant.show"))
+
+    func assistantPeers() -> [AssistantPeer]? { peers }
+    func assistantInput(_ entry: AssistantEntry) { streamInputs.append(entry) }
+    func assistantProviders() -> [SessionLauncher]? { providers }
+    func assistantProviderChanged(_ provider: SessionLauncher) { changedProviders.append(provider) }
+
+    func showAssistant(window: String?) -> ControlResponse {
+        showWindows.append(window)
+        return nextShowAssistantResponse
     }
 }

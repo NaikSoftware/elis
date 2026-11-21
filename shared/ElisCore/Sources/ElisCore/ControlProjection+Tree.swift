@@ -104,6 +104,8 @@ public struct ControlTree: Codable, Sendable, Equatable {
     /// snapshotUnsaved is true after this window's AppStore save fails until its next successful save,
     /// omitted otherwise. Per window, unlike `indexUnsaved`.
     public let snapshotUnsaved: Bool?
+    /// assistant is the app-wide assistant chat's state, omitted on a host without one.
+    public var assistant: ControlAssistantNode?
 
     public init(workspaces: [ControlWorkspaceNode], idleMs: Int? = nil, autoFollowMs: Int? = nil,
                 attentionIncludesActive: Bool? = nil, attentionNavigationAcrossWindows: Bool? = nil,
@@ -144,6 +146,20 @@ public struct ControlTree: Codable, Sendable, Equatable {
         self.pickPending = pickPending
         self.askPending = askPending
         self.app = app
+    }
+}
+
+public struct ControlAssistantNode: Codable, Sendable, Equatable {
+    public var provider: String?
+    public var providers: [String]
+    public var running: Bool
+    public var unread: Int
+
+    public init(provider: String?, providers: [String], running: Bool, unread: Int) {
+        self.provider = provider
+        self.providers = providers
+        self.running = running
+        self.unread = unread
     }
 }
 

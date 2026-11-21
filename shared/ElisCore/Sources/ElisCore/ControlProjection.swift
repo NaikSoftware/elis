@@ -428,6 +428,8 @@ public struct ControlSessionNode: Codable, Sendable, Equatable {
     /// hidden local slot still counts in `overlay` and `paneOverlays`, which report occupancy; a remote page
     /// is listed when the presenting Mac reports it hidden.
     public let hiddenOverlays: [String]?
+    /// handle is the assistant's `@` tag for this session, omitted on a host without the assistant.
+    public var handle: String?
 
     public init(id: String, name: String, cwd: String, title: String? = nil, active: Bool, split: Bool,
                 hasSplit: Bool? = nil, backedByZmx: Bool?, splitAxis: String? = nil,
@@ -742,6 +744,8 @@ public struct ControlWorkspaceNode: Codable, Sendable, Equatable {
     public let rememberedFolder: String?
     /// The workspace's pinned project folder; nil/omitted when none.
     public let projectFolder: String?
+    /// handle is the assistant's `@ws:` tag for this workspace, omitted on a host without the assistant.
+    public var handle: String?
     public let sessions: [ControlSessionNode]
 
     public init(id: String, name: String, active: Bool, focused: Bool? = nil,

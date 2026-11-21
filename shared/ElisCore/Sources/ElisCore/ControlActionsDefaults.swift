@@ -15,6 +15,18 @@ public extension ControlActions {
 
     func messageQueued(_: UUID, from _: String?, to _: [MessageRecipient]) {}
 
+    func assistantPeers() -> [AssistantPeer]? { nil }
+
+    func assistantInput(_: AssistantEntry) {}
+
+    func assistantProviders() -> [SessionLauncher]? { nil }
+
+    func assistantProviderChanged(_: SessionLauncher) {}
+
+    func showAssistant(window _: String?) -> ControlResponse {
+        ControlResponse(ok: false, error: ControlActionsUnsupported.message("assistant.show"))
+    }
+
     func attachCompanionPage(_: String?, window _: String?) -> ControlResponse {
         ControlResponse(ok: false, error: ControlActionsUnsupported.message("session.companion.page.attach"))
     }
