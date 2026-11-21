@@ -9,7 +9,7 @@ ctl() { "$bin/elisctl" "$@"; }
 pid=
 mpid=
 start() {
-  QT_QPA_PLATFORM=offscreen "$bin/elis" >"$ELIS_STATE_DIR/app.log" 2>&1 &
+  CLAUDE_CONFIG_DIR=$ELIS_STATE_DIR/claude QT_QPA_PLATFORM=offscreen "$bin/elis" >"$ELIS_STATE_DIR/app.log" 2>&1 &
   pid=$!
   for _ in $(seq 50); do ctl tree >/dev/null 2>&1 && return; sleep 0.2; done
   echo "socket never came up"; cat "$ELIS_STATE_DIR/app.log"; exit 1
@@ -75,6 +75,23 @@ ELIS_SESSION_ID=$id ctl session info | grep -q '^pid' || fail "info by env targe
 ctl session type "$root/share/agent-status/elis-claude-status.sh completed --auto-reset"$'\n' --target "$id"
 sleep 1
 ctl tree | grep probe | grep -q completed || fail "Claude hook adapter from a pane"
+# a claude in a pane names its conversation in the tree (its sessions/<pid>.json), which session transcript reads
+cat >"$ELIS_STATE_DIR/fake-claude.sh" <<'EOF'
+mkdir -p "$CLAUDE_CONFIG_DIR/sessions"
+printf '{"sessionId":"c1","cwd":"/tmp"}' >"$CLAUDE_CONFIG_DIR/sessions/$$.json"
+exec -a claude sleep 600
+EOF
+agent=$(ctl session new --name agent --cwd /tmp)
+sleep 1
+ctl session type 'bash "$ELIS_STATE_DIR/fake-claude.sh"'$'\n' --target "$agent"
+for _ in $(seq 30); do ctl --json tree | grep -q '"agentSessionId":"c1"' && break; sleep 0.2; done
+ctl --json tree | grep -q '"agentPane":"left","agentSessionId":"c1"' || fail "tree agentSessionId and agentPane"
+out=$(ctl session transcript --target "$agent" 2>&1) || true # an error exits 1
+grep -q "too old for session.transcript" <<<"$out" || fail "session transcript reaches the reader ($out)"
+out=$(ctl session transcript --pane right --target "$agent" 2>&1) || true
+grep -q "no adapter" <<<"$out" || fail "session transcript: the pane without claude ($out)"
+ctl session transcript --after 1 --before 2 --target "$agent" 2>/dev/null && fail "--after with --before"
+ctl session close --target "$agent" >/dev/null # never captured for a re-run restore: its argv names claude
 ctl session split on --axis horizontal --target "$id"
 sleep 1
 ctl session info --target "$id" | grep -qE '^hasSplit +true' || fail "split not created"

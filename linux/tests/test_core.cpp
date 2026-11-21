@@ -6,6 +6,7 @@
 #include "livehost.h"
 #include "restore.h"
 #include "store.h"
+#include "transcript.h"
 
 #include <QDir>
 #include <QFileInfo>
@@ -55,6 +56,23 @@ public:
         return true;
     }
 };
+
+// a session running claude in its left pane on conversation c1, as ControlDispatcherTranscriptTests' fixture
+struct TranscriptFixture {
+    Store s;
+    FakeTerminals t;
+    QString id;
+
+    TranscriptFixture()
+    {
+        id = dispatch(s, t, {{"cmd", "session.new"}}).value("result").toObject().value("id").toString();
+        s.setAgent(id, QStringLiteral("claude"));
+        s.setAgentSessionId(id, QStringLiteral("c1"));
+    }
+    QJsonObject read(const QJsonObject &args = {}) { return dispatch(s, t, {{"cmd", "session.transcript"}, {"target", id}, {"args", args}}); }
+    QString error(const QJsonObject &args) { return read(args).value("error").toString(); }
+};
+static const QString tooOld = QStringLiteral("the Elis on this host is too old for session.transcript");
 
 class TestCore : public QObject
 {
@@ -939,6 +957,86 @@ private Q_SLOTS:
         QCOMPARE(call(s, t, "session.text", id, {{"pane", "split"}})["error"].toString(), QStringLiteral("session has no split pane"));
         QCOMPARE(call(s, t, "session.text", id, {{"pane", "up"}})["error"].toString(), QStringLiteral("invalid pane: up"));
         QCOMPARE(call(s, t, "session.text", id, {{"pane", "top"}})["result"]["pane"].toString(), QStringLiteral("left"));
+    }
+
+    // session.transcript: ControlDispatcherTranscriptTests' argument and refusal cases; the page cases come with the reader
+    void afterAndBeforeAreExclusive()
+    {
+        TranscriptFixture f;
+        QCOMPARE(f.error({{"after", "1"}, {"before", "2"}}), QStringLiteral("use either --after or --before, not both"));
+    }
+
+    void offsetMustBeADecimal()
+    {
+        TranscriptFixture f;
+        QCOMPARE(f.error({{"after", "x"}}), QStringLiteral("after must be a byte offset"));
+        QCOMPARE(f.error({{"before", "-1"}}), QStringLiteral("before must be a byte offset"));
+        QCOMPARE(f.error({{"after", 3}}), QStringLiteral("after must be a byte offset")); // offsets travel as text
+    }
+
+    void maxBytesRejectsNonPositive()
+    {
+        TranscriptFixture f;
+        QCOMPARE(f.error({{"maxBytes", 0}}), QStringLiteral("max-bytes must be greater than 0"));
+        QCOMPARE(f.error({{"maxBytes", 1000000}}), tooOld);
+    }
+
+    void paneAliasesResolveAsInSessionText()
+    {
+        TranscriptFixture f;
+        f.t.panes.insert(f.id, {"p0", "p1"});
+        QCOMPARE(f.error({{"pane", "top"}}), tooOld);
+        QCOMPARE(f.error({}), tooOld); // the agent's pane
+        QCOMPARE(f.error({{"pane", "bottom"}}), QStringLiteral("no adapter"));
+        QCOMPARE(f.error({{"pane", "bottom"}, {"paneID", "p1"}}), QStringLiteral("no adapter"));
+        QCOMPARE(f.error({{"pane", "bottom"}, {"paneID", "p0"}}), tooOld); // a token that resolves wins
+        QCOMPARE(f.error({{"paneID", "zz"}}), QStringLiteral("unknown pane id: zz"));
+        QCOMPARE(f.error({{"pane", "x"}}), QStringLiteral("invalid pane: x"));
+    }
+
+    void scratchPaneIsRefused()
+    {
+        TranscriptFixture f;
+        QCOMPARE(f.error({{"pane", "scratch"}}), QStringLiteral("session.transcript reads --pane left or right"));
+    }
+
+    void lookupRefusalPassesThrough()
+    {
+        TranscriptFixture f;
+        f.s.setAgent(f.id, QStringLiteral("codex"));
+        QCOMPARE(f.read(), (QJsonObject{{"ok", false}, {"error", "no adapter"}}));
+        f.s.setAgent(f.id, QStringLiteral("claude"));
+        f.s.setAgentSessionId(f.id, QString());
+        QCOMPARE(f.error({}), QStringLiteral("no adapter"));
+        QCOMPARE(dispatch(f.s, f.t, {{"cmd", "session.transcript"}, {"target", "nope"}}).value("ok").toBool(), false);
+    }
+
+    // until the shared reader lands a valid read answers what the phone reads as a host without Chat
+    void defaultRefusalReadsAsTooOld()
+    {
+        TranscriptFixture f;
+        QCOMPARE(f.read(), (QJsonObject{{"ok", false}, {"error", tooOld}}));
+    }
+
+    void claudeHomeHonorsAbsoluteConfigDir()
+    {
+        QCOMPARE(claudeHome("/x", "/h"), QStringLiteral("/x"));
+        QCOMPARE(claudeHome("rel", "/h"), QStringLiteral("/h/.claude"));
+        QCOMPARE(claudeHome({}, "/h"), QStringLiteral("/h/.claude"));
+    }
+
+    // the read-back: the tree names the transcript the command reads
+    void treeNamesTheTranscript()
+    {
+        TranscriptFixture f;
+        const QJsonObject node = call(f.s, f.t, "tree")["result"]["tree"]["workspaces"][0]["sessions"][0].toObject();
+        QCOMPARE(node["agent"].toString(), QStringLiteral("claude"));
+        QCOMPARE(node["agentSessionId"].toString(), QStringLiteral("c1"));
+        QCOMPARE(node["agentPane"].toString(), QStringLiteral("left"));
+        f.s.setAgent(f.id, QString());
+        const QJsonObject gone = call(f.s, f.t, "tree")["result"]["tree"]["workspaces"][0]["sessions"][0].toObject();
+        QVERIFY(!gone.contains("agentPane"));
+        QCOMPARE(gone["agentSessionId"].toString(), QStringLiteral("c1")); // the id outlives claude
     }
 
     void contextFlagCollapseAndWorkspaceGo()
