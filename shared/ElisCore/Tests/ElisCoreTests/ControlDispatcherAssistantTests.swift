@@ -41,6 +41,7 @@ struct ControlDispatcherAssistantTests {
         #expect(entry.kind == .user && entry.text == "what is claude doing?")
         #expect(chat.entries(last: nil) == [entry])
         #expect(actions.streamInputs == [entry])
+        #expect(actions.streamTexts == ["what is claude doing?"])
     }
 
     @Test func askAndReplyMarkTheAssistantRunning() async {
@@ -154,9 +155,8 @@ struct ControlDispatcherAssistantTests {
         let stored = try #require(chat.entries(last: nil).last)
         #expect(response?.ok == true)
         #expect(stored.kind == .reply && stored.from == "shell1-uuid" && stored.text == "tests pass")
-        let input = try #require(actions.streamInputs.first)
-        #expect(input.text == "[reply from @zsh] tests pass")
-        #expect(input.id == stored.id && input.kind == .reply && input.from == "shell1-uuid")
+        #expect(actions.streamInputs == [stored])
+        #expect(actions.streamTexts == ["[reply from @zsh] tests pass"])
         #expect(chat.entries(last: nil).count == 1)
     }
 

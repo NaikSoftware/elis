@@ -35,7 +35,7 @@ extension ControlDispatcher {
         }
         let entry = chat.append(.user, text: text, now: Date().timeIntervalSince1970)
         chat.inputQueued()
-        actions.assistantInput(entry)
+        actions.assistantInput(entry, streamText: text)
         return assistantSuccess(ControlAssistantResult(entries: [entry]))
     }
 
@@ -82,8 +82,7 @@ extension ControlDispatcher {
         }
         let stored = chat.append(.reply, text: text, from: peer.sessionID, now: Date().timeIntervalSince1970)
         chat.inputQueued()
-        actions.assistantInput(AssistantEntry(id: stored.id, kind: .reply, from: stored.from, to: stored.to,
-                                              text: "[reply from @\(handle(peer, in: directory))] \(text)", ts: stored.ts))
+        actions.assistantInput(stored, streamText: "[reply from @\(handle(peer, in: directory))] \(text)")
         return assistantSuccess(ControlAssistantResult(entries: [stored]))
     }
 

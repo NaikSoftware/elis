@@ -17,7 +17,7 @@ public extension ControlActions {
 
     func assistantPeers() -> [AssistantPeer]? { nil }
 
-    func assistantInput(_: AssistantEntry) {}
+    func assistantInput(_: AssistantEntry, streamText _: String) {}
 
     func assistantSent(_: AssistantEntry) {}
 

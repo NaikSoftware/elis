@@ -343,10 +343,11 @@ public protocol ControlActions {
     func messageQueued(_ messageID: UUID, from: String?, to recipients: [MessageRecipient])
     /// assistantPeers lists the sessions the assistant can tag; nil on a host without the assistant.
     func assistantPeers() -> [AssistantPeer]?
-    /// assistantInput writes a `user` entry, or a `reply` in its marked form, into the assistant's stream.
+    /// assistantInput writes `streamText` into the assistant's stream: a `user` entry's text, or a `reply`'s marked form.
+    /// `entry` is the stored transcript entry.
     /// The dispatcher has called `chat.inputQueued()`; the host calls `chat.turnEnded()` per finished turn and
     /// `chat.providerFailed` when no provider can run or its process dies.
-    func assistantInput(_ entry: AssistantEntry)
+    func assistantInput(_ entry: AssistantEntry, streamText: String)
     /// assistantSent reports the `sent` entry `assistant.send` appended, so the host can emit it.
     func assistantSent(_ entry: AssistantEntry)
     /// assistantProviders lists the assistant CLIs installed here; nil on a host without the assistant.
