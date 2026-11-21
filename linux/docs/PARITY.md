@@ -29,8 +29,7 @@ Legend: [x] done · [ ] todo · (fork) = fork-only feature, not in upstream docs
   very lightly. `--on`/`--tint-on` are gone, and an older file's placement is ignored
 - [x] `session info` sets the sidebar info line (markdown, `--hide-after`, Settings ▸ Interface ▸ Session info), as on
   the Mac. Linux's former `session info` read (the node plus `pid`, `foreground`, `foregroundPid`, `liveCwd`,
-  `profile`) has no Mac counterpart and is `session get` (`session.get`). The markdown is a small parser of the same
-  inline forms rather than Foundation's, so a rare CommonMark corner case may render differently
+  `profile`) has no Mac counterpart and is `session get` (`session.get`)
 - [x] Drag to reorder sessions and workspaces; drag a session to another workspace; multi-select
 - [x] Drop folders from the file manager onto the tree to open sessions there
 - [x] Drop a session row on a terminal to type its Claude Code conversation id, else its Elis id (Elis only)

@@ -671,7 +671,7 @@ private Q_SLOTS:
             {"two\nlines", false, 0, "info text must be one line"},
             {"   ", false, 0, "info text is empty"},
             {"bell\a", false, 0, "info text contains a control character"},
-            {"^[x](color: \"teal\")", true, 0, "unknown info color: teal (red, orange, yellow, green, blue, purple, gray)"},
+            {"^[x](color: \"navy\")", true, 0, "unknown info color: navy (red|orange|yellow|green|blue|purple|gray|teal|pink|brown|indigo|mint)"},
             {"^[x](color: green)", true, 0, "invalid info markdown; quote attribute values: ^[text](color: \"green\")"},
             {"ok", false, 86401, "--hide-after must be 0...86400 seconds"}};
         for (const auto &[src, markdown, hide, message] : refused) {

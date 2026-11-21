@@ -7,7 +7,7 @@
 struct InfoSpan {
     QString text;
     bool bold = false, italic = false, code = false, dim = false;
-    QString color; // a Store::tintColors name; "" = the row's own colour
+    QString color; // an ElisCore TintColor name; "" = the row's own colour
     bool operator==(const InfoSpan &) const = default;
 };
 
@@ -20,6 +20,9 @@ struct SessionInfo {
     QList<InfoSpan> spans;
     bool operator==(const SessionInfo &) const = default;
 
-    // validates a set and parses its source; *error carries the control message on a refusal
+    // ElisCore's SessionInfo.make through ElisBridge: the Mac's validation and markup; *error carries its rejection
     static SessionInfo make(const QString &source, bool markdown, double hideAfter, QString *error);
 };
+
+// sidebar.density's mode ("" toggles) against the current density, by ElisCore's parse; "" and *error on a refusal
+QString sidebarDensity(const QString &mode, const QString &current, QString *error);

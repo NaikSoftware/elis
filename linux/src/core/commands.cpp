@@ -262,10 +262,11 @@ static QJsonObject sidebarCommand(Store &store, const QString &cmd, const QJsonO
         return ok({{"text", s.flaggedViewLayout}});
     }
     if (cmd == QLatin1String("sidebar.density")) {
-        if (mode != QLatin1String("default") && mode != QLatin1String("compact") && mode != QLatin1String("toggle"))
-            return fail(QStringLiteral("invalid sidebar density: %1").arg(mode));
+        QString error;
         Settings s = store.settings;
-        s.sidebarDensity = mode != QLatin1String("toggle") ? mode : s.sidebarDensity == QLatin1String("compact") ? QStringLiteral("default") : QStringLiteral("compact");
+        s.sidebarDensity = sidebarDensity(args.value("mode").toString(), s.sidebarDensity, &error);
+        if (!error.isEmpty())
+            return fail(error);
         store.setSettings(s);
         return ok({{"text", s.sidebarDensity}});
     }

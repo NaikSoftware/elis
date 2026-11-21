@@ -49,5 +49,69 @@ public func elisTranscriptRead(_ argsJSON: UnsafePointer<CChar>, _ claudeDirecto
     }
 }
 
+private func encoded<T: Encodable>(_ value: T) -> UnsafeMutablePointer<CChar>? {
+    let data = (try? JSONEncoder().encode(value)) ?? Data(#"{"ok":false,"error":"encoding failed"}"#.utf8)
+    return strdup(String(decoding: data, as: UTF8.self))
+}
+
+private struct Refusal: Encodable {
+    var ok = false
+    let error: String
+}
+
+/// `session.info` set's text, validated and parsed as the Mac does: `{"ok":true,"spans":[…]}` or the Mac's
+/// rejection message. Input `{"source","markdown","hideAfter"}`.
+@_cdecl("elis_session_info")
+public func elisSessionInfo(_ json: UnsafePointer<CChar>) -> UnsafeMutablePointer<CChar>? {
+    struct Input: Decodable {
+        let source: String
+        let markdown: Bool?
+        let hideAfter: Double?
+    }
+    struct Span: Encodable {
+        let text: String
+        let bold, italic, code, dim: Bool
+        let color: String?
+    }
+    struct Parsed: Encodable {
+        var ok = true
+        let spans: [Span]
+    }
+    guard let input = try? JSONDecoder().decode(Input.self, from: Data(String(cString: json).utf8)) else {
+        return encoded(Refusal(error: "invalid arguments"))
+    }
+    switch SessionInfo.make(source: input.source, markdown: input.markdown ?? false, hideAfter: input.hideAfter ?? 0) {
+    case .failure(let rejection): return encoded(Refusal(error: rejection.message))
+    case .success(let info):
+        return encoded(Parsed(spans: info.spans.map {
+            Span(text: $0.text, bold: $0.bold, italic: $0.italic, code: $0.code, dim: $0.dim, color: $0.color?.rawValue)
+        }))
+    }
+}
+
+/// `sidebar.density`'s mode against the current density: `{"ok":true,"density":"default|compact"}` or the Mac's
+/// refusal. Input `{"mode"?,"current"}`; an absent mode toggles.
+@_cdecl("elis_sidebar_density")
+public func elisSidebarDensity(_ json: UnsafePointer<CChar>) -> UnsafeMutablePointer<CChar>? {
+    struct Input: Decodable {
+        let mode: String?
+        let current: String
+    }
+    struct Density: Encodable {
+        var ok = true
+        let density: String
+    }
+    guard let input = try? JSONDecoder().decode(Input.self, from: Data(String(cString: json).utf8)) else {
+        return encoded(Refusal(error: "invalid arguments"))
+    }
+    let current = SidebarDensity(rawValue: input.current) ?? .standard
+    switch ControlSidebarDensityMode.parse(input.mode) {
+    case nil: return encoded(Refusal(error: "invalid sidebar density: \(input.mode ?? "toggle")"))
+    case .standard: return encoded(Density(density: SidebarDensity.standard.rawValue))
+    case .compact: return encoded(Density(density: SidebarDensity.compact.rawValue))
+    case .toggle: return encoded(Density(density: (current == .compact ? SidebarDensity.standard : .compact).rawValue))
+    }
+}
+
 @_cdecl("elis_free")
 public func elisFree(_ pointer: UnsafeMutablePointer<CChar>?) { free(pointer) }
