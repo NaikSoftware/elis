@@ -113,6 +113,7 @@ void Palette::open(const QString &placeholder, const QList<Item> &items, bool sw
     m_switcher = switcher;
     m_cancel = std::move(cancel);
     custom = {};
+    m_anchor = std::exchange(anchor, nullptr);
     m_initial = current;
     m_search->setPlaceholderText(placeholder);
     m_search->setVisible(!switcher);
@@ -133,6 +134,12 @@ void Palette::place()
     for (int i = 0; i < m_list->count() && i < 9; ++i)
         rows += m_list->sizeHintForRow(i);
     const int height = (m_switcher ? 0 : m_search->sizeHint().height()) + rows + 20;
+    if (m_anchor && m_anchor->isVisible()) {
+        const QRect at(m_anchor->mapTo(w, QPoint()), m_anchor->size());
+        const int x = qBound(8, at.center().x() - width / 2, w->width() - width - 8);
+        setGeometry(x, at.bottom() + 7, width, qMin(height, w->height() - at.bottom() - 15));
+        return;
+    }
     setGeometry((w->width() - width) / 2, w->height() / 6, width, qMin(height, w->height() * 2 / 3));
 }
 

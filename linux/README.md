@@ -51,8 +51,9 @@ Pair the phone again with the Elis phone app: the app id and the link scheme cha
 - A session row shows the logo of the agent running in it, its status dot (active, blocked, completed), an unseen
   notification count, and a filled icon when flagged. Companions sit indented under their parent; Duplicate as
   Companion copies a session's split layout and the program in each pane.
-- Tint a session or workspace row (row menu ▸ Tint: seven colours, on the icon, the name, the background, or any mix).
-  A background tint washes the row and the session's terminal; a workspace's wash reaches its sessions.
+- Tint a session or workspace row (row menu ▸ Tint: seven colours). A tint colours the icon and the name; a
+  workspace's draws a band around its sessions, a session's washes its row, and both wash the terminal very lightly.
+- An info line under a session's name (`elisctl session info`), for an agent or script to say what it is doing now.
 - Rename inline (double-click), multi-select, drag to reorder or move between workspaces, and drop folders from the
   file manager to open sessions there. Drop a session on a terminal to type its id: the Claude Code conversation id
   it runs (or ran last), else Elis's session id. The footer has New Session, New Workspace, the workspace filter and the

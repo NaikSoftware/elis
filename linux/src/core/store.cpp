@@ -15,38 +15,16 @@ const QStringList Store::statuses = {QStringLiteral("idle"), QStringLiteral("act
 const QStringList Store::tintColors = {QStringLiteral("red"),  QStringLiteral("orange"), QStringLiteral("yellow"), QStringLiteral("green"),
                                        QStringLiteral("blue"), QStringLiteral("purple"), QStringLiteral("gray")};
 
-QStringList Store::tintParts(const QStringList &raw)
-{
-    QStringList parts;
-    for (const QString &p : raw) {
-        const QString part = p.trimmed().toLower();
-        if (part != QLatin1String("icon") && part != QLatin1String("name") && part != QLatin1String("background"))
-            return {};
-        parts << part;
-    }
-    QStringList ordered;
-    for (const char *p : {"icon", "name", "background"})
-        if (parts.contains(QLatin1String(p)))
-            ordered << QLatin1String(p);
-    return ordered;
-}
-
 static QJsonValue tintJson(const Tint &t)
 {
-    return t.color.isEmpty() ? QJsonValue() : QJsonObject{{"color", t.color}, {"on", QJsonArray::fromStringList(t.on)}};
+    return t.color.isEmpty() ? QJsonValue() : QJsonObject{{"color", t.color}};
 }
 
 static Tint tintFromJson(const QJsonValue &v)
 {
-    // an unknown colour drops the tint; unknown parts are skipped and none left reads as the icon
+    // an unknown colour drops the tint; an older file's "on" placement is ignored
     const QString color = v.toObject().value("color").toString();
-    if (!Store::tintColors.contains(color))
-        return {};
-    QStringList on;
-    for (const auto &p : v.toObject().value("on").toArray())
-        on += Store::tintParts({p.toString()});
-    on = Store::tintParts(on);
-    return {color, on.isEmpty() ? QStringList{QStringLiteral("icon")} : on};
+    return Store::tintColors.contains(color) ? Tint{color} : Tint{};
 }
 
 QString Session::displayName() const
@@ -368,6 +346,8 @@ bool Store::softClose(const QStringList &ids)
         if (group.contains(s->id)) {
             auto *w = workspaceOf(s->id);
             close.sessions << Parked{w->id, indexIn(*w, s->id), *s};
+            if (close.sessions.last().session.info.hideAfter > 0)
+                close.sessions.last().session.info = {}; // an undo never brings back a line whose time ran out
         }
     if (close.sessions.isEmpty())
         return false;
@@ -392,6 +372,9 @@ bool Store::softRemoveWorkspace(const QString &id)
         return false;
     PendingClose close{++m_pendingSerial};
     close.workspace = *at;
+    for (Session &s : close.workspace.sessions)
+        if (s.info.hideAfter > 0)
+            s.info = {};
     close.workspaceIndex = int(at - workspaces.cbegin());
     close.focusMember = focused.contains(id);
     focused.removeAll(id);
@@ -663,26 +646,30 @@ Tint *Store::tintOf(const QString &id)
     return w ? &w->tint : nullptr;
 }
 
-void Store::setTint(const QString &id, const QString &color, const QStringList &parts)
+void Store::setTint(const QString &id, const QString &color)
 {
     Tint *t = tintOf(id);
-    if (!t || (!color.isEmpty() && !tintColors.contains(color)))
+    if (!t || (!color.isEmpty() && !tintColors.contains(color)) || t->color == color)
         return;
-    // an untinted row starts on everything: icon, name and the background wash (its row, a workspace's open sessions, the terminal)
-    const QStringList fresh{QStringLiteral("icon"), QStringLiteral("name"), QStringLiteral("background")};
-    Tint next;
-    if (!color.isEmpty())
-        next = {color, !tintParts(parts).isEmpty() ? tintParts(parts) : t->on.isEmpty() ? fresh : t->on};
-    if (next == *t)
-        return;
-    *t = next;
+    t->color = color;
     Q_EMIT changed();
 }
 
-void Store::placeTint(const QString &id, const QStringList &parts)
+void Store::setInfo(const QString &id, const SessionInfo &info)
 {
-    if (Tint *t = tintOf(id); t && !t->color.isEmpty() && !tintParts(parts).isEmpty())
-        setTint(id, t->color, parts);
+    Session *s = session(id);
+    if (!s)
+        return;
+    const int revision = ++m_infoRevision[id];
+    if (info.hideAfter > 0)
+        QTimer::singleShot(qRound(info.hideAfter * 1000), this, [this, id, revision] {
+            if (m_infoRevision.value(id) == revision)
+                setInfo(id, {});
+        });
+    if (s->info == info)
+        return;
+    s->info = info;
+    Q_EMIT changed();
 }
 
 void Store::setCwd(const QString &id, const QString &cwd)
@@ -746,7 +733,7 @@ void Store::setSettings(const Settings &s)
     X(newSessionDirectory) X(newSessionCustomDirectory) X(newSessionPlacement) X(statusReset) X(lastLauncher) X(fontFamily) X(theme) \
     X(cursorStyle) X(cursorBlink) X(notificationSoundName) X(dockBounce) X(activeStatusColorHex) X(blockedStatusColorHex)            \
     X(completedStatusColorHex) X(activeStatusShape) X(blockedStatusShape) X(completedStatusShape) X(blockedStatusSoundName)            \
-    X(configDirectory) X(restoreMode) X(autoFollowAttention) X(flaggedViewLayout) X(sidebarDensity)
+    X(configDirectory) X(restoreMode) X(autoFollowAttention) X(flaggedViewLayout) X(sidebarDensity) X(sessionInfoDisplay)
 #define ELIS_SETTINGS_BOOLS(X)                                                                                                  \
     X(confirmCloseSession) X(closeUndo) X(workspaceRowClickExpands) X(notificationsEnabled) X(notificationBadgeEnabled) X(attentionIncludesActive) X(autoFollowStayOnActive) \
         X(windowBlur)

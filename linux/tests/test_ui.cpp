@@ -733,6 +733,80 @@ private Q_SLOTS:
         QCOMPARE(store.selected, beta);
     }
 
+    void sessionInfoLineGrowsItsRowWhereSettingsShowIt()
+    {
+        Store store;
+        const QString ws = store.addWorkspace("w");
+        const QString a = store.addSession(ws, "a", {}), b = store.addSession(ws, "b", {});
+        store.addSession(ws, "c", {});
+        QString e;
+        store.setInfo(a, SessionInfo::make("step 2", false, 0, &e));
+        Sidebar tree(store);
+        tree.rebuild();
+        tree.resize(260, 400);
+        tree.show();
+        auto height = [&](const QString &id) {
+            for (int i = 0; i < tree.topLevelItem(0)->childCount(); ++i)
+                if (tree.topLevelItem(0)->child(i)->data(0, SidebarRole::Id).toString() == id)
+                    return tree.visualItemRect(tree.topLevelItem(0)->child(i)).height();
+            return -1;
+        };
+        QTRY_COMPARE(height(a), height(b) + QFontMetrics(Sidebar::infoFont(tree.font())).height());
+        Settings st = store.settings;
+        st.sessionInfoDisplay = QStringLiteral("flagged");
+        store.setSettings(st);
+        tree.rebuild();
+        QTRY_COMPARE(height(a), height(b)); // hidden outside the flagged view, still set
+        QCOMPARE(store.session(a)->info.source, QStringLiteral("step 2"));
+    }
+
+    void foldingAWorkspaceByClickRefreshesItsBandPadding()
+    {
+        Store store;
+        const QString ws = store.addWorkspace("w");
+        store.addSession(ws, "a", {});
+        Sidebar tree(store);
+        tree.rebuild();
+        tree.resize(260, 400);
+        tree.show();
+        QTreeWidgetItem *row = tree.topLevelItem(0);
+        const int open = tree.visualItemRect(row).height();
+        QTest::mouseClick(tree.viewport(), Qt::LeftButton, {}, tree.visualItemRect(row).center());
+        QVERIFY(store.collapsed.contains(ws));
+        QTRY_COMPARE(tree.visualItemRect(row).height(), open + Sidebar::groupGap + Sidebar::groupPadding); // its bottom edge now closes the band
+    }
+
+    void sessionPillFollowsTheInterfaceTogglesAndHangsThePalette()
+    {
+        Store store;
+        MainWindow w(store, dir.filePath("pill.json"));
+        w.restore({});
+        const QString ws = store.addWorkspace("w");
+        store.select(store.addSession(ws, "alpha", {}));
+        store.addSession(ws, "beta", {});
+        store.session(store.selected)->context = QStringLiteral("a fairly long context line");
+        Q_EMIT store.changed();
+        w.resize(1100, 700);
+        w.show();
+        QAbstractButton *pill = nullptr;
+        for (auto *t : w.findChildren<QAbstractButton *>())
+            if (t->accessibleName() == QLatin1String("Session switcher"))
+                pill = t;
+        QVERIFY(pill);
+        const int withContext = pill->sizeHint().width();
+        Settings st = store.settings;
+        st.hiddenInterfaceElements << QStringLiteral("sessionContext");
+        store.setSettings(st);
+        QVERIFY(pill->sizeHint().width() < withContext);
+        pill->click();
+        auto *palette = w.findChild<QFrame *>("palette");
+        QTRY_VERIFY(palette->isVisible());
+        const QRect at(pill->mapTo(&w, QPoint()), pill->size());
+        QVERIFY(palette->geometry().top() > at.bottom()); // hung under the pill, as elis's switcher is
+        QVERIFY(qAbs(palette->geometry().center().x() - at.center().x()) <= 1);
+        QTest::keyClick(palette->findChild<QListWidget *>(), Qt::Key_Escape);
+    }
+
     void flaggedViewLayouts()
     {
         Store store;

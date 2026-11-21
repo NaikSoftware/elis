@@ -397,7 +397,7 @@ private Q_SLOTS:
         QVERIFY(!call(s, t, "session.type", id, {{"text", "x"}, {"pane", "right"}})["ok"].toBool()); // no split pane
         QVERIFY(!call(s, t, "session.type", id, {{"text", "x"}, {"pane", "up"}})["ok"].toBool());
         QCOMPARE(call(s, t, "session.text", id, {{"lines", 2}})["result"]["text"].toString(), QStringLiteral("b\nc"));
-        QCOMPARE(call(s, t, "session.info", id)["result"]["session"]["pid"].toInt(), 42);
+        QCOMPARE(call(s, t, "session.get", id)["result"]["session"]["pid"].toInt(), 42);
     }
 
     void jsonRoundTripDropsLiveState()
@@ -620,36 +620,110 @@ private Q_SLOTS:
         QVERIFY(!s.session(c1) && !s.session(c2));
     }
 
-    void tintRecolorsKeepsPlacementAndPersists()
+    void tintIsAColourThatPersistsAndIgnoresOldPlacements()
     {
         Store s;
         FakeTerminals t;
-        QVERIFY(!call(s, t, "workspace.new", {}, {{"tintOn", QJsonArray{"name"}}})["ok"].toBool());
         QVERIFY(!call(s, t, "workspace.new", {}, {{"tint", "pink"}})["ok"].toBool());
         QVERIFY(s.workspaces.isEmpty()); // a refused tint creates nothing
         const QString ws = call(s, t, "workspace.new", {}, {{"name", "prod"}, {"tint", "Red"}})["result"]["id"].toString();
-        QCOMPARE(s.workspace(ws)->tint, (Tint{"red", {"icon", "name", "background"}})); // a fresh tint defaults to everything
-        QVERIFY(call(s, t, "workspace.tint", ws, {{"mode", "set"}, {"tint", "red"}, {"tintOn", QJsonArray{"background", "name", "icon"}}})["ok"].toBool());
-        QCOMPARE(s.workspace(ws)->tint, (Tint{"red", {"icon", "name", "background"}})); // ordered
-        s.placeTint(ws, {"icon", "name"});
+        QCOMPARE(s.workspace(ws)->tint, Tint{"red"});
+        // a raw client's old placement is ignored, as on the Mac
+        QVERIFY(call(s, t, "workspace.tint", ws, {{"mode", "set"}, {"tint", "red"}, {"tintOn", QJsonArray{"glyph"}}})["ok"].toBool());
         const QString a = s.addSession(ws, {}, {});
         QVERIFY(s.session(a)->tint.color.isEmpty()); // a workspace tint never reaches its sessions
-        s.placeTint(a, {"name"});
-        QVERIFY(s.session(a)->tint.color.isEmpty()); // placing on an untinted row is a no-op
-        QVERIFY(call(s, t, "session.tint", a, {{"mode", "set"}, {"tint", "green"}, {"tintOn", QJsonArray{"name", "icon"}}})["ok"].toBool());
         QVERIFY(call(s, t, "session.tint", a, {{"mode", "set"}, {"tint", "blue"}})["ok"].toBool());
-        QCOMPARE(s.session(a)->tint, (Tint{"blue", {"icon", "name"}}));
         QVERIFY(!call(s, t, "session.tint", a, {{"mode", "clear"}, {"tint", "red"}})["ok"].toBool());
-        QVERIFY(!call(s, t, "session.tint", a, {{"mode", "set"}, {"tint", "red"}, {"tintOn", QJsonArray{"glyph"}}})["ok"].toBool());
         const auto node = call(s, t, "tree")["result"]["tree"]["workspaces"][0];
         QCOMPARE(node["tint"].toString(), QStringLiteral("red"));
-        QCOMPARE(node["sessions"][0]["tintOn"].toArray(), (QJsonArray{"icon", "name"}));
+        QCOMPARE(node["sessions"][0]["tint"].toString(), QStringLiteral("blue"));
+        QVERIFY(!node.toObject().contains("tintOn"));
         QCOMPARE(s.session(s.duplicateSession(a, {}))->tint, Tint{}); // a duplicate starts untinted
         Store r;
         r.fromJson(s.toJson());
-        QCOMPARE(r.session(a)->tint, (Tint{"blue", {"icon", "name"}}));
+        QCOMPARE(r.session(a)->tint, Tint{"blue"});
+        QJsonObject old = s.toJson();
+        QJsonArray wss = old["workspaces"].toArray();
+        QJsonObject w0 = wss[0].toObject();
+        w0["tint"] = QJsonObject{{"color", "green"}, {"on", QJsonArray{"name"}}}; // a file from before placements went
+        wss[0] = w0;
+        old["workspaces"] = wss;
+        Store o;
+        o.fromJson(old);
+        QCOMPARE(o.workspace(ws)->tint, Tint{"green"});
         QVERIFY(call(s, t, "session.tint", a, {{"mode", "clear"}})["ok"].toBool());
         QVERIFY(!call(s, t, "tree")["result"]["tree"]["workspaces"][0]["sessions"][0].toObject().contains("tint"));
+    }
+
+    void sessionInfoMarkdownParsesTheInlineForms()
+    {
+        QString e;
+        auto spans = [&](const QString &src) { return SessionInfo::make(src, true, 0, &e).spans; };
+        QCOMPARE(spans("**3** agents ^[running](color: \"green\") ^[idle](dim: true)"),
+                 (QList<InfoSpan>{{"3", true}, {" agents "}, {"running", false, false, false, false, "green"}, {" "}, {"idle", false, false, false, true}}));
+        QCOMPARE(spans("*a* `b_c` [docs](https://x) snake_case &amp; \\*x\\*"),
+                 (QList<InfoSpan>{{"a", false, true}, {" "}, {"b_c", false, false, true}, {" docs snake_case & *x*"}}));
+        QCOMPARE(spans("^[**big**](color: \"Red\")"), (QList<InfoSpan>{{"big", true, false, false, false, "red"}}));
+        QVERIFY(e.isEmpty());
+        QCOMPARE(SessionInfo::make("**x**", false, 0, &e).spans, (QList<InfoSpan>{{"**x**"}})); // plain text is literal
+        const QList<std::tuple<QString, bool, double, QString>> refused{
+            {QString(513, QLatin1Char('a')), false, 0, "info text is over 512 bytes"},
+            {"two\nlines", false, 0, "info text must be one line"},
+            {"   ", false, 0, "info text is empty"},
+            {"bell\a", false, 0, "info text contains a control character"},
+            {"^[x](color: \"teal\")", true, 0, "unknown info color: teal (red, orange, yellow, green, blue, purple, gray)"},
+            {"^[x](color: green)", true, 0, "invalid info markdown; quote attribute values: ^[text](color: \"green\")"},
+            {"ok", false, 86401, "--hide-after must be 0...86400 seconds"}};
+        for (const auto &[src, markdown, hide, message] : refused) {
+            e.clear();
+            SessionInfo::make(src, markdown, hide, &e);
+            QCOMPARE(e, message);
+        }
+    }
+
+    void sessionInfoSetsClearsExpiresAndIsNeverSaved()
+    {
+        Store s;
+        FakeTerminals t;
+        const QString ws = s.addWorkspace("w"), a = s.addSession(ws, "a", {});
+        auto node = [&] { return call(s, t, "tree")["result"]["tree"]["workspaces"][0]["sessions"][0].toObject(); };
+        QVERIFY(!node().contains("info"));
+        QVERIFY(call(s, t, "session.info", a, {{"mode", "set"}, {"text", "step **2**"}, {"markdown", true}, {"hideAfter", 30}})["ok"].toBool());
+        QCOMPARE(node()["info"].toString(), QStringLiteral("step **2**"));
+        QVERIFY(node()["infoMarkdown"].toBool());
+        QCOMPARE(node()["infoHideAfter"].toDouble(), 30.0);
+        QCOMPARE(call(s, t, "session.info", a, {{"mode", "set"}, {"text", "a\nb"}})["error"].toString(), QStringLiteral("session.info: info text must be one line"));
+        QCOMPARE(node()["info"].toString(), QStringLiteral("step **2**")); // a refused set changes nothing
+        QVERIFY(call(s, t, "session.info", a, {{"mode", "set"}, {"text", "plain"}})["ok"].toBool());
+        QVERIFY(!node()["infoMarkdown"].toBool());
+        QCOMPARE(node()["infoHideAfter"].toDouble(), 0.0); // an omitted hideAfter cancels the expiry
+        QCOMPARE(call(s, t, "session.info", a, {{"mode", "clear"}, {"text", "x"}})["error"].toString(),
+                 QStringLiteral("session.info clear takes no text, markdown or hide-after"));
+        QCOMPARE(call(s, t, "session.info", a, {{"mode", "x"}})["error"].toString(), QStringLiteral("invalid info mode: x (set|clear)"));
+        QCOMPARE(s.session(s.duplicateSession(a, {}))->info, SessionInfo{}); // never copied
+        Store r;
+        r.fromJson(s.toJson());
+        QCOMPARE(r.session(a)->info, SessionInfo{}); // never saved
+        QVERIFY(call(s, t, "session.info", a, {{"mode", "clear"}})["ok"].toBool());
+        QVERIFY(!node().contains("info"));
+        QVERIFY(call(s, t, "session.info", a, {{"mode", "set"}, {"text", "soon gone"}, {"hideAfter", 0.05}})["ok"].toBool());
+        QTRY_VERIFY(s.session(a)->info.source.isEmpty());
+        QVERIFY(call(s, t, "session.info", a, {{"mode", "set"}, {"text", "timed"}, {"hideAfter", 60}})["ok"].toBool());
+        QVERIFY(s.softClose({a}));
+        QVERIFY(s.undoClose());
+        QVERIFY(s.session(a)->info.source.isEmpty()); // an undo never brings back a timed line
+        QCOMPARE(call(s, t, "session.get", a)["result"]["session"]["pid"].toInt(), 42); // the old read, renamed
+    }
+
+    void sidebarDensityToggleAndReadBack()
+    {
+        Store s;
+        FakeTerminals t;
+        QCOMPARE(call(s, t, "tree")["result"]["tree"]["sidebarDensity"].toString(), QStringLiteral("default"));
+        QCOMPARE(call(s, t, "sidebar.density")["result"]["text"].toString(), QStringLiteral("compact")); // toggle
+        QCOMPARE(call(s, t, "sidebar.density", {}, {{"mode", "default"}})["result"]["text"].toString(), QStringLiteral("default"));
+        QCOMPARE(call(s, t, "sidebar.density", {}, {{"mode", "x"}})["error"].toString(), QStringLiteral("invalid sidebar density: x"));
+        QCOMPARE(s.settings.sidebarDensity, QStringLiteral("default"));
     }
 
     void workspaceFocusFilterAndSuspend()
@@ -830,7 +904,7 @@ private Q_SLOTS:
                  QStringLiteral("command must not contain control characters"));
         QCOMPARE(call(s, t, "session.restore", id, {{"mode", "set"}, {"pane", "right"}, {"command", "x"}})["error"].toString(), QStringLiteral("session has no split"));
         QVERIFY(call(s, t, "session.restore", id, {{"mode", "set"}, {"command", "tmux attach"}})["ok"].toBool());
-        QCOMPARE(call(s, t, "session.info", id)["result"]["session"]["restoreCommand"].toString(), QStringLiteral("tmux attach"));
+        QCOMPARE(call(s, t, "session.get", id)["result"]["session"]["restoreCommand"].toString(), QStringLiteral("tmux attach"));
         Store pinned;
         pinned.fromJson(s.toJson());
         QCOMPARE(pinned.takeReplay(id, false, deny), QStringLiteral("tmux attach")); // a pin beats the capture and the denylist
@@ -1138,7 +1212,7 @@ private Q_SLOTS:
         QCOMPARE(call(s, t, "session.collapse", a2)["error"].toString(), QStringLiteral("session has no companions"));
         s.addCompanion(a1, {}, {});
         QVERIFY(call(s, t, "session.collapse", a1)["ok"].toBool());
-        QVERIFY(call(s, t, "session.info", a1)["result"]["session"]["collapsed"].toBool());
+        QVERIFY(call(s, t, "session.get", a1)["result"]["session"]["collapsed"].toBool());
 
         QCOMPARE(call(s, t, "workspace.go", {}, {{"to", "next"}})["result"]["id"].toString(), b);
         QCOMPARE(s.selected, b1);

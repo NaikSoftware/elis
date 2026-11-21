@@ -229,12 +229,23 @@ void MainWindow::showSettings()
     page(tr("Interface"), QStringLiteral("preferences-desktop-theme-global"),
          {group(tr("Title Bar"), twoColumns({element(QStringLiteral("filePanel"), tr("File panel toggle")), element(QStringLiteral("sidebarToggle"), tr("Sidebar toggle")),
                                              element(QStringLiteral("workspaceName"), tr("Workspace name")), element(QStringLiteral("sessionName"), tr("Session name")),
+                                             element(QStringLiteral("sessionContext"), tr("Session context")),
                                              element(QStringLiteral("recentSessions"), tr("Session switcher")), element(QStringLiteral("split"), tr("Split view")),
                                              element(QStringLiteral("dashboard"), tr("Dashboard")), element(QStringLiteral("customCommands"), tr("Custom commands"))})),
-          group(tr("Sidebar"), twoColumns({element(QStringLiteral("newSession"), tr("New session")), element(QStringLiteral("newWorkspace"), tr("New workspace")),
-                                           element(QStringLiteral("focusFilter"), tr("Workspace filter")), element(QStringLiteral("flaggedView"), tr("Flagged view")),
-                                           element(QStringLiteral("workspaceAddSession"), tr("Workspace add-session")),
-                                           element(QStringLiteral("workspaceIcons"), tr("Workspace icons")), element(QStringLiteral("sessionIcons"), tr("Session icons"))}))});
+          group(tr("Sidebar"), [&] {
+              auto *grid = twoColumns({element(QStringLiteral("newSession"), tr("New session")), element(QStringLiteral("newWorkspace"), tr("New workspace")),
+                                       element(QStringLiteral("focusFilter"), tr("Workspace filter")), element(QStringLiteral("flaggedView"), tr("Flagged view")),
+                                       element(QStringLiteral("workspaceAddSession"), tr("Workspace add-session")),
+                                       element(QStringLiteral("workspaceIcons"), tr("Workspace icons")), element(QStringLiteral("sessionIcons"), tr("Session icons"))});
+              // where session.info lines show; hiding never clears one
+              auto *info = new QHBoxLayout;
+              info->addWidget(new QLabel(tr("Session info")));
+              info->addWidget(picker({{tr("Always"), QStringLiteral("always")}, {tr("Flagged"), QStringLiteral("flagged")}, {tr("Off"), QStringLiteral("off")}},
+                                     cur.sessionInfoDisplay, [](Settings &s, const QString &v) { s.sessionInfoDisplay = v; }));
+              info->addStretch(1);
+              grid->addLayout(info, grid->rowCount(), 0, 1, 2);
+              return grid;
+          }())});
 
     // Notifications
     QList<std::pair<QString, QString>> sounds{{tr("None"), QString()}};

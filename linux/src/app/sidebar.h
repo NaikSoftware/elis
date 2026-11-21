@@ -7,6 +7,7 @@
 
 class Store;
 struct Settings;
+struct SessionInfo;
 class QPainter;
 
 // A launcher's icon as a template tinted `color`: the terminal glyph, or the agent's logo.
@@ -22,7 +23,7 @@ void drawStatusGlyph(QPainter *p, const QPointF &center, qreal radius, const QSt
 QColor tintColor(const QString &name);
 
 namespace SidebarRole {
-enum { Id = Qt::UserRole, Kind, Status, Blink, Agent, Flagged, Expanded, Unseen, Busy, Companion, HasCompanions, FoldedAttention, TintColor, TintOn, Focused, WorkspaceLabel, Split };
+enum { Id = Qt::UserRole, Kind, Status, Blink, Agent, Flagged, Expanded, Unseen, Busy, Companion, HasCompanions, FoldedAttention, TintColor, Focused, WorkspaceLabel, Split, Info };
 enum { WorkspaceRow = 1, SessionRow };
 }
 
@@ -60,6 +61,10 @@ public:
     Edge groupEdge(const QModelIndex &index) const;
     static QMargins edgeExtras(Edge edge);
     QRect contentRect(const QModelIndex &index, const QRect &row) const;
+    QRect titleRect(const QModelIndex &index, const QRect &row) const; // the content less its info line: name, icons, buttons
+    const SessionInfo *shownInfo(const QModelIndex &index) const;      // the session's info line where Settings shows it
+    int titleHeight(const QFontMetrics &fm) const;                     // a plain row's content height at the density
+    static QFont infoFont(const QFont &rowFont);
     static QRectF pillRect(const QRect &content, bool flat); // the selection pill, hover and wash
     static QRect addButtonRect(const QRect &row);
     static QRect repeatButtonRect(const QRect &row);
