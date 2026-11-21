@@ -71,8 +71,9 @@ ctl session text --target "$id" --lines 5 | grep -q "MARK=$id" || fail "pane env
 ctl session status blocked --target "$id" --blink --pane main
 ctl tree | grep probe | grep -q blocked || fail "status not set"
 ctl session status bogus --target "$id" 2>/dev/null && fail "bogus status accepted"
-ELIS_SESSION_ID=$id ctl session info | grep -q '^pid' || fail "info by env target"
-ctl session type "$root/../shared/agent-status/elis-claude-status.sh completed --auto-reset"$'\n' --target "$id"
+ELIS_SESSION_ID=$id ctl session get | grep -q '^pid' || fail "session get by env target"
+ctl session type "$root/../shared/agent-status/elis-claude-status.sh completed --auto-reset"$'
+' --target "$id"
 sleep 1
 ctl tree | grep probe | grep -q completed || fail "Claude hook adapter from a pane"
 # a claude in a pane names its conversation in the tree (its sessions/<pid>.json), which session transcript reads
@@ -104,11 +105,11 @@ ctl session transcript --after 1 --before 2 --target "$agent" 2>/dev/null && fai
 ctl session close --target "$agent" >/dev/null # never captured for a re-run restore: its argv names claude
 ctl session split on --axis horizontal --target "$id"
 sleep 1
-ctl session info --target "$id" | grep -qE '^hasSplit +true' || fail "split not created"
-ctl session info --target "$id" | grep -qE '^splitAxis +horizontal' || fail "split axis"
+ctl session get --target "$id" | grep -qE '^hasSplit +true' || fail "split not created"
+ctl session get --target "$id" | grep -qE '^splitAxis +horizontal' || fail "split axis"
 ctl session swap --target "$id"
 ctl session split close --target "$id"
-ctl session info --target "$id" | grep -qE '^hasSplit +false' || fail "split not closed"
+ctl session get --target "$id" | grep -qE '^hasSplit +false' || fail "split not closed"
 rc=0; ctl session overlay open 'exit 4' --block --target "$id" || rc=$?
 [ "$rc" = 4 ] || fail "overlay --block exits with the program's status ($rc)"
 [ "$(ctl session overlay result --target "$id")" = 4 ] || fail "overlay result"
@@ -130,13 +131,13 @@ ctl dashboard --close
 ctl tree --json | grep -q dashboardMembers && fail "dashboard --close"
 bg=$(ctl session new --name bg --no-select) # a notification for the session in front of you is not a badge
 ctl notify --title smoke --body hi --target "$bg"
-ctl session info --target "$bg" | grep -qE '^unseen +1' || fail "unseen badge"
+ctl session get --target "$bg" | grep -qE '^unseen +1' || fail "unseen badge"
 ctl session seen --target "$bg"
-ctl session info --target "$bg" | grep -qE '^unseen +0' || fail "session seen"
+ctl session get --target "$bg" | grep -qE '^unseen +0' || fail "session seen"
 sleep 0.5
 ctl session type $'printf "\\033]9;from osc\\007"\n' --target "$bg"
-for _ in $(seq 20); do ctl session info --target "$bg" | grep -qE '^unseen +1' && break; sleep 0.1; done
-ctl session info --target "$bg" | grep -qE '^unseen +1' || fail "OSC 9 from a pane raises the badge"
+for _ in $(seq 20); do ctl session get --target "$bg" | grep -qE '^unseen +1' && break; sleep 0.1; done
+ctl session get --target "$bg" | grep -qE '^unseen +1' || fail "OSC 9 from a pane raises the badge"
 grep -q "\"session\":\"$bg\"" "$ELIS_STATE_DIR/created" || fail "session.created hook got the event on stdin"
 ctl filepanel show >/dev/null
 ctl tree --json | grep -q '"filePanel":{"visible":true' || fail "file panel show"
@@ -146,7 +147,7 @@ ctl session new --parent "$id" --name logs --no-select >/dev/null
 ctl tree --json | grep -q "\"parent\":\"$id\"" || fail "companion"
 named=$(ctl session new --no-select)
 sleep 1.5
-folder=$(basename "$(ctl session info --target "$named" | awk '$1 == "cwd" {print $2}')")
+folder=$(basename "$(ctl session get --target "$named" | awk '$1 == "cwd" {print $2}')")
 [ "$folder" = "$(basename "$HOME")" ] && folder="~"
 ctl tree | grep "$named" | grep -qF -- "$folder" || fail "a plain shell is named after its folder (its prompt title is not a name)"
 ctl session type "sleep 4"$'\n' --target "$named"
@@ -169,13 +170,13 @@ sleep 1.5
 ctl tree | grep -q exits && fail "exited shell should end its session"
 doomed=$(ctl session new --name doomed --no-select)
 sleep 1
-dpid=$(ctl session info --target "$doomed" | awk '/^pid /{print $2}')
+dpid=$(ctl session get --target "$doomed" | awk '/^pid /{print $2}')
 kill -0 "$dpid" || fail "no shell pid for doomed"
 ctl session close --target "$doomed"
 for _ in $(seq 20); do kill -0 "$dpid" 2>/dev/null || break; sleep 0.1; done
 kill -0 "$dpid" 2>/dev/null && fail "closing a session left its shell running"
-ctl session tint red --on icon,name --target "$id"
-ctl tree --json | grep -q '"tint":"red","tintOn":\["icon","name"\]' || fail "session tint read-back"
+ctl session tint red --target "$id"
+ctl tree --json | grep -q '"tint":"red"' || fail "session tint read-back"
 ctl session tint pink --target "$id" 2>/dev/null && fail "unknown tint accepted"
 ctl workspace new --name tinted --tint green >/dev/null
 ctl tree --json | grep -q '"name":"tinted","rememberedFolder":"","sessions":\[\],"tint":"green"' || ctl tree --json | grep -q '"tint":"green"' || fail "workspace new --tint"
@@ -185,17 +186,17 @@ ctl workspace filter off
 ctl tree --json | grep -q '"workspaceFilter":false' || fail "workspace filter off"
 ctl tree --json | grep -q '"focused":true' || fail "filter off keeps the marked set"
 ctl font inc --target "$id"
-ctl session info --target "$id" | grep -qE '^fontSize +[1-9]' || fail "font inc read-back"
+ctl session get --target "$id" | grep -qE '^fontSize +[1-9]' || fail "font inc read-back"
 ctl font reset --target "$id"
-ctl session info --target "$id" | grep -qE '^fontSize +0' || fail "font reset"
+ctl session get --target "$id" | grep -qE '^fontSize +0' || fail "font reset"
 src=$(ctl session new --name src --no-select)
 sleep 1
 ctl session type $'sleep 300\n' --target "$src"
 sleep 1
 dup=$(ctl session duplicate --companion --no-select --target "$src")
 sleep 1
-ctl session info --target "$dup" | grep -qE "^parent +$src" || fail "duplicate as companion parent"
-dupid=$(ctl session info --target "$dup" | awk '/^pid /{print $2}') # exec'd: the program is the pane's process itself
+ctl session get --target "$dup" | grep -qE "^parent +$src" || fail "duplicate as companion parent"
+dupid=$(ctl session get --target "$dup" | awk '/^pid /{print $2}') # exec'd: the program is the pane's process itself
 grep -qx sleep "/proc/$dupid/comm" || fail "duplicate as companion runs the pane's program"
 undo=$(ctl session new --name undo --no-select)
 [ "$(ctl session close --undoable --target "$undo")" = "ok (undoable)" ] || fail "close --undoable"
@@ -209,7 +210,7 @@ w2=$(ctl window new second)
 inw2=$(ctl session new --name inw2 --window "$w2" --no-select)
 ctl tree --window "$w2" | grep -q inw2 || fail "session in the second window"
 ctl tree --window "$w1" | grep -q inw2 && fail "windows share a tree"
-ctl session info --target "$inw2" | grep -q '^name  *inw2' || fail "a session id reaches its window"
+ctl session get --target "$inw2" | grep -q '^name  *inw2' || fail "a session id reaches its window"
 ctl session type 'echo WIN=$ELIS_WINDOW_ID'$'\n' --target "$inw2"
 sleep 1
 ctl session text --target "$inw2" | grep -q "WIN=$w2" || fail "ELIS_WINDOW_ID"
@@ -241,6 +242,8 @@ ctl sidebar mode flagged
 ctl tree --json | grep -q '"sidebarMode":"flagged"' || fail "sidebar mode"
 ctl sidebar mode tree
 [ "$(ctl sidebar flagged-layout tree)" = tree ] || fail "sidebar flagged-layout"
+[ "$(ctl sidebar density compact)" = compact ] || fail "sidebar density"
+ctl tree --json | grep -q '"sidebarDensity":"compact"' || fail "sidebar density read-back"
 ctl workspace go --to next >/dev/null || fail "workspace go"
 ctl session select --target "$id"
 ctl session type $'seq 1 120\n' --target "$id"
@@ -332,16 +335,16 @@ ctl tree --json | grep -q '"context":"PR 12"' || fail "context not restored"
 ctl restore mode | grep -q 'active     rerun' || fail "restore mode at launch"
 [ "$(ctl window list | grep -c ' open$')" = 2 ] || fail "open windows reopen at launch"
 ctl tree --window "$w2" | grep -q inw2 || fail "second window restored"
-for _ in $(seq 20); do ctl session info --target src | grep -qE '^foreground +sleep' && break; sleep 0.2; done
-ctl session info --target src | grep -qE '^foreground +sleep' || fail "rerun restore replays the captured command"
+for _ in $(seq 20); do ctl session get --target src | grep -qE '^foreground +sleep' && break; sleep 0.2; done
+ctl session get --target src | grep -qE '^foreground +sleep' || fail "rerun restore replays the captured command"
 ctl restore mode live >/dev/null
 stop
 timeout 3 openssl s_client -connect "127.0.0.1:$port" </dev/null >/dev/null 2>&1 && fail0 "the relay outlived the app"
 
 start # live: every pane starts its daemon, and the captured sleep is replayed into the fresh shell once
 ctl restore mode | grep -q 'active     live' || fail "live mode at launch"
-for _ in $(seq 20); do ctl session info --target src | grep -qE '^foreground +sleep' && break; sleep 0.2; done
-spid=$(ctl session info --target src | awk '/^foregroundPid /{print $2}')
+for _ in $(seq 20); do ctl session get --target src | grep -qE '^foreground +sleep' && break; sleep 0.2; done
+spid=$(ctl session get --target src | awk '/^foregroundPid /{print $2}')
 [ -n "$spid" ] && [ "$spid" -gt 0 ] || fail "live pane foreground"
 ctl session type $'LIVE_VAR=kept\n' --target renamed
 sleep 0.5
@@ -349,8 +352,8 @@ stop
 kill -0 "$spid" 2>/dev/null || fail "a live pane's program outlives the app"
 
 start
-for _ in $(seq 20); do ctl session info --target src | grep -qE '^foreground +sleep' && break; sleep 0.2; done
-[ "$(ctl session info --target src | awk '/^foregroundPid /{print $2}')" = "$spid" ] || fail "live reattach keeps the same program"
+for _ in $(seq 20); do ctl session get --target src | grep -qE '^foreground +sleep' && break; sleep 0.2; done
+[ "$(ctl session get --target src | awk '/^foregroundPid /{print $2}')" = "$spid" ] || fail "live reattach keeps the same program"
 ctl session type 'echo "V=$LIVE_VAR"'$'\n' --target renamed
 for _ in $(seq 20); do ctl session text --target renamed --lines 5 | grep -q 'V=kept' && break; sleep 0.2; done
 ctl session text --target renamed --lines 5 | grep -q 'V=kept' || fail "live reattach keeps the shell"

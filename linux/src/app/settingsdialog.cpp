@@ -191,6 +191,8 @@ void MainWindow::showSettings()
     terminal->addRow(tr("Theme"), themeRow);
     auto *window = new QFormLayout;
     window->addRow(tr("Sidebar font size"), sizeSpin(cur.sidebarFontSize, [](Settings &s, double v) { s.sidebarFontSize = v; }));
+    window->addRow(tr("Sidebar density"), picker({{tr("Default"), QStringLiteral("default")}, {tr("Compact"), QStringLiteral("compact")}}, cur.sidebarDensity,
+                                                 [](Settings &s, const QString &v) { s.sidebarDensity = v; }));
     window->addRow(tr("Palette and switcher font size"), sizeSpin(cur.interfaceFontSize, [](Settings &s, double v) { s.interfaceFontSize = v; }));
     // backgrounds only: text stays solid, as macOS and iOS glass does
     auto *clear = new QSlider(Qt::Horizontal);
@@ -227,12 +229,23 @@ void MainWindow::showSettings()
     page(tr("Interface"), QStringLiteral("preferences-desktop-theme-global"),
          {group(tr("Title Bar"), twoColumns({element(QStringLiteral("filePanel"), tr("File panel toggle")), element(QStringLiteral("sidebarToggle"), tr("Sidebar toggle")),
                                              element(QStringLiteral("workspaceName"), tr("Workspace name")), element(QStringLiteral("sessionName"), tr("Session name")),
-                                             element(QStringLiteral("recentSessions"), tr("Recent sessions")), element(QStringLiteral("split"), tr("Split view")),
+                                             element(QStringLiteral("sessionContext"), tr("Session context")),
+                                             element(QStringLiteral("recentSessions"), tr("Session switcher")), element(QStringLiteral("split"), tr("Split view")),
                                              element(QStringLiteral("dashboard"), tr("Dashboard")), element(QStringLiteral("customCommands"), tr("Custom commands"))})),
-          group(tr("Sidebar"), twoColumns({element(QStringLiteral("newSession"), tr("New session")), element(QStringLiteral("newWorkspace"), tr("New workspace")),
-                                           element(QStringLiteral("focusFilter"), tr("Workspace filter")), element(QStringLiteral("flaggedView"), tr("Flagged view")),
-                                           element(QStringLiteral("workspaceAddSession"), tr("Workspace add-session")),
-                                           element(QStringLiteral("workspaceIcons"), tr("Workspace icons")), element(QStringLiteral("sessionIcons"), tr("Session icons"))}))});
+          group(tr("Sidebar"), [&] {
+              auto *grid = twoColumns({element(QStringLiteral("newSession"), tr("New session")), element(QStringLiteral("newWorkspace"), tr("New workspace")),
+                                       element(QStringLiteral("focusFilter"), tr("Workspace filter")), element(QStringLiteral("flaggedView"), tr("Flagged view")),
+                                       element(QStringLiteral("workspaceAddSession"), tr("Workspace add-session")),
+                                       element(QStringLiteral("workspaceIcons"), tr("Workspace icons")), element(QStringLiteral("sessionIcons"), tr("Session icons"))});
+              // where a session's second line shows; hiding never clears it
+              auto *info = new QHBoxLayout;
+              info->addWidget(new QLabel(tr("Session info")));
+              info->addWidget(picker({{tr("Always"), QStringLiteral("always")}, {tr("Flagged"), QStringLiteral("flagged")}, {tr("Off"), QStringLiteral("off")}},
+                                     cur.sessionInfoDisplay, [](Settings &s, const QString &v) { s.sessionInfoDisplay = v; }));
+              info->addStretch(1);
+              grid->addLayout(info, grid->rowCount(), 0, 1, 2);
+              return grid;
+          }())});
 
     // Notifications
     QList<std::pair<QString, QString>> sounds{{tr("None"), QString()}};

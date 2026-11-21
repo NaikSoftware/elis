@@ -1,6 +1,7 @@
 #pragma once
 
 #include <QFrame>
+#include <QPointer>
 #include <functional>
 
 class QLineEdit;
@@ -17,6 +18,7 @@ public:
         std::function<void()> run;
         bool enabled = true; // a disabled action still shows and matches, greyed out, and does nothing
         std::function<void()> preview; // runs when the row becomes current (the theme picker's live preview)
+        QString id; // what the row stands for, for a caller that reorders its items
     };
 
     explicit Palette(QWidget *window);
@@ -27,6 +29,8 @@ public:
     QString query() const;
     // Enter with no enabled row runs this with the query (pick --allow-custom); open() clears it
     std::function<void(const QString &)> custom;
+    // the next open() hangs under this widget, centred on it, as elis's switcher hangs under its title pill; open() clears it
+    QPointer<QWidget> anchor;
     bool switching() const { return isVisible() && m_switcher; }
 
     static bool fuzzyMatch(const QString &needle, const QString &haystack); // case-insensitive subsequence
@@ -45,5 +49,6 @@ private:
     bool m_switcher = false;
     std::function<void()> m_cancel;
     int m_initial = -1;
+    QPointer<QWidget> m_anchor;
     void dismiss();
 };

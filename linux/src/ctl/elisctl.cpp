@@ -17,10 +17,10 @@ static const char *usage = R"(usage: elisctl <command> [args] [--target T] [--so
 
   tree                                  workspaces and sessions
   version
-  workspace new [--name N] [--tint COLOR [--tint-on icon,name,background]]
+  workspace new [--name N] [--tint COLOR]
   workspace rename <name>               (--target: workspace id/prefix/name, default active)
-  workspace tint <color|clear> [--on icon,name,background]   the row; background also washes its sessions
-  session tint <color|clear> [--on icon,name,background]     red|orange|yellow|green|blue|purple|gray
+  workspace tint <color|clear>          the row, the band around its sessions and their terminals
+  session tint <color|clear>            red|orange|yellow|green|blue|purple|gray
   workspace delete | select
   workspace go --to next|prev            the next or previous visible workspace's first session
   workspace collapse | expand
@@ -29,10 +29,11 @@ static const char *usage = R"(usage: elisctl <command> [args] [--target T] [--so
   workspace filter [on|off|toggle]      apply or suspend the marked set (off keeps it)
   session new [--name N] [--cwd DIR] [--workspace W | --workspace-name N [--create-workspace]]
               [--command CMD] [--no-select] [--parent SESSION]   (--parent makes a companion: session.companion.new)
-              [--tint COLOR [--tint-on icon,name,background]]
+              [--tint COLOR]
   session close [--undoable]           with the GUI's undo grace when Settings allow it; prints (undoable)|(not undoable)
                                         --target repeats for session close and session move
-  session close | select | info         (--target: session id/prefix/name, default $ELIS_SESSION_ID, then active)
+  session close | select | get          (--target: session id/prefix/name, default $ELIS_SESSION_ID, then active);
+                                        get prints the node with its live process details
   session rename <name>                 an empty name unpins it (the running program's title, else "New session")
   session context <text> | --clear      a short line of what the session is about, shown in the title bar
   session reveal                        open the session's folder in the file manager
@@ -72,6 +73,7 @@ static const char *usage = R"(usage: elisctl <command> [args] [--target T] [--so
   sidebar [show|hide|toggle]
   sidebar mode [tree|flagged|toggle]
   sidebar flagged-layout [flat|plain|tree|toggle]
+  sidebar density [default|compact|toggle]
   sidebar expand | collapse              every workspace (collapse keeps the current one open)
   sidebar width <points>                160...560
   events [--kind K]... [--run ID --after SEQ] [--limit N]   follow control events (--json: one event per line)
@@ -281,7 +283,7 @@ int main(int argc, char **argv)
         cmd += QLatin1Char('.') + pos.takeFirst();
     // a verb whose bare form is a command of its own takes only its known subcommands
     static const QHash<QString, QStringList> subs{{"pick", {"open", "result", "cancel"}}, {"ask", {"open", "result", "cancel"}},
-                                                   {"sidebar", {"mode", "flagged-layout", "expand", "collapse", "width"}}};
+                                                   {"sidebar", {"mode", "flagged-layout", "density", "expand", "collapse", "width"}}};
     if (subs.contains(cmd))
         cmd += subs[cmd].contains(pos.value(0)) ? QLatin1Char('.') + pos.takeFirst() : cmd == QLatin1String("sidebar") ? QString() : QStringLiteral(".open");
     if (cmd == QLatin1String("events"))
@@ -358,16 +360,9 @@ int main(int argc, char **argv)
         args.insert("mode", arg == QLatin1String("clear") ? QStringLiteral("clear") : QStringLiteral("set"));
         if (arg != QLatin1String("clear"))
             args.insert("tint", arg);
-        if (opt.contains(QStringLiteral("on")))
-            args.insert("tintOn", QJsonArray::fromStringList(opt.value(QStringLiteral("on")).split(QLatin1Char(','))));
     }
-    if (cmd.endsWith(QLatin1String(".new")) && opt.contains(QStringLiteral("tint"))) {
+    if (cmd.endsWith(QLatin1String(".new")) && opt.contains(QStringLiteral("tint")))
         args.insert("tint", opt.value(QStringLiteral("tint")));
-        if (opt.contains(QStringLiteral("tint-on")))
-            args.insert("tintOn", QJsonArray::fromStringList(opt.value(QStringLiteral("tint-on")).split(QLatin1Char(','))));
-    } else if (opt.contains(QStringLiteral("tint-on"))) {
-        args.insert("tintOn", QJsonArray()); // the app refuses a placement without a colour
-    }
     if (cmd.startsWith(QLatin1String("session.overlay.")) || cmd.startsWith(QLatin1String("session.hud."))) {
         copy("background-color", "color");
         copy("text-color", "textColor");
@@ -482,7 +477,7 @@ int main(int argc, char **argv)
         return followEvents(opt.value(QStringLiteral("socket"), socketPath()), args, opt.contains(QStringLiteral("json")));
     }
     if (cmd == QLatin1String("workspace.flag") || cmd == QLatin1String("sidebar.mode") || cmd == QLatin1String("sidebar.flagged-layout")
-        || cmd == QLatin1String("sidebar") || cmd == QLatin1String("surface.zoom"))
+        || cmd == QLatin1String("sidebar.density") || cmd == QLatin1String("sidebar") || cmd == QLatin1String("surface.zoom"))
         args.insert("mode", arg.isEmpty() ? QStringLiteral("toggle") : arg);
     if (cmd == QLatin1String("sidebar.width")) {
         bool number = false;

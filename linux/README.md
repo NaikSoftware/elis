@@ -51,8 +51,8 @@ Pair the phone again with the Elis phone app: the app id and the link scheme cha
 - A session row shows the logo of the agent running in it, its status dot (active, blocked, completed), an unseen
   notification count, and a filled icon when flagged. Companions sit indented under their parent; Duplicate as
   Companion copies a session's split layout and the program in each pane.
-- Tint a session or workspace row (row menu ▸ Tint: seven colours, on the icon, the name, the background, or any mix).
-  A background tint washes the row and the session's terminal; a workspace's wash reaches its sessions.
+- Tint a session or workspace row (row menu ▸ Tint: seven colours). A tint colours the icon and the name; a
+  workspace's draws a band around its sessions, a session's washes its row, and both wash the terminal very lightly.
 - Rename inline (double-click), multi-select, drag to reorder or move between workspaces, and drop folders from the
   file manager to open sessions there. Drop a session on a terminal to type its Elis session id. The footer has New Session, New Workspace, the workspace filter and the
   flagged view. Mark workspaces with Focus / Add to Focus in their row menu; the grid button applies or suspends
@@ -61,8 +61,9 @@ Pair the phone again with the Elis phone app: the app id and the link scheme cha
   Edit Flagged Sessions… and Edit Focused Workspaces… tick rows on and off.
 - Auto-follow (Settings ▸ Agent Status) moves to the oldest blocked session once you have been idle for a chosen time.
 - Splits, terminal zoom, full screen.
-- Session (Ctrl+P) and action (Ctrl+Shift+P) palettes, a Ctrl-Tab recent-session switcher, and its title-bar clock
-  menu, which also reopens recently closed sessions, kept across restarts (a Claude Code one resumes its conversation). A close can be undone
+- Session (Ctrl+P, or the title bar's session pill) and action (Ctrl+Shift+P) palettes and a Ctrl-Tab recent-session
+  switcher. The session palette lists what needs you, then recent sessions, then recently closed ones, kept across
+  restarts (a Claude Code one resumes its conversation). A close can be undone
   for 3 seconds.
 - A file panel (the session folder as a tree with file-type icons, a built-in viewer that highlights source code as
   Kate does, clipboard, drag and drop).

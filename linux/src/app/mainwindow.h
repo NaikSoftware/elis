@@ -239,8 +239,8 @@ private:
     QToolButton *m_filterButton;
     void syncChrome();
     QAction *m_sidebarAction;
-    QAction *m_recentAction;
-    void recentMenu();
+    QAction *m_recentAction; // the session pill's
+    QWidget *m_pill;
     QLabel *m_title;
     QStackedWidget *m_stack;
     QWidget *m_empty;

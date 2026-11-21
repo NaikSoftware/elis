@@ -49,5 +49,39 @@ public func elisTranscriptRead(_ argsJSON: UnsafePointer<CChar>, _ claudeDirecto
     }
 }
 
+private func encoded<T: Encodable>(_ value: T) -> UnsafeMutablePointer<CChar>? {
+    let data = (try? JSONEncoder().encode(value)) ?? Data(#"{"ok":false,"error":"encoding failed"}"#.utf8)
+    return strdup(String(decoding: data, as: UTF8.self))
+}
+
+private struct Refusal: Encodable {
+    var ok = false
+    let error: String
+}
+
+/// `sidebar.density`'s mode against the current density: `{"ok":true,"density":"default|compact"}` or the Mac's
+/// refusal. Input `{"mode"?,"current"}`; an absent mode toggles.
+@_cdecl("elis_sidebar_density")
+public func elisSidebarDensity(_ json: UnsafePointer<CChar>) -> UnsafeMutablePointer<CChar>? {
+    struct Input: Decodable {
+        let mode: String?
+        let current: String
+    }
+    struct Density: Encodable {
+        var ok = true
+        let density: String
+    }
+    guard let input = try? JSONDecoder().decode(Input.self, from: Data(String(cString: json).utf8)) else {
+        return encoded(Refusal(error: "invalid arguments"))
+    }
+    let current = SidebarDensity(rawValue: input.current) ?? .standard
+    switch ControlSidebarDensityMode.parse(input.mode) {
+    case nil: return encoded(Refusal(error: "invalid sidebar density: \(input.mode ?? "toggle")"))
+    case .standard: return encoded(Density(density: SidebarDensity.standard.rawValue))
+    case .compact: return encoded(Density(density: SidebarDensity.compact.rawValue))
+    case .toggle: return encoded(Density(density: (current == .compact ? SidebarDensity.standard : .compact).rawValue))
+    }
+}
+
 @_cdecl("elis_free")
 public func elisFree(_ pointer: UnsafeMutablePointer<CChar>?) { free(pointer) }

@@ -272,5 +272,5 @@ void MainWindow::toggleDashboard()
 void MainWindow::syncDashboardButton()
 {
     if (QAction *a = m_chrome.value(QStringLiteral("dashboard")))
-        a->setIcon(chromeIcon(m_dashboard ? QStringLiteral("gridFilled") : QStringLiteral("grid"), palette().color(QPalette::WindowText)));
+        a->setIcon(chromeIcon(m_dashboard ? QStringLiteral("dashboardFilled") : QStringLiteral("dashboard"), palette().color(QPalette::WindowText)));
 }

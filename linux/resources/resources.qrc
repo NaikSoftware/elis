@@ -4,6 +4,13 @@
     <file>launchers/codex.svg</file>
     <file>launchers/opencode.svg</file>
     <file>launchers/antigravity.svg</file>
+    <file>glyphs/workspace-stack.svg</file>
+    <file>glyphs/workspace-stack-focused.svg</file>
+    <file>glyphs/session-terminal.svg</file>
+    <file>glyphs/session-plus.svg</file>
+    <file>glyphs/focus-frame.svg</file>
+    <file>glyphs/focus-frame-fill.svg</file>
+    <file>glyphs/flag-lucide.svg</file>
     <file alias="elis.png">icons/hicolor/256x256/apps/elis.png</file>
   </qresource>
 </RCC>

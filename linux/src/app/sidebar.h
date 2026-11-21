@@ -7,11 +7,13 @@
 
 class Store;
 struct Settings;
+struct InfoSpan;
 class QPainter;
 
 // A launcher's icon as a template tinted `color`: the terminal glyph, or the agent's logo.
 QIcon launcherIcon(const QString &launcherId, const QColor &color);
-// elis's title-bar and footer glyphs: sidebar, split, splitH, filepanel, clock, grid, gridFilled
+// elis's title-bar and footer glyphs: sidebar, filepanel, clock, split|splitH[Filled], splitLeft|Right|Top|Bottom,
+// dashboard[Filled], and the bundled ones (workspace-stack, session-plus, focus-frame[-fill], ...)
 QIcon chromeIcon(const QString &name, const QColor &color);
 // a status's glyph colour and shape (circle square triangle diamond capsule star) from Settings > Agent Status
 QColor statusColor(const Settings &settings, const QString &status);
@@ -21,7 +23,7 @@ void drawStatusGlyph(QPainter *p, const QPointF &center, qreal radius, const QSt
 QColor tintColor(const QString &name);
 
 namespace SidebarRole {
-enum { Id = Qt::UserRole, Kind, Status, Blink, Agent, Flagged, Expanded, Unseen, Busy, Companion, HasCompanions, FoldedAttention, TintColor, TintOn, Focused, WorkspaceLabel };
+enum { Id = Qt::UserRole, Kind, Status, Blink, Agent, Flagged, Expanded, Unseen, Busy, Companion, HasCompanions, FoldedAttention, TintColor, Focused, WorkspaceLabel, Split, Info };
 enum { WorkspaceRow = 1, SessionRow };
 }
 
@@ -52,7 +54,18 @@ public:
     bool editing() const { return state() == EditingState; }
     QString lastLauncher() const;
 
-    // geometry shared by painting and hit-testing
+    // geometry shared by painting and hit-testing. A row is its workspace group's first, middle or last, and the
+    // group's gap and padding sit outside the content at its outer ends (elis's band)
+    enum Edge { NoEdge, First, Middle, Last, Single };
+    static constexpr int groupGap = 4, groupPadding = 3;
+    Edge groupEdge(const QModelIndex &index) const;
+    static QMargins edgeExtras(Edge edge);
+    QRect contentRect(const QModelIndex &index, const QRect &row) const;
+    QRect titleRect(const QModelIndex &index, const QRect &row) const; // the content less its info line: name, icons, buttons
+    const QList<InfoSpan> *shownInfo(const QModelIndex &index) const;  // the session's second line where Settings shows it
+    int titleHeight(const QFontMetrics &fm) const;                     // a plain row's content height at the density
+    static QFont infoFont(const QFont &rowFont);
+    static QRectF pillRect(const QRect &content, bool flat); // the selection pill, hover and wash
     static QRect addButtonRect(const QRect &row);
     static QRect repeatButtonRect(const QRect &row);
     static QRect closeButtonRect(const QRect &row); // a finished session's, on hover

@@ -397,7 +397,7 @@ private Q_SLOTS:
         QVERIFY(!call(s, t, "session.type", id, {{"text", "x"}, {"pane", "right"}})["ok"].toBool()); // no split pane
         QVERIFY(!call(s, t, "session.type", id, {{"text", "x"}, {"pane", "up"}})["ok"].toBool());
         QCOMPARE(call(s, t, "session.text", id, {{"lines", 2}})["result"]["text"].toString(), QStringLiteral("b\nc"));
-        QCOMPARE(call(s, t, "session.info", id)["result"]["session"]["pid"].toInt(), 42);
+        QCOMPARE(call(s, t, "session.get", id)["result"]["session"]["pid"].toInt(), 42);
     }
 
     void jsonRoundTripDropsLiveState()
@@ -620,36 +620,39 @@ private Q_SLOTS:
         QVERIFY(!s.session(c1) && !s.session(c2));
     }
 
-    void tintRecolorsKeepsPlacementAndPersists()
+    void tintIsAColourThatPersists()
     {
         Store s;
         FakeTerminals t;
-        QVERIFY(!call(s, t, "workspace.new", {}, {{"tintOn", QJsonArray{"name"}}})["ok"].toBool());
         QVERIFY(!call(s, t, "workspace.new", {}, {{"tint", "pink"}})["ok"].toBool());
         QVERIFY(s.workspaces.isEmpty()); // a refused tint creates nothing
         const QString ws = call(s, t, "workspace.new", {}, {{"name", "prod"}, {"tint", "Red"}})["result"]["id"].toString();
-        QCOMPARE(s.workspace(ws)->tint, (Tint{"red", {"icon", "name", "background"}})); // a fresh tint defaults to everything
-        QVERIFY(call(s, t, "workspace.tint", ws, {{"mode", "set"}, {"tint", "red"}, {"tintOn", QJsonArray{"background", "name", "icon"}}})["ok"].toBool());
-        QCOMPARE(s.workspace(ws)->tint, (Tint{"red", {"icon", "name", "background"}})); // ordered
-        s.placeTint(ws, {"icon", "name"});
+        QCOMPARE(s.workspace(ws)->tint, Tint{"red"});
         const QString a = s.addSession(ws, {}, {});
         QVERIFY(s.session(a)->tint.color.isEmpty()); // a workspace tint never reaches its sessions
-        s.placeTint(a, {"name"});
-        QVERIFY(s.session(a)->tint.color.isEmpty()); // placing on an untinted row is a no-op
-        QVERIFY(call(s, t, "session.tint", a, {{"mode", "set"}, {"tint", "green"}, {"tintOn", QJsonArray{"name", "icon"}}})["ok"].toBool());
         QVERIFY(call(s, t, "session.tint", a, {{"mode", "set"}, {"tint", "blue"}})["ok"].toBool());
-        QCOMPARE(s.session(a)->tint, (Tint{"blue", {"icon", "name"}}));
         QVERIFY(!call(s, t, "session.tint", a, {{"mode", "clear"}, {"tint", "red"}})["ok"].toBool());
-        QVERIFY(!call(s, t, "session.tint", a, {{"mode", "set"}, {"tint", "red"}, {"tintOn", QJsonArray{"glyph"}}})["ok"].toBool());
         const auto node = call(s, t, "tree")["result"]["tree"]["workspaces"][0];
         QCOMPARE(node["tint"].toString(), QStringLiteral("red"));
-        QCOMPARE(node["sessions"][0]["tintOn"].toArray(), (QJsonArray{"icon", "name"}));
+        QCOMPARE(node["sessions"][0]["tint"].toString(), QStringLiteral("blue"));
+        QVERIFY(!node.toObject().contains("tintOn"));
         QCOMPARE(s.session(s.duplicateSession(a, {}))->tint, Tint{}); // a duplicate starts untinted
         Store r;
         r.fromJson(s.toJson());
-        QCOMPARE(r.session(a)->tint, (Tint{"blue", {"icon", "name"}}));
+        QCOMPARE(r.session(a)->tint, Tint{"blue"});
         QVERIFY(call(s, t, "session.tint", a, {{"mode", "clear"}})["ok"].toBool());
         QVERIFY(!call(s, t, "tree")["result"]["tree"]["workspaces"][0]["sessions"][0].toObject().contains("tint"));
+    }
+
+    void sidebarDensityToggleAndReadBack()
+    {
+        Store s;
+        FakeTerminals t;
+        QCOMPARE(call(s, t, "tree")["result"]["tree"]["sidebarDensity"].toString(), QStringLiteral("default"));
+        QCOMPARE(call(s, t, "sidebar.density")["result"]["text"].toString(), QStringLiteral("compact")); // toggle
+        QCOMPARE(call(s, t, "sidebar.density", {}, {{"mode", "default"}})["result"]["text"].toString(), QStringLiteral("default"));
+        QCOMPARE(call(s, t, "sidebar.density", {}, {{"mode", "x"}})["error"].toString(), QStringLiteral("invalid sidebar density: x"));
+        QCOMPARE(s.settings.sidebarDensity, QStringLiteral("default"));
     }
 
     void workspaceFocusFilterAndSuspend()
@@ -830,7 +833,7 @@ private Q_SLOTS:
                  QStringLiteral("command must not contain control characters"));
         QCOMPARE(call(s, t, "session.restore", id, {{"mode", "set"}, {"pane", "right"}, {"command", "x"}})["error"].toString(), QStringLiteral("session has no split"));
         QVERIFY(call(s, t, "session.restore", id, {{"mode", "set"}, {"command", "tmux attach"}})["ok"].toBool());
-        QCOMPARE(call(s, t, "session.info", id)["result"]["session"]["restoreCommand"].toString(), QStringLiteral("tmux attach"));
+        QCOMPARE(call(s, t, "session.get", id)["result"]["session"]["restoreCommand"].toString(), QStringLiteral("tmux attach"));
         Store pinned;
         pinned.fromJson(s.toJson());
         QCOMPARE(pinned.takeReplay(id, false, deny), QStringLiteral("tmux attach")); // a pin beats the capture and the denylist
@@ -1138,7 +1141,7 @@ private Q_SLOTS:
         QCOMPARE(call(s, t, "session.collapse", a2)["error"].toString(), QStringLiteral("session has no companions"));
         s.addCompanion(a1, {}, {});
         QVERIFY(call(s, t, "session.collapse", a1)["ok"].toBool());
-        QVERIFY(call(s, t, "session.info", a1)["result"]["session"]["collapsed"].toBool());
+        QVERIFY(call(s, t, "session.get", a1)["result"]["session"]["collapsed"].toBool());
 
         QCOMPARE(call(s, t, "workspace.go", {}, {{"to", "next"}})["result"]["id"].toString(), b);
         QCOMPARE(s.selected, b1);

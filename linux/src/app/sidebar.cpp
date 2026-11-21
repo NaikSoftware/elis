@@ -6,7 +6,9 @@
 #include <QLinearGradient>
 #include <QDrag>
 #include <QDragEnterEvent>
+#include <QFile>
 #include <QFileInfo>
+#include <QFontDatabase>
 #include <QHash>
 #include <QLineEdit>
 #include <QMimeData>
@@ -34,7 +36,10 @@ QString statusShape(const Settings &settings, const QString &status)
                           : status == QLatin1String("blocked")   ? settings.blockedStatusShape
                           : status == QLatin1String("completed") ? settings.completedStatusShape
                                                                  : QString();
-    return shape.isEmpty() ? QStringLiteral("circle") : shape;
+    if (!shape.isEmpty())
+        return shape;
+    // elis's defaults: active circle, blocked triangle, completed diamond
+    return status == QLatin1String("blocked") ? QStringLiteral("triangle") : status == QLatin1String("completed") ? QStringLiteral("diamond") : QStringLiteral("circle");
 }
 
 void drawStatusGlyph(QPainter *p, const QPointF &c, qreal r, const QString &shape)
@@ -65,49 +70,15 @@ static const char *sessionsMime = "application/x-elis-sessions";
 static const char *workspaceMime = "application/x-elis-workspace";
 
 namespace {
-QColor textColor()
-{
-    return QApplication::palette().color(QPalette::WindowText);
-}
-
-void drawTerminalGlyph(QPainter *p, const QRectF &r, const QColor &c, bool filled)
-{
-    const QRectF box = r.adjusted(0.5, r.height() * 0.15, -0.5, -r.height() * 0.15);
-    p->setPen(QPen(c, 1.2));
-    p->setBrush(filled ? QBrush(c) : Qt::NoBrush);
-    p->drawRoundedRect(box, 2.5, 2.5);
-    const QColor ink = filled ? QApplication::palette().color(QPalette::Window) : c;
-    QPainterPath prompt;
-    const qreal x = box.left() + box.width() * 0.22, y = box.center().y();
-    prompt.moveTo(x, y - 2.2);
-    prompt.lineTo(x + 2.2, y);
-    prompt.lineTo(x, y + 2.2);
-    prompt.moveTo(x + 3.6, y + 2.4);
-    prompt.lineTo(x + 6.6, y + 2.4);
-    p->setPen(QPen(ink, 1.2, Qt::SolidLine, Qt::RoundCap, Qt::RoundJoin));
-    p->setBrush(Qt::NoBrush);
-    p->drawPath(prompt);
-}
-
-void drawGridGlyph(QPainter *p, const QRectF &r, const QColor &c, bool heavy = false)
-{
-    // heavy: elis draws a workspace in the focus set at black weight
-    const qreal g = 2, s = (r.width() - g) / 2;
-    p->setPen(QPen(c, heavy ? 2.2 : 1.1));
-    p->setBrush(Qt::NoBrush);
-    for (int i = 0; i < 4; ++i)
-        p->drawRoundedRect(QRectF(r.left() + (i % 2) * (s + g), r.top() + (i / 2) * (s + g), s, s).adjusted(0.5, 0.5, -0.5, -0.5), 1.5, 1.5);
-}
-
-QImage tintedLogo(const QString &id, const QColor &color, int px)
+QImage tintedSvg(const QString &path, const QColor &color, int px)
 {
     static QHash<QString, QImage> cache;
-    const QString key = QStringLiteral("%1/%2/%3").arg(id, color.name(QColor::HexArgb)).arg(px);
+    const QString key = QStringLiteral("%1/%2/%3").arg(path, color.name(QColor::HexArgb)).arg(px);
     if (auto it = cache.constFind(key); it != cache.cend())
         return *it;
     QImage img(px, px, QImage::Format_ARGB32_Premultiplied);
     img.fill(Qt::transparent);
-    QSvgRenderer svg(QStringLiteral(":/launchers/%1.svg").arg(id));
+    QSvgRenderer svg(path);
     QPainter p(&img);
     svg.render(&p, QRectF(0, 0, px, px));
     p.setCompositionMode(QPainter::CompositionMode_SourceIn); // template image: keep alpha, take the colour
@@ -117,27 +88,42 @@ QImage tintedLogo(const QString &id, const QColor &color, int px)
     return img;
 }
 
-void drawLauncher(QPainter *p, const QRectF &r, const QString &id, const QColor &c, bool filled)
+void drawSvg(QPainter *p, const QRectF &r, const QString &path, const QColor &c)
 {
-    if (id.isEmpty() || id == QLatin1String("terminal")) {
-        drawTerminalGlyph(p, r, c, filled);
-        return;
-    }
     const qreal dpr = p->device()->devicePixelRatioF();
-    QImage logo = tintedLogo(id, c, qRound(r.width() * dpr));
-    logo.setDevicePixelRatio(dpr);
-    p->drawImage(r.topLeft(), logo);
+    QImage img = tintedSvg(path, c, qRound(r.width() * dpr));
+    img.setDevicePixelRatio(dpr);
+    p->drawImage(r.topLeft(), img);
+}
+
+// elis's bundled Lucide glyphs (resources/glyphs): workspace-stack[-focused], session-terminal, session-plus,
+// focus-frame[-fill], flag-lucide
+void drawGlyph(QPainter *p, const QRectF &r, const QString &name, const QColor &c)
+{
+    drawSvg(p, r, QStringLiteral(":/glyphs/%1.svg").arg(name), c);
+}
+
+void drawLauncher(QPainter *p, const QRectF &r, const QString &id, const QColor &c)
+{
+    if (id.isEmpty() || id == QLatin1String("terminal"))
+        drawGlyph(p, r, QStringLiteral("session-terminal"), c);
+    else
+        drawSvg(p, r, QStringLiteral(":/launchers/%1.svg").arg(id), c);
 }
 } // namespace
 
 QColor tintColor(const QString &name)
 {
-    // systemRed..systemGray, light and dark appearance
+    // the macOS system colours, light and dark appearance
     static const QHash<QString, std::pair<QRgb, QRgb>> colors{
         {QStringLiteral("red"), {0xFF3B30, 0xFF453A}},    {QStringLiteral("orange"), {0xFF9500, 0xFF9F0A}},
         {QStringLiteral("yellow"), {0xFFCC00, 0xFFD60A}}, {QStringLiteral("green"), {0x34C759, 0x30D158}},
         {QStringLiteral("blue"), {0x007AFF, 0x0A84FF}},   {QStringLiteral("purple"), {0xAF52DE, 0xBF5AF2}},
-        {QStringLiteral("gray"), {0x8E8E93, 0x98989D}}};
+        {QStringLiteral("gray"), {0x8E8E93, 0x98989D}},
+        // the rest of ElisCore's TintColor, which an info line's markup may name
+        {QStringLiteral("teal"), {0x30B0C7, 0x40C8E0}},   {QStringLiteral("pink"), {0xFF2D55, 0xFF375F}},
+        {QStringLiteral("brown"), {0xA2845E, 0xAC8E68}},  {QStringLiteral("indigo"), {0x5856D6, 0x5E5CE6}},
+        {QStringLiteral("mint"), {0x00C7BE, 0x63E6E2}}};
     const auto it = colors.constFind(name);
     if (it == colors.cend())
         return {};
@@ -152,7 +138,7 @@ QIcon launcherIcon(const QString &launcherId, const QColor &color)
     QPainter p(&pm);
     p.setRenderHint(QPainter::Antialiasing);
     p.scale(2, 2);
-    drawLauncher(&p, QRectF(0, 0, 16, 16), launcherId, color, false);
+    drawLauncher(&p, QRectF(0, 0, 16, 16), launcherId, color);
     p.end();
     pm.setDevicePixelRatio(2);
     return QIcon(pm);
@@ -165,24 +151,20 @@ QIcon chromeIcon(const QString &name, const QColor &color)
     QPainter p(&pm);
     p.setRenderHint(QPainter::Antialiasing);
     p.scale(2, 2);
+    auto done = [&] {
+        p.end();
+        pm.setDevicePixelRatio(2);
+        return QIcon(pm);
+    };
+    if (QFile::exists(QStringLiteral(":/glyphs/%1.svg").arg(name))) {
+        drawGlyph(&p, QRectF(2.5, 2.5, 15, 15), name, color);
+        return done();
+    }
     p.setPen(QPen(color, 1.3, Qt::SolidLine, Qt::RoundCap, Qt::RoundJoin));
     if (name == QLatin1String("clock")) { // the title bar's recent sessions
         p.drawEllipse(QRectF(3, 3, 14, 14));
         p.drawPolyline(QList<QPointF>{{10, 6}, {10, 10}, {13, 12}});
-        p.end();
-        pm.setDevicePixelRatio(2);
-        return QIcon(pm);
-    }
-    if (name.startsWith(QLatin1String("grid"))) {
-        // the footer's workspace filter: square.grid.2x2, filled while the filter applies
-        if (name == QLatin1String("gridFilled"))
-            for (int i = 0; i < 4; ++i)
-                p.fillRect(QRectF(3.5 + (i % 2) * 7, 3.5 + (i / 2) * 7, 6, 6), color);
-        else
-            drawGridGlyph(&p, QRectF(3, 3, 14, 14), color, false);
-        p.end();
-        pm.setDevicePixelRatio(2);
-        return QIcon(pm);
+        return done();
     }
     if (name == QLatin1String("filepanel")) {
         // elis's "folder" symbol: a tab on the left of the lid
@@ -200,21 +182,45 @@ QIcon chromeIcon(const QString &name, const QColor &color)
         folder.quadTo(2.5, 16, 2.5, 15);
         p.drawPath(folder);
         p.drawLine(QPointF(2.5, 8.5), QPointF(17.5, 8.5));
-        p.end();
-        pm.setDevicePixelRatio(2);
-        return QIcon(pm);
+        return done();
     }
+    // the rectangle family: sidebar.left, rectangle.split.2x1 / 1x2 / 2x2, each pane filled while it shows
     const QRectF box(2.5, 4.5, 15, 11);
-    p.drawRoundedRect(box, 2.5, 2.5);
+    const bool across = name.startsWith(QLatin1String("splitH")) || name == QLatin1String("splitTop") || name == QLatin1String("splitBottom");
+    const bool grid = name.startsWith(QLatin1String("dashboard"));
+    QList<QRectF> filled;
+    const QRectF left(box.left(), box.top(), box.width() / 2, box.height()), right = left.translated(box.width() / 2, 0);
+    const QRectF top(box.left(), box.top(), box.width(), box.height() / 2), bottom = top.translated(0, box.height() / 2);
+    if (name.endsWith(QLatin1String("Filled")))
+        filled << box;
+    else if (name == QLatin1String("splitLeft"))
+        filled << left;
+    else if (name == QLatin1String("splitRight"))
+        filled << right;
+    else if (name == QLatin1String("splitTop"))
+        filled << top;
+    else if (name == QLatin1String("splitBottom"))
+        filled << bottom;
+    QPainterPath shape;
+    shape.addRoundedRect(box, 2.5, 2.5);
+    for (const QRectF &f : std::as_const(filled)) {
+        p.save();
+        p.setClipRect(f);
+        p.fillPath(shape, color);
+        p.restore();
+    }
+    p.drawPath(shape);
+    if (!filled.isEmpty()) // the divider cut out of a filled pane
+        p.setCompositionMode(QPainter::CompositionMode_Clear);
     if (name == QLatin1String("sidebar"))
         p.drawLine(QPointF(7.5, 4.5), QPointF(7.5, 15.5));
-    else if (name == QLatin1String("split"))
-        p.drawLine(QPointF(10, 4.5), QPointF(10, 15.5));
-    else if (name == QLatin1String("splitH"))
-        p.drawLine(QPointF(2.5, 10), QPointF(17.5, 10));
-    p.end();
-    pm.setDevicePixelRatio(2);
-    return QIcon(pm);
+    if (name.startsWith(QLatin1String("split")) && !across)
+        p.drawLine(QPointF(10, box.top() + (filled.isEmpty() ? 0 : 1.5)), QPointF(10, box.bottom() - (filled.isEmpty() ? 0 : 1.5)));
+    if (across || grid)
+        p.drawLine(QPointF(box.left() + (filled.isEmpty() ? 0 : 1.5), 10), QPointF(box.right() - (filled.isEmpty() ? 0 : 1.5), 10));
+    if (grid)
+        p.drawLine(QPointF(10, box.top() + (filled.isEmpty() ? 0 : 1.5)), QPointF(10, box.bottom() - (filled.isEmpty() ? 0 : 1.5)));
+    return done();
 }
 
 SidebarDelegate::SidebarDelegate(Sidebar *sidebar)
@@ -222,62 +228,98 @@ SidebarDelegate::SidebarDelegate(Sidebar *sidebar)
 {
 }
 
+namespace {
+QColor faded(QColor c, qreal alpha)
+{
+    c.setAlphaF(c.alphaF() * alpha);
+    return c;
+}
+
+// how far an info line lifts into the plain row's bottom padding, by density
+qreal infoLift(const Settings &st)
+{
+    return st.sidebarDensity == QLatin1String("compact") ? 4 : 6;
+}
+
+// one line of styled spans from the top of `at`, the last one that does not fit elided. A colour stays on a
+// selected row, as a row tint does; plain text follows the row's text colour.
+void drawInfo(QPainter *p, const QList<InfoSpan> &spans, const QRectF &at, const QFont &rowFont, const QColor &text, bool selected)
+{
+    const QFont base = Sidebar::infoFont(rowFont);
+    const qreal height = QFontMetricsF(base).height();
+    qreal x = at.left();
+    for (const InfoSpan &span : spans) {
+        QFont f = span.code ? QFontDatabase::systemFont(QFontDatabase::FixedFont) : base;
+        f.setPointSizeF(base.pointSizeF());
+        f.setBold(span.bold);
+        f.setItalic(span.italic);
+        const QFontMetricsF fm(f);
+        const qreal room = at.right() - x;
+        if (room <= fm.averageCharWidth())
+            break;
+        const QString shown = fm.elidedText(span.text, Qt::ElideRight, room);
+        QColor c = span.color.isEmpty() ? text : tintColor(span.color);
+        c.setAlphaF(!span.color.isEmpty() ? (span.dim ? 0.55 : 1) : selected ? (span.dim ? 0.6 : 0.85) : span.dim ? 0.38 : span.bold ? 1 : 0.58);
+        p->setFont(f);
+        p->setPen(c);
+        p->drawText(QRectF(x, at.top(), room, height), Qt::AlignVCenter | Qt::AlignLeft, shown);
+        x += fm.horizontalAdvance(shown);
+        if (shown != span.text)
+            break;
+    }
+}
+
+// elis's metrics: the pill's inset into the row, and where icons and names start inside it
+constexpr qreal pillInset = 10, chevronX = 8, iconBox = 16, iconGap = 8;
+}
+
 void SidebarDelegate::paint(QPainter *p, const QStyleOptionViewItem &opt, const QModelIndex &index) const
 {
     // QApplication's palette, not opt.palette: a stylesheet background would make the view's palette transparent
     const QPalette pal = QApplication::palette();
     const QColor text = pal.color(QPalette::WindowText);
-    QColor dim = text;
-    dim.setAlpha(170);
+    const QColor dim = faded(text, 0.65);
     p->save();
     p->setRenderHint(QPainter::Antialiasing);
-    const QRectF r = QRectF(opt.rect).adjusted(6, 1, -6, -1);
     const bool session = index.data(Kind).toInt() == SessionRow;
     const bool flat = m_sidebar->flatList();
-    // a row tint colours the parts it lists, selected or not
+    const bool selected = opt.state & QStyle::State_Selected;
+    const Sidebar::Edge edge = m_sidebar->groupEdge(index);
+    const QRectF r = Sidebar::pillRect(m_sidebar->contentRect(index, opt.rect), flat);
+    // a tint colours its row's icon and name; a workspace's draws the group's band, a session's a wash
     const QColor tint = tintColor(index.data(TintColor).toString());
-    const QStringList tintOn = index.data(TintOn).toStringList();
-    const QColor iconColor = tint.isValid() && tintOn.contains(QLatin1String("icon")) ? tint : dim;
-    const QColor nameColor = tint.isValid() && tintOn.contains(QLatin1String("name")) ? tint : text;
+    const QColor band = edge == Sidebar::NoEdge ? QColor() : tintColor((session ? index.parent() : index).data(TintColor).toString());
+    const QColor iconColor = tint.isValid() ? tint : faded(text, selected ? 0.85 : 0.58);
+    const QColor nameColor = tint.isValid() ? tint : text;
 
-    // "background": a light wash; a workspace's also covers its open sessions, drawn as one block
-    auto wash = [&](const QModelIndex &i) {
-        return i.data(TintOn).toStringList().contains(QLatin1String("background")) ? tintColor(i.data(TintColor).toString()) : QColor();
-    };
-    auto block = [&](QColor c, bool openTop, bool openBottom) {
-        c.setAlpha(22);
+    if (band.isValid()) {
+        // one rounded outline across the group: each row's piece runs past the edges the group continues over, clipped to the row
+        const QRectF row(opt.rect);
+        const qreal top = edge == Sidebar::First || edge == Sidebar::Single ? row.top() + Sidebar::groupGap : row.top() - 13;
+        const qreal bottom = edge == Sidebar::Last || edge == Sidebar::Single ? row.bottom() - Sidebar::groupGap : row.bottom() + 13;
+        const QRectF shape(r.left() - Sidebar::groupPadding, top, r.width() + 2 * Sidebar::groupPadding, bottom - top);
         p->save();
-        p->setClipRect(opt.rect); // an open end runs past the row so stacked rows join seamlessly
-        p->setPen(Qt::NoPen);
-        p->setBrush(c);
-        p->drawRoundedRect(QRectF(opt.rect).adjusted(6, openTop ? -8 : 1, -6, openBottom ? 8 : -1), 6, 6);
+        p->setClipRect(opt.rect);
+        p->setPen(QPen(faded(band, 0.16), 1));
+        p->setBrush(faded(band, 0.10));
+        p->drawRoundedRect(shape.adjusted(0.5, 0.5, -0.5, -0.5), 10.5, 10.5);
         p->restore();
-    };
-    const QColor own = wash(index), group = session ? wash(index.parent()) : QColor();
-    if (!session && own.isValid())
-        block(own, false, index.data(Expanded).toBool() && index.model()->rowCount(index) > 0);
-    else if (group.isValid())
-        block(group, true, index.row() < index.model()->rowCount(index.parent()) - 1);
-    if (session && own.isValid())
-        block(own, false, false);
-
-    if (const QColor washed = own.isValid() ? own : group; washed.isValid() && (opt.state & QStyle::State_Selected)) {
-        // on a wash a highlight fill muddies the colour: outline the row in the wash's own colour instead
-        p->setPen(QPen(washed, m_sidebar->hasFocus() ? 1.6 : 1.2));
-        p->setBrush(Qt::NoBrush);
-        p->drawRoundedRect(r.adjusted(2, 1, -2, -1), 5, 5);
-    } else if (opt.state & QStyle::State_Selected) {
-        QColor sel = pal.color(QPalette::Highlight);
-        sel.setAlpha(m_sidebar->hasFocus() ? 110 : 80);
-        p->setPen(Qt::NoPen);
-        p->setBrush(sel);
-        p->drawRoundedRect(r, 6, 6);
+    }
+    p->setPen(Qt::NoPen);
+    if (session && tint.isValid()) {
+        p->setBrush(faded(tint, 0.09));
+        p->drawRoundedRect(r, 8, 8);
+    }
+    if (selected) {
+        // the group's tint, else the row's own, else the accent; dimmer while the window is in the background
+        const QColor c = band.isValid() ? band : tint.isValid() ? tint : pal.color(QPalette::Highlight);
+        const bool key = m_sidebar->isActiveWindow();
+        p->setPen(QPen(faded(c, key ? 0.55 : 0.35), 1));
+        p->setBrush(faded(c, key ? 0.20 : 0.12));
+        p->drawRoundedRect(r.adjusted(0.5, 0.5, -0.5, -0.5), 7.5, 7.5);
     } else if (opt.state & QStyle::State_MouseOver) {
-        QColor hover = text;
-        hover.setAlpha(16);
-        p->setPen(Qt::NoPen);
-        p->setBrush(hover);
-        p->drawRoundedRect(r, 6, 6);
+        p->setBrush(faded(text, 0.07));
+        p->drawRoundedRect(r, 8, 8);
     }
 
     if (session && index.data(Status).toString() == QLatin1String("active")) {
@@ -294,11 +336,13 @@ void SidebarDelegate::paint(QPainter *p, const QStyleOptionViewItem &opt, const 
         g.setColorAt(1, alpha(base, 10));
         p->setPen(Qt::NoPen);
         p->setBrush(g);
-        p->drawRoundedRect(r, 6, 6);
+        p->drawRoundedRect(r, 8, 8);
     }
 
-    qreal x = r.left() + 6;
-    const qreal cy = r.center().y();
+    qreal x = r.left() + chevronX;
+    const QRect title = m_sidebar->titleRect(index, opt.rect);
+    const qreal cy = QRectF(title).center().y();
+    QFont font = opt.font;
     if (!session) {
         QPainterPath chevron;
         if (index.data(Expanded).toBool()) {
@@ -314,19 +358,22 @@ void SidebarDelegate::paint(QPainter *p, const QStyleOptionViewItem &opt, const 
         p->drawPath(chevron);
         x += 14;
         if (m_sidebar->settings().shows(QStringLiteral("workspaceIcons"))) {
-            drawGridGlyph(p, QRectF(x, cy - 7, 14, 14), iconColor, index.data(Focused).toBool());
-            x += 21;
+            const bool focused = index.data(Focused).toBool();
+            drawGlyph(p, QRectF(x, cy - iconBox / 2, iconBox, iconBox), focused ? QStringLiteral("workspace-stack-focused") : QStringLiteral("workspace-stack"),
+                      iconColor);
+            x += iconBox + iconGap;
         } else {
             x += 4;
         }
+        font.setWeight(QFont::DemiBold);
     } else {
-        x += flat ? 2 : 22;
+        x += flat ? 0 : 14; // under the workspace's icon
         if (index.data(Companion).toBool() && !flat)
             x += 18; // indented under its parent
         if (index.data(HasCompanions).toBool() && !flat) {
             // the parent's own disclosure chevron folds its companions away
             QPainterPath chevron;
-            const qreal cx = x - 13;
+            const qreal cx = x - 9;
             if (index.data(Expanded).toBool()) {
                 chevron.moveTo(cx - 3.5, cy - 1.8);
                 chevron.lineTo(cx, cy + 1.8);
@@ -346,20 +393,25 @@ void SidebarDelegate::paint(QPainter *p, const QStyleOptionViewItem &opt, const 
             }
         }
         if (m_sidebar->settings().shows(QStringLiteral("sessionIcons"))) {
-            drawLauncher(p, QRectF(x, cy - 8, 16, 16), index.data(Agent).toString(), iconColor, index.data(Flagged).toBool());
-            x += 23;
+            const QRectF box(x, cy - iconBox / 2, iconBox, iconBox);
+            if (const QString split = index.data(Split).toString(); !split.isEmpty())
+                p->drawPixmap(box.toRect(), chromeIcon(split, iconColor).pixmap(int(iconBox))); // a split session shows its panes
+            else
+                drawLauncher(p, box, index.data(Agent).toString(), iconColor);
+            x += iconBox + iconGap;
         }
     }
 
     qreal right = r.right() - 8;
     // hover-only: the launcher menu "+" and, left of it, a repeat of the last choice
     const bool buttons = !session && m_sidebar->hovered() == index && m_sidebar->settings().shows(QStringLiteral("workspaceAddSession"));
+    const QRect content = title;
     // a collapsed workspace rolls up its sessions' status and badge, as master does; an open one leaves them to its rows
     if (session || (!buttons && !index.data(Expanded).toBool())) {
         const QString status = index.data(Status).toString();
         if (session && m_sidebar->hovered() == index && m_sidebar->closable(index)) {
             // hover-only: a finished session's glyph turns into its close button
-            const QPointF c(right - 6, cy); // the status glyph's own centre; QRect::center() rounds up a pixel
+            const QPointF c = QRectF(Sidebar::closeButtonRect(content)).center();
             p->setPen(QPen(dim, 1.4, Qt::SolidLine, Qt::RoundCap));
             p->drawLine(c + QPointF(-4, -4), c + QPointF(4, 4));
             p->drawLine(c + QPointF(-4, 4), c + QPointF(4, -4));
@@ -370,7 +422,7 @@ void SidebarDelegate::paint(QPainter *p, const QStyleOptionViewItem &opt, const 
                 c.setAlpha(m_sidebar->blinkAlpha());
             p->setPen(Qt::NoPen);
             p->setBrush(c);
-            drawStatusGlyph(p, QPointF(right - 6, cy), 6, statusShape(m_sidebar->settings(), status));
+            drawStatusGlyph(p, QPointF(right - 6, cy), 5, statusShape(m_sidebar->settings(), status));
             right -= 20;
         }
         if (const int unseen = index.data(Unseen).toInt(); unseen > 0 && m_sidebar->settings().notificationBadgeEnabled) {
@@ -389,40 +441,59 @@ void SidebarDelegate::paint(QPainter *p, const QStyleOptionViewItem &opt, const 
             right -= w + 6;
         }
     } else if (buttons) {
-        const QRect add = Sidebar::addButtonRect(opt.rect), rep = Sidebar::repeatButtonRect(opt.rect);
+        const QRect add = Sidebar::addButtonRect(content), rep = Sidebar::repeatButtonRect(content);
         p->setPen(QPen(dim, 1.4, Qt::SolidLine, Qt::RoundCap));
         const QPointF c = QRectF(add).center();
         p->drawLine(QPointF(c.x() - 5, c.y()), QPointF(c.x() + 5, c.y()));
         p->drawLine(QPointF(c.x(), c.y() - 5), QPointF(c.x(), c.y() + 5));
-        drawLauncher(p, QRectF(rep).adjusted(3, 3, -3, -3), m_sidebar->lastLauncher(), dim, false);
+        drawLauncher(p, QRectF(rep).adjusted(3, 3, -3, -3), m_sidebar->lastLauncher(), dim);
         right = rep.left() - 4;
     }
 
+    // the tree marks a flagged session after its name, in the flag's indigo; the flagged view lists only flagged ones
+    const bool flagMark = session && !m_sidebar->flaggedView() && index.data(Flagged).toBool();
+    const qreal flagRoom = flagMark ? 17 : 0;
+    const QFontMetricsF fm(font);
     p->setPen(nameColor);
-    p->setFont(opt.font);
-    const QRectF label(x, r.top(), right - x, r.height());
+    p->setFont(font);
+    const QRectF label(x, title.top(), right - x - flagRoom, title.height());
     const QString suffix = index.data(WorkspaceLabel).toString().isEmpty() ? QString() : QStringLiteral(" : ") + index.data(WorkspaceLabel).toString();
-    const QString name = opt.fontMetrics.elidedText(index.data(Qt::DisplayRole).toString(), Qt::ElideRight, int(label.width()));
+    const QString name = fm.elidedText(index.data(Qt::DisplayRole).toString(), Qt::ElideRight, label.width());
     p->drawText(label, Qt::AlignVCenter | Qt::AlignLeft, name);
+    qreal end = x + fm.horizontalAdvance(name);
     if (!suffix.isEmpty()) { // flat layout: "session : workspace", the workspace part dimmed
         p->setPen(dim);
-        const QRectF rest = label.adjusted(opt.fontMetrics.horizontalAdvance(name), 0, 0, 0);
-        p->drawText(rest, Qt::AlignVCenter | Qt::AlignLeft, opt.fontMetrics.elidedText(suffix, Qt::ElideRight, int(rest.width())));
+        const QRectF rest = label.adjusted(fm.horizontalAdvance(name), 0, 0, 0);
+        const QString tail = fm.elidedText(suffix, Qt::ElideRight, rest.width());
+        p->drawText(rest, Qt::AlignVCenter | Qt::AlignLeft, tail);
+        end += fm.horizontalAdvance(tail);
     }
+    if (flagMark) {
+        const bool dark = pal.color(QPalette::Window).lightness() < 128;
+        drawGlyph(p, QRectF(end + 6, cy - 5.5, 11, 11), QStringLiteral("flag-lucide"), QColor(dark ? 0x5E5CE6 : 0x5856D6)); // systemIndigo
+    }
+    if (const QList<InfoSpan> *spans = m_sidebar->shownInfo(index))
+        drawInfo(p, *spans, QRectF(x, title.bottom() + 1 - infoLift(m_sidebar->settings()), r.right() - 8 - x, 0), opt.font, text, selected);
     p->restore();
 }
 
-QSize SidebarDelegate::sizeHint(const QStyleOptionViewItem &opt, const QModelIndex &) const
+QSize SidebarDelegate::sizeHint(const QStyleOptionViewItem &opt, const QModelIndex &index) const
 {
-    return QSize(200, opt.fontMetrics.height() + 16);
+    const QMargins extras = Sidebar::edgeExtras(m_sidebar->groupEdge(index));
+    // an info line lifts into the plain row's bottom padding and is padded by as much under it: the row grows by one line
+    const int info = m_sidebar->shownInfo(index) ? QFontMetrics(Sidebar::infoFont(opt.font)).height() : 0;
+    return QSize(200, m_sidebar->titleHeight(opt.fontMetrics) + info + extras.top() + extras.bottom());
 }
 
 void SidebarDelegate::updateEditorGeometry(QWidget *editor, const QStyleOptionViewItem &opt, const QModelIndex &index) const
 {
+    // where paint() puts the name
     const Settings &st = m_sidebar->settings();
-    const int left = index.data(Kind).toInt() == SessionRow ? (m_sidebar->flatList() ? 37 : 57) - (st.shows(QStringLiteral("sessionIcons")) ? 0 : 23)
-                                                            : 47 - (st.shows(QStringLiteral("workspaceIcons")) ? 0 : 17);
-    editor->setGeometry(opt.rect.adjusted(left, 3, -12, -3));
+    const bool session = index.data(Kind).toInt() == SessionRow, flat = m_sidebar->flatList();
+    const QRectF pill = Sidebar::pillRect(m_sidebar->contentRect(index, opt.rect), flat);
+    qreal x = pill.left() + chevronX + (session ? (flat ? 0 : 14) + (index.data(Companion).toBool() && !flat ? 18 : 0) : 14);
+    x += st.shows(session ? QStringLiteral("sessionIcons") : QStringLiteral("workspaceIcons")) ? iconBox + iconGap : session ? 0 : 4;
+    editor->setGeometry(QRectF(x - 4, pill.top() + 2, pill.right() - x, pill.height() - 4).toRect());
 }
 
 void SidebarDelegate::setEditorData(QWidget *editor, const QModelIndex &index) const
@@ -483,19 +554,73 @@ const Settings &Sidebar::settings() const
     return m_store.settings;
 }
 
+Sidebar::Edge Sidebar::groupEdge(const QModelIndex &index) const
+{
+    if (flatList() || !index.isValid())
+        return NoEdge;
+    if (index.data(Kind).toInt() == WorkspaceRow)
+        return isExpanded(index) && model()->rowCount(index) > 0 ? First : Single;
+    return index.row() == model()->rowCount(index.parent()) - 1 ? Last : Middle;
+}
+
+QMargins Sidebar::edgeExtras(Edge edge)
+{
+    const int outer = groupGap + groupPadding;
+    return QMargins(0, edge == First || edge == Single ? outer : 0, 0, edge == Last || edge == Single ? outer : 0);
+}
+
+QRect Sidebar::contentRect(const QModelIndex &index, const QRect &row) const
+{
+    return row.marginsRemoved(edgeExtras(groupEdge(index)));
+}
+
+const QList<InfoSpan> *Sidebar::shownInfo(const QModelIndex &index) const
+{
+    if (index.data(Kind).toInt() != SessionRow || index.data(Info).toString().isEmpty())
+        return nullptr;
+    const ::Session *s = m_store.session(index.data(Id).toString());
+    return s && !s->infoSpans.isEmpty() ? &s->infoSpans : nullptr;
+}
+
+int Sidebar::titleHeight(const QFontMetrics &fm) const
+{
+    return fm.height() + (settings().sidebarDensity == QLatin1String("compact") ? 8 : 16);
+}
+
+QFont Sidebar::infoFont(const QFont &rowFont)
+{
+    QFont f = rowFont;
+    f.setPointSizeF(qMax(7.0, rowFont.pointSizeF() - 1.5));
+    return f;
+}
+
+QRect Sidebar::titleRect(const QModelIndex &index, const QRect &row) const
+{
+    QRect content = contentRect(index, row);
+    if (shownInfo(index))
+        content.setHeight(titleHeight(QFontMetrics(font())));
+    return content;
+}
+
+QRectF Sidebar::pillRect(const QRect &content, bool flat)
+{
+    const qreal x = flat ? 6 : 10;
+    return QRectF(content).adjusted(x, 0.5, -x, -0.5);
+}
+
 QRect Sidebar::addButtonRect(const QRect &row)
 {
-    return QRect(row.right() - 34, row.center().y() - 11, 22, 22);
+    return QRect(row.right() - 38, row.center().y() - 11, 22, 22);
 }
 
 QRect Sidebar::closeButtonRect(const QRect &row)
 {
-    return QRect(row.right() - 31, row.center().y() - 11, 22, 22); // centred on the status glyph it replaces
+    return QRect(row.right() - 35, row.center().y() - 11, 22, 22); // centred on the status glyph it replaces
 }
 
 QRect Sidebar::repeatButtonRect(const QRect &row)
 {
-    return QRect(row.right() - 62, row.center().y() - 11, 22, 22);
+    return QRect(row.right() - 66, row.center().y() - 11, 22, 22);
 }
 
 void Sidebar::setFlaggedView(bool on)
@@ -580,7 +705,14 @@ void Sidebar::rebuild()
         item->setData(0, Unseen, s.unseen);
         item->setData(0, Busy, s.busy);
         item->setData(0, TintColor, s.tint.color);
-        item->setData(0, TintOn, s.tint.on);
+        // what the info line shows; set only where Settings shows it, so the row's height follows
+        const QString display = m_store.settings.sessionInfoDisplay;
+        const bool showsInfo = display == QLatin1String("always") || (display == QLatin1String("flagged") && m_store.flaggedView);
+        QString info; // the spans as a key, so a changed line re-asks the row's height
+        for (const InfoSpan &span : s.infoSpans)
+            info += span.text + QChar(span.bold | span.italic << 1 | span.code << 2 | span.dim << 3) + span.color + QChar(0);
+        item->setData(0, Info, showsInfo ? info : QString());
+        item->setData(0, Split, !s.hasSplit ? QString() : s.splitAxis == QLatin1String("horizontal") ? QStringLiteral("splitH") : QStringLiteral("split"));
         item->setToolTip(0, s.title.isEmpty() ? s.cwd : s.title + QLatin1Char('\n') + s.cwd);
         item->setFlags(Qt::ItemIsEnabled | Qt::ItemIsSelectable | Qt::ItemIsEditable | Qt::ItemIsDragEnabled);
         animating |= s.blink || s.status == QLatin1String("active");
@@ -622,7 +754,6 @@ void Sidebar::rebuild()
         wi->setData(0, Id, w.id);
         wi->setData(0, Kind, WorkspaceRow);
         wi->setData(0, TintColor, w.tint.color);
-        wi->setData(0, TintOn, w.tint.on);
         wi->setToolTip(0, w.folder);
         wi->setFlags(Qt::ItemIsEnabled | Qt::ItemIsEditable | Qt::ItemIsDragEnabled | Qt::ItemIsDropEnabled);
         for (const auto &s : w.sessions) {
@@ -716,7 +847,7 @@ void Sidebar::mousePressEvent(QMouseEvent *event)
     if (isCloseButton(item, pos) && event->button() == Qt::LeftButton)
         return Q_EMIT closeRequested(item->data(0, Id).toString());
     if (item && item->data(0, Kind).toInt() == WorkspaceRow && event->button() == Qt::LeftButton) {
-        const QRect row = visualItemRect(item);
+        const QRect row = titleRect(indexFromItem(item), visualItemRect(item));
         const QString id = item->data(0, Id).toString();
         const bool buttons = m_store.settings.shows(QStringLiteral("workspaceAddSession"));
         if (buttons && addButtonRect(row).contains(pos)) {
@@ -728,7 +859,7 @@ void Sidebar::mousePressEvent(QMouseEvent *event)
             return;
         }
         // a click on the row folds or unfolds it, as elis's default does; with that off only the chevron does
-        if (!m_store.settings.workspaceRowClickExpands && pos.x() > row.left() + 24)
+        if (!m_store.settings.workspaceRowClickExpands && pos.x() > row.left() + 28)
             return QTreeWidget::mousePressEvent(event);
         m_store.collapsed.contains(id) ? m_store.collapsed.remove(id) : (m_store.collapsed.insert(id), true);
         item->setExpanded(!m_store.collapsed.contains(id));
@@ -747,7 +878,7 @@ void Sidebar::mousePressEvent(QMouseEvent *event)
 bool Sidebar::isCloseButton(QTreeWidgetItem *item, const QPoint &pos) const
 {
     return item && item->data(0, Kind).toInt() == SessionRow && closable(indexFromItem(item))
-        && closeButtonRect(visualItemRect(item)).contains(pos);
+        && closeButtonRect(titleRect(indexFromItem(item), visualItemRect(item))).contains(pos);
 }
 
 // the close X shows only on a quiet row: no attention mark, and no plain command running (an agent's own status speaks for it)
@@ -773,8 +904,8 @@ QItemSelectionModel::SelectionFlags Sidebar::selectionCommand(const QModelIndex 
 void Sidebar::mouseDoubleClickEvent(QMouseEvent *event)
 {
     if (QTreeWidgetItem *item = itemAt(event->position().toPoint())) {
-        if (item->data(0, Kind).toInt() == WorkspaceRow && (addButtonRect(visualItemRect(item)).contains(event->position().toPoint())
-                                                         || repeatButtonRect(visualItemRect(item)).contains(event->position().toPoint())))
+        if (item->data(0, Kind).toInt() == WorkspaceRow && (addButtonRect(titleRect(indexFromItem(item), visualItemRect(item))).contains(event->position().toPoint())
+                                                         || repeatButtonRect(titleRect(indexFromItem(item), visualItemRect(item))).contains(event->position().toPoint())))
             return;
         if (isCloseButton(item, event->position().toPoint()))
             return;

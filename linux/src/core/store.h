@@ -1,5 +1,6 @@
 #pragma once
 
+#include <QHash>
 #include <QJsonObject>
 #include <QList>
 #include <QObject>
@@ -9,11 +10,19 @@
 
 #include <optional>
 
-// A sidebar row colour: one of Store::tintColors shown on the icon, the name and/or as a background wash; empty color = none.
+// A sidebar row colour, one of Store::tintColors: its icon, its name, and a workspace's band or a session's wash; empty = none.
 struct Tint {
     QString color;
-    QStringList on; // icon, name, background in that order; never empty while tinted
     bool operator==(const Tint &) const = default;
+};
+
+// One styled run of a session's sidebar second line: the spans array ElisBridge produces, color one of ElisCore's
+// TintColor names ("" = the row's own colour).
+struct InfoSpan {
+    QString text;
+    bool bold = false, italic = false, code = false, dim = false;
+    QString color;
+    bool operator==(const InfoSpan &) const = default;
 };
 
 struct Session {
@@ -41,6 +50,7 @@ struct Session {
     QString parentId;            // a companion is pinned to its parent, listed right after it
     Tint tint;
     QString context; // a short line of what the session is about, set from outside (session.context)
+    QList<InfoSpan> infoSpans; // the sidebar's second line under the name; runtime only, empty = none
     // re-run restore: argv captured at quit (persisted), its one-shot replay this launch (not persisted), and a pinned
     // command that beats both (persisted; "" = pinned to nothing)
     QStringList foreground, splitForeground, replay, splitReplay;
@@ -57,7 +67,7 @@ struct Workspace {
     QString name;
     QString folder; // last directory one of its sessions reported; where new sessions open
     QList<Session> sessions;
-    Tint tint; // colours the workspace row; its background wash also covers its open sessions' rows and terminals
+    Tint tint; // colours the workspace row and the band around its open sessions, and washes its terminals
 };
 
 struct Settings {
@@ -92,6 +102,8 @@ struct Settings {
     QString autoFollowAttention = QStringLiteral("off"); // off s5 s10 s30 s60 m5: idle time before the window follows a blocked session
     bool autoFollowStayOnActive = false;                  // hold the selection while the current session is active
     QString flaggedViewLayout = QStringLiteral("flat");   // flat (session : workspace) | plain | tree
+    QString sidebarDensity = QStringLiteral("default");   // default | compact
+    QString sessionInfoDisplay = QStringLiteral("always"); // where the sidebar draws a session's second line: always | flagged | off
     // Key Mapping: the directory holding keymap.conf and hooks.conf; "" = the default
     QString configDirectory;
     QString restoreMode = QStringLiteral("none"); // none | rerun | live; takes effect at the next launch
@@ -108,7 +120,6 @@ public:
     enum class Key { Plain, Submit, Interrupt };
     static const QStringList statuses;
     static const QStringList tintColors; // red orange yellow green blue purple gray
-    static QStringList tintParts(const QStringList &raw); // ordered icon,name,background; empty when empty or unknown
 
     QList<Workspace> workspaces;
     QString selected;
@@ -188,9 +199,8 @@ public:
     void setFlag(const QString &id, bool flagged);
     bool focusWorkspace(const QString &id, const QString &mode); // on | off | toggle | add; false on another mode
     void setFilter(bool on);
-    // id names a session or a workspace. color "" clears; parts empty keep the row's placement; an untinted row gets icon,name,background
-    void setTint(const QString &id, const QString &color, const QStringList &parts = {});
-    void placeTint(const QString &id, const QStringList &parts); // an untinted row stays untinted
+    // id names a session or a workspace; color "" clears
+    void setTint(const QString &id, const QString &color);
     void setCwd(const QString &id, const QString &cwd);
     void setTitle(const QString &id, const QString &title);
     void setAgent(const QString &id, const QString &agent, const QString &pane = QStringLiteral("left"));

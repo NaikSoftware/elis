@@ -1,5 +1,7 @@
 // Control commands added to reach master's catalog: events, navigation, sidebar, context, recent, messages, and the
 // app-side ones routed through Terminals::appCommand.
+#include "elis_bridge.h"
+#include <QJsonDocument>
 #include "control.h"
 #include "hooks.h"
 #include "store.h"
@@ -106,6 +108,20 @@ static QJsonObject workspaceGo(Store &store, const QJsonObject &args)
     if (!dest->sessions.isEmpty())
         store.select(dest->sessions.first().id);
     return ok({{"id", dest->id}});
+}
+
+// sidebar.density's mode ("" toggles) against the current density, by ElisCore's parse; "" and *error on a refusal
+static QString sidebarDensity(const QString &mode, const QString &current, QString *error)
+{
+    QJsonObject request{{"current", current}};
+    if (!mode.isEmpty())
+        request.insert("mode", mode);
+    char *raw = elis_sidebar_density(QJsonDocument(request).toJson(QJsonDocument::Compact).constData());
+    const QJsonObject reply = QJsonDocument::fromJson(raw ? QByteArray(raw) : QByteArray()).object();
+    elis_free(raw);
+    if (!reply.value("ok").toBool())
+        *error = reply.value("error").toString(QStringLiteral("the density check gave no answer"));
+    return reply.value("density").toString();
 }
 
 static QJsonObject sessionContext(Store &store, const QString &id, const QJsonObject &args)
@@ -237,6 +253,15 @@ static QJsonObject sidebarCommand(Store &store, const QString &cmd, const QJsonO
         s.flaggedViewLayout = mode != QLatin1String("toggle") ? mode : s.flaggedViewLayout == QLatin1String("tree") ? QStringLiteral("flat") : QStringLiteral("tree");
         store.setSettings(s);
         return ok({{"text", s.flaggedViewLayout}});
+    }
+    if (cmd == QLatin1String("sidebar.density")) {
+        QString error;
+        Settings s = store.settings;
+        s.sidebarDensity = sidebarDensity(args.value("mode").toString(), s.sidebarDensity, &error);
+        if (!error.isEmpty())
+            return fail(error);
+        store.setSettings(s);
+        return ok({{"text", s.sidebarDensity}});
     }
     // sidebar.expand | sidebar.collapse: workspace rows; collapse keeps the current workspace open
     const Workspace *cur = store.workspaceOf(store.selected);

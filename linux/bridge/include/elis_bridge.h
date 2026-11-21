@@ -11,6 +11,9 @@ extern "C" {
 char *elis_transcript_arguments(const char *argsJSON);
 // One session.transcript page as the Mac's whole reply. Blocks on file reads, and traps on the process main thread.
 char *elis_transcript_read(const char *argsJSON, const char *claudeDir, const char *sessionID, const char *pane);
+// sidebar.density's mode against the current density: {"ok":true,"density":"default|compact"} or the Mac's refusal.
+// Input {"mode"?,"current"}; an absent mode toggles.
+char *elis_sidebar_density(const char *json);
 void elis_free(char *result);
 
 #ifdef __cplusplus

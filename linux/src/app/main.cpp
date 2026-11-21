@@ -22,6 +22,7 @@
 #include <QLocalSocket>
 #include <QLockFile>
 #include <QMessageBox>
+#include <QPalette>
 #include <QPointer>
 #include <QSocketNotifier>
 #include <QThreadPool>
@@ -112,12 +113,38 @@ static int installFromCommandLine(int argc, char **argv)
     return failed ? 1 : 0;
 }
 
+// The brand copper as the palette's Highlight (D2); the rest stays the desktop's. Re-applied when the desktop
+// scheme changes, since that replaces the whole palette.
+class Accent : public QObject
+{
+public:
+    using QObject::QObject;
+    static void apply()
+    {
+        QPalette pal = QApplication::palette();
+        const QColor copper(pal.color(QPalette::Window).lightness() < 128 ? 0xE08A45 : 0xC8742F);
+        if (pal.color(QPalette::Highlight) == copper)
+            return; // setPalette posts another palette change
+        for (auto group : {QPalette::Active, QPalette::Inactive})
+            pal.setColor(group, QPalette::Highlight, copper), pal.setColor(group, QPalette::HighlightedText, Qt::white);
+        QApplication::setPalette(pal);
+    }
+    bool eventFilter(QObject *watched, QEvent *event) override
+    {
+        if (watched == qApp && event->type() == QEvent::ApplicationPaletteChange)
+            apply();
+        return false;
+    }
+};
+
 int main(int argc, char **argv)
 {
     if (argc > 1 && qstrcmp(argv[1], "--install") == 0)
         return installFromCommandLine(argc, argv);
     QApplication app(argc, argv);
     app.installEventFilter(new SmoothWheel(&app));
+    Accent::apply();
+    app.installEventFilter(new Accent(&app));
     app.setApplicationName(QStringLiteral("elis")); // also names the Konsole-part profile namespace
     app.setApplicationVersion(QLatin1String(appVersion));
     app.setDesktopFileName(QStringLiteral("elis"));

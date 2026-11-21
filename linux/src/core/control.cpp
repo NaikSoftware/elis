@@ -23,10 +23,8 @@ static QJsonObject fail(const QString &error)
 
 static QJsonObject withTint(QJsonObject node, const Tint &t)
 {
-    if (!t.color.isEmpty()) {
+    if (!t.color.isEmpty())
         node.insert("tint", t.color);
-        node.insert("tintOn", QJsonArray::fromStringList(t.on));
-    }
     return node;
 }
 
@@ -215,49 +213,39 @@ static QJsonObject restoreCommand(Store &store, Terminals &terminals, const QStr
     return fail(QStringLiteral("unknown command '%1'").arg(cmd));
 }
 
-// a colour from the palette and an optional placement of known parts; "" when valid
-static QString tintArgs(const QJsonObject &args, QString *color, QStringList *parts)
+// a colour from the palette; "" when valid
+static QString tintArgs(const QJsonObject &args, QString *color)
 {
     *color = args.value("tint").toString().toLower();
     if (!Store::tintColors.contains(*color))
         return QStringLiteral("invalid tint: %1 (%2)").arg(args.value("tint").toString(), Store::tintColors.join(QLatin1Char('|')));
-    if (args.contains("tintOn")) {
-        QStringList raw;
-        for (const auto &v : args.value("tintOn").toArray())
-            raw << v.toString();
-        if ((*parts = Store::tintParts(raw)).isEmpty())
-            return QStringLiteral("invalid tint placement: %1 (icon,name,background)").arg(raw.join(QLatin1Char(',')));
-    }
     return {};
 }
 
-// session.tint / workspace.tint: a clear refuses a colour or placement rather than ignoring it
+// session.tint / workspace.tint: a clear refuses a colour rather than ignoring it
 static QString applyTint(Store &store, const QString &id, const QString &cmd, const QJsonObject &args)
 {
     const QString mode = args.value("mode").toString();
     QString color;
-    QStringList parts;
     if (mode == QLatin1String("clear")) {
-        if (args.contains("tint") || args.contains("tintOn"))
-            return QStringLiteral("%1 clear takes no color or placement").arg(cmd);
+        if (args.contains("tint"))
+            return QStringLiteral("%1 clear takes no color").arg(cmd);
     } else if (mode == QLatin1String("set")) {
         if (!args.contains("tint"))
             return QStringLiteral("%1 set requires a color").arg(cmd);
-        if (QString e = tintArgs(args, &color, &parts); !e.isEmpty())
+        if (QString e = tintArgs(args, &color); !e.isEmpty())
             return e;
     } else {
         return QStringLiteral("invalid tint mode: %1 (set|clear)").arg(mode);
     }
-    store.setTint(id, color, parts);
+    store.setTint(id, color);
     return {};
 }
 
 // session.new / workspace.new: validated before anything is created
-static QString creationTint(const QJsonObject &args, QString *color, QStringList *parts)
+static QString creationTint(const QJsonObject &args, QString *color)
 {
-    if (!args.contains("tint"))
-        return args.contains("tintOn") ? QStringLiteral("--tint-on requires --tint") : QString();
-    return tintArgs(args, color, parts);
+    return args.contains("tint") ? tintArgs(args, color) : QString();
 }
 
 static QJsonObject merged(QJsonObject node, const QJsonObject &extra)
@@ -389,7 +377,8 @@ static QJsonObject tree(Store &store, const Terminals &terminals)
     return {{"workspaces", ws},
             {"workspaceFilter", store.focusEnabled},
             {"sidebarMode", store.flaggedView ? "flagged" : "tree"},
-            {"sidebarFlaggedLayout", store.settings.flaggedViewLayout}};
+            {"sidebarFlaggedLayout", store.settings.flaggedViewLayout},
+            {"sidebarDensity", store.settings.sidebarDensity}};
 }
 
 // on | off | toggle against the current state; "" means toggle
@@ -413,15 +402,14 @@ static QJsonObject sessionNew(Store &store, const QJsonObject &args)
         cwd = QFileInfo(cwd).absoluteFilePath();
 
     QString error, wsId, tint;
-    QStringList tintOn;
-    if (error = creationTint(args, &tint, &tintOn); !error.isEmpty())
+    if (error = creationTint(args, &tint); !error.isEmpty())
         return fail(error);
     if (args.contains("parent")) {
         const QString parent = store.resolveSession(args.value("parent").toString(), &error);
         if (parent.isEmpty())
             return fail(error);
         const QString id = store.addCompanion(parent, args.value("name").toString(), cwd, args.value("command").toString());
-        store.setTint(id, tint, tintOn);
+        store.setTint(id, tint);
         if (!args.value("noSelect").toBool())
             store.select(id);
         return ok({{"id", id}});
@@ -448,7 +436,7 @@ static QJsonObject sessionNew(Store &store, const QJsonObject &args)
     }
 
     const QString id = store.addSession(wsId, args.value("name").toString(), cwd, args.value("command").toString());
-    store.setTint(id, tint, tintOn);
+    store.setTint(id, tint);
     if (!args.value("noSelect").toBool())
         store.select(id);
     return ok({{"id", id}});
@@ -531,11 +519,10 @@ QJsonObject dispatch(Store &store, Terminals &terminals, const QJsonObject &requ
         return ok({{"text", QStringLiteral("Elis %1").arg(QLatin1String(appVersion))}});
     if (cmd == QLatin1String("workspace.new")) {
         QString tint;
-        QStringList tintOn;
-        if (error = creationTint(args, &tint, &tintOn); !error.isEmpty())
+        if (error = creationTint(args, &tint); !error.isEmpty())
             return fail(error);
         const QString id = store.addWorkspace(args.value("name").toString());
-        store.setTint(id, tint, tintOn);
+        store.setTint(id, tint);
         return ok({{"id", id}});
     }
     if (cmd == QLatin1String("session.new"))
@@ -722,7 +709,7 @@ QJsonObject dispatch(Store &store, Terminals &terminals, const QJsonObject &requ
                 return fail(QStringLiteral("session has no split pane"));
             if (!terminals.type(id, pane, args.value("text").toString(), &error))
                 return fail(error);
-        } else if (cmd == QLatin1String("session.info")) {
+        } else if (cmd == QLatin1String("session.get")) {
             QJsonObject node = merged(withContext(withRestore(sessionNode(*store.session(id), store.selected), *store.session(id)), *store.session(id), store),
                                       terminals.sessionExtras(id));
             node.insert("workspace", store.workspaceOf(id)->id);

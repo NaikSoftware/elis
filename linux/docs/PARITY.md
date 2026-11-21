@@ -8,9 +8,11 @@ Legend: [x] done · [ ] todo · (fork) = fork-only feature, not in upstream docs
 
 ## Phase 1: sidebar, chrome, sessions
 
-- [x] Title bar strip: sidebar toggle, session name
-- [x] Title bar: file panel toggle (fork, left of the sidebar toggle); split button
-- [x] Sidebar rows: workspace = chevron + grid icon + name; session = terminal icon + name + status dot at the right
+- [x] Title bar strip in the window's toolbar row (KDE keeps its decoration and menu bar): file panel and sidebar toggles,
+  the centred session pill (agent logo · workspace › session · context · Ctrl+P), split (its pane state) and dashboard
+- [x] Sidebar rows: workspace = chevron + workspace-stack glyph + name in a tinted band; session = terminal glyph or agent
+  logo (split glyph when split) + name + status glyph at the right; selection pill in the group's tint, else the copper accent
+- [x] Sidebar density (Settings ▸ Appearance, `sidebar density`); app accent copper as the palette's Highlight
 - [x] Session icon = logo of the agent in its foreground process group (claude, codex, opencode, agy), sampled every 2 s (fork)
 - [x] Workspace "+" on hover: menu of Terminal + agents found on the login shell PATH, with logos; repeat button for the last choice (fork)
 - [x] Remembered folder per workspace (last cwd its panes reported); new sessions open there (fork)
@@ -22,7 +24,12 @@ Legend: [x] done · [ ] todo · (fork) = fork-only feature, not in upstream docs
 - [x] Session context menu: New Companion
 - [x] Workspace context menu: New Session, Rename, Flag All Sessions, Delete Workspace
 - [x] Workspace context menu: Focus/Unfocus, Add to/Remove from Focus, Tint
-- [x] Session context menu: Tint (None, seven colours, Show On icon/name/background; batch), palette Tint Session items, `session|workspace tint`, `--tint` on new
+- [x] Session context menu: Tint (None, seven colours; batch), palette Tint Session items, `session|workspace tint`, `--tint` on new.
+  A tint colours icon and name, a workspace's band and a session's wash, as on the Mac; Linux also washes the terminal
+  very lightly. There is no `--on`/`--tint-on`
+- [ ] `session info` (the Mac's sidebar info line) is not on Linux. The row's second line and Settings ▸ Interface ▸
+  Session info are drawn and wait for the CI summary to feed them. Linux's process-detail read (the node plus `pid`,
+  `foreground`, `foregroundPid`, `liveCwd`, `profile`) has no Mac counterpart and is `session get` (`session.get`)
 - [x] Drag to reorder sessions and workspaces; drag a session to another workspace; multi-select
 - [x] Drop folders from the file manager onto the tree to open sessions there
 - [x] Drop a session row on a terminal to type its Claude Code conversation id, else its Elis id (Elis only)
@@ -49,7 +56,8 @@ Legend: [x] done · [ ] todo · (fork) = fork-only feature, not in upstream docs
 - [x] Session palette ⌃P, action palette ⌃⇧P (fuzzy, Ctrl-J/K, disabled actions greyed)
 - [x] Custom-commands palette ⌃⇧O → Ctrl+Alt+O (Ctrl+Shift+O is ⌘O, Open Directory, so its Shift becomes Alt)
 - [x] Ctrl-Tab MRU switcher (hold Ctrl, Tab walks, release switches; one tap flips back)
-- [x] Recent-sessions title-bar button (a menu under the clock, not a popover): the last 15 open sessions, then the recently closed ones (persisted with the window state); a closed Claude Code session reopens with `claude --resume <id>`
+- [x] Session switcher pill: opens the session palette with the sessions that need you, then the recent ones, then the
+  recently closed (persisted with the window state); a closed Claude Code session reopens with `claude --resume <id>`
 - [x] Flagged view layout (Settings ▸ General: Flat list `session : workspace`, Flat list names only, Workspace tree sharing the
   tree's collapse state), View ▸ Edit Flagged Sessions… / Edit Focused Workspaces… (live checklists; the empty flagged view links
   to the first). The flat list follows tree order, not a per-window flagged order of its own
@@ -84,7 +92,7 @@ Legend: [x] done · [ ] todo · (fork) = fork-only feature, not in upstream docs
 - [x] Settings dialog: General, Appearance, Interface, Notifications, Agent Status, Key Mapping (KPageDialog, every control live).
   Not here, with their features: flagged view layout, link opening, scroll speed, right-click paste, Ghostty config,
   toolbar mode, sidebar tint, inactive-pane mute, follow system appearance, window/remote/dashboard/scratch/overlay
-  title-bar elements, session info line, multiple-window sidebar, attention indicator, crossing windows, keyboard-layout lock
+  title-bar elements, multiple-window sidebar, attention indicator, crossing windows, keyboard-layout lock
 - [x] Theme picker with live preview (Konsole colour schemes applied per session at runtime, no profile file written; `theme list|set`)
 - [x] keymap.conf: built-in rebinding, alternatives, leader sequences, `command "Name" chord shell…`, AGT_* tokens and env, diagnostics,
   File ▸ Edit/Reload Keymap (the editor runs in a 95% overlay and the file reloads when it quits), `keymap reload|list|run`.
@@ -123,10 +131,10 @@ Legend: [x] done · [ ] todo · (fork) = fork-only feature, not in upstream docs
   panes, the focused one first): the argument check and the reader are master's own `ElisCore`, linked through
   `linux/bridge` (ElisBridge); the read runs on a worker thread
 - [x] Control API breadth: master's catalog with its argument names, errors and read-backs — `events` (an app-wide ring
-  with run/after cursors; the CLI polls it), `workspace go|collapse|expand|flag`, `session context|reveal|collapse|expand|focus|resize|
+  with run/after cursors; the CLI polls it), `workspace go|collapse|expand|flag`, `session context|get|reveal|collapse|expand|focus|resize|
   copy|paste|select-all|search`, `session text` (visible screen; `--all` and `--lines` page the scrollback through the view's
   scrollbar), `session new --parent` as `session.companion.new`, `surface zoom`, `sidebar [show|hide|toggle]|mode|flagged-layout|
-  expand|collapse|width`, `pick` (the palette; exits 0 picked/custom, 2 cancelled), `ask` (a dialog; buttons, hotkeys, line or
+  density|expand|collapse|width`, `pick` (the palette; exits 0 picked/custom, 2 cancelled), `ask` (a dialog; buttons, hotkeys, line or
   multiline input, choices with other; exits 0/2/3), `msg send|read|ack` (panes export `ELIS_PANE_ID`), `recent list|open <id>|clear`,
   `notify <body>`, repeated `--target` for `session close|move`. Read-back `context`, `collapsed`, `splitFocused`, `ask`,
   `sidebarFlaggedLayout`, `sidebarWidth`, `zoomedSurface`, `pickPending`, `askPending`. Absent features answer master's

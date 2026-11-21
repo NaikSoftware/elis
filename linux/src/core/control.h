@@ -59,7 +59,7 @@ public:
         Q_UNUSED(sessionId);
         Q_UNUSED(payload);
     }
-    virtual QJsonObject info(const QString &sessionId) = 0; // live process fields merged into session.info
+    virtual QJsonObject info(const QString &sessionId) = 0; // live process fields merged into session.get
     // mode show | hide | toggle, or "" with width > 0 to resize only
     virtual bool filePanel(const QString &mode, int width, QString *error)
     {
