@@ -79,7 +79,7 @@ add_custom_command(OUTPUT ${ELIS_ZMX}
   COMMAND ${CMAKE_COMMAND} -E copy ${CMAKE_BINARY_DIR}/zmx-stage/zmx ${ELIS_ZMX}
   DEPENDS ${CMAKE_SOURCE_DIR}/../macos/scripts/setup.sh ${ELIS_ZMX_PATCHES}
   COMMENT "Building the patched zmx" USES_TERMINAL VERBATIM)
-add_custom_target(zmx ALL DEPENDS ${ELIS_ZMX})
+add_custom_target(elis-zmx ALL DEPENDS ${ELIS_ZMX}) # not `zmx`, the output's own name
 
 add_library(elis-core STATIC src/core/store.cpp src/core/control.cpp src/core/launcher.cpp src/core/keymap.cpp src/core/hooks.cpp src/core/restore.cpp src/core/commands.cpp src/core/installers.cpp src/core/zmx.cpp src/core/transcript.cpp)
 target_include_directories(elis-core PUBLIC src/core)
@@ -97,7 +97,7 @@ target_link_libraries(elis-ui PUBLIC elis-core Qt6::Widgets Qt6::DBus Qt6::Svg K
 add_executable(elis src/app/main.cpp)
 target_link_libraries(elis PRIVATE elis-ui Qt6::Network KF6::ConfigCore)
 
-add_dependencies(elis zmx) # spawned from the app's own directory
+add_dependencies(elis elis-zmx) # spawned from the app's own directory
 
 add_executable(elisctl src/ctl/elisctl.cpp src/ctl/mobile.cpp src/ctl/qrcodegen/qrcodegen.cpp)
 target_link_libraries(elisctl PRIVATE elis-core Qt6::Network)
@@ -110,7 +110,7 @@ enable_testing()
 add_executable(test_core tests/test_core.cpp)
 target_link_libraries(test_core PRIVATE elis-core Qt6::Sql Qt6::Test)
 target_compile_definitions(test_core PRIVATE ELIS_SOURCE_AGENT_STATUS="${ELIS_AGENT_STATUS}")
-add_dependencies(test_core zmx) # Zmx::executable() is beside the binary
+add_dependencies(test_core elis-zmx) # Zmx::executable() is beside the binary
 add_test(NAME core COMMAND test_core)
 add_executable(test_ui tests/test_ui.cpp)
 target_link_libraries(test_ui PRIVATE elis-ui Qt6::Test)

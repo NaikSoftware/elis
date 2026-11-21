@@ -44,7 +44,7 @@ An elis-server host is not this app: SKILL.md's "Remote windows and elis-server"
 These answer `<cmd> is not supported on this platform (<reason>)`:
 
 - quick terminal (`quick …`) and scratch terminal (`session scratch`);
-- every `zmx …` command, remote sessions and pane leads (`session lead`), `session restart`;
+- every `zmx …` command, remote sessions, `session lead` (a covered pane takes the lead with a key), `session restart`;
 - `session background`, `surface cursor`, `config reload`;
 - the built-in browser (`browser …`), page overlays (`session overlay open --html|--url`,
   `overlay reload|navigate|submit|copy`) and page companions: they need Qt WebEngine.

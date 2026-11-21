@@ -29,7 +29,7 @@ std::optional<QList<Record>> list(const QString &stateDir); // nullopt when the 
 QString daemonName(const QString &stateDir, const QString &paneId);
 int shellPid(const QString &stateDir, const QString &paneId); // the daemon's shell; -1 until zmx lists it
 int foregroundPid(int shellPid); // the shell's terminal foreground group (tpgid), the shell itself when idle
-// ends each pane's daemon, then hangs up a foreground job in another group (zmx signals only the shell's)
+// ends each pane's daemon, then hangs up its foreground job; the launch reap ends its daemons the same way
 void kill(const QString &stateDir, const QStringList &paneIds);
 // the launch reap: zero-client daemons not in `known` (every pane id of every window), or all of them off live;
 // `known` nullopt (an unreadable window file) skips a live reap

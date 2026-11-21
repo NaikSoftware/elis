@@ -150,28 +150,36 @@ int foregroundPid(int shellPid)
     return tpgid > 0 ? tpgid : shellPid;
 }
 
-void kill(const QString &stateDir, const QStringList &paneIds)
+// ends the named daemons; `zmx kill` signals only each shell's process group, so a foreground job in another group
+// gets the hangup a closed terminal sends, then what ignores it ends too
+static void end(const QString &stateDir, const QStringList &daemons)
 {
-    if (paneIds.isEmpty())
+    if (daemons.isEmpty())
         return;
-    QStringList daemons;
     QList<int> jobs;
-    list(stateDir); // the foreground jobs are read before the kill ends their shells
-    for (const QString &id : paneIds) {
-        const QString name = daemonName(stateDir, id);
-        daemons << name;
+    list(stateDir); // read before the kill ends their shells
+    for (const QString &name : daemons) {
         const int shell = s_shells.value(name, -1), job = foregroundPid(shell);
         if (job > 0 && job != shell)
             jobs << job;
         s_shells.remove(name);
-        forget(id);
     }
     if (!run(stateDir, QStringList{QStringLiteral("kill")} << daemons << QStringLiteral("--force")))
         qWarning("zmx kill %s failed", qPrintable(daemons.join(QLatin1Char(' '))));
-    for (const int job : std::as_const(jobs)) { // the hangup a closed terminal sends, then what ignores it ends too
+    for (const int job : std::as_const(jobs)) {
         ::kill(-job, SIGHUP);
         QTimer::singleShot(2000, [job] { ::kill(-job, SIGKILL); });
     }
+}
+
+void kill(const QString &stateDir, const QStringList &paneIds)
+{
+    QStringList daemons;
+    for (const QString &id : paneIds) {
+        daemons << daemonName(stateDir, id);
+        forget(id);
+    }
+    end(stateDir, daemons);
 }
 
 void reap(const QString &stateDir, const QString &requestedMode, const std::optional<QStringList> &known)
@@ -186,8 +194,7 @@ void reap(const QString &stateDir, const QString &requestedMode, const std::opti
     QStringList daemons;
     for (const auto &v : r.value("kill").toArray())
         daemons << v.toString();
-    if (!daemons.isEmpty() && !run(stateDir, QStringList{QStringLiteral("kill")} << daemons << QStringLiteral("--force")))
-        qWarning("zmx kill %s failed", qPrintable(daemons.join(QLatin1Char(' '))));
+    end(stateDir, daemons);
 }
 
 static Lead leadFrom(const QJsonObject &o)

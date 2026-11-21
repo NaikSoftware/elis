@@ -365,6 +365,22 @@ for _ in $(seq 20); do ctl session get --target src | grep -qE '^foreground +sle
 ctl session type 'echo "V=$LIVE_VAR"'$'\n' --target renamed
 for _ in $(seq 20); do ctl session text --target renamed --lines 5 | grep -q 'V=kept' && break; sleep 0.2; done
 ctl session text --target renamed --lines 5 | grep -q 'V=kept' || fail "live reattach keeps the shell"
+# another client claims a pane's lead, as the phone will: the pane follows, and takes the lead back once it leaves
+spane=$(ctl tree --json | python3 -I -c 'import json,sys
+d=json.load(sys.stdin); d=d.get("result",d); d=d.get("tree",d)
+print([f["paneID"] for w in d["workspaces"] for s in w["sessions"] if s["name"]=="src" for f in s["surfaces"] if f["kind"]=="left"][0])')
+mkfifo "$ELIS_STATE_DIR/claim-in"
+ZMX_MANAGED=other ZMX_MANAGED_CLAIM=1 ZMX_DIR=$zdir ZMX_SESSION= ZMX_SESSION_PREFIX= \
+  script -qfec "$bin/zmx attach elis-${spane//-/}" /dev/null <"$ELIS_STATE_DIR/claim-in" >/dev/null 2>&1 &
+mpid=$!
+exec 8>"$ELIS_STATE_DIR/claim-in"
+for _ in $(seq 25); do ctl tree --json | grep -q '"lead":"follower"' && break; sleep 0.2; done
+ctl tree --json | grep -q '"lead":"follower"' || fail "a pane another client leads reads follower"
+kill "$mpid"
+exec 8>&-
+for _ in $(seq 25); do ctl tree --json | grep -q '"lead":"follower"' || break; sleep 0.2; done
+ctl tree --json | grep -q '"lead":"follower"' && fail "the pane takes the lead back once the other client leaves"
+[ "$(ctl session info --target src | awk '/^foregroundPid /{print $2}')" = "$spid" ] || fail "a takeover keeps the pane's program"
 gone=$(ctl session new --name gone --no-select)
 for _ in $(seq 20); do [ "$(daemons)" -gt "$(ctl tree --json | grep -o '"kind":"left"' | wc -l)" ] && break; sleep 0.2; done
 before=$(daemons)
@@ -377,6 +393,17 @@ for _ in $(seq 20); do [ "$(daemons)" = "$before" ] && break; sleep 0.2; done
 ctl session close --target "$gone" >/dev/null
 for _ in $(seq 20); do [ "$(daemons)" -lt "$before" ] && break; sleep 0.2; done
 [ "$(daemons)" -lt "$before" ] || fail "deleting a session ends its daemon"
+wpid=$(ctl session info --target "$inw2" | awk '/^pid /{print $2}')
+[ -n "$wpid" ] && [ "$wpid" -gt 0 ] || fail "a live pane in the second window"
+ctl window close "$w2"
+before=$(daemons)
+stop
+start # a closed window's file claims its daemons from the launch reap
+kill -0 "$wpid" 2>/dev/null || fail "a closed window keeps its live daemons"
+[ "$(daemons)" = "$before" ] || fail "a live launch reaps only unclaimed daemons"
+ctl window delete "$w2"
+for _ in $(seq 20); do kill -0 "$wpid" 2>/dev/null || break; sleep 0.2; done
+kill -0 "$wpid" 2>/dev/null && fail "deleting a window ends its daemons"
 ctl restore mode none >/dev/null
 stop
 

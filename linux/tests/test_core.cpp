@@ -892,11 +892,21 @@ private Q_SLOTS:
         QCOMPARE(call(live, t, "restore.mode")["result"]["restore"]["active"].toString(), QStringLiteral("live"));
     }
 
+    void zmxPayloadRunsOnlyWhenTheAttachCreatesTheDaemon_data()
+    {
+        QTest::addColumn<QString>("login");
+        QTest::newRow("sh") << QStringLiteral("/bin/sh");
+        QTest::newRow("bash") << QStringLiteral("/bin/bash");
+        if (QFileInfo(QStringLiteral("/usr/bin/fish")).isExecutable())
+            QTest::newRow("fish") << QStringLiteral("/usr/bin/fish");
+    }
+
     void zmxPayloadRunsOnlyWhenTheAttachCreatesTheDaemon()
     {
+        QFETCH(QString, login);
         ZmxNamespace ns;
         const QString pane = ns.pane(), mark = ns.state.filePath("ran");
-        const Zmx::Attach a = Zmx::attach(ns.state.path(), pane, QStringLiteral("/bin/sh"), QStringLiteral("echo once >> %1").arg(mark), {}, false);
+        const Zmx::Attach a = Zmx::attach(ns.state.path(), pane, login, QStringLiteral("echo once >> %1").arg(mark), {}, false);
         ns.dir = a.set.value("ZMX_DIR");
         QVERIFY(a.error.isEmpty());
         QVERIFY(ns.dir.startsWith(qEnvironmentVariable("XDG_RUNTIME_DIR", QStringLiteral("/tmp")) + QStringLiteral("/elis-zmx-")));
@@ -912,7 +922,7 @@ private Q_SLOTS:
         first.waitForFinished();
         QTRY_COMPARE(clients(ns.state.path(), a.daemon), 0); // the daemon outlives its client
 
-        const Zmx::Attach again = Zmx::attach(ns.state.path(), pane, QStringLiteral("/bin/sh"), QStringLiteral("echo twice >> %1").arg(mark), {}, false);
+        const Zmx::Attach again = Zmx::attach(ns.state.path(), pane, login, QStringLiteral("echo twice >> %1").arg(mark), {}, false);
         QProcess second;
         startClient(second, again.set, again.argv);
         QTRY_COMPARE(clients(ns.state.path(), a.daemon), 1);
