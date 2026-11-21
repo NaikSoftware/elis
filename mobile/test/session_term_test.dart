@@ -23,6 +23,7 @@ import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import 'mux_test.dart' show answer, frame, grid, json, pairing, upgradeAnswer;
+import 'support/vt_lib.dart';
 
 const _refusal = 'session predates this version; restart it to watch it on the phone';
 
@@ -827,7 +828,7 @@ void main() {
     await h.stop();
   });
 
-  const lib = 'build/vtshim/libvtshim.dylib';
+  final lib = hostVtLib;
   testWidgets('livePaneDrawsWithTheRealEmulator', (t) async {
     final h = Harness(t, treeOf());
     await h.start(vt: (c, r) {
