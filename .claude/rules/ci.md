@@ -56,6 +56,9 @@ paths:
   to another user's process. The 45-minute cap covers the build plus both watchdog budgets.
   Darwin-only behavior keeps its tests behind
   `#if canImport(Darwin)` beside the code; everything else runs on both platforms.
+- `bridge` builds `linux/shared` (ElisBridge, the Qt app's link to `ElisCore`) in the same container under the
+  Swift filter, with the flags `linux/CMakeLists.txt` passes, and fails when the library needs a Swift runtime.
+  It does not build the Qt app: noble has no KF6.
 - `build` and `hosted` each restore separate revision-keyed caches for libghostty and zmx, including each
   build stamp, and install xcodegen. A zmx pin change does not rebuild libghostty. A libghostty cache miss
   also runs the teardown patch's Zig tests inside `setup.sh`, and a zmx miss runs zmx's own `zig build test`;
