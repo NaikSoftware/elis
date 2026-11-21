@@ -41,7 +41,7 @@ set(ELIS_BRIDGE ${CMAKE_BINARY_DIR}/swift/release/libElisBridge.so)
 file(GLOB_RECURSE ELIS_BRIDGE_SOURCES CONFIGURE_DEPENDS ${CMAKE_SOURCE_DIR}/shared/Sources/*.swift ${CMAKE_SOURCE_DIR}/../macos/ElisCore/Sources/*.swift)
 add_custom_command(OUTPUT ${ELIS_BRIDGE}
   # a soname, so what links it records the name and finds it on the rpath, not this build path
-  COMMAND ${SWIFT} build -c release -Xswiftc -static-stdlib -Xlinker -soname=libElisBridge.so --package-path ${CMAKE_SOURCE_DIR}/shared --scratch-path ${CMAKE_BINARY_DIR}/swift
+  COMMAND ${SWIFT} build -c release -Xswiftc -static-stdlib -Xlinker -soname=libElisBridge.so -Xlinker --strip-all --package-path ${CMAKE_SOURCE_DIR}/shared --scratch-path ${CMAKE_BINARY_DIR}/swift
   COMMAND ${CMAKE_COMMAND} -E touch ${ELIS_BRIDGE} # SwiftPM leaves an unchanged product's time alone
   DEPENDS ${ELIS_BRIDGE_SOURCES} ${CMAKE_SOURCE_DIR}/shared/Package.swift ${CMAKE_SOURCE_DIR}/../macos/ElisCore/Package.swift
   COMMENT "Building ElisBridge (Swift ElisCore)" USES_TERMINAL VERBATIM)
