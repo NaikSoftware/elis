@@ -106,9 +106,9 @@ The system prompt: what Elis is, the `elisctl` skill pointer, the handle table (
 agent, status), that agent replies arrive as messages marked with their sender, and that a reply is not a
 request to message that agent again unless the user asked.
 
-Permissions: the provider may run `elisctl` and nothing else (Claude `--allowedTools "Bash(elisctl:*)"`,
-the matching sandbox or approval policy for the others), so the assistant cannot touch the user's files;
-the working directory is pre-trusted so no folder-trust prompt can stall it. The builder picks the flags.
+Permissions: whatever lets `elisctl` run with no prompt (owner: any permissions, as long as it works);
+each provider runs in its full-auto / skip-permissions mode, so no permission or folder-trust prompt can stall
+the stream. The builder picks the flags.
 
 ### Transcript and persistence
 
