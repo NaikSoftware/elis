@@ -4,8 +4,9 @@ import 'dart:typed_data';
 
 import 'package:elis_mobile/terminal/vt.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'support/vt_lib.dart';
 
-const _lib = 'build/vtshim/libvtshim.dylib';
+final _lib = hostVtLib;
 
 Uint8List _b(String s) => Uint8List.fromList(utf8.encode(s));
 

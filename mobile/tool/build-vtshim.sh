@@ -2,7 +2,7 @@
 # Build libvtshim (native/vtshim.c over libghostty-vt at the pinned GHOSTTY_REV) for the phone and the host.
 #
 #   android/app/src/main/jniLibs/{arm64-v8a,x86_64}/libvtshim.so   loaded by the app
-#   build/vtshim/libvtshim.dylib                                    loaded by the Dart unit tests
+#   build/vtshim/libvtshim.{dylib,so}                               loaded by the Dart unit tests (macOS, Linux)
 #
 # libghostty-vt builds unpatched (macos/scripts/ghostty-patches/ are for the Mac app). The build is skipped
 # while the stamp (rev + shim digest) matches and every output exists. --check prints the outputs and
@@ -16,18 +16,23 @@ GHOSTTY_REV="$(sed -n 's/^GHOSTTY_REV="\([0-9a-f]\{40\}\)".*/\1/p' "$SETUP")"
 ZIG_FORMULA="$(sed -n 's/^GHOSTTY_ZIG_FORMULA="\(.*\)"$/\1/p' "$SETUP")"
 [[ -n "$GHOSTTY_REV" && -n "$ZIG_FORMULA" ]] || { echo "error: no GHOSTTY_REV/GHOSTTY_ZIG_FORMULA in $SETUP" >&2; exit 1; }
 
-NDK="${ANDROID_NDK_HOME:-$HOME/Library/Android/sdk/ndk/28.2.13676358}"
-NDK_BIN="$NDK/toolchains/llvm/prebuilt/darwin-x86_64/bin"
+if [[ "$(uname)" == Darwin ]]; then
+  NDK="${ANDROID_NDK_HOME:-$HOME/Library/Android/sdk/ndk/28.2.13676358}" HOST_TAG=darwin-x86_64 HOST_LIB=libvtshim.dylib
+else
+  NDK="${ANDROID_NDK_HOME:-$HOME/Android/Sdk/ndk/28.2.13676358}" HOST_TAG=linux-x86_64 HOST_LIB=libvtshim.so
+fi
+NDK_BIN="$NDK/toolchains/llvm/prebuilt/$HOST_TAG/bin"
+sha() { if command -v shasum >/dev/null; then shasum -a 256 "$1"; else sha256sum "$1"; fi | cut -c1-16; }
 API=35  # minSdk
 SHIM="native/vtshim.c"
 OUT_DIR="build/vtshim"
 GHOSTTY_DIR="$OUT_DIR/ghostty"
 STAMP_FILE=".vtshim-build-stamp"
 # the script's own digest: an ABI, API or flag edit rebuilds
-STAMP="$GHOSTTY_REV $(shasum -a 256 "$SHIM" | cut -c1-16) $(shasum -a 256 tool/build-vtshim.sh | cut -c1-16)"
+STAMP="$GHOSTTY_REV $(sha "$SHIM") $(sha tool/build-vtshim.sh)"
 ABIS=(arm64-v8a x86_64)
 OUTPUTS=(android/app/src/main/jniLibs/arm64-v8a/libvtshim.so android/app/src/main/jniLibs/x86_64/libvtshim.so
-  "$OUT_DIR/libvtshim.dylib")
+  "$OUT_DIR/$HOST_LIB")
 FUNCS=(vts_new vts_free vts_write vts_resize vts_reset vts_mode vts_scroll_to vts_snapshot
   vts_encode_key vts_encode_paste vts_encode_wheel vts_encode_click vts_encode_focus vts_take_replies)
 
@@ -42,7 +47,7 @@ check() {
       grep -qE " _?$fn\$" <<<"$syms" || { echo "$f: no $fn"; ok=1; }
     done
     # Android 15 devices use 16 KB pages: every LOAD segment must align to at least 0x4000
-    if [[ "$f" == *.so ]]; then
+    if [[ "$f" == android/* ]]; then
       local aligns align
       aligns="$("$NDK_BIN/llvm-readelf" -lW "$f" | awk '$1 == "LOAD" { print $NF }')"
       [[ -n "$aligns" ]] || { echo "$f: no LOAD segments"; ok=1; }
@@ -63,8 +68,11 @@ if [[ -f "$STAMP_FILE" && "$(cat "$STAMP_FILE")" == "$STAMP" ]] && all_present; 
   exit 0
 fi
 
-ZIG="$(brew --prefix "$ZIG_FORMULA")/bin/zig"
-[[ -x "$ZIG" ]] || { echo "error: $ZIG missing; run brew install $ZIG_FORMULA" >&2; exit 1; }
+# ZIG overrides; otherwise Homebrew's keg, else the zig on PATH (Linux: the ziglang.org tarball)
+if [[ -z "${ZIG:-}" ]]; then
+  if command -v brew >/dev/null; then ZIG="$(brew --prefix "$ZIG_FORMULA")/bin/zig"; else ZIG="$(command -v zig || true)"; fi
+fi
+[[ -x "$ZIG" ]] || { echo "error: no $ZIG_FORMULA: brew install $ZIG_FORMULA, or set ZIG to a ziglang.org build" >&2; exit 1; }
 # as in setup.sh: a versioned alias can still resolve to a stale rolling keg
 zig_ver="$("$ZIG" version)"
 [[ "$zig_ver" == "${ZIG_FORMULA#zig@}".* ]] || {
@@ -106,8 +114,9 @@ done
 
 lib_vt host
 mkdir -p "$OUT_DIR"
-cc -O2 -fPIC -shared -I"$GHOSTTY/include" "$SHIM" -Wl,-force_load,"$GHOSTTY/out-host/lib/libghostty-vt.a" \
-  -o "$OUT_DIR/libvtshim.dylib"
+if [[ "$HOST_LIB" == *.dylib ]]; then whole=(-Wl,-force_load,"$GHOSTTY/out-host/lib/libghostty-vt.a")
+else whole=(-Wl,--whole-archive "$GHOSTTY/out-host/lib/libghostty-vt.a" -Wl,--no-whole-archive -lm); fi
+cc -O2 -fPIC -shared -I"$GHOSTTY/include" "$SHIM" "${whole[@]}" -o "$OUT_DIR/$HOST_LIB"
 
 check
 printf '%s\n' "$STAMP" > "$STAMP_FILE"
