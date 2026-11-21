@@ -7,6 +7,7 @@
 #include "sidebar.h"
 #include "store.h"
 
+#include <QScopeGuard>
 #include <QApplication>
 #include <QCheckBox>
 #include <QDir>
@@ -727,6 +728,29 @@ private Q_SLOTS:
             listed << list->item(i)->text();
         QCOMPARE(listed, (QStringList{"Needs you", "alpha", "Recent", "beta"})); // the shown idle session is not a jump target
         QTest::keyClick(list, Qt::Key_Escape);
+    }
+
+    void sessionPaletteAbbreviatesHomeInTheDetail()
+    {
+        const QByteArray realHome = qgetenv("HOME");
+        auto restoreHome = qScopeGuard([&] { qputenv("HOME", realHome); });
+        const QString home = dir.filePath("home");
+        QVERIFY(QDir().mkpath(home + "/src"));
+        qputenv("HOME", home.toUtf8());
+        Store store;
+        MainWindow w(store, dir.filePath("tilde.json"));
+        w.restore({});
+        const QString ws = store.addWorkspace("w");
+        store.addSession(ws, "in-home", home + "/src");
+        store.addSession(ws, "at-home", home);
+        store.select(store.addSession(ws, "elsewhere", "/usr"));
+        w.show();
+        w.namedAction("session_palette")->trigger();
+        auto *list = w.findChild<QFrame *>("palette")->findChild<QListWidget *>();
+        QTRY_VERIFY(list->isVisible());
+        auto detailOf = [&](const QString &name) { return list->findItems(name, Qt::MatchExactly).value(0)->data(PaletteRole::Subtitle).toString(); };
+        QCOMPARE(detailOf("in-home"), QStringLiteral("~/src"));
+        QCOMPARE(detailOf("at-home"), QStringLiteral("~"));
     }
 
     void sessionPaletteRowsCarryStatusAndIdleHasNone()
