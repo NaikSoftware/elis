@@ -531,6 +531,8 @@ private Q_SLOTS:
         QCOMPARE(w.chromeState()["dashboardMembers"].toArray().size(), 2);
         QVERIFY(termA->font().pointSizeF() < fontA);
         QVERIFY(termB->font().pointSizeF() < fontB);
+        QVERIFY(w.save());
+        QCOMPARE(store.session(a)->fontSize, 0.0);
         QTest::mouseClick(termA, Qt::LeftButton, {}, QPoint(20, 20));
         QTRY_VERIFY(!w.chromeState().contains("dashboardMembers"));
         QCOMPARE(store.selected, a);

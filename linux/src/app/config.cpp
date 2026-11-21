@@ -221,11 +221,8 @@ void MainWindow::applyAppearance(KParts::ReadOnlyPart *part)
     if (zoomed)
         font.setPointSizeF(zoom); // an explicit zoom keeps its size, in the new family
     display->setFont(font);
-    for (int delta : {120, -120}) {
-        const QPointF at(4, 4);
-        QWheelEvent wheel(at, display->mapToGlobal(at), {}, QPoint(0, delta), Qt::NoButton, Qt::ControlModifier, Qt::NoScrollPhase, false);
-        QApplication::sendEvent(display, &wheel);
-    }
+    zoomFontTo(display, font.pointSizeF() + 1);
+    zoomFontTo(display, font.pointSizeF());
     display->setProperty("elisBaseFont", base);
 }
 

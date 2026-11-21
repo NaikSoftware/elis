@@ -1884,7 +1884,8 @@ bool MainWindow::save()
     for (auto *s : m_store.allSessions()) {
         if (const QString cwd = liveCwd(s->id); !cwd.isEmpty())
             m_store.workspaceOf(s->id)->folder = s->cwd = cwd;
-        recordFontSizes(s); // a Ctrl+wheel zoom in the terminal persists too
+        if (!m_dashboard) // the grid's sizes are transient
+            recordFontSizes(s); // a Ctrl+wheel zoom in the terminal persists too
     }
     QJsonObject root = m_store.toJson();
     QJsonArray collapsed;
