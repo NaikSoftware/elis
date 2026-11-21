@@ -21,7 +21,7 @@ public struct ControlDispatcher {
         }
         switch request.cmd {
         case .tree:
-            return actions.controlTree(window: request.args?.window)
+            return stampAssistant(actions.controlTree(window: request.args?.window))
         case .eventsRead:
             return dispatchEventsRead(request)
         case .sessionNew, .sessionDuplicate, .sessionSelect, .sessionGo, .sessionClose, .sessionTerminate, .sessionRename,

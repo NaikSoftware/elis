@@ -236,12 +236,46 @@ struct ControlDispatcherAssistantTests {
         #expect(response?.error == ControlActionsUnsupported.message(cmd.rawValue))
     }
 
+    private func hostTree() -> ControlResponse {
+        let sessions = ["claude1-uuid", "shell1-uuid"].map {
+            ControlSessionNode(id: $0, name: $0, cwd: "/", active: false, split: false, backedByZmx: nil)
+        }
+        let workspace = ControlWorkspaceNode(id: "wsE", name: "elis", active: true, sessions: sessions)
+        return ControlResponse(ok: true, result: ControlResult(tree: ControlTree(workspaces: [workspace])))
+    }
+
+    @Test func treeCarriesHandlesMarksAndTheAssistantNode() async throws {
+        let (actions, chat) = (actions(), AssistantChat())
+        actions.nextTreeResponse = hostTree()
+        chat.provider = .claude
+        chat.append(.sent, text: "go", to: ["claude1-uuid"], now: 0)
+        chat.inputQueued()
+
+        let tree = try #require(await dispatch(.tree, actions: actions, chat: chat)?.result?.tree)
+
+        let workspace = try #require(tree.workspaces.first)
+        #expect(workspace.handle == "elis")
+        #expect(workspace.sessions.map(\.handle) == ["claude-1", "zsh"])
+        #expect(workspace.sessions.map(\.assistantMark) == ["waiting", nil])
+        #expect(tree.assistant == ControlAssistantNode(provider: "claude", providers: ["claude", "codex"], running: true, unread: 0))
+
+        let handle = try #require(workspace.sessions[1].handle)
+        _ = await dispatch(.assistantSend, ControlArgs(text: "hi", recipients: ["@\(handle)"]), actions: actions, chat: chat)
+        #expect(typed(actions).map(\.target) == ["shell1-uuid"])
+    }
+
+    @Test func treeIsUntouchedOnAHostWithoutTheAssistant() async {
+        let actions = MockControlActions()
+        actions.nextTreeResponse = hostTree()
+        #expect(await dispatch(.tree, actions: actions, chat: AssistantChat()) == hostTree())
+    }
+
     @Test func treeOmitsAssistantWhenNil() throws {
         let workspace = ControlWorkspaceNode(id: "w", name: "w", active: true, sessions: [
             ControlSessionNode(id: "s", name: "s", cwd: "/", active: true, split: false, backedByZmx: nil),
         ])
         let json = String(decoding: try JSONEncoder().encode(ControlTree(workspaces: [workspace])), as: UTF8.self)
-        #expect(!json.contains("\"assistant\"") && !json.contains("\"handle\""))
+        #expect(!json.contains("\"assistant\"") && !json.contains("\"handle\"") && !json.contains("\"assistantMark\""))
 
         var tree = ControlTree(workspaces: [workspace])
         tree.assistant = ControlAssistantNode(provider: "claude", providers: ["claude"], running: true, unread: 2)

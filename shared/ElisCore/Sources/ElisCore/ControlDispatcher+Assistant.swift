@@ -29,6 +29,26 @@ extension ControlDispatcher {
         }
     }
 
+    /// stampAssistant adds the assistant's handles, marks and state to a host's tree; a host without it keeps its tree.
+    func stampAssistant(_ response: ControlResponse) -> ControlResponse {
+        guard let peers = actions.assistantPeers(), var tree = response.result?.tree else { return response }
+        let directory = AssistantDirectory(peers)
+        for w in tree.workspaces.indices {
+            tree.workspaces[w].handle = directory.workspaceHandle(of: tree.workspaces[w].id)
+            for s in tree.workspaces[w].sessions.indices {
+                let id = tree.workspaces[w].sessions[s].id
+                tree.workspaces[w].sessions[s].handle = directory.handle(of: id)
+                tree.workspaces[w].sessions[s].assistantMark = chat.marks[id]?.rawValue
+            }
+        }
+        tree.assistant = ControlAssistantNode(provider: chat.provider?.rawValue,
+                                              providers: AssistantProvider.choices(actions.assistantProviders() ?? []).map(\.rawValue),
+                                              running: chat.running, unread: chat.unread)
+        var stamped = response
+        stamped.result?.tree = tree
+        return stamped
+    }
+
     private func dispatchAssistantAsk(_ args: ControlArgs) -> ControlResponse {
         guard let text = args.text, !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
             return assistantFailure("assistant.ask requires text")

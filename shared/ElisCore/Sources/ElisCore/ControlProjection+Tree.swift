@@ -1,6 +1,6 @@
 /// The whole workspace tree, the payload of a `tree` response.
 public struct ControlTree: Codable, Sendable, Equatable {
-    public let workspaces: [ControlWorkspaceNode]
+    public var workspaces: [ControlWorkspaceNode]
     /// Milliseconds since the last user input in the projected window; nil/omitted before any activity. A
     /// LIVE, continuously-growing delta — `tree`-only, since the tree is built fresh per request on the main
     /// actor while cache-served `window.list` would freeze it between commands. The auto-follow idle metric.
