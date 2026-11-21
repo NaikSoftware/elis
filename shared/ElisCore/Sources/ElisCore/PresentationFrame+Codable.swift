@@ -2,7 +2,7 @@ import Foundation
 
 extension PresentationFrame: Codable {
     private enum CodingKeys: String, CodingKey {
-        case kind, gen, rev, hello, snapshot, status, context, agentSession, agent, info, layout, hud, notify, message, mail, sound, ask, pick, overlay, page, respawn, link,
+        case kind, gen, rev, hello, snapshot, status, context, agentSession, agent, ci, layout, hud, notify, message, mail, sound, ask, pick, overlay, page, respawn, link,
              pending, lead
     }
 
@@ -20,7 +20,7 @@ extension PresentationFrame: Codable {
         case "context": body = .context(try container.decodeIfPresent(String.self, forKey: .context))
         case "agent.session": body = .agentSession(try container.decodeIfPresent(String.self, forKey: .agentSession))
         case "agent": body = .agent(try container.decodeIfPresent(PresentationAgent.self, forKey: .agent))
-        case "info": body = .info(try container.decodeIfPresent(PresentationInfo.self, forKey: .info))
+        case "ci": body = .ci(try container.decodeIfPresent(CIStatus.self, forKey: .ci))
         case "layout": body = .layout((try? container.decode(PresentationLayout.self, forKey: .layout)) ?? .invalid)
         case "hud": body = .hud(try container.decodeIfPresent(PresentationHud.self, forKey: .hud))
         case "notify": body = .notify(try container.decode(PresentationNotify.self, forKey: .notify))
@@ -76,7 +76,7 @@ extension PresentationFrame: Codable {
         case .context(let context): try container.encodeIfPresent(context, forKey: .context)
         case .agentSession(let id): try container.encodeIfPresent(id, forKey: .agentSession)
         case .agent(let agent): try container.encodeIfPresent(agent, forKey: .agent)
-        case .info(let info): try container.encodeIfPresent(info, forKey: .info)
+        case .ci(let ci): try container.encodeIfPresent(ci, forKey: .ci)
         case .layout(let layout): try container.encode(layout, forKey: .layout)
         case .hud(let hud): try container.encodeIfPresent(hud, forKey: .hud)
         case .notify(let notify): try container.encode(notify, forKey: .notify)

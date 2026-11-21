@@ -53,7 +53,7 @@ The event kinds and payloads are:
   selected `session new` (after its `session.created`), and the reselection after the active session
   closes. Re-selecting the selected session and raising another window emit nothing.
 - `tree.changed`: an empty payload and the affected window id. Name, membership, and ordering changes
-  are coalesced for 100 ms per window, as is a `session context` or `session info` set or clear that changes the shown value, a
+  are coalesced for 100 ms per window, as is a `session context` set or clear or a CI status change that changes the shown value, a
   `session tint` or `workspace tint` that changes the row's tint,
   and an overlay, page or HUD opening or closing (`session hud update` emits nothing). It says the tree
   moved, never what happened: a page opened and closed inside the 100 ms shows as one event.
@@ -240,7 +240,7 @@ a message for one. A HUD opening or closing emits `tree.changed`; an update emit
 either style handed over for a remote session), with `pane` omitted for session-wide placement, `remote: true` on an origin while the Mac presenting the session draws it, and
 `replica: true` on that Mac for the copy it draws; omitted when the session ask slot is empty), `scratch` (scratch shown), `flagged` (in the
 flagged working-set), `context` (what the session is about — the `session context` value, or on an attached row without
-one the origin's mirrored context; omitted when neither is set), `info`/`infoMarkdown`/`infoHideAfter` (the sidebar info line from `session info`: its source, whether it is markdown, and its configured `--hide-after` seconds; on an attached row without one, the origin's; all omitted when there is no line), `tint`/`tintOn` (the sidebar row's tint color
+one the origin's mirrored context; omitted when neither is set), `ci` (the GitHub CI the row's second line shows, read with `gh` on the host running the session: `branch`, `sha`, `pr` with `number`, `title`, `url`, `approved` and `changesRequested` logins for an open PR, and `runs` with `workflow`, `state` `running`|`failed`|`passed`|`skipped` and `url`, the latest run per workflow of the branch's last pushed commit; on an attached row the origin's; omitted when there is none), `tint`/`tintOn` (the sidebar row's tint color
 and the deprecated `tintOn`, always `["icon","name"]`, the read side of `session tint`; both omitted when
 untinted), `status` (the agent-status — `active`|`completed`|`blocked` — omitted when
 idle), `statusPane` (which pane set that status — `left` (main) | `right` (split) | `scratch` — the
@@ -984,43 +984,15 @@ error keeps those names for compatibility.
   bar it takes line two in normal mode (replacing the cwd/terminal-title detail) and follows the session and
   window names on line one in compact mode, where a long value tail-truncates before the names do. Settings
   ▸ Interface ▸ Title Bar ▸ "Session context" hides it without clearing it.
-- `session info <TEXT|--clear> [--markdown] [--hide-after SECONDS] [--target] [--window W]` - show one line
-  under the session's sidebar row saying what it is doing NOW: the step an agent is on, a count, a test
-  run's progress. Use `session context` for what the session is for; this line is for activity.
-  - Exactly one of TEXT or `--clear`; `--clear` refuses TEXT, `--markdown` and `--hide-after`. A rejected set
-    leaves the line and its expiry as they were.
-  - Each successful set replaces the whole line. Leaving out `--markdown` sends plain text, and leaving out
-    `--hide-after` cancels an earlier expiry, so pass every flag on every set.
-  - TEXT is at most 512 UTF-8 bytes, markup included, and must show as one non-blank line with no control
-    characters or line breaks.
-  - `--markdown` reads TEXT as inline markdown: `**bold**`, `*italic*`, `` `code` ``, a link (its label
-    shows), `^[text](color: "NAME")` and `^[text](dim: true)`, which combine as
-    `^[text](color: "red", dim: true)`. NAME is one of the twelve `session tint` names
-    (`red|orange|yellow|green|blue|purple|gray|teal|pink|brown|indigo|mint`), quoted; an unknown NAME or a hex
-    is refused. An unknown attribute key is ignored and its text shows unstyled.
-  - `--hide-after SECONDS` (0 to 86400, 0 for never) clears the line by itself. Every successful set with a
-    positive `--hide-after` restarts that interval, even with identical text. A hook or loop reporting
-    activity must pass a positive value and repeat it on each refresh, so a line from a process that died
-    goes away.
-  - The line is never saved: it is gone after a relaunch, a duplicate starts without it, and closing the
-    session drops it. Undoing a close brings back a line without `--hide-after`, never a timed one.
-  - Settings ▸ Interface ▸ Session info shows it Always (the default), in the flagged view only, or Off.
-    Hiding never clears the line.
-  - The tree reads back `info` (the source as sent), `infoMarkdown` and `infoHideAfter` (the configured
-    seconds, not the time left), all omitted when there is no line. A set or clear that changes the line
-    shown emits `tree.changed`.
-
-  ```bash
-  elisctl session info --markdown --hide-after 30 --target "$ELIS_SESSION_ID" \
-    '**3** agents ^[running](color: "green") ^[1 idle](dim: true)'
-  elisctl session info --clear --target "$ELIS_SESSION_ID"
-  ```
+- CI status is not a command: a session whose focused cwd is a GitHub checkout gets a second sidebar line with
+  its branch's CI, refreshed every 30 s while a run is going and every 3 min after, read back as the node's `ci`.
+  No `gh`, no login, no GitHub remote, a detached HEAD or a network error means no line and no `ci`.
+  Settings ▸ Interface ▸ CI status shows it Always, in the flagged view only, or Off, which stops asking GitHub.
 - `session tint <COLOR|clear> [--target] [--window W]` - color the session's sidebar row (its icon and name) so it
   stands out at a glance (red for production, green for dev). COLOR is
   `red|orange|yellow|green|blue|purple|gray|teal|pink|brown|indigo|mint`, macOS system colors that follow light and
   dark, or a `#rrggbb` hex (the `#` optional) for any other color, fixed in both modes and read back as lowercase
-  `#rrggbb`; the row menu shows a hex tint as a checked "Custom #rrggbb" entry. `session info` markup colors take
-  the names only. `--on` is deprecated and ignored (still validated as `icon`, `name` or `icon,name`).
+  `#rrggbb`; the row menu shows a hex tint as a checked "Custom #rrggbb" entry. `--on` is deprecated and ignored (still validated as `icon`, `name` or `icon,name`).
   `clear` removes the tint and refuses `--on`; the
   socket form (`mode` `set|clear`, `tint`, `tintOn` array) refuses a clear carrying either. Returns the session
   id. Persisted across a relaunch; a duplicated session starts untinted. Local to this Mac on a row attached from
@@ -1687,8 +1659,7 @@ the Mac showing it; `catalog` is served by elis-server and by that other Mac.
   pane, selecting the row, Clear Status), or the row's badge, goes to the server, which applies the Mac's default
   reset rules; a status set on this Mac's row is cleared here only. A path clicked in the server's scratch resolves in the scratch's directory on the host, and a
   loopback http(s) link clicked in a server pane or scratch opens through an ssh forward to the host.
-- On the host itself `elisctl events` and `session wait` read the server's own event ring, `session info`
-  expires there, `surface cursor` reads the daemon's screen, and `zmx list` and `zmx screen` cover its daemons.
+- On the host itself `elisctl events` and `session wait` read the server's own event ring, `surface cursor` reads the daemon's screen, and `zmx list` and `zmx screen` cover its daemons.
 - `window remote dismiss [ID]`: drop the marks for actions whose outcome was lost; it neither undoes nor
   resends them. The window settles a mark through `catalog op` by itself when the server still knows it.
 - `session detach [--target T ...]` / `workspace detach [--target T]`: hide a remote window's rows on this
@@ -2628,7 +2599,7 @@ companions when it is a top-level session. It is the
 A program in an attached session runs on the origin and talks to the origin's Elis, so what it asks
 Elis to draw would show there only. Every terminal attach therefore also opens a presentation stream (a page row
 uses its page channel instead and mirrors nothing), and this
-Mac mirrors the origin session's status, its `session context`, its `session info` line, its `notify` notifications, its HUD and
+Mac mirrors the origin session's status, its `session context`, its CI line, its `notify` notifications, its HUD and
 the layout of panes already attached.
 Nothing has to be set up beyond the `elisctl` PATH precondition above. What to expect:
 
@@ -2636,9 +2607,7 @@ Nothing has to be set up beyond the `elisctl` PATH precondition above. What to e
   `session context` set on this Mac's row wins over it, and `--clear` here removes only that local value,
   so the origin's latest context shows again. It cannot blank the origin's. An origin running an Elis
   that predates context mirroring still connects and mirrors status and HUD, with no context.
-- The origin's `session info` line shows under this Mac's row the same way: a line set here wins, and
-  `--clear` here reveals the origin's again. Origin expiry clears the mirrored line; a line set on this
-  Mac remains until cleared or its own expiry.
+- The origin's CI line shows under this Mac's row: the origin runs `gh`, so this Mac needs no GitHub login.
 
 - Two existing remote panes follow the origin's split axis, hide/show and swaps. Local panes, divider
   ratio and focus stay local. A split the origin opens later attaches into an empty split slot, and a
@@ -2649,10 +2618,10 @@ Nothing has to be set up beyond the `elisctl` PATH precondition above. What to e
   or reconnecting per the attach section above.
 - `presentation.state` in `tree` reports the stream. `connected` means mirroring works; it is not a claim
   about the panes' ssh connections. An origin too old for it reads `unsupported` and the attach still works.
-- When the stream drops, the mirrored status, context, info line and HUD are cleared here and come back on reconnect. Retries
+- When the stream drops, the mirrored status, context, CI line and HUD are cleared here and come back on reconnect. Retries
   run after 1, 2, 4, 8, 16 then 30 seconds, slow to every 5 minutes after eight failures in a row, and
   never stop; a wake or a network change retries at once and starts that schedule over.
-- A notification raised while the stream is down is never shown here; status, context, info line and HUD are restored.
+- A notification raised while the stream is down is never shown here; status, context, CI line and HUD are restored.
 - A terminal notification (OSC 9/777) is not mirrored: it already arrives in the pane's bytes and is
   raised here once. A mirrored `notify` records a `notify` event on each app.
 - A HUD with `--hide-after` closes here on this Mac's own countdown of the time the origin had left, so

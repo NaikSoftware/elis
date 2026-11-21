@@ -191,7 +191,7 @@ renumbering. Do not reintroduce a count anywhere.
 - `session.new`, `.duplicate`, `.companion.new`, `.companion.page`, `.companion.duplicate`, `.companion.convert`, `.companion.move`, `.companion.page.attach`, `.page`, `.collapse`, `.expand`, `.close`, `.terminate`, `.select`, `.rename`, `.reveal`, `.move`, `.type`, `.split`,
   `.split.close`, `.swap`, `.lead`,
   `.scratch`, `.focus`, `.resize`, `.go`, `.copy`, `.paste`, `.selectall`, `.text`, `.transcript`, `.search`, `.status`,
-  `.grid`, `.scroll`, `.flag`, `.tint`, `.info`, `.seen`, `.restore`, `.restart`, `.background`, `.overlay.open`, `.overlay.close`, `.overlay.resize`,
+  `.grid`, `.scroll`, `.flag`, `.tint`, `.seen`, `.restore`, `.restart`, `.background`, `.overlay.open`, `.overlay.close`, `.overlay.resize`,
   `.overlay.reload`, `.overlay.navigate`,
   `.overlay.result`, `.overlay.submit`, `.overlay.copy`, `.overlay.text`, `.overlay.job.run`, `.overlay.page.serve`, `.overlay.hide`,
   `.overlay.show`, `.overlay.toggle`, `.overlay.follow`, `.overlay.search`, `.overlay.changes`, `.overlay.files`, `.overlay.wrap`,
@@ -1744,7 +1744,6 @@ the spec `docs/superpowers/specs/2026-11-20-phone-chat-mode-design.md` owns the 
   Hex is control-only: the row menu shows it as a checked Custom entry and has no picker. The agterm-linux fork
   calls the `TintColor` forms of `SidebarTint.init`, `recolor`, `AppStore.setTintColor` and `ControlTintUpdate.set`,
   so each keeps that signature beside a non-optional `TintValue` overload, which leaves a `nil` argument unambiguous.
-  `session.info` markup keeps `TintColor`, names only.
   Read `tint` on session and workspace nodes, omitted when untinted; `tintOn` always reports `SidebarTint.shownParts`.
 - `session.context set TEXT|clear` sets what a session is FOR, shown in the title bar. Read `context`.
   `set` requires `text`, `clear` forbids it, and the mode is required, so a raw client sending both or
@@ -1755,25 +1754,12 @@ the spec `docs/superpowers/specs/2026-11-20-phone-chat-mode-design.md` owns the 
   emits `tree.changed` when the shown value changed; re-setting the same value does neither. The tree's
   `context` is the shown value: an attached row also shows its origin's context, and the Remote sessions
   section owns that rule.
-- `session.info set TEXT|clear` sets one line drawn under the session's sidebar row ([[sidebar]] owns the
-  drawing). `set` takes optional `markdown` and `hideAfter`; `clear` refuses all three and is the explicit
-  clearing form. Each successful set replaces the whole value: an omitted `markdown` means plain text and an omitted
-  `hideAfter` cancels an earlier expiry. `SessionInfo.make` validates and parses in the dispatcher, so a
-  rejected set changes neither the line nor its deadline. The 512-byte cap is on the SOURCE, markup
-  included. Visible text must be one non-blank line with no control character, checked after entities
-  decode. Foundation drops an unknown `^[...]` attribute key and the fragment renders unstyled; lexing
-  the source to refuse it would mean a second parser beside Foundation's.
-- `hideAfter` reuses the HUD's validation and ceiling. Every successful set calls
-  `ControlServer.armInfoAutoHide`: a positive duration restarts the interval, even with identical text,
-  because the expected caller refreshes its line to keep it alive; zero or omission cancels it.
-  It carries a per-session revision like `armHudAutoHide`. The clock is elapsed lifetime and
-  runs while the display setting hides the line. `Session.onInfoDiscarded` cancels it at session, workspace
-  and window teardown. A soft close drops a timed line in `AppStore.closeTimedInfo`, so undo
-  never brings back a line whose time ran out.
-- The line is runtime-only: never snapshotted, absent after relaunch, not copied by duplicate. A set
-  does not save. It emits `tree.changed` only when the effective value changes. Read back `info` (the
-  source), `infoMarkdown` and `infoHideAfter` (configured seconds, never a countdown), all omitted
-  when there is no line, and populated from `effectiveInfo`.
+- The sidebar's second line is the session's GitHub CI (`CIStatus`), internal with no setter: the owner removed
+  `session.info` on 2026-11-21. `CIPoller` (ElisCore) runs in the Mac app and in elis-server: one fetch per
+  repository and branch read from `.git` (no git process), `gh run list` and `gh pr view` through `CIProbe.gh` on
+  dispatch threads, never the cooperative pool, since a call blocks up to its 15 s timeout. Any failure applies nil,
+  so a stale line never outlives the fact. Remote rows are skipped; their origin polls. Read back `ci` from
+  `effectiveCI`, omitted when nil; it is runtime-only and a change emits `tree.changed`.
 
 ## Message bus
 
@@ -2418,7 +2404,7 @@ the spec `docs/superpowers/specs/2026-11-20-phone-chat-mode-design.md` owns the 
 - `ZmxLaunch.wrapsLocally` is the one gate both surface factories read, so a remote pane is never wrapped
   in a local daemon. Wrapping buys nothing for a session that never restores, and under live mode window
   close would drop the local client while the daemon kept ssh connected with no UI showing it.
-- Presentation carries status, context, the info line, notifications, the HUD and the layout of attached panes. Such a program runs
+- Presentation carries status, context, the CI line, notifications, the HUD and the layout of attached panes. Such a program runs
   on the origin and reaches the origin's socket, so without a stream the viewer sees terminal bytes only.
   Every terminal attach opens one; a page row has only its page channel. The viewer runs `ssh -T <host> elisctl zmx present <session>`, whose far end
   bridges stdio to a `zmx.present` connection. The far-side `elisctl` PATH precondition above applies.
@@ -2464,11 +2450,9 @@ the spec `docs/superpowers/specs/2026-11-20-phone-chat-mode-design.md` owns the 
   effective value: setting the text the mirror already shows emits nothing. Attach does not seed the
   context from `zmx.tree`, which would make the origin's label a local override that wins forever, so an
   origin predating the `context` frame mirrors none.
-- The info line follows the same local, mirrored and effective split (`Session.info`, `mirroredInfo`,
-  `effectiveInfo`), with a local line winning and `clear` revealing the origin's. The origin sends its
-  LOCAL line's source, markdown flag and configured `hideAfter` in the `info` frame and the snapshot. The
-  viewer parses the source again and arms no timer: expiry is the origin's, and its clear reaches the
-  viewer as a nil frame. Stream end clears only the mirror.
+- The CI line follows the local, mirrored and effective split (`Session.ci`, `mirroredCI`, `effectiveCI`): the
+  origin sends its local status in the `ci` frame and the snapshot, and the viewer never polls a remote row.
+  Stream end clears only the mirror.
 - The origin's `Session.agentSessionID` rides the `agent.session` frame and snapshot field into the row's own
   `agentSessionID`, and the viewer drops a value that is not a plain token.
   An older origin or elis-server sends none, so the row falls back to `remoteSessionID`.
@@ -2484,8 +2468,8 @@ the spec `docs/superpowers/specs/2026-11-20-phone-chat-mode-design.md` owns the 
 - Only a `notify` command is mirrored. A terminal notification (OSC 9/777) already reaches the viewer in
   the pane's bytes and its libghostty raises it, so mirroring it would show it twice. Each app records
   its own `notify` event. Notifications are not part of the snapshot: one raised while the stream is down
-  is never shown on the viewer, where status, context, info line and HUD are restored on reconnect.
-- When the stream ends, the mirrored status, context, info line and HUD are cleared, since nothing would ever clear them. The
+  is never shown on the viewer, where status, context, CI line and HUD are restored on reconnect.
+- When the stream ends, the mirrored status, context, CI line and HUD are cleared, since nothing would ever clear them. The
   client retries after 1, 2, 4, 8, 16 then 30 seconds, moves to a 300-second cap after eight failures in a
   row, and never gives up; 30 seconds without a frame counts as a failure against the origin's 10-second
   ping. One warning per failure episode or changed reason. A soft close stops the client and undo starts a

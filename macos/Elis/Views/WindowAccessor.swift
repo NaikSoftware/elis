@@ -200,7 +200,6 @@ struct WindowAccessor: NSViewRepresentable {
                         session.teardownPaneOverlays()
                         session.scratchSurface?.teardown()
                         session.discardHudBody() // an unrealized HUD has no teardown to delete its body file
-                        session.discardInfo()
                     }
                     library.closeWindow(windowID)
                     // the unregister above refreshed window.list while the store was still open

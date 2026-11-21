@@ -206,7 +206,7 @@ extension WindowLibrary {
     }
 
     /// The open stores in window order.
-    private func openStores() -> [AppStore] {
+    public func openStores() -> [AppStore] {
         openIDs().compactMap { store(for: $0) }
     }
 }

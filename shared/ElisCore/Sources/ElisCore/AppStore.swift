@@ -481,7 +481,7 @@ public final class AppStore {
                                           tint: session.tint?.color.rawValue, tintOn: session.tint.map { _ in SidebarTint.shownParts },
                                           parent: session.parentID?.uuidString,
                                           collapsed: !session.isExpanded && parents.contains(session.id) ? true : nil,
-                                          content: session.content == .page ? "page" : nil, info: session.effectiveInfo,
+                                          content: session.content == .page ? "page" : nil, ci: session.effectiveCI,
                                           remoteSessionID: session.remoteSessionID, paneGrids: paneGrids(session))
             }
             return ControlWorkspaceNode(id: workspace.id.uuidString, name: workspace.name,
@@ -705,7 +705,6 @@ public final class AppStore {
         removed.teardownPaneOverlays()
         removed.scratchSurface?.teardown()
         removed.discardHudBody() // a HUD whose surface never realized has no teardown to delete its body file
-        removed.discardInfo()
         WatermarkStorage.removeAllRenderedText(sessionID: sessionID) // drop any rendered .text PNG; the session is gone
         sessionRecency.remove(sessionID)
         if wasActive {
@@ -749,7 +748,6 @@ public final class AppStore {
             session.teardownPaneOverlays()
             session.scratchSurface?.teardown()
             session.discardHudBody() // a HUD whose surface never realized has no teardown to delete its body file
-            session.discardInfo()
             WatermarkStorage.removeAllRenderedText(sessionID: session.id) // drop any rendered .text PNG; the session is gone
             sessionRecency.remove(session.id)
         }

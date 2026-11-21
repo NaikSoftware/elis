@@ -152,23 +152,12 @@ public final class Session: Identifiable {
     public internal(set) var mirroredContext: String?
     public var effectiveContext: String? { context ?? mirroredContext }
 
-    /// info is the local sidebar info line (`session.info`), runtime-only; clearing reveals any mirrored info.
-    public internal(set) var info: SessionInfo?
-    /// mirroredInfo is the origin's info line from an attached stream.
-    public internal(set) var mirroredInfo: SessionInfo?
-    /// effectiveInfo is the line the row shows: the local one, else the origin's.
-    public var effectiveInfo: SessionInfo? { info ?? mirroredInfo }
-    /// onInfoDiscarded cancels the app's expiry timer for the local line; `discardInfo` fires and clears it.
-    @ObservationIgnored public var onInfoDiscarded: (() -> Void)?
-
-    /// discardInfo drops the local info line and fires `onInfoDiscarded`. Session and window teardown call it,
-    /// never an overlay close, which leaves the session and its line in place.
-    public func discardInfo() {
-        info = nil
-        let cancelTimer = onInfoDiscarded
-        onInfoDiscarded = nil
-        cancelTimer?()
-    }
+    /// ci is this session's repository CI as the local `CIPoller` last saw it; runtime-only.
+    public internal(set) var ci: CIStatus?
+    /// mirroredCI is the origin's from an attached stream.
+    public internal(set) var mirroredCI: CIStatus?
+    /// effectiveCI is what the row's second line shows: the local one, else the origin's.
+    public var effectiveCI: CIStatus? { ci ?? mirroredCI }
 
     /// Changes only when one live primary-slot surface replaces another; SwiftUI hosts fold it into their
     /// identity, so lazy nil→first creation stays at zero while split-survivor promotion remounts the view.

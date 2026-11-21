@@ -108,7 +108,7 @@ paths:
   `com_apple_SwiftUI_Settings_selectedTabIndex` persistence. General holds Mouse and Sessions; the
   global-Ghostty-config toggle and its hint close Sessions, since a third section made the tab scroll.
   Appearance holds Terminal and Window. Interface groups `InterfaceElement`s two per row, with the
-  Session info picker (`sessionInfoDisplay`, owned by [[sidebar]]) and the Multiple Windows toggle sharing the
+  CI status picker (`sessionInfoDisplay`, owned by [[sidebar]]) and the Multiple Windows toggle sharing the
   Sidebar section's last row, since the grid's eight toggles leave no half-cell, plus the quick terminal's panel size,
   which sits there rather than under Appearance's Window because the panel belongs to no window.
   Notifications holds banner/badge/badge reset/attention/bounce/sound. Agent Status holds colors/shapes, sound,

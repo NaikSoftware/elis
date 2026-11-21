@@ -373,18 +373,19 @@ final class ControlServerRemotePresentationTests: XCTestCase {
         XCTAssertEqual(events.first?.payload.messageID, message.messageID.uuidString)
     }
 
-    func testAMirroredInfoLineFollowsTheSnapshotAndItsFrames() throws {
+    func testAMirroredCILineFollowsTheSnapshotAndItsFrames() throws {
         let (fix, transport) = try connected()
+        let first = CIStatus(branch: "main", sha: "abc", runs: [CIRun(workflow: "build", state: .passed, url: "u")])
+        let second = CIStatus(branch: "main", sha: "def", pr: CIPullRequest(number: 9, title: "t", url: "p"))
 
-        try transport.feed(.snapshot(PresentationSnapshot(
-            status: nil, hud: nil, info: PresentationInfo(source: "first", markdown: false, hideAfter: 30))), rev: 1)
-        XCTAssertEqual(fix.session.effectiveInfo?.source, "first")
+        try transport.feed(.snapshot(PresentationSnapshot(status: nil, hud: nil, ci: first)), rev: 1)
+        XCTAssertEqual(fix.session.effectiveCI, first)
 
-        try transport.feed(.info(PresentationInfo(source: "**second**", markdown: true, hideAfter: 0)), rev: 2)
-        XCTAssertEqual(fix.session.effectiveInfo?.spans, [SessionInfoSpan(text: "second", bold: true)])
+        try transport.feed(.ci(second), rev: 2)
+        XCTAssertEqual(fix.session.effectiveCI, second)
 
-        try transport.feed(.info(nil), rev: 3)
-        XCTAssertNil(fix.session.effectiveInfo)
+        try transport.feed(.ci(nil), rev: 3)
+        XCTAssertNil(fix.session.effectiveCI)
     }
 
     func testAnAttachedRowsTreeReadsTheOriginsMailCounts() throws {
@@ -1163,27 +1164,19 @@ final class ControlServerRemotePresentationTests: XCTestCase {
         XCTAssertEqual(origin.agentIndicator.status, .blocked)
     }
 
-    func testInfoTravelsFromAnOriginSessionToItsViewerExpiresThereAndLeavesWithTheStream() throws {
+    func testCITravelsFromAnOriginSessionToItsViewerAndLeavesWithTheStream() throws {
         let pair = try bridgedPair()
-        let (server, store, origin, viewer) = (pair.server, pair.store, pair.origin, pair.viewer)
-        let timed = try SessionInfo.make(source: "3 agents", markdown: false, hideAfter: 30).get()
+        let (server, origin, viewer) = (pair.server, pair.origin, pair.viewer)
+        let ci = CIStatus(branch: "main", sha: "abc", runs: [CIRun(workflow: "build", state: .passed, url: "u")])
+        let originStore = try XCTUnwrap(server.library.store(forSession: origin.id))
 
-        XCTAssertTrue(server.setSessionInfo(origin.id.uuidString, window: nil, info: timed).ok)
-        waitUntil("the origin's info line reaches the viewer row") { viewer.effectiveInfo?.source == "3 agents" }
-        XCTAssertNil(viewer.info, "a mirrored line never lands in the local slot")
-        XCTAssertEqual(store.controlTree().workspaces.flatMap(\.sessions).first { $0.id == viewer.id.uuidString }?
-            .infoHideAfter, 30)
-        XCTAssertNil(server.infoAutoHide[viewer.id], "the viewer arms no timer of its own")
+        originStore.setCI(ci, forSession: origin.id)
+        waitUntil("the origin's CI reaches the viewer row") { viewer.effectiveCI == ci }
+        XCTAssertNil(viewer.ci, "a mirrored status never lands in the local slot")
 
-        let brief = try SessionInfo.make(source: "brief", markdown: false, hideAfter: 0.2).get()
-        XCTAssertTrue(server.setSessionInfo(origin.id.uuidString, window: nil, info: brief).ok)
-        waitUntil("the origin's expiry clears the viewer row") { viewer.effectiveInfo == nil && origin.info == nil }
-
-        XCTAssertTrue(server.setSessionInfo(origin.id.uuidString, window: nil, info: timed).ok)
-        waitUntil("the line is back on the viewer") { viewer.effectiveInfo != nil }
         server.shutdownPresentationStreams()
-        waitUntil("the mirrored line leaves with the stream") { viewer.effectiveInfo == nil }
-        XCTAssertEqual(origin.info?.source, "3 agents", "the origin keeps its own line")
+        waitUntil("the mirrored status leaves with the stream") { viewer.effectiveCI == nil }
+        XCTAssertEqual(origin.ci, ci, "the origin keeps its own")
     }
 
     func testAnAskAndAnOverlayJobHandedToTheViewerCompleteOnTheOrigin() throws {

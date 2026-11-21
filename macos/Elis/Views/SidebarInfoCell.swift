@@ -24,6 +24,8 @@ final class SidebarInfoCellView: SidebarCellView {
     let infoField = NSTextField(labelWithString: "")
     var titleBandHeight: NSLayoutConstraint?
     var infoTop: NSLayoutConstraint?
+    /// onInfoClick opens the CI panel; the line claims its click, so it neither selects the row nor starts a drag.
+    var onInfoClick: ((NSView) -> Void)?
     private var spans: [SessionInfoSpan] = []
     private var base = AppSettings.defaultSidebarFontSize
     private var selected = false
@@ -35,6 +37,19 @@ final class SidebarInfoCellView: SidebarCellView {
         titleBandHeight?.constant = AppSettings.sidebarRowHeight(fontSize: base, density: density)
         infoTop?.constant = -density.infoLineSpacing
         render()
+    }
+
+    override init(frame frameRect: NSRect) {
+        super.init(frame: frameRect)
+        let click = NSClickGestureRecognizer(target: self, action: #selector(infoClicked))
+        click.delaysPrimaryMouseButtonEvents = true
+        infoField.addGestureRecognizer(click)
+    }
+
+    required init?(coder _: NSCoder) { fatalError("init(coder:) is not supported") }
+
+    @objc private func infoClicked() {
+        onInfoClick?(infoField)
     }
 
     override func setColors(selected: Bool) {

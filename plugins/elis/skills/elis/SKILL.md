@@ -5,7 +5,7 @@ description: >
   manage and move sessions, companions and workspaces; split panes; toggle the scratch or file panel; run, hide or show overlays;
   read exit status; show HTML pages, URLs or dev servers in an overlay or as a
   page row;
-  post a HUD/caption/notification/sidebar activity line; message panes; show a picker, question or input dialog; show images/markdown/code; type
+  post a HUD/caption/notification; read CI/PR status; message panes; show a picker, question or input dialog; show images/markdown/code; type
   into or restart a pane by id, copy its selection, set the clipboard, search scrollback; manage windows, fonts,
   theme; reload or edit the keymap, event hooks and elis-scoped ghostty config; run a custom command; read
   a closed window's screen; read a pane's Claude chat; subscribe to status, tree and other
@@ -508,12 +508,10 @@ omitted when expanded).
   origin's mirrored context; `--clear` removes that override and reveals the origin's latest value.
   The mirrored value is never persisted. Read the shown value from the tree node's `context` field;
   setting the text already shown emits no `tree.changed` event.
-- `session info <TEXT|--clear> [--markdown] [--hide-after SECONDS] [--target] [--window W]` - show one line of
-  current activity under the session's sidebar row: a step, a count, a progress note. `--markdown` allows
-  `**bold**`, `*italic*`, `` `code` ``, `^[text](color: "green")` and `^[text](dim: true)`. Each set replaces the
-  whole line, so pass every flag every time. A process reporting activity must pass a positive `--hide-after`
-  and set the line again before it runs out, so the line goes away if the process dies. Not kept across a
-  relaunch. Read back as the tree's `info`; details in reference.md.
+- CI status: a session in a GitHub repository carries `ci` on its `tree` node, read with `gh` on its host: `branch`,
+  `sha`, `pr` (`number`, `title`, `url`, `approved` and `changesRequested` logins, open PRs only) and `runs`
+  (`workflow`, `state` running|failed|passed|skipped, `url`), the latest run per workflow of the last pushed commit.
+  Omitted without `gh`, a GitHub remote or runs. Read it to answer "is my PR green / approved"; it has no setter.
 - `session tint <COLOR|#rrggbb|clear>` (COLOR: red, orange, yellow, green, blue,
   purple, gray, teal, pink, brown, indigo, mint) and `workspace tint`
   (same arguments) - color a sidebar row so it stands out, e.g. red for production; a workspace tint colors only

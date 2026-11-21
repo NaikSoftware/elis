@@ -875,7 +875,7 @@ s=$(elisctl zmx tree studio.local --json \
 <td>a context set here wins over the mirrored one; clearing it here shows the other Mac's again</td>
 </tr>
 <tr>
-<td>sidebar info line, <code>notify</code> notifications, HUD</td>
+<td>CI line, <code>notify</code> notifications, HUD</td>
 <td>a timed HUD closes on this Mac's own count of the time left, so the two can close a moment apart</td>
 </tr>
 </tbody>
@@ -1035,7 +1035,7 @@ s=$(elisctl zmx tree studio.local --json \
 <ul>
 <li>An ask, a pick, a page, a HUD or an overlay is drawn by the Mac showing that session. With no Mac connected, a HUD is kept on the host and shown when a Mac shows the session.</li>
 <li>The connection works with a stock sshd configuration; nothing on the server's ssh setup needs changing.</li>
-<li>A program on the host reads the server's own state: <code>elisctl events</code> and <code>session wait</code> follow the server's event history, a session info line expires there, <code>surface cursor</code> reads the pane's screen, and <code>zmx list</code> and <code>zmx screen</code> cover the server's shells.</li>
+<li>A program on the host reads the server's own state: <code>elisctl events</code> and <code>session wait</code> follow the server's event history, <code>surface cursor</code> reads the pane's screen, and <code>zmx list</code> and <code>zmx screen</code> cover the server's shells.</li>
 <li>Clearing the server's status or a badge on the Mac (typing, selecting the row, Clear Status) clears it on the server under the Mac's default rules. A status set on the Mac's row is cleared there only.</li>
 </ul>
 <h3 id="remote-server-disconnects">Disconnects</h3>
@@ -1301,7 +1301,7 @@ The Interface tab: title-bar and sidebar controls, plus the quick terminal's siz
 <li><strong>Workspace add-session</strong> is the + shown on a workspace row on hover.</li>
 <li>Hiding <strong>Workspace icons</strong> or <strong>Session icons</strong> gives names more room, and takes what the icon shows with it: a session's split, remote cloud and page glyph, and a workspace's focus mark. A remote session's connection notice then shows when you hover its name.</li>
 <li>Hiding <strong>Workspace chevrons</strong> moves every row left into their space; a workspace row then gives no sign of being folded.</li>
-<li><strong>Session info</strong>: where a session's <a href="#status-info">info line</a> shows: Always, Flagged (the flagged view only) or Off.</li>
+<li><strong>CI status</strong>: where a session's <a href="#status-ci">CI line</a> shows: Always, Flagged (the flagged view only) or Off.</li>
 <li><strong>Active window only</strong> (off by default) shows the sidebar only in the frontmost window and hides it in the others, so the sidebar moves with focus.</li>
 <li><strong>Quick Terminal ▸ Size</strong>: the quick terminal's share of the screen (<a href="#terminals-quick">Quick terminal</a>).</li>
 </ul>
@@ -2441,18 +2441,16 @@ elisctl session context --clear --target &quot;$ELIS_SESSION_ID&quot;</code></pr
 <li><strong>Settings ▸ Interface</strong> hides it without clearing it.</li>
 <li><code>tree</code> reports it as the session's <code>context</code>.</li>
 </ul>
-<h3 id="status-info">Session info</h3>
-<p>For current activity there is session info: one line under the session's sidebar row, such as the step an agent is on or how many tests have run.</p>
-<pre class="bash"><code>elisctl session info --markdown --hide-after 30 --target &quot;$ELIS_SESSION_ID&quot; \
-  &#39;**3** agents ^[running](color: &quot;green&quot;) ^[1 idle](dim: true)&#39;
-elisctl session info --clear --target &quot;$ELIS_SESSION_ID&quot;</code></pre>
+<h3 id="status-ci">CI status</h3>
+<p>A session working in a GitHub repository shows that branch's CI on a second line under its sidebar row. Elis asks <a href="https://cli.github.com">gh</a>, so it works wherever <code>gh</code> is installed and logged in, GitHub Enterprise included; without it, or when GitHub cannot be reached, the line is simply not there.</p>
 <ul>
-<li><code>--markdown</code> allows bold, italic and code. <code>^[text](color: "green")</code> colors a fragment with any named tint color (not a hex), and <code>^[text](dim: true)</code> dims it.</li>
-<li>Each set replaces the whole line. The line is never saved, so it is gone after a relaunch.</li>
-<li><code>--hide-after SECONDS</code> clears it by itself. Give a positive interval and repeat it on each refresh, so the line expires if the script stops.</li>
-<li><strong>Settings ▸ Interface ▸ Session info</strong> shows it Always (the default), only in the flagged view (Flagged), or never (Off). Hiding never clears it.</li>
-<li>A session attached from another Mac shows that Mac's line too, unless one is set here.</li>
-<li><code>tree</code> reports <code>info</code>, <code>infoMarkdown</code> and <code>infoHideAfter</code>.</li>
+<li>The line counts the workflow runs of the branch's last pushed commit: <code>◷ build</code> for one run, <code>✓ 3 passed</code> when all agree, <code>✗ build  ◷ 1  ✓ 2</code> when they differ, a single failure by name.</li>
+<li>With an open pull request the line starts with its number and reviews: <code>#56 👍1 👎1 · ✓ build</code> counts approvals and change requests.</li>
+<li>Click the line for the details: the pull request with who approved and who asked for changes, then every run. Click the pull request or a run to open it on GitHub.</li>
+<li>Elis checks every 30 seconds while a run is going and every 3 minutes once all are done, once for all sessions on the same branch.</li>
+<li><strong>Settings ▸ Interface ▸ CI status</strong> shows it Always (the default), only in the flagged view (Flagged), or never (Off). Off stops asking GitHub.</li>
+<li>A session attached from another Mac or an elis-server host shows the CI the host sees.</li>
+<li><code>tree</code> reports it as the session's <code>ci</code>: <code>branch</code>, <code>sha</code>, <code>pr</code> (<code>number</code>, <code>title</code>, <code>url</code>, <code>approved</code>, <code>changesRequested</code>) and <code>runs</code> (<code>workflow</code>, <code>state</code> <code>running</code>|<code>failed</code>|<code>passed</code>|<code>skipped</code>, <code>url</code>); omitted when there is none.</li>
 </ul>
 <h3 id="status-transcript">Read Claude's conversation</h3>
 <p>A script can read the Claude Code conversation running in a session as a list of prompts, replies and tool calls, taken from Claude Code's own transcript rather than the screen, so a finished reply reads whole however far it scrolled away.</p>

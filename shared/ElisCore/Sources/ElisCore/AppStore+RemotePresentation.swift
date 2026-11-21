@@ -33,15 +33,11 @@ extension AppStore {
         scheduleTreeChanged()
     }
 
-    /// applyRemoteInfo records the origin's info line, kept even while a local line hides it; one that does not
-    /// parse here reads as none.
-    public func applyRemoteInfo(_ info: PresentationInfo?, forSession id: UUID) {
-        guard let session = session(withID: id), session.remotePresentation != nil else { return }
-        let previous = session.effectiveInfo
-        session.mirroredInfo = info.flatMap {
-            try? SessionInfo.make(source: $0.source, markdown: $0.markdown, hideAfter: $0.hideAfter).get()
-        }
-        if previous != session.effectiveInfo { scheduleTreeChanged() }
+    /// applyRemoteCI records the origin's CI status for the row's second line.
+    public func applyRemoteCI(_ ci: CIStatus?, forSession id: UUID) {
+        guard let session = session(withID: id), session.remotePresentation != nil, session.mirroredCI != ci else { return }
+        session.mirroredCI = ci
+        scheduleTreeChanged()
     }
 
     /// applyRemoteMail records the origin's mail counts for the row's tree read-back; nil means it sends none.
@@ -179,7 +175,7 @@ extension AppStore {
     func withdrawRemoteReplicas(of session: Session) {
         let id = session.id
         applyRemoteContext(nil, forSession: id)
-        applyRemoteInfo(nil, forSession: id)
+        applyRemoteCI(nil, forSession: id)
         session.remotePresentation?.mail = nil
         if session.remotePresentation?.statusBridged == true { showRemainingActivity(of: session) }
         session.remotePresentation?.activePanes = nil

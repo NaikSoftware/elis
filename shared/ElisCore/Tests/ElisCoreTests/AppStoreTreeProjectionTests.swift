@@ -372,45 +372,37 @@ struct AppStoreTreeProjectionTests {
         #expect(set.contains("\"context\":\"PR #517\""))
     }
 
-    @Test func controlTreeProjectsSessionInfoFields() throws {
+    @Test func controlTreeProjectsLocalElseMirroredCI() throws {
         let store = makeStore()
         let work = store.addWorkspace(name: "work")
-        let plain = try #require(store.addSession(toWorkspace: work.id, cwd: "/repo/a"))
-        let timed = try #require(store.addSession(toWorkspace: work.id, cwd: "/repo/b"))
-        let mirrored = try #require(store.addSession(toWorkspace: work.id, cwd: "/repo/c"))
-        _ = try #require(store.addSession(toWorkspace: work.id, cwd: "/repo/d"))
-        store.setInfo(try SessionInfo.make(source: "3 agents", markdown: false, hideAfter: 0).get(), forSession: plain.id)
-        store.setInfo(try SessionInfo.make(source: "**ci**", markdown: true, hideAfter: 60).get(), forSession: timed.id)
-        mirrored.mirroredInfo = try SessionInfo.make(source: "origin", markdown: false, hideAfter: 15).get()
+        let local = try #require(store.addSession(toWorkspace: work.id, cwd: "/repo/a"))
+        let mirrored = try #require(store.addSession(toWorkspace: work.id, cwd: "/repo/b"))
+        _ = try #require(store.addSession(toWorkspace: work.id, cwd: "/repo/c"))
+        let ci = CIStatus(branch: "main", sha: "abc", runs: [CIRun(workflow: "build", state: .passed, url: "u")])
+        let origin = CIStatus(branch: "main", sha: "def", pr: CIPullRequest(number: 7, title: "t", url: "p"))
+        store.setCI(ci, forSession: local.id)
+        mirrored.mirroredCI = origin
 
         let sessions = store.controlTree().workspaces[0].sessions
 
-        #expect(sessions[0].info == "3 agents")
-        #expect(sessions[0].infoMarkdown == false)
-        #expect(sessions[0].infoHideAfter == 0)
-        #expect(sessions[1].info == "**ci**")
-        #expect(sessions[1].infoMarkdown == true)
-        #expect(sessions[1].infoHideAfter == 60)
-        #expect(sessions[2].info == "origin")
-        #expect(sessions[2].infoHideAfter == 15)
-        #expect(sessions[3].info == nil)
-        #expect(sessions[3].infoMarkdown == nil)
-        #expect(sessions[3].infoHideAfter == nil)
+        #expect(sessions[0].ci == ci)
+        #expect(sessions[1].ci == origin)
+        #expect(sessions[2].ci == nil)
     }
 
-    @Test func sessionInfoFieldsAreOmittedFromJSONWhenUnset() throws {
+    @Test func ciIsOmittedFromJSONWhenUnset() throws {
         let store = makeStore()
         let work = store.addWorkspace(name: "work")
         let session = try #require(store.addSession(toWorkspace: work.id, cwd: "/repo/a"))
 
         let bare = try String(decoding: JSONEncoder().encode(store.controlTree()), as: UTF8.self)
-        #expect(!bare.contains("\"info"))
+        #expect(!bare.contains("\"ci\""))
 
-        store.setInfo(try SessionInfo.make(source: "x", markdown: false, hideAfter: 0).get(), forSession: session.id)
+        store.setCI(CIStatus(branch: "main", sha: "abc", runs: [CIRun(workflow: "build", state: .passed, url: "u")]), forSession: session.id)
         let set = try String(decoding: JSONEncoder().encode(store.controlTree()), as: UTF8.self)
-        #expect(set.contains("\"info\":\"x\""))
-        #expect(set.contains("\"infoMarkdown\":false"))
-        #expect(set.contains("\"infoHideAfter\":0"))
+        #expect(set.contains("\"ci\":{"))
+        #expect(set.contains("\"workflow\":\"build\""))
+        #expect(set.contains("\"state\":\"passed\""))
     }
 
     @Test func aCompanionReportsItsParentAndAFoldedParentReportsCollapsed() throws {

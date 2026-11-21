@@ -335,14 +335,14 @@ final class RemoteCatalogMirrorTests {
         let row = try #require(store.session(withID: entry.id))
         let surface = Surface()
         row.surface = surface
-        store.applyRemoteInfo(PresentationInfo(source: "3 agents", markdown: false, hideAfter: 0), forSession: entry.id)
+        store.applyRemoteCI(CIStatus(branch: "main", sha: "abc", runs: [CIRun(workflow: "build", state: .passed, url: "u")]), forSession: entry.id)
         store.applyRemoteContext("deploying", forSession: entry.id)
         var ended = entry.fields
         ended.lifecycle = .ended
 
         delta(1, .sessionChanged(ended))
 
-        #expect(row.effectiveInfo == nil)
+        #expect(row.effectiveCI == nil)
         #expect(row.effectiveContext == nil)
         #expect(row.surface === surface)
         #expect(!surface.tornDown)

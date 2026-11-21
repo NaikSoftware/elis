@@ -12,7 +12,6 @@ public final class ServerActions: ControlActions {
     let streams: ServerStreams
     let events: ServerEvents
     var hudAutoHide: [UUID: HudTimer] = [:]
-    var infoAutoHide: [UUID: InfoTimer] = [:]
     /// macDefaults are the settings the server's status and badge clears follow: it has no settings of its own.
     static let macDefaults = AppSettings()
     /// foregroundArgv reads the foreground program of the terminal whose shell is the given pid.

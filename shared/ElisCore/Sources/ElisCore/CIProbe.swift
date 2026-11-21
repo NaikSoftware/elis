@@ -110,17 +110,18 @@ public enum CIProbe {
         let url: String
     }
 
-    private struct PullRequestJSON: Decodable {
-        struct Review: Decodable {
-            struct Author: Decodable { let login: String }
-            let author: Author?
-            let state: String
-        }
+    private struct ReviewJSON: Decodable {
+        let author: AuthorJSON?
+        let state: String
+    }
 
+    private struct AuthorJSON: Decodable { let login: String }
+
+    private struct PullRequestJSON: Decodable {
         let number: Int
         let title: String
         let url: String
         let state: String
-        let latestReviews: [Review]?
+        let latestReviews: [ReviewJSON]?
     }
 }

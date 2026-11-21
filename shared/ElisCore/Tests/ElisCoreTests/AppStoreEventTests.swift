@@ -425,40 +425,29 @@ final class AppStoreEventTests {
         #expect(session.context == nil)
     }
 
-    @Test func settingSessionInfoEmitsTreeChangedOnlyWhenItChanges() throws {
+    @Test func settingCIEmitsTreeChangedOnlyWhenItChanges() throws {
         let library = WindowLibrary(directory: directory, controlEventRing: ControlEventRing(runID: run))
         let window = library.newWindow(name: "open")
         let store = try #require(library.store(for: window.id))
         let session = try #require(store.activeSession)
-        let info = try SessionInfo.make(source: "3 agents", markdown: false, hideAfter: 0).get()
-        var discarded = 0
+        let ci = CIStatus(branch: "main", sha: "abc", runs: [CIRun(workflow: "build", state: .passed, url: "u")])
         library.flushTreeEvents()
-        let anchor = try eventBatch(library.readEvents(ControlEventReadOptions(cursor: nil, kinds: nil, limit: 100)))
+        var cursor = try eventBatch(library.readEvents(ControlEventReadOptions(cursor: nil, kinds: nil, limit: 100)))
+        func changes() throws -> Int {
+            library.flushTreeEvents()
+            let batch = try eventBatch(library.readEvents(ControlEventReadOptions(
+                cursor: ControlEventCursor(run: cursor.run, after: cursor.next), kinds: [.treeChanged], limit: 100)))
+            cursor = batch
+            return batch.items.count
+        }
 
-        #expect(store.setInfo(info, forSession: session.id))
-        library.flushTreeEvents()
-        let afterSet = try eventBatch(library.readEvents(ControlEventReadOptions(
-            cursor: ControlEventCursor(run: anchor.run, after: anchor.next), kinds: [.treeChanged], limit: 100
-        )))
-        #expect(afterSet.items.count == 1)
-
-        #expect(!store.setInfo(info, forSession: session.id))
-        library.flushTreeEvents()
-        let afterSame = try eventBatch(library.readEvents(ControlEventReadOptions(
-            cursor: ControlEventCursor(run: afterSet.run, after: afterSet.next), kinds: [.treeChanged], limit: 100
-        )))
-        #expect(afterSame.items.isEmpty)
-
-        session.onInfoDiscarded = { discarded += 1 }
-        #expect(store.setInfo(nil, forSession: session.id))
-        library.flushTreeEvents()
-        let afterClear = try eventBatch(library.readEvents(ControlEventReadOptions(
-            cursor: ControlEventCursor(run: afterSame.run, after: afterSame.next), kinds: [.treeChanged], limit: 100
-        )))
-        #expect(afterClear.items.count == 1)
-        #expect(discarded == 1)
-        #expect(session.info == nil)
-        #expect(session.onInfoDiscarded == nil)
+        store.setCI(ci, forSession: session.id)
+        #expect(try changes() == 1)
+        store.setCI(ci, forSession: session.id)
+        #expect(try changes() == 0)
+        store.setCI(nil, forSession: session.id)
+        #expect(try changes() == 1)
+        #expect(session.ci == nil)
     }
 
     @Test func settingSessionContextWritesItToTheSavedSnapshot() throws {
