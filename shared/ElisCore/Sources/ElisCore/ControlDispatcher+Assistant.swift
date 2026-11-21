@@ -34,7 +34,7 @@ extension ControlDispatcher {
             return assistantFailure("assistant.ask requires text")
         }
         let entry = chat.append(.user, text: text, now: Date().timeIntervalSince1970)
-        chat.running = true
+        chat.inputQueued()
         actions.assistantInput(entry)
         return assistantSuccess(ControlAssistantResult(entries: [entry]))
     }
@@ -81,7 +81,7 @@ extension ControlDispatcher {
             return assistantFailure("assistant.reply: unknown session \(target)")
         }
         let stored = chat.append(.reply, text: text, from: peer.sessionID, now: Date().timeIntervalSince1970)
-        chat.running = true
+        chat.inputQueued()
         actions.assistantInput(AssistantEntry(id: stored.id, kind: .reply, from: stored.from, to: stored.to,
                                               text: "[reply from @\(handle(peer, in: directory))] \(text)", ts: stored.ts))
         return assistantSuccess(ControlAssistantResult(entries: [stored]))

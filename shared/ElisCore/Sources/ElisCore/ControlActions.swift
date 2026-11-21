@@ -344,7 +344,8 @@ public protocol ControlActions {
     /// assistantPeers lists the sessions the assistant can tag; nil on a host without the assistant.
     func assistantPeers() -> [AssistantPeer]?
     /// assistantInput writes a `user` entry, or a `reply` in its marked form, into the assistant's stream.
-    /// The dispatcher has set `chat.running`; the host clears it when the turn ends (stream `turnEnded` or the provider exiting).
+    /// The dispatcher has called `chat.inputQueued()`; the host calls `chat.turnEnded()` per finished turn and
+    /// `chat.providerFailed` when no provider can run or its process dies.
     func assistantInput(_ entry: AssistantEntry)
     /// assistantSent reports the `sent` entry `assistant.send` appended, so the host can emit it.
     func assistantSent(_ entry: AssistantEntry)

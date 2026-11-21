@@ -28,7 +28,8 @@ public final class AssistantChat {
 
     public private(set) var unread = 0
     public private(set) var marks: [String: AssistantMark] = [:]
-    public var running = false
+    /// running is true while an input written to the provider still awaits its turn's end.
+    public var running: Bool { pending > 0 }
     public var provider: SessionLauncher? {
         didSet {
             guard let file else { return }
@@ -37,6 +38,7 @@ public final class AssistantChat {
         }
     }
 
+    private var pending = 0
     private var all: [AssistantEntry] = []
     private var fileLines = 0
     private let file: URL?
@@ -76,6 +78,16 @@ public final class AssistantChat {
     public func entries(last: Int?) -> [AssistantEntry] {
         guard let last else { return all }
         return Array(all.suffix(max(0, last)))
+    }
+
+    public func inputQueued() { pending += 1 }
+
+    public func turnEnded() { pending = max(0, pending - 1) }
+
+    /// providerFailed records why no provider could run, or why it died, and drops every queued input.
+    public func providerFailed(_ message: String, now: Double) {
+        append(.error, text: message, now: now)
+        pending = 0
     }
 
     public func markSeen() { unread = 0 }

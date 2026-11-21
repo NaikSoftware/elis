@@ -32,6 +32,32 @@ import Testing
         #expect(chat.unread == 0)
     }
 
+    @Test func runningLastsUntilEveryQueuedInputEnds() {
+        let chat = AssistantChat()
+        chat.inputQueued()
+        chat.inputQueued()
+        chat.turnEnded()
+        #expect(chat.running)
+        chat.turnEnded()
+        #expect(!chat.running)
+    }
+
+    @Test func turnEndedNeverGoesBelowZero() {
+        let chat = AssistantChat()
+        chat.turnEnded()
+        chat.inputQueued()
+        #expect(chat.running)
+    }
+
+    @Test func providerFailureRecordsTheErrorAndClearsTheQueue() {
+        let chat = AssistantChat()
+        chat.inputQueued()
+        chat.inputQueued()
+        chat.providerFailed("claude not found", now: 5)
+        #expect(!chat.running)
+        #expect(chat.entries(last: 1).map { [$0.kind.rawValue, $0.text] } == [["error", "claude not found"]])
+    }
+
     @Test func reloadRestoresEntriesAndProvider() {
         let (dir, file) = tempFile()
         defer { try? FileManager.default.removeItem(at: dir) }
