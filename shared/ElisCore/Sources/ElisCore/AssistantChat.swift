@@ -31,11 +31,11 @@ public final class AssistantChat {
     /// running is true while an input written to the provider still awaits its turn's end.
     public var running: Bool { pending > 0 }
     public var provider: SessionLauncher? {
-        didSet {
-            guard let file else { return }
-            try? FileManager.default.createDirectory(at: file.deletingLastPathComponent(), withIntermediateDirectories: true)
-            try? provider?.rawValue.write(to: providerFile(file), atomically: true, encoding: .utf8)
-        }
+        didSet { save(provider.map { Data($0.rawValue.utf8) }, as: "provider") }
+    }
+    /// resume is each provider's conversation id, so a restarted provider continues its own conversation.
+    public var resume: [SessionLauncher: String] = [:] {
+        didSet { save(try? JSONEncoder().encode(Dictionary(uniqueKeysWithValues: resume.map { ($0.key.rawValue, $0.value) })), as: "resume") }
     }
 
     private var pending = 0
@@ -52,8 +52,12 @@ public final class AssistantChat {
             let decoder = JSONDecoder()
             all = Array(lines.compactMap { try? decoder.decode(AssistantEntry.self, from: Data($0.utf8)) }.suffix(Self.limit))
         }
-        if let raw = try? String(contentsOf: providerFile(file), encoding: .utf8) {
+        if let raw = try? String(contentsOf: file.appendingPathExtension("provider"), encoding: .utf8) {
             provider = SessionLauncher(rawValue: raw.trimmingCharacters(in: .whitespacesAndNewlines))
+        }
+        if let data = try? Data(contentsOf: file.appendingPathExtension("resume")),
+           let raw = try? JSONDecoder().decode([String: String].self, from: data) {
+            resume = Dictionary(uniqueKeysWithValues: raw.compactMap { key, id in SessionLauncher(rawValue: key).map { ($0, id) } })
         }
     }
 
@@ -94,7 +98,11 @@ public final class AssistantChat {
 
     public func markSkipped(_ sessionIDs: [String]) { sessionIDs.forEach { marks[$0] = .notDelivered } }
 
-    private func providerFile(_ file: URL) -> URL { file.appendingPathExtension("provider") }
+    private func save(_ data: Data?, as pathExtension: String) {
+        guard let file, let data else { return }
+        try? FileManager.default.createDirectory(at: file.deletingLastPathComponent(), withIntermediateDirectories: true)
+        try? data.write(to: file.appendingPathExtension(pathExtension), options: .atomic)
+    }
 
     // Save errors are dropped: a chat that cannot be written stays usable in memory.
     private func persist(_ entry: AssistantEntry) {

@@ -1,3 +1,4 @@
+import Foundation
 import Testing
 @testable import ElisCore
 
@@ -18,5 +19,20 @@ import Testing
             let row = "\(handle) | \(peer.workspaceName) | \(peer.agent ?? "-") | \(peer.status ?? "-") | \(peer.sessionID)"
             #expect(prompt.contains(row))
         }
+    }
+
+    @Test func inlineRecapsOneEntryPerLine() {
+        let entries = [
+            AssistantEntry(id: UUID(), kind: .user, from: nil, to: nil, text: "ask\n@zsh", ts: 1),
+            AssistantEntry(id: UUID(), kind: .sent, from: nil, to: ["shell1"], text: "run it", ts: 2),
+            AssistantEntry(id: UUID(), kind: .reply, from: "shell1", to: nil, text: "done", ts: 3),
+        ]
+        #expect(AssistantPrompt.inline(entries) == """
+        Earlier messages in this chat, oldest first:
+        user: ask @zsh
+        sent: run it
+        reply @shell1: done
+        """)
+        #expect(AssistantPrompt.inline([]) == "")
     }
 }

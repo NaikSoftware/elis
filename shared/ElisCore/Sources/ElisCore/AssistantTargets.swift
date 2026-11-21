@@ -115,8 +115,8 @@ public enum AssistantLine {
     private static let prefix = "[Elis] "
     private static let hint = " — reply: elisctl reply \"<answer>\""
 
-    public static func make(_ text: String) throws(AssistantLineError) -> String {
-        if text.unicodeScalars.contains(where: { $0.value == 0 }) { throw .nul }
+    /// fold turns each run of whitespace and control characters into one space and trims both ends.
+    public static func fold(_ text: String) -> String {
         var folded = ""
         var pendingSpace = false
         for scalar in text.unicodeScalars {
@@ -128,6 +128,12 @@ public enum AssistantLine {
                 folded.unicodeScalars.append(scalar)
             }
         }
+        return folded
+    }
+
+    public static func make(_ text: String) throws(AssistantLineError) -> String {
+        if text.unicodeScalars.contains(where: { $0.value == 0 }) { throw .nul }
+        let folded = fold(text)
         if folded.isEmpty { throw .empty }
         var budget = maxBytes - prefix.utf8.count - hint.utf8.count
         var body = ""

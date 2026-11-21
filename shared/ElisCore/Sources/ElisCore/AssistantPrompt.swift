@@ -18,4 +18,11 @@ public enum AssistantPrompt {
         \(rows.joined(separator: "\n"))
         """
     }
+
+    /// inline recaps `entries` for the first input of a newly started provider, one entry per line.
+    public static func inline(_ entries: [AssistantEntry]) -> String {
+        guard !entries.isEmpty else { return "" }
+        let lines = entries.map { "\($0.kind.rawValue)\($0.from.map { " @\($0)" } ?? ""): \(AssistantLine.fold($0.text))" }
+        return (["Earlier messages in this chat, oldest first:"] + lines).joined(separator: "\n")
+    }
 }

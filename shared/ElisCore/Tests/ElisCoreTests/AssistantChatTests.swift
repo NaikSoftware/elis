@@ -71,6 +71,21 @@ import Testing
         #expect(again.provider == .codex)
     }
 
+    @Test func resumeIDsPersistPerProvider() throws {
+        let (dir, file) = tempFile()
+        defer { try? FileManager.default.removeItem(at: dir) }
+        let chat = AssistantChat(file: file)
+        chat.resume[.claude] = "c-1"
+        chat.resume[.codex] = "x-1"
+        chat.resume[.claude] = "c-2"
+        #expect(AssistantChat(file: file).resume == [.claude: "c-2", .codex: "x-1"])
+
+        try Data(#"{"claude":"c-3","nope":"z"}"#.utf8).write(to: file.appendingPathExtension("resume"))
+        #expect(AssistantChat(file: file).resume == [.claude: "c-3"])
+        try Data("not json".utf8).write(to: file.appendingPathExtension("resume"))
+        #expect(AssistantChat(file: file).resume.isEmpty)
+    }
+
     @Test func transcriptKeepsTheLast500() {
         let (dir, file) = tempFile()
         defer { try? FileManager.default.removeItem(at: dir) }
