@@ -25,10 +25,8 @@
 ## Review Focus
 
 1. Phone ↔ desktop wire strings (`agterm://pair`, JSON keys such as `agtermLive`, `agtermPaneId`, relay handshake labels) renamed on one side only: pairing or attach fails silently. Task 5 adds a cross-check test.
-2. A user's `keymap.conf` `command` lines that call `agtermctl` by name break after migration. Task 7 rewrites and tests them.
-3. Old hooks and the old `agterm` skill stay installed next to the new ones: the agent sees two skills and two status hooks fire. Task 7 removes them and tests it.
-4. A stray `agterm.sock` default in one resolver splits CLI and app. Task 4 tests that both derive the same default path.
-5. The token pass turns `agterm` inside a kept credit or an unrelated word. Task 3's check fails on any match outside the skip list and on a missing credit line.
+2. A stray `agterm.sock` default in one resolver splits CLI and app. Task 4 tests that both derive the same default path.
+3. The token pass turns `agterm` inside a kept credit or an unrelated word. Task 3's check fails on any match outside the skip list and on a missing credit line.
 
 ---
 
@@ -117,19 +115,6 @@
 - [ ] **Step 5:** `check-names.sh` passes. Render `site/index.html` with Playwright (channel chrome) at 1440 and 390 and compare it with the mockup side by side.
 - [ ] **Step 6:** Commit `docs: Hangar docs, site and product page`.
 
-### Task 7: One-time migration script
-
-**Files:**
-- Create: `macos/scripts/migrate-from-agterm2.sh`, `macos/scripts/tests/migrate-from-agterm2-test.sh`
-
-**Interfaces:**
-- Produces: `migrate-from-agterm2.sh [--home DIR] [--dry-run]`. `--home` exists for the test and skips the running-app check.
-
-- [ ] **Step 1:** The test builds a fake HOME with: the old state dir (a sessions file); `~/.config/agterm/{keymap.conf,ghostty.conf,restore-denylist.conf}` where `keymap.conf` has a `command` line calling `agtermctl`; `.claude/settings.json` with agterm hooks plus one unrelated hook; `.claude/skills/agterm/`; `.codex/` hooks. Assertions: the new dirs exist with byte-identical sessions content; `keymap.conf` calls `hangarctl`; the agterm hooks and skill are gone; the unrelated hook is byte-identical; the old dirs still exist; a second run changes nothing and exits 0.
-- [ ] **Step 2:** Run it. Expected: FAIL (script missing).
-- [ ] **Step 3:** Implement per the spec's Migration section. Refuse to run while `pgrep -x agterm` or `pgrep -x Hangar` finds a process. Stop the old zmx daemons and `agterm-session-host` processes whose state dir is the old one (skipped under `--home`). Edit JSON with `python3 -I` (stdlib only).
-- [ ] **Step 4:** Run the test. Expected: PASS. Commit `feat: one-time migration from Agterm2`.
-
 ### Task 9: Rename Hangar to Elis
 
 **Files:** `tools/hangar/` → `tools/elis/` (scripts, skip list), then the whole tree.
@@ -168,4 +153,4 @@
 - [ ] **Step 2:** Open the PR (`--repo NaikSoftware/agterm`). After the owner merges, verify the merge commit on `origin/master`.
 - [ ] **Step 3:** Ask the owner to confirm, then `gh repo rename elis --repo NaikSoftware/agterm`; update local `origin` URLs; enable Pages (source: GitHub Actions).
 - [ ] **Step 4:** Archive agterm-qt (owner's request, 2026-11-17): push one commit to `NaikSoftware/agterm-qt` `main` whose README says the project moved to `NaikSoftware/elis` (`linux/`, `mobile/`), then `gh repo archive NaikSoftware/agterm-qt --yes`. The local clone stays; the owner removes it.
-- [ ] **Step 5 (deferred by the owner, 2026-11-18: no release at the end of this plan; improvements land first):** Release with `Elis-<ver>.dmg`, `elis-mobile.apk` and `migrate-from-agterm2.sh`. The notes tell users to run the script, and that two attached Macs must both update.
+- [ ] **Step 5 (deferred by the owner, 2026-11-18: no release at the end of this plan; improvements land first):** Release with `Elis-<ver>.dmg` and `elis-mobile.apk`. The notes say that two attached Macs must both update.

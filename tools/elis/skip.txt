@@ -11,11 +11,6 @@ tools/elis/**
 .superpowers/**
 # Released entries are history; the file has no product name in its title.
 macos/CHANGELOG.md
-# Task 7 migration script: it keeps its name and every agterm it migrates from; its new-side names are renamed.
-macos/scripts/migrate-from-agterm2.sh	path
-macos/scripts/migrate-from-agterm2.sh	keep	(?i)agterm\w*
-macos/scripts/tests/migrate-from-agterm2-test.sh	path
-macos/scripts/tests/migrate-from-agterm2-test.sh	keep	(?i)agterm\w*
 
 # Our patches are renamed, but their context and removed lines are upstream code and must keep applying.
 macos/scripts/*-patches/**.patch	line	^[ -]
@@ -40,18 +35,3 @@ macos/**/*.swift	line	(?i)adapted from thdxg/macterm
 
 # The phone wire-name test asserts the old name is gone.
 mobile/test/wire_names_test.dart	line	isNot\(contains\('agterm'\)\)
-
-# The install docs name the Agterm2 migration script and the old product.
-README.md	keep	migrate-from-agterm2\.sh|Agterm2
-site/docs.html	keep	migrate-from-agterm2\.sh|Agterm2
-
-# The Linux upgrade from agterm-qt: the script and its test keep every old name they migrate from, the installers
-# keep the names they remove, and the README names the script.
-linux/scripts/migrate-from-agterm-qt.sh	path
-linux/scripts/migrate-from-agterm-qt.sh	keep	(?i)agterm\w*
-linux/scripts/tests/migrate-from-agterm-qt-test.sh	path
-linux/scripts/tests/migrate-from-agterm-qt-test.sh	keep	(?i)agterm\w*
-linux/CMakeLists.txt	keep	migrate-from-agterm-qt-test\.sh
-linux/src/core/installers.cpp	keep	(?i)agterm\w*
-linux/tests/test_core.cpp	keep	(?i)agterm\w*
-linux/README.md	keep	(?i)agterm\w*

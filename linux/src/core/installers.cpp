@@ -15,9 +15,6 @@ namespace Install {
 static const char *const shellMarker = "# >>> elis agent-status >>>";
 static const char *const shellEnd = "# <<< elis agent-status <<<";
 static const char *const bakeMarker = "# >>> elis elisctl path (installer-baked) >>>";
-// what agterm-qt installed: each pass that installs ours removes it, so an upgraded home holds one set of hooks
-static const char *const agtermMarker = "# >>> agterm agent-status >>>";
-static const char *const agtermEnd = "# <<< agterm agent-status <<<";
 
 QString packageDir(const QString &home)
 {
@@ -91,39 +88,6 @@ static bool copyTree(const QString &from, const QString &to)
     return true;
 }
 
-// text without agterm-qt's marked block, when the block's body contains needle
-static QString dropAgtermBlock(const QString &text, const QString &needle)
-{
-    QStringList lines = text.split(QLatin1Char('\n'));
-    qsizetype b = -1, e = -1;
-    for (qsizetype i = 0; i < lines.size() && e < 0; ++i)
-        if (lines[i].trimmed() == QLatin1String(agtermMarker))
-            b = i;
-        else if (b >= 0 && lines[i].trimmed() == QLatin1String(agtermEnd))
-            e = i;
-    if (e < 0 || !lines.mid(b, e - b).join(QLatin1Char('\n')).contains(needle))
-        return text;
-    if (b > 0 && lines[b - 1].trimmed().isEmpty())
-        --b;
-    else if (b == 0 && e + 1 < lines.size() && lines[e + 1].trimmed().isEmpty())
-        ++e; // at the top, the blank line after it goes instead
-    lines.remove(b, e - b + 1);
-    return lines.join(QLatin1Char('\n'));
-}
-
-// removes a file, or a directory by its SKILL.md, only when it carries agterm-qt's marker
-static void removeAgterm(const QString &path, const QString &marker)
-{
-    const QFileInfo fi(path);
-    QString text;
-    if (fi.isSymLink() || readText(fi.isDir() ? path + QStringLiteral("/SKILL.md") : path, &text) != Read::Ok || !text.contains(marker))
-        return;
-    if (fi.isDir())
-        QDir(path).removeRecursively();
-    else if (QFile::remove(path) && fi.dir().dirName() == QLatin1String("agterm-v2"))
-        QDir().rmdir(fi.path());
-}
-
 static bool bake(const QString &script, const QString &elisctl)
 {
     QString text;
@@ -169,29 +133,6 @@ static bool mergeClaude(const QString &home, const QString &pkg, QString *error)
     }
     if (root.contains("env") && (!root.value("env").isObject() || (root.value("env").toObject().contains("CLAUDE_CODE_PLUGIN_DIRS") && !root.value("env").toObject().value("CLAUDE_CODE_PLUGIN_DIRS").isString())))
         return false;
-    static const QRegularExpression agterm(QStringLiteral("agent-status/agterm-(claude|agent)-status\\.sh"));
-    for (const QString &event : hooks.keys()) {
-        if (!hooks.value(event).isArray())
-            continue;
-        const QJsonArray entries = hooks.value(event).toArray();
-        QJsonArray kept;
-        for (const auto &v : entries) {
-            QJsonObject entry = v.toObject();
-            const QJsonArray list = entry.value("hooks").toArray();
-            QJsonArray rest;
-            for (const auto &h : list)
-                if (!agterm.match(h.toObject().value("command").toString()).hasMatch())
-                    rest << h;
-            if (rest.size() == list.size())
-                kept << v;
-            else if (!rest.isEmpty())
-                entry.insert("hooks", rest), kept << entry;
-        }
-        if (kept.isEmpty() && !entries.isEmpty())
-            hooks.remove(event);
-        else
-            hooks.insert(event, kept);
-    }
     const QString adapter = pkg + QStringLiteral("/elis-claude-status.sh"), wrapper = pkg + QStringLiteral("/elis-agent-status.sh");
     const QString cmd = shellQuote(adapter) + QLatin1Char(' ');
     // an older elis install (scripts/install-claude-hooks.sh) or a raw wrapper hook: same state, our adapter now
@@ -227,10 +168,8 @@ static bool mergeClaude(const QString &home, const QString &pkg, QString *error)
     QJsonObject env = root.value("env").toObject();
     const QString mod = pkg + QStringLiteral("/claude-mods/swarm-companion");
     QStringList dirs = env.value("CLAUDE_CODE_PLUGIN_DIRS").toString().split(QLatin1Char(':'), Qt::SkipEmptyParts);
-    const qsizetype dropped = dirs.removeIf([](const QString &d) { return d.endsWith(QLatin1String("/agterm-qt/agent-status/claude-mods/swarm-companion")); });
-    if (dropped || !dirs.contains(mod)) {
-        if (!dirs.contains(mod))
-            dirs << mod;
+    if (!dirs.contains(mod)) {
+        dirs << mod;
         env.insert("CLAUDE_CODE_PLUGIN_DIRS", dirs.join(QLatin1Char(':')));
         root.insert("env", env);
     }
@@ -249,16 +188,13 @@ static QString shellRc(const QString &home, const QString &pkg, QString *error)
     if (QFileInfo(home + QStringLiteral("/.config/fish")).isDir())
         files.append({home + QStringLiteral("/.config/fish/config.fish"), QStringLiteral("integration.fish")});
     for (const auto &[path, script] : files) {
-        QString original;
-        if (readText(path, &original) == Read::Unreadable)
+        QString text;
+        if (readText(path, &text) == Read::Unreadable || text.contains(QLatin1String(shellMarker)))
             continue;
-        QString text = dropAgtermBlock(original, QStringLiteral("/agent-status/shell/integration"));
-        if (!text.contains(QLatin1String(shellMarker))) {
-            if (!text.isEmpty())
-                text += text.endsWith(QLatin1Char('\n')) ? QStringLiteral("\n") : QStringLiteral("\n\n");
-            text += QStringLiteral("%1\nsource %2\n%3\n").arg(QLatin1String(shellMarker), shellQuote(pkg + QStringLiteral("/shell/") + script), QLatin1String(shellEnd));
-        }
-        if (text != original && !writeText(path, text, false))
+        if (!text.isEmpty())
+            text += text.endsWith(QLatin1Char('\n')) ? QStringLiteral("\n") : QStringLiteral("\n\n");
+        text += QStringLiteral("%1\nsource %2\n%3\n").arg(QLatin1String(shellMarker), shellQuote(pkg + QStringLiteral("/shell/") + script), QLatin1String(shellEnd));
+        if (!writeText(path, text, false))
             return *error = QStringLiteral("Could not write %1.").arg(path), QString();
     }
     return {};
@@ -287,23 +223,16 @@ static Codex mergeCodex(const QString &home, const QString &pkg, QString *error)
     if (!QFileInfo(home + QStringLiteral("/.codex")).isDir())
         return Codex::NoCodex;
     const QString path = home + QStringLiteral("/.codex/config.toml");
-    QString original;
-    const Read read = readText(path, &original);
+    QString text;
+    const Read read = readText(path, &text);
     if (read == Read::Unreadable)
         return Codex::Unreadable;
-    // agterm-qt's block goes whole, its [hooks.state] trust records with it: its hooks tables would read as the user's
-    const QString text = dropAgtermBlock(original, QStringLiteral("agterm-codex-status.sh"));
-    const auto foreign = [&] {
-        if (text != original && !writeText(path, text, true))
-            *error = QStringLiteral("Could not write %1.").arg(path);
-        return Codex::HooksExist;
-    };
     const QString block = codexBlock(pkg);
     QString out;
     if (const qsizetype begin = text.indexOf(QLatin1String(shellMarker)); begin >= 0) {
         const qsizetype end = text.indexOf(QLatin1String(shellEnd), begin);
         if (end < 0 || !text.mid(begin, end - begin).contains(QLatin1String("elis-codex-status.sh")))
-            return foreign(); // a foreign block under our marker
+            return Codex::HooksExist; // a foreign block under our marker
         // tables Codex appended inside the block (its trust state) stay byte for byte
         const QString inner = text.mid(begin, end - begin);
         const qsizetype state = inner.indexOf(QRegularExpression(QStringLiteral("\n\\n?\\[hooks\\.state")));
@@ -313,7 +242,7 @@ static Codex mergeCodex(const QString &home, const QString &pkg, QString *error)
         QString fresh = block;
         fresh.insert(fresh.lastIndexOf(QLatin1String(shellEnd)) - 1, kept);
         out = text.left(begin) + fresh + text.mid(end + qsizetype(strlen(shellEnd)) + (text.mid(end + qsizetype(strlen(shellEnd))).startsWith(QLatin1Char('\n')) ? 1 : 0));
-        if (out == original)
+        if (out == text)
             return Codex::AlreadyConfigured;
     } else if (text.trimmed().isEmpty()) {
         out = block;
@@ -325,7 +254,7 @@ static Codex mergeCodex(const QString &home, const QString &pkg, QString *error)
         qsizetype notifyLine = -1;
         for (qsizetype i = 0; i < lines.size(); ++i) {
             if (hooksHeader.match(lines[i]).hasMatch() || (topLevel && hooksKey.match(lines[i]).hasMatch()))
-                return foreign();
+                return Codex::HooksExist;
             if (header.match(lines[i]).hasMatch())
                 topLevel = false;
             else if (topLevel && notifyLine < 0 && notify.match(lines[i]).hasMatch())
@@ -336,7 +265,7 @@ static Codex mergeCodex(const QString &home, const QString &pkg, QString *error)
         out = lines.join(QLatin1Char('\n'));
         out += (out.endsWith(QLatin1Char('\n')) ? QStringLiteral("\n") : QStringLiteral("\n\n")) + block;
     }
-    if (!writeText(path, out, read == Read::Ok && !original.trimmed().isEmpty()))
+    if (!writeText(path, out, read == Read::Ok && !text.trimmed().isEmpty()))
         *error = QStringLiteral("Could not write %1.").arg(path);
     return Codex::Merged;
 }
@@ -389,13 +318,6 @@ Report agentHooks(const QString &home, const QString &bundle, const QString &eli
     const Codex codex = error.isEmpty() ? mergeCodex(home, pkg, &error) : Codex::NoCodex;
     if (!error.isEmpty())
         return r.error = error, r;
-
-    removeAgterm(home + QStringLiteral("/.pi/agent/extensions/agterm-status.ts"), QStringLiteral("// agterm-pi-status-extension"));
-    for (const QString &cfg : {home + QStringLiteral("/.config/opencode"), openCode.v2Dir})
-        if (!cfg.isEmpty()) {
-            removeAgterm(cfg + QStringLiteral("/plugins/agterm-status.js"), QStringLiteral("// agterm-opencode-status-plugin"));
-            removeAgterm(cfg + QStringLiteral("/plugins/agterm-v2/tui.js"), QStringLiteral("// agterm-opencode-v2-status-plugin"));
-        }
 
     QString piLine;
     bool warn = !claude || codex == Codex::HooksExist || codex == Codex::Unreadable;
@@ -520,8 +442,6 @@ Report skill(const QString &home, const QString &bundle)
     Report r;
     if (!QFileInfo(bundle + QStringLiteral("/SKILL.md")).isFile())
         return r.error = QStringLiteral("The agent skill is not bundled in this build."), r;
-    for (const char *agent : {"/.claude", "/.codex"})
-        removeAgterm(home + QLatin1String(agent) + QStringLiteral("/skills/agterm"), QStringLiteral("<!-- agterm-skill -->"));
     QList<std::pair<QString, QString>> targets; // agent, its skills dir
     if (QFileInfo(home + QStringLiteral("/.claude")).isDir())
         targets.append({QStringLiteral("Claude Code"), home + QStringLiteral("/.claude/skills")});

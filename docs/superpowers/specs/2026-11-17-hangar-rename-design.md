@@ -19,7 +19,6 @@ Nothing user-visible or internal keeps the name agterm, except credits and histo
 - One repository, `NaikSoftware/hangar`, with three projects at the same level: `macos/`, `linux/`, `mobile/`.
 - The Linux Qt app and the Flutter phone app move in from `NaikSoftware/agterm-qt` with their git history.
 - Every name changes in all three projects: product, app, CLI, env vars, modules, paths, bundle ids, state and config dirs, skill, docs.
-- A one-time script moves each user's Mac from Agterm2 to Hangar. Several people run Agterm2 on their own Macs, so the script is generic, ships with the release, and the README and release notes tell users to run it.
 - All existing gates pass after the change: macOS build, `swift test`, `make test-app`, `make lint`, Qt `ctest` and `scripts/smoke.sh`, mobile `flutter analyze` and `flutter test`.
 
 ## Non-goals
@@ -34,7 +33,6 @@ Nothing user-visible or internal keeps the name agterm, except credits and histo
 
 - A tree that builds but leaves `agterm` in a user-visible string, path, env var, menu, log line or doc.
 - Lost history for any of the three projects.
-- A migration script that loses a user's sessions list, keymap, ghostty config or restore denylist.
 
 ## Name map
 
@@ -103,21 +101,8 @@ Linux and mobile have no CI today and get none in this work.
 1. **Restructure (no renames).** Move today's root content into `macos/`, keep the shared items at the root. Import agterm-qt with history: its root content (without `mobile/`) under `linux/`, its `mobile/` under `mobile/`. Fix scripts, Makefile, CI and docs paths so every gate passes. One commit series, reviewable as pure moves.
 2. **Rename.** Run the rename script over all three projects, then fix and pass all gates.
 3. **Docs.** README for Hangar (from the current draft), `site/`, the skill, `CLAUDE.md` and `.claude/rules` paths and names.
-4. **Migration script** `macos/scripts/migrate-from-agterm2.sh` (see below), tested against a copy of real state.
-5. **Repository rename** on GitHub, after the PR merges and with a final confirmation from the owner. Update `origin` URLs locally.
-6. **Release.** A new release with `Hangar-<ver>.dmg` and `hangar-mobile.apk`.
-
-## Migration script
-
-Runs once on each user's Mac, after Hangar is installed and before it first starts. It is attached to the release as `migrate-from-agterm2.sh`, and it is safe to run twice.
-
-1. Refuse to run while `agterm.app` or `Hangar.app` runs.
-2. Stop the old zmx daemons and `agterm-session-host` processes of the old state dir.
-3. Copy (not move) `~/Library/Application Support/agterm` to `…/hangar` and `~/.config/agterm` to `~/.config/hangar`, if the targets do not exist. Rewrite `agterm`/`AGTERM_` inside copied config files (`keymap.conf` commands may call `agtermctl`).
-4. Remove the old agent hooks from `~/.claude/settings.json` and `~/.codex/`, the installed `agterm` skill, and `/usr/local/bin/agtermctl`. Hangar's first launch installs its own.
-5. Print what it did and what is left for the user: remove `agterm.app`, grant Accessibility and other macOS permissions again, install the new phone app and pair again.
-
-The old dirs stay as a backup; the user deletes them.
+4. **Repository rename** on GitHub, after the PR merges and with a final confirmation from the owner. Update `origin` URLs locally.
+5. **Release.** A new release with `Hangar-<ver>.dmg` and `hangar-mobile.apk`.
 
 ## Constraints
 

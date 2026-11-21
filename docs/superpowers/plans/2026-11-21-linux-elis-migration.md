@@ -6,7 +6,7 @@ This is a roadmap of sub-projects, not a task plan: each phase below gets its ow
 
 **Goal:** bring `linux/` level with the Mac app and the phone app as they are on `master` now: the Elis brand and
 look, adapted to Qt/KDE, and the phone link the phone app now speaks (Chat and Term views, direct input,
-Bluetooth), with a clean upgrade for people running the old agterm-qt.
+Bluetooth).
 
 ## Where `linux/` stands
 
@@ -14,11 +14,6 @@ Done already, verify only:
 - Name, paths, env vars, `elisctl`, `elis://pair` links (`d680dbcd`), app icon (`fda717db`).
 
 Missing (found by reading the code, 2026-11-21):
-- Upgrade from an installed agterm-qt. This machine runs one:
-  `~/.local/bin/{agterm-qt,agtermctl,agterm-session-host}`, `~/.local/share/agterm-qt`, `~/.config/agterm-qt`,
-  `~/.config/agterm-qtrc`, `~/.local/share/applications/agterm-qt.desktop`.
-  Elis reads none of them, and its hook installer only recognises `elis-*-status.sh`
-  (`src/core/installers.cpp:139`), so the old agterm hooks stay in `~/.claude/settings.json` beside the new ones.
 - The Mac look: workspace bands, the selection pill, the title-bar session pill, the copper accent.
   `linux/docs/images/elis.png` is still an agterm-qt screenshot.
 - Phone link: the Linux relay (`src/ctl/mobile.cpp`) is the pre-mux line protocol.
@@ -60,24 +55,8 @@ Settled earlier and not reopened:
 The order follows the tightest dependency.
 Chat needs neither the mux nor the daemon change: the phone's `TypeWriter` types through `session.type`, and its
 prompt cards read the grid from `session.text` (`mobile/lib/screens/session.dart:226-236`).
-So Chat, the owner's top phone priority, comes first after the upgrade and the look.
-
-### Phase 0 — Upgrade from agterm-qt
-
-- `linux/scripts/migrate-from-agterm-qt.sh`, modelled on `macos/scripts/migrate-from-agterm2.sh` and covered by a
-  test on a copy of real state. It is safe to run twice, and it refuses while agterm-qt or Elis runs.
-  - Stop the old `agterm-session-host` daemons.
-    Their panes come back through the captured re-run command, so their output is lost and their commands are not.
-  - Move the state directory (windows, `mobile/` cert and token) and the config directory (`keymap.conf`,
-    `hooks.conf`, `restore-denylist.conf`), and convert `agterm-qtrc`.
-  - Remove the old binaries, the `agtermctl` link and the `.desktop` entry, then run `kbuildsycoca6`.
-- The installers drop agterm-named hooks, the shell rc block, the Codex block, the OpenCode plugin and the skill,
-  in the same pass that installs the Elis ones.
-  Add the old names to `tools/elis/skip.txt` as the Mac migration script does, so `rename.sh` leaves them alone.
-- The phone has to pair again, because both the app id and the link scheme changed.
-  The README says so.
-- Done when, on a copy of this machine's state, Elis opens the same windows and sessions with exactly one set of
-  hooks, and `which agtermctl` finds nothing.
+So Chat, the owner's top phone priority, comes first after the look.
+No phase migrates old installs or state: the owner is the only user (2026-11-21).
 
 ### Phase 1 — Brand and look, in Qt terms
 
