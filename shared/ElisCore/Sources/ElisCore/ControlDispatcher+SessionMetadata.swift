@@ -1,6 +1,6 @@
 /// TintRejection is the refusal text of a tint request the dispatcher will not pass on.
-struct TintRejection: Error {
-    let message: String
+public struct TintRejection: Error {
+    public let message: String
 }
 
 extension ControlDispatcher {
@@ -94,7 +94,7 @@ extension ControlDispatcher {
 
     /// tintUpdate parses a set or clear. The mode is required, a set needs a color, and a clear refuses a
     /// color or placement rather than ignoring it, so a contradictory raw request never half-applies.
-    static func tintUpdate(_ args: ControlArgs?, command: String) -> Result<ControlTintUpdate, TintRejection> {
+    public nonisolated static func tintUpdate(_ args: ControlArgs?, command: String) -> Result<ControlTintUpdate, TintRejection> {
         switch args?.mode ?? "" {
         case "set":
             guard let raw = args?.tint else { return .failure(TintRejection(message: "\(command) set requires a color")) }
@@ -113,7 +113,7 @@ extension ControlDispatcher {
 
     /// creationTint parses `session.new`/`workspace.new`'s optional tint before anything is created, so an
     /// invalid one leaves no session or workspace behind. A placement without a color is refused.
-    static func creationTint(_ args: ControlArgs?) -> Result<SidebarTint?, TintRejection> {
+    public nonisolated static func creationTint(_ args: ControlArgs?) -> Result<SidebarTint?, TintRejection> {
         guard let raw = args?.tint else {
             guard args?.tintOn == nil else { return .failure(TintRejection(message: "--tint-on requires --tint")) }
             return .success(nil)
@@ -123,14 +123,14 @@ extension ControlDispatcher {
         }
     }
 
-    private static func tintColor(_ raw: String) -> Result<TintValue, TintRejection> {
+    private nonisolated static func tintColor(_ raw: String) -> Result<TintValue, TintRejection> {
         guard let color = TintValue(rawValue: raw) else {
             return .failure(TintRejection(message: "invalid tint: \(raw) (\(TintValue.validValuesList))"))
         }
         return .success(color)
     }
 
-    private static func tintParts(_ raw: [String]?) -> Result<Set<TintPart>?, TintRejection> {
+    private nonisolated static func tintParts(_ raw: [String]?) -> Result<Set<TintPart>?, TintRejection> {
         guard let raw else { return .success(nil) }
         guard let parts = SidebarTint.parseParts(raw) else {
             let shown = raw.joined(separator: ",")

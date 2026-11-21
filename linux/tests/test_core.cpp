@@ -624,22 +624,33 @@ private Q_SLOTS:
     {
         Store s;
         FakeTerminals t;
-        QVERIFY(!call(s, t, "workspace.new", {}, {{"tint", "pink"}})["ok"].toBool());
+        QCOMPARE(call(s, t, "workspace.new", {}, {{"tint", "fuchsia"}})["error"].toString(),
+                 QStringLiteral("invalid tint: fuchsia (red|orange|yellow|green|blue|purple|gray|teal|pink|brown|indigo|mint|#rrggbb)"));
+        QCOMPARE(call(s, t, "workspace.new", {}, {{"tintOn", QJsonArray{"icon"}}})["error"].toString(), QStringLiteral("--tint-on requires --tint"));
         QVERIFY(s.workspaces.isEmpty()); // a refused tint creates nothing
         const QString ws = call(s, t, "workspace.new", {}, {{"name", "prod"}, {"tint", "Red"}})["result"]["id"].toString();
         QCOMPARE(s.workspace(ws)->tint, Tint{"red"});
         const QString a = s.addSession(ws, {}, {});
         QVERIFY(s.session(a)->tint.color.isEmpty()); // a workspace tint never reaches its sessions
         QVERIFY(call(s, t, "session.tint", a, {{"mode", "set"}, {"tint", "blue"}})["ok"].toBool());
-        QVERIFY(!call(s, t, "session.tint", a, {{"mode", "clear"}, {"tint", "red"}})["ok"].toBool());
+        QCOMPARE(call(s, t, "session.tint", a, {{"mode", "clear"}, {"tint", "red"}})["error"].toString(),
+                 QStringLiteral("session.tint clear takes no color or placement"));
+        QCOMPARE(call(s, t, "session.tint", a, {{"mode", "set"}, {"tint", "red"}, {"tintOn", QJsonArray{"strip"}}})["error"].toString(),
+                 QStringLiteral("invalid tint placement: strip (icon,name)"));
         const auto node = call(s, t, "tree")["result"]["tree"]["workspaces"][0];
         QCOMPARE(node["tint"].toString(), QStringLiteral("red"));
+        QCOMPARE(node["tintOn"].toArray(), (QJsonArray{"icon", "name"})); // as on the Mac: a tint colours both
         QCOMPARE(node["sessions"][0]["tint"].toString(), QStringLiteral("blue"));
-        QVERIFY(!node.toObject().contains("tintOn"));
+        // a placement is accepted and dropped, a hex normalized
+        QVERIFY(call(s, t, "session.tint", a, {{"mode", "set"}, {"tint", "FF8800"}, {"tintOn", QJsonArray{"name"}}})["ok"].toBool());
+        QCOMPARE(s.session(a)->tint, Tint{"#ff8800"});
+        QVERIFY(call(s, t, "session.tint", a, {{"mode", "set"}, {"tint", "Teal"}})["ok"].toBool());
+        QCOMPARE(s.session(a)->tint, Tint{"teal"});
+        s.setTint(a, "#ABCDEF");
         QCOMPARE(s.session(s.duplicateSession(a, {}))->tint, Tint{}); // a duplicate starts untinted
         Store r;
         r.fromJson(s.toJson());
-        QCOMPARE(r.session(a)->tint, Tint{"blue"});
+        QCOMPARE(r.session(a)->tint, Tint{"#abcdef"});
         QVERIFY(call(s, t, "session.tint", a, {{"mode", "clear"}})["ok"].toBool());
         QVERIFY(!call(s, t, "tree")["result"]["tree"]["workspaces"][0]["sessions"][0].toObject().contains("tint"));
     }

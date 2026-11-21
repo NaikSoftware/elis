@@ -3,6 +3,12 @@ import Testing
 @testable import ElisCore
 
 struct SidebarTintTests {
+    @Test func paletteResolvesEachAppearance() {
+        #expect(TintColor.red.rgb(dark: false) == 0xFF3B30)
+        #expect(TintColor.mint.rgb(dark: true) == 0x63E6E2)
+        #expect(Set(TintColor.allCases.map { $0.rgb(dark: false) }).count == TintColor.allCases.count)
+    }
+
     @Test func partsAreOrderedAndNeverEmpty() {
         #expect(SidebarTint(color: .red, parts: [.name, .icon]).parts == [.icon, .name])
         #expect(SidebarTint(color: .red, parts: []).parts == [.icon])

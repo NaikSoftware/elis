@@ -49,12 +49,12 @@ public func elisTranscriptRead(_ argsJSON: UnsafePointer<CChar>, _ claudeDirecto
     }
 }
 
-private func encoded<T: Encodable>(_ value: T) -> UnsafeMutablePointer<CChar>? {
+func encoded<T: Encodable>(_ value: T) -> UnsafeMutablePointer<CChar>? {
     let data = (try? JSONEncoder().encode(value)) ?? Data(#"{"ok":false,"error":"encoding failed"}"#.utf8)
     return strdup(String(decoding: data, as: UTF8.self))
 }
 
-private struct Refusal: Encodable {
+struct Refusal: Encodable {
     var ok = false
     let error: String
 }

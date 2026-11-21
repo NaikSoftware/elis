@@ -714,6 +714,40 @@ private Q_SLOTS:
         QCOMPARE(tree->topLevelItem(0)->data(0, SidebarRole::TintColor).toString(), QStringLiteral("red"));
     }
 
+    void tintMenuListsTheMacPaletteAndAHexAsCustom()
+    {
+        Store store;
+        MainWindow w(store, dir.filePath("tintmenu.json"));
+        w.restore({});
+        const QString a = store.addSession(store.addWorkspace("w"), {}, {});
+        store.select(a);
+        store.setTint(a, "#FF8800");
+        w.show();
+        auto *tree = w.findChild<Sidebar *>();
+        QTreeWidgetItem *row = tree->topLevelItem(0)->child(0);
+        QCOMPARE(row->data(0, SidebarRole::TintColor).toString(), QStringLiteral("#ff8800"));
+        QStringList titles;
+        QTimer::singleShot(0, this, [&] {
+            auto *menu = qobject_cast<QMenu *>(QApplication::activePopupWidget());
+            QAction *mint = nullptr;
+            for (QAction *m : menu->actions())
+                if (m->text() == QLatin1String("Tint"))
+                    for (QAction *c : m->menu()->actions()) {
+                        titles << c->text() + (c->isChecked() ? QStringLiteral("*") : QString());
+                        if (c->text() == QLatin1String("Mint"))
+                            mint = c;
+                    }
+            mint->trigger();
+            menu->close();
+        });
+        Q_EMIT tree->customContextMenuRequested(tree->visualItemRect(row).center());
+        QCOMPARE(titles, (QStringList{"None", "Red", "Orange", "Yellow", "Green", "Blue", "Purple", "Gray", "Teal", "Pink", "Brown",
+                                      "Indigo", "Mint", "Custom #ff8800*"}));
+        QCOMPARE(store.session(a)->tint, Tint{"mint"});
+        QCOMPARE(tintColor("mint"), QColor(QApplication::palette().color(QPalette::Window).lightness() < 128 ? 0x63E6E2 : 0x00C7BE));
+        QCOMPARE(tintColor("#ff8800"), QColor(0xFF8800));
+    }
+
     void sessionPaletteFiltersAndSelects()
     {
         Store store;

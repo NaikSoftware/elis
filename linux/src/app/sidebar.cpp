@@ -114,21 +114,13 @@ void drawLauncher(QPainter *p, const QRectF &r, const QString &id, const QColor 
 
 QColor tintColor(const QString &name)
 {
-    // the macOS system colours, light and dark appearance
-    static const QHash<QString, std::pair<QRgb, QRgb>> colors{
-        {QStringLiteral("red"), {0xFF3B30, 0xFF453A}},    {QStringLiteral("orange"), {0xFF9500, 0xFF9F0A}},
-        {QStringLiteral("yellow"), {0xFFCC00, 0xFFD60A}}, {QStringLiteral("green"), {0x34C759, 0x30D158}},
-        {QStringLiteral("blue"), {0x007AFF, 0x0A84FF}},   {QStringLiteral("purple"), {0xAF52DE, 0xBF5AF2}},
-        {QStringLiteral("gray"), {0x8E8E93, 0x98989D}},
-        // the rest of ElisCore's TintColor, which an info line's markup may name
-        {QStringLiteral("teal"), {0x30B0C7, 0x40C8E0}},   {QStringLiteral("pink"), {0xFF2D55, 0xFF375F}},
-        {QStringLiteral("brown"), {0xA2845E, 0xAC8E68}},  {QStringLiteral("indigo"), {0x5856D6, 0x5E5CE6}},
-        {QStringLiteral("mint"), {0x00C7BE, 0x63E6E2}}};
-    const auto it = colors.constFind(name);
-    if (it == colors.cend())
-        return {};
+    if (name.startsWith(QLatin1Char('#')))
+        return QColor(name); // a hex is fixed sRGB in both appearances, as on the Mac
     const bool dark = QApplication::palette().color(QPalette::Window).lightness() < 128;
-    return QColor(dark ? it->second : it->first);
+    for (const TintSwatch &c : Store::tintPalette())
+        if (c.name == name)
+            return QColor(dark ? c.dark : c.light);
+    return {};
 }
 
 QIcon launcherIcon(const QString &launcherId, const QColor &color)

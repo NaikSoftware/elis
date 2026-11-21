@@ -23,7 +23,7 @@ An elis-server host is not this app: SKILL.md's "Remote windows and elis-server"
 
 - `session get` (Linux only) prints the session node plus `pid`, `foreground`, `foregroundPid`, `liveCwd`
   (from `/proc`) and `profile` (the Konsole profile).
-- A tint is one of red, orange, yellow, green, blue, purple or gray, with no hex form and no `--on`.
+- `session|workspace tint` take no `--on`, and `new` takes no `--tint-on` (both deprecated and ignored on the Mac).
 - `session search` drives Konsole's search bar and prints the match count.
 - `theme list|set` lists and sets Konsole colour schemes.
 - `session overlay open` runs the program in a temporary Konsole terminal; `--background-color` tints only the

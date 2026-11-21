@@ -655,7 +655,10 @@ void MainWindow::createMenus()
             m_store.setFlag(s->id, !s->flagged);
     }));
     // palette-only, as in elis: "Tint Session: Red" … "Tint Session: None" for the active session
-    for (const QString &c : Store::tintColors + QStringList{QString()})
+    QStringList tints;
+    for (const TintSwatch &c : Store::tintPalette())
+        tints << c.name;
+    for (const QString &c : tints + QStringList{QString()})
         action(QStringLiteral("tint_session_") + (c.isEmpty() ? QStringLiteral("none") : c),
                tr("Tint Session: %1").arg(c.isEmpty() ? tr("None") : c.left(1).toUpper() + c.mid(1)), {}, {},
                [this, c] { m_store.setTint(m_store.selected, c); });
@@ -1695,18 +1698,23 @@ void MainWindow::fillTintMenu(QMenu *menu, const QStringList &ids)
         a->setCheckable(true);
         a->setChecked(colors == QSet<QString>{color});
     };
-    add(tr("None"), {}, {});
-    for (const QString &c : Store::tintColors) {
-        QPixmap swatch(24, 24);
-        swatch.fill(Qt::transparent);
-        QPainter p(&swatch);
+    auto swatch = [](const QString &color) {
+        QPixmap pm(24, 24);
+        pm.fill(Qt::transparent);
+        QPainter p(&pm);
         p.setRenderHint(QPainter::Antialiasing);
         p.setPen(Qt::NoPen);
-        p.setBrush(tintColor(c));
+        p.setBrush(tintColor(color));
         p.drawEllipse(QRectF(2, 2, 20, 20));
         p.end();
-        add(c.left(1).toUpper() + c.mid(1), QIcon(swatch), c);
-    }
+        return QIcon(pm);
+    };
+    add(tr("None"), {}, {});
+    for (const TintSwatch &c : Store::tintPalette())
+        add(c.name.left(1).toUpper() + c.name.mid(1), swatch(c.name), c.name);
+    // the Mac has no hex entry: a hex set over the control API shows as a checked Custom row
+    if (colors.size() == 1 && colors.begin()->startsWith(QLatin1Char('#')))
+        add(tr("Custom %1").arg(*colors.begin()), swatch(*colors.begin()), *colors.begin());
 }
 
 void MainWindow::sidebarMenu(const QPoint &pos)
