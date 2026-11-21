@@ -82,7 +82,7 @@ extension ControlDispatcher {
         }
         let stored = chat.append(.reply, text: text, from: peer.sessionID, now: Date().timeIntervalSince1970)
         chat.inputQueued()
-        actions.assistantInput(stored, streamText: "[reply from @\(handle(peer, in: directory))] \(text)")
+        actions.assistantInput(stored, streamText: "[reply from @\(handle(peer, in: directory)) \(peer.sessionID)] \(text)")
         return assistantSuccess(ControlAssistantResult(entries: [stored]))
     }
 

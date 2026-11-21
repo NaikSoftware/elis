@@ -9,8 +9,10 @@ public enum AssistantPrompt {
         Message a session with: elisctl assistant send --to @handle "text"
         The user's @tags say whom a message is about. Never type into a session any other way.
         `@ws:<handle>` targets the agent sessions of a workspace and `@all` every agent session; sessions with status `blocked` are skipped.
-        Replies arrive as messages starting `[reply from @<handle>] <text>`.
+        Replies arrive as messages starting `[reply from @<handle> <session id>] <text>`.
         A reply is not a request to message that session again unless the user asked.
+        The table below is a snapshot taken when this conversation started: when in doubt, address a session by its session id \
+        (`--to <session id>`), and re-read `elisctl tree --json` for current handles and statuses.
 
         handle | workspace | agent | status | session id
         \(rows.joined(separator: "\n"))

@@ -64,24 +64,27 @@ public enum AssistantTagError: Error, Equatable, Sendable {
 }
 
 public enum AssistantTargets {
+    /// resolve matches tags case-insensitively; a tag is a handle, `ws:<handle>`, `all`, or an exact session id.
     public static func resolve(_ tags: [String], in directory: AssistantDirectory) throws(AssistantTagError) -> AssistantDelivery {
         if tags.isEmpty { throw .noTags }
         var seen = Set<String>()
         var delivery = AssistantDelivery(targets: [], skipped: [])
         for raw in tags {
-            let tag = raw.hasPrefix("@") ? String(raw.dropFirst()) : raw
+            let typed = raw.hasPrefix("@") ? String(raw.dropFirst()) : raw
+            let tag = typed.lowercased()
             let chosen: [AssistantPeer]
             if tag == "all" {
                 chosen = directory.peers.filter { $0.agent != nil }
             } else if tag.hasPrefix("ws:") {
                 let handle = String(tag.dropFirst(3))
                 let inWorkspace = directory.peers.filter { directory.workspaceHandle(of: $0.workspaceID) == handle }
-                if inWorkspace.isEmpty { throw .unknown(tag) }
+                if inWorkspace.isEmpty { throw .unknown(typed) }
                 chosen = inWorkspace.filter { $0.agent != nil }
-            } else if let peer = directory.peers.first(where: { directory.handle(of: $0.sessionID) == tag }) {
+            } else if let peer = directory.peers.first(where: { directory.handle(of: $0.sessionID) == tag })
+                        ?? directory.peers.first(where: { $0.sessionID.lowercased() == tag }) {
                 chosen = [peer]
             } else {
-                throw .unknown(tag)
+                throw .unknown(typed)
             }
             for peer in chosen where seen.insert(peer.sessionID).inserted {
                 if peer.status == "blocked" {

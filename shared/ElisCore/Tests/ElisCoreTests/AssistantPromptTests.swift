@@ -9,7 +9,8 @@ import Testing
         ])
         let prompt = AssistantPrompt.system(directory)
         #expect(prompt.contains("elisctl assistant send"))
-        #expect(prompt.contains("[reply from @"))
+        #expect(prompt.contains("[reply from @<handle> <session id>] <text>"))
+        #expect(prompt.contains("snapshot") && prompt.contains("elisctl tree --json"))
         #expect(prompt.contains("@ws:"))
         #expect(prompt.contains("@all"))
         for peer in directory.peers {

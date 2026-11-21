@@ -156,7 +156,7 @@ struct ControlDispatcherAssistantTests {
         #expect(response?.ok == true)
         #expect(stored.kind == .reply && stored.from == "shell1-uuid" && stored.text == "tests pass")
         #expect(actions.streamInputs == [stored])
-        #expect(actions.streamTexts == ["[reply from @zsh] tests pass"])
+        #expect(actions.streamTexts == ["[reply from @zsh shell1-uuid] tests pass"])
         #expect(chat.entries(last: nil).count == 1)
     }
 

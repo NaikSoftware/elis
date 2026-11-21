@@ -23,6 +23,21 @@ import Testing
         #expect(try AssistantTargets.resolve(["@zsh"], in: directory).targets.map(\.sessionID) == ["shell1"])
     }
 
+    @Test func sessionIDIsATagWithOrWithoutTheAt() throws {
+        #expect(try AssistantTargets.resolve(["@shell1", "claude1"], in: directory).targets.map(\.sessionID) == ["shell1", "claude1"])
+    }
+
+    @Test func tagsAndSessionIDsMatchCaseInsensitively() throws {
+        let upper = AssistantDirectory([
+            AssistantPeer(sessionID: "3FA9C1D2-AAAA", window: "w1", workspaceID: "wsE", workspaceName: "Elis", name: "zsh"),
+        ])
+        for tag in ["@ZSH", "@3fa9c1d2-aaaa", "3FA9C1D2-AAAA", "@WS:Elis"] {
+            let targets = try AssistantTargets.resolve([tag], in: upper).targets.map(\.sessionID)
+            #expect(targets == (tag.hasPrefix("@WS") ? [] : ["3FA9C1D2-AAAA"]))
+        }
+        #expect(throws: AssistantTagError.unknown("Nobody")) { try AssistantTargets.resolve(["@Nobody"], in: upper) }
+    }
+
     @Test func explicitTagToABlockedAgentIsSkipped() throws {
         let d = try AssistantTargets.resolve(["codex-run"], in: directory)
         #expect(d.targets.isEmpty && d.skipped.map(\.handle) == ["codex-run"])
