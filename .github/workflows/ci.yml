@@ -27,6 +27,8 @@ jobs:
             swift:
               - "**/*.swift"
               - "macos/**"
+              # ElisCore, the agent-status package and the golden vectors the suites read
+              - "shared/**"
               # the agent skill and its plugin manifests: SkillInstallTests reads
               # them, so a skill- or manifest-only change must still run the suite
               - "plugins/**"
@@ -85,11 +87,11 @@ jobs:
         run: which fish && fish --version
       # built outside the watchdog so a slow runner's compile cannot spend its budget; the test step reuses it
       - name: swift build tests (with coverage)
-        working-directory: macos/ElisCore
+        working-directory: shared/ElisCore
         run: swift build --build-tests --enable-code-coverage
       - name: swift test (with coverage)
-        working-directory: macos/ElisCore
-        run: ../scripts/watchdog.sh swift test --enable-code-coverage
+        working-directory: shared/ElisCore
+        run: ../../macos/scripts/watchdog.sh swift test --enable-code-coverage
         env:
           ELIS_REQUIRE_FISH: "1"
           ELIS_REQUIRE_ZMX: "1"
@@ -112,7 +114,7 @@ jobs:
           path: test-hang
           if-no-files-found: ignore
       - name: export lcov
-        working-directory: macos/ElisCore
+        working-directory: shared/ElisCore
         # rewrite the absolute SF: paths llvm-cov emits to repo-relative so the
         # separate linux coverage job can resolve them against its own checkout
         run: |
@@ -130,7 +132,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: coverage-lcov
-          path: macos/ElisCore/coverage.lcov
+          path: shared/ElisCore/coverage.lcov
 
   coverage:
     name: Coverage upload
@@ -170,6 +172,9 @@ jobs:
       - name: Install swiftlint
         run: brew install swiftlint
       - name: swiftlint (strict)
+        run: swiftlint lint --strict
+      - name: swiftlint ElisCore (strict)
+        working-directory: shared/ElisCore
         run: swiftlint lint --strict
 
   linux:
@@ -227,13 +232,13 @@ jobs:
           useradd --create-home elis-test
           chown -R elis-test "$GITHUB_WORKSPACE"
       - name: swift build
-        working-directory: macos/ElisCore
+        working-directory: shared/ElisCore
         run: runuser --user elis-test -- env HOME=/home/elis-test swift build --build-tests
       - name: swift test
-        working-directory: macos/ElisCore
+        working-directory: shared/ElisCore
         # the server's real-daemon suite and the fish cases fail rather than skip without zmx or fish
         run: >-
-          ../scripts/watchdog.sh runuser --user elis-test --
+          ../../macos/scripts/watchdog.sh runuser --user elis-test --
           env HOME=/home/elis-test ELIS_REQUIRE_ZMX=1 ELIS_REQUIRE_FISH=1 swift test --skip-build
         env:
           WATCHDOG_SECONDS: "600"
@@ -260,7 +265,7 @@ jobs:
       image: swift:6.3.2-noble
     defaults:
       run:
-        working-directory: linux/shared
+        working-directory: linux/bridge
     steps:
       - uses: actions/checkout@v7
       - name: swift build

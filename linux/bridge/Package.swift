@@ -5,7 +5,7 @@ import PackageDescription
 let package = Package(
     name: "ElisBridge",
     products: [.library(name: "ElisBridge", type: .dynamic, targets: ["ElisBridge"])],
-    dependencies: [.package(path: "../../macos/ElisCore")],
+    dependencies: [.package(path: "../../shared/ElisCore")],
     targets: [.target(name: "ElisBridge", dependencies: [.product(name: "ElisCore", package: "ElisCore")])],
     swiftLanguageModes: [.v6]
 )

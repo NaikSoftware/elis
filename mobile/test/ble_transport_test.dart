@@ -46,7 +46,7 @@ Link fakeRaw(void Function(Uint8List body, void Function(Uint8List body) reply) 
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized(); // platform channel mocks and the model's lifecycle listener
-  final v =jsonDecode(File('test/fixtures/ble-vectors.json').readAsStringSync()) as Map<String, dynamic>;
+  final v =jsonDecode(File('../shared/fixtures/ble-vectors.json').readAsStringSync()) as Map<String, dynamic>;
   final hs = v['handshake'] as Map<String, dynamic>;
   BleInitiator vectorInitiator() => BleInitiator.deterministic(BleIds.psk(v['token']), hex(hs['initiatorEphemeralPrivate']));
 

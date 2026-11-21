@@ -559,7 +559,7 @@ struct AgentHooksInstallTests {
         #expect(AgentHooksInstall.OpenCode.mayOverwrite(fileExists: true, existingContents: "// elis-opencode-v2-status-plugin\n", version: version))
         let root = URL(fileURLWithPath: #filePath).deletingLastPathComponent().deletingLastPathComponent()
             .deletingLastPathComponent().deletingLastPathComponent()
-        let bundled = root.appendingPathComponent("Elis/Resources/agent-status/" + AgentHooksInstall.OpenCode.relativePath(version: version))
+        let bundled = root.appendingPathComponent("agent-status/" + AgentHooksInstall.OpenCode.relativePath(version: version))
         #expect(try String(contentsOf: bundled, encoding: .utf8).contains(AgentHooksInstall.OpenCode.marker(version: version)))
     }
 
@@ -612,7 +612,7 @@ struct AgentHooksInstallTests {
             .deletingLastPathComponent()
             .deletingLastPathComponent()
             .deletingLastPathComponent()
-        let fish = root.appendingPathComponent("Elis/Resources/agent-status/shell/integration.fish")
+        let fish = root.appendingPathComponent("agent-status/shell/integration.fish")
         let text = try String(contentsOf: fish, encoding: .utf8)
         let code = text.split(separator: "\n")
             .map { $0.trimmingCharacters(in: .whitespaces) }
@@ -640,8 +640,8 @@ struct AgentHooksInstallTests {
         // Keep local to the test — no production constant; shell scripts are the source of truth.
         let expected = "^(gemini|cursor-agent|aider|crush|goose)([[:space:]]|$)"
         let lifecycleAgents = ["opencode", "claude", "codex"]
-        for relative in ["Elis/Resources/agent-status/shell/integration.sh",
-                         "Elis/Resources/agent-status/shell/integration.fish"] {
+        for relative in ["agent-status/shell/integration.sh",
+                         "agent-status/shell/integration.fish"] {
             let text = try String(contentsOf: root.appendingPathComponent(relative), encoding: .utf8)
             #expect(text.contains(expected), "\(relative) must embed the default agent regex")
             // Match only the default assignment — keyed on the default's literal regex, because an

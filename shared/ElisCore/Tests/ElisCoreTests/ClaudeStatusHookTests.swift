@@ -10,7 +10,7 @@ struct ClaudeStatusHookTests {
             .deletingLastPathComponent()
             .deletingLastPathComponent()
             .deletingLastPathComponent()
-            .appendingPathComponent("Elis/Resources/agent-status/elis-claude-status.sh")
+            .appendingPathComponent("agent-status/elis-claude-status.sh")
             .path
     }
 
@@ -212,7 +212,7 @@ struct ClaudeStatusHookTests {
             .deletingLastPathComponent()
             .deletingLastPathComponent()
         let integration = try String(contentsOf: root
-            .appendingPathComponent("Elis/Resources/agent-status/shell/integration.sh"), encoding: .utf8)
+            .appendingPathComponent("agent-status/shell/integration.sh"), encoding: .utf8)
         guard let alternation = integration
             .components(separatedBy: "ELIS_AGENT_RE:=^(").dropFirst().first?
             .components(separatedBy: ")").first, !alternation.isEmpty else {

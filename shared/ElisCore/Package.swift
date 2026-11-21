@@ -17,7 +17,7 @@ let package = Package(
     targets: [
         .target(name: "ElisCore", dependencies: [.product(name: "TOMLDecoder", package: "TOMLDecoder")]),
         .target(name: "ElisResponsibility"),
-        .testTarget(name: "ElisCoreTests", dependencies: ["ElisCore"], exclude: ["Fixtures"]),
+        .testTarget(name: "ElisCoreTests", dependencies: ["ElisCore"]),
         .target(
             name: "elisctlKit",
             dependencies: [
@@ -32,8 +32,7 @@ let package = Package(
         .executableTarget(name: "session-wait-watchdog-probe", dependencies: ["elisctlKit"]),
         .testTarget(
             name: "elisctlKitTests",
-            dependencies: ["elisctlKit", "elisctl", "session-wait-watchdog-probe"],
-            exclude: ["Fixtures"]
+            dependencies: ["elisctlKit", "elisctl", "session-wait-watchdog-probe"]
         ),
         .target(name: "ElisServerKit", dependencies: ["ElisCore"]),
         .executableTarget(

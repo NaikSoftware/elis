@@ -3,7 +3,7 @@
 #include <QJsonObject>
 #include <QString>
 
-// session.transcript through ElisBridge (linux/shared): ElisCore's own argument check and reader, shared with the Mac.
+// session.transcript through ElisBridge (linux/bridge): ElisCore's own argument check and reader, shared with the Mac.
 // The spec docs/superpowers/specs/2026-11-20-phone-chat-mode-design.md owns the page shape.
 
 // ClaudeHome.directory: configDir (CLAUDE_CONFIG_DIR) when it is absolute, else <home>/.claude

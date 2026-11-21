@@ -56,7 +56,7 @@ extension ControlDispatcher {
         }
     }
 
-    /// The blocking read behind `session.transcript`, public for the Linux Qt app's bridge (`linux/shared`).
+    /// The blocking read behind `session.transcript`, public for the Linux Qt app's bridge (`linux/bridge`).
     nonisolated public static func transcriptResponse(_ source: ControlTranscriptSource, _ arguments: ClaudeTranscriptArguments) -> ControlResponse {
         let request = ClaudeTranscriptRequest(sessionID: source.claudeSessionID, after: arguments.after, before: arguments.before,
                                               held: arguments.held, maxBytes: arguments.maxBytes)

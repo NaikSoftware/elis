@@ -12,7 +12,7 @@ import Testing
     }
 
     static func fixture() throws -> Fixture {
-        let url = URL(fileURLWithPath: #filePath).deletingLastPathComponent().appendingPathComponent("Fixtures/phone-link-vectors.json")
+        let url = URL(fileURLWithPath: #filePath).deletingLastPathComponent().appendingPathComponent("../../../fixtures/phone-link-vectors.json")
         return try JSONDecoder().decode(Fixture.self, from: Data(contentsOf: url))
     }
 

@@ -72,7 +72,7 @@ ctl session status blocked --target "$id" --blink --pane main
 ctl tree | grep probe | grep -q blocked || fail "status not set"
 ctl session status bogus --target "$id" 2>/dev/null && fail "bogus status accepted"
 ELIS_SESSION_ID=$id ctl session info | grep -q '^pid' || fail "info by env target"
-ctl session type "$root/share/agent-status/elis-claude-status.sh completed --auto-reset"$'\n' --target "$id"
+ctl session type "$root/../shared/agent-status/elis-claude-status.sh completed --auto-reset"$'\n' --target "$id"
 sleep 1
 ctl tree | grep probe | grep -q completed || fail "Claude hook adapter from a pane"
 # a claude in a pane names its conversation in the tree (its sessions/<pid>.json), which session transcript reads

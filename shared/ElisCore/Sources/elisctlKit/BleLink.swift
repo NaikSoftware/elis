@@ -4,7 +4,7 @@ import CryptoKit
 import Foundation
 
 // The phone relay's Bluetooth link: Noise NNpsk0 over u16-length frames, raw DEFLATE inside.
-// Tests/elisctlKitTests/Fixtures/ble-vectors.json is the byte-exact contract the phone checks itself against.
+// shared/fixtures/ble-vectors.json is the byte-exact contract the phone checks itself against.
 
 public enum BleLinkError: Error, Equatable {
     case wrongKey

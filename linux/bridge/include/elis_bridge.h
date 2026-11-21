@@ -1,6 +1,6 @@
 #pragma once
 
-// ElisBridge (linux/shared): ElisCore's Swift code behind a C ABI. Every call takes and returns UTF-8 JSON, and the
+// ElisBridge (linux/bridge): ElisCore's Swift code behind a C ABI. Every call takes and returns UTF-8 JSON, and the
 // caller frees each result with elis_free.
 #ifdef __cplusplus
 extern "C" {

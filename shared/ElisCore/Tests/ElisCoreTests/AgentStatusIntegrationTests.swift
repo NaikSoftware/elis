@@ -1,7 +1,7 @@
 import Foundation
 import Testing
 
-// Runs the shipped bash/zsh shell integration `Elis/Resources/agent-status/shell/integration.sh` under
+// Runs the shipped bash/zsh shell integration `shared/agent-status/shell/integration.sh` under
 // bash, with a stub agent-status binary that records its argv.
 struct AgentStatusIntegrationTests {
     private static var integration: String {
@@ -10,7 +10,7 @@ struct AgentStatusIntegrationTests {
             .deletingLastPathComponent()
             .deletingLastPathComponent()
             .deletingLastPathComponent()
-            .appendingPathComponent("Elis/Resources/agent-status/shell/integration.sh")
+            .appendingPathComponent("agent-status/shell/integration.sh")
             .path
     }
 

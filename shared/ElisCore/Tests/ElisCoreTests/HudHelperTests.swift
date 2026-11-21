@@ -2,7 +2,7 @@ import Foundation
 import Testing
 @testable import ElisCore
 
-// Tests the shipped panel painter `Elis/Resources/hud/hud.sh` by running it against a temp body file and
+// Tests the shipped panel painter `macos/Elis/Resources/hud/hud.sh` by running it against a temp body file and
 // reading the escape stream it writes. It reaches the app target's resource on purpose: the script is the
 // rendering half of the ElisCore `HudLayout` model, and the three contracts (the header line, the
 // rendered body's empty-line separator, the file as the ONLY changing input) only hold if both halves are
@@ -13,8 +13,8 @@ struct HudHelperTests {
             .deletingLastPathComponent()     // ElisCoreTests
             .deletingLastPathComponent()     // Tests
             .deletingLastPathComponent()     // ElisCore
-            .deletingLastPathComponent()     // repo root
-            .appendingPathComponent("Elis/Resources/hud/hud.sh")
+            .deletingLastPathComponent()     // shared
+            .appendingPathComponent("../macos/Elis/Resources/hud/hud.sh")
             .path
     }
 
@@ -164,7 +164,7 @@ struct HudHelperTests {
     // the script is reached through the repository layout, not a bundle, so a move breaks it at run time
     @Test func theShippedHelperIsWhereTheseTestsLookForIt() throws {
         #expect(FileManager.default.isReadableFile(atPath: Self.helper),
-                "no helper at \(Self.helper): Elis/Resources/hud/hud.sh moved, or this file did")
+                "no helper at \(Self.helper): macos/Elis/Resources/hud/hud.sh moved, or this file did")
     }
 
     @Test func paintsTheMessage() async throws {

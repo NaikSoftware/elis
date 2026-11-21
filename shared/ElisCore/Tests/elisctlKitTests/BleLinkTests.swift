@@ -27,7 +27,7 @@ struct BleLinkTests {
     }
 
     private static func load() throws -> Vectors {
-        let url = URL(fileURLWithPath: #filePath).deletingLastPathComponent().appendingPathComponent("Fixtures/ble-vectors.json")
+        let url = URL(fileURLWithPath: #filePath).deletingLastPathComponent().appendingPathComponent("../../../fixtures/ble-vectors.json")
         let decoder = JSONDecoder()
         return try decoder.decode(Vectors.self, from: Data(contentsOf: url))
     }

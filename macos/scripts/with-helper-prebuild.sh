@@ -4,11 +4,12 @@ set -euo pipefail
 cd "$(dirname "$0")/.."
 mkdir -p build
 log=build/helper-prebuild.log
+core="$(cd ../shared/ElisCore && pwd)"
 
 # keep the two helper commands in their own process group
 set -m
-(swift build --package-path ElisCore -c release --product elisctl &&
-  swift build --package-path ElisCore -c release --product elis-session-host) >"$log" 2>&1 &
+(swift build --package-path "$core" -c release --product elisctl &&
+  swift build --package-path "$core" -c release --product elis-session-host) >"$log" 2>&1 &
 helpers=$!
 set +m
 prebuilt=
@@ -20,7 +21,7 @@ stop_helpers() {
     wait "$helpers" 2>/dev/null || true
   fi
   # swift build starts each compiler job in a group of its own and leaves it running when signalled
-  pkill -f -- "$PWD/ElisCore/.build/" 2>/dev/null || true
+  pkill -f -- "$core/.build/" 2>/dev/null || true
 }
 trap stop_helpers EXIT
 trap 'exit 143' TERM

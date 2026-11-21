@@ -15,7 +15,7 @@ struct CodexStatusHookTests {
             .deletingLastPathComponent()
             .deletingLastPathComponent()
             .deletingLastPathComponent()
-            .appendingPathComponent("Elis/Resources/agent-status/elis-codex-status.sh")
+            .appendingPathComponent("agent-status/elis-codex-status.sh")
             .path
     }
 

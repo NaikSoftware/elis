@@ -72,7 +72,7 @@ struct OpenCodeStatusHookTests {
             .deletingLastPathComponent()
             .deletingLastPathComponent()
             .deletingLastPathComponent()
-            .appendingPathComponent("Elis/Resources/agent-status/opencode/elis-status.js")
+            .appendingPathComponent("agent-status/opencode/elis-status.js")
             .path
     }
 

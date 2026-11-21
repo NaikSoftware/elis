@@ -3,7 +3,7 @@ import Testing
 @testable import ElisCore
 
 struct SkillInstallTests {
-    // the repo root, five levels up from macos/ElisCore/Tests/ElisCoreTests/<this file>
+    // the repo root, five levels up from shared/ElisCore/Tests/ElisCoreTests/<this file>
     private var repository: URL {
         URL(fileURLWithPath: #filePath)
             .deletingLastPathComponent()
@@ -71,7 +71,7 @@ struct SkillInstallTests {
 
         let skill = repository.appendingPathComponent("\(pluginRoot)/\(skillLeaf)")
         for file in ["SKILL.md", "reference.md", "examples.md", "cookbook.md", "troubleshooting.md",
-                     "scripts/show-image.sh"] {
+                     "linux.md", "scripts/show-image.sh"] {
             #expect(FileManager.default.fileExists(atPath: skill.appendingPathComponent(file).path),
                     "missing \(file) in \(pluginRoot)/\(skillLeaf)")
         }

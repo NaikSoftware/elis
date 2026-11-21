@@ -1,12 +1,12 @@
 # swiftlint config for elis — tailored, low-noise.
 # philosophy: disable only rules that fight deliberate project conventions; keep every
 # rule that surfaces a real, fixable finding on; hold source files under 1000 lines and
-# test files under 2000 (via nested configs in ElisUITests/, ElisTests/, and ElisCore/Tests/).
+# test files under 2000 (via nested configs in ElisUITests/, ElisTests/, and ../shared/ElisCore/Tests/).
+# ../shared/ElisCore lints separately under these rules through its own parent_config.
 
 excluded:
   - build                       # xcodebuild DerivedData
   - .build                      # SwiftPM build (root)
-  - ElisCore/.build           # SwiftPM build + vendored checkouts
   - .claude/worktrees           # concurrent git worktrees (gitignored) carry their own .build/checkouts
   - GhosttyKit.xcframework
   - Elis/Resources
@@ -31,7 +31,7 @@ line_length:
 
 # size limits: source files stay under 1000 lines, source type bodies under 800.
 # the biggest source file is Elis/Ghostty/GhosttySurfaceView.swift; test files get a
-# 2000-line budget via nested configs (ElisUITests/, ElisTests/, ElisCore/Tests/).
+# 2000-line budget via nested configs (ElisUITests/, ElisTests/, ../shared/ElisCore/Tests/).
 file_length:
   warning: 1000
   error: 1100

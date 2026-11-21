@@ -34,7 +34,7 @@ struct ServerHookInstallTests {
         for directory in [fixture.home, fixture.bin, fixture.resources.appendingPathComponent("skill")] {
             try fm.createDirectory(at: directory, withIntermediateDirectories: true)
         }
-        try DirectoryCopy.copy(repository.appendingPathComponent("Elis/Resources/agent-status"),
+        try DirectoryCopy.copy(repository.appendingPathComponent("agent-status"),
                                to: fixture.resources.appendingPathComponent("agent-status"))
         try DirectoryCopy.copy(repository.deletingLastPathComponent().appendingPathComponent("plugins/elis/skills/elis"),
                                to: fixture.resources.appendingPathComponent("skill/elis"))

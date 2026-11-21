@@ -11,7 +11,7 @@ struct CodexInstallationTests {
     private var scripts: URL {
         URL(fileURLWithPath: #filePath)
             .deletingLastPathComponent().deletingLastPathComponent().deletingLastPathComponent().deletingLastPathComponent()
-            .appendingPathComponent("Elis/Resources/agent-status")
+            .appendingPathComponent("agent-status")
     }
 
     private func installHooks(codexHome: URL?) throws -> AgentHooksFiles.CodexResult {

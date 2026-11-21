@@ -14,7 +14,7 @@ String toHex(List<int> b) => b.map((x) => x.toRadixString(16).padLeft(2, '0')).j
 LinkKind kind(String name) => LinkKind.values.byName(name);
 
 void main() {
-  final v = jsonDecode(File('test/fixtures/phone-link-vectors.json').readAsStringSync()) as Map<String, dynamic>;
+  final v = jsonDecode(File('../shared/fixtures/phone-link-vectors.json').readAsStringSync()) as Map<String, dynamic>;
   List<Map<String, dynamic>> list(String key) => (v[key] as List).cast<Map<String, dynamic>>();
 
   Matcher throwsLink(String code) => throwsA(isA<LinkError>().having((e) => e.code, 'code', code));

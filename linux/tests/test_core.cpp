@@ -368,7 +368,7 @@ private Q_SLOTS:
             env.insert("ELIS_SESSION_ID", "s1");
             env.insert("ELIS_STATUS_WRAPPER", stub);
             p.setProcessEnvironment(env);
-            p.start("bash", QStringList{QStringLiteral(ELIS_SOURCE_SHARE "/agent-status/elis-claude-status.sh")} + argv);
+            p.start("bash", QStringList{QStringLiteral(ELIS_SOURCE_AGENT_STATUS "/elis-claude-status.sh")} + argv);
             p.write(payload);
             p.closeWriteChannel();
             p.waitForFinished(5000);
@@ -1279,7 +1279,7 @@ private Q_SLOTS:
     void agentHooksInstallerMergesAndIsIdempotent()
     {
         QTemporaryDir tmp;
-        const QString home = tmp.path(), bundle = QStringLiteral(ELIS_SOURCE_SHARE "/agent-status"), pkg = Install::packageDir(home);
+        const QString home = tmp.path(), bundle = QStringLiteral(ELIS_SOURCE_AGENT_STATUS), pkg = Install::packageDir(home);
         const QString settings = home + "/.claude/settings.json";
         spit(home + "/real-settings.json",
              R"({"model":"opus","hooks":{"Stop":[{"hooks":[{"type":"command","command":"/old/share/elis/agent-status/elis-claude-status.sh completed --auto-reset"}]}],)"
@@ -1338,7 +1338,7 @@ private Q_SLOTS:
         spit(home + "/.claude/settings.json", "[1, 2]");
         spit(home + "/.codex/config.toml", "[hooks]\nfoo = 1\n");
         spit(home + "/.pi/agent/extensions/elis-status.ts", "// my own\n");
-        const Install::Report r = Install::agentHooks(home, QStringLiteral(ELIS_SOURCE_SHARE "/agent-status"), {}, {0, {}});
+        const Install::Report r = Install::agentHooks(home, QStringLiteral(ELIS_SOURCE_AGENT_STATUS), {}, {0, {}});
         QVERIFY(r.warning);
         QCOMPARE(slurp(home + "/.claude/settings.json"), QStringLiteral("[1, 2]"));
         QCOMPARE(slurp(home + "/.codex/config.toml"), QStringLiteral("[hooks]\nfoo = 1\n"));

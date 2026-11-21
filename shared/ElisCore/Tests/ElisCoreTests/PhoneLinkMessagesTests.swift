@@ -15,7 +15,7 @@ import Testing
     }
 
     static func vectors() throws -> [Vectors.Vector] {
-        let url = URL(fileURLWithPath: #filePath).deletingLastPathComponent().appendingPathComponent("Fixtures/phone-link-vectors.json")
+        let url = URL(fileURLWithPath: #filePath).deletingLastPathComponent().appendingPathComponent("../../../fixtures/phone-link-vectors.json")
         return try JSONDecoder().decode(Vectors.self, from: Data(contentsOf: url)).json
     }
 

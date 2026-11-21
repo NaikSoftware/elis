@@ -8,7 +8,7 @@ struct AgentHooksFilesTests {
     private var scripts: URL {
         URL(fileURLWithPath: #filePath)
             .deletingLastPathComponent().deletingLastPathComponent().deletingLastPathComponent().deletingLastPathComponent()
-            .appendingPathComponent("Elis/Resources/agent-status")
+            .appendingPathComponent("agent-status")
     }
 
     private func makeHome() throws -> URL {

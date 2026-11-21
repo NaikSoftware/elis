@@ -9,7 +9,7 @@ import ElisCore
 /// checkout that has not run setup has no daemon for the fixtures below to attach to.
 private let stagedZmxPath = URL(fileURLWithPath: #filePath)
     .deletingLastPathComponent().deletingLastPathComponent().deletingLastPathComponent()
-    .deletingLastPathComponent().appendingPathComponent("Elis/Resources/zmx/zmx").path
+    .deletingLastPathComponent().appendingPathComponent("../macos/Elis/Resources/zmx/zmx").path
 
 private let sessionHostFixtureReady = Responsibility.system.isAvailable
     && FileManager.default.isExecutableFile(atPath: stagedZmxPath)

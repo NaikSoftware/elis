@@ -2,7 +2,7 @@ import Foundation
 import Testing
 @testable import ElisCore
 
-// Tests the shipped hook wrapper `Elis/Resources/agent-status/elis-agent-status.sh` by running it
+// Tests the shipped hook wrapper `shared/agent-status/elis-agent-status.sh` by running it
 // with a stub `elisctl` that records its argv. It reaches the app target's resource on purpose: the
 // wrapper is the shell half of the ElisCore agent-status model.
 struct AgentStatusWrapperTests {
@@ -12,8 +12,8 @@ struct AgentStatusWrapperTests {
             .deletingLastPathComponent()     // ElisCoreTests
             .deletingLastPathComponent()     // Tests
             .deletingLastPathComponent()     // ElisCore
-            .deletingLastPathComponent()     // repo root
-            .appendingPathComponent("Elis/Resources/agent-status/elis-agent-status.sh")
+            .deletingLastPathComponent()     // shared
+            .appendingPathComponent("agent-status/elis-agent-status.sh")
             .path
     }
 

@@ -70,7 +70,7 @@ struct ServerInstallTests {
 
     @Test func theRemoteStringsAreTheOnesTheDeveloperScriptSends() throws {
         let script = URL(fileURLWithPath: #filePath).deletingLastPathComponent().deletingLastPathComponent()
-            .deletingLastPathComponent().deletingLastPathComponent().appendingPathComponent("scripts/install-server.sh")
+            .deletingLastPathComponent().deletingLastPathComponent().appendingPathComponent("../macos/scripts/install-server.sh")
         let text = try String(contentsOf: script, encoding: .utf8)
 
         #expect(text.contains("unpack='\(ServerInstall.unpackScript)'\n"))

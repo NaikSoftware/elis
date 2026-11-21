@@ -5,7 +5,7 @@ import ElisCore
 
 enum RealZmx {
     static let repository = URL(fileURLWithPath: #filePath).deletingLastPathComponent().deletingLastPathComponent()
-        .deletingLastPathComponent().deletingLastPathComponent().path
+        .deletingLastPathComponent().deletingLastPathComponent().deletingLastPathComponent().appendingPathComponent("macos").path
 
     static var binary: String? {
         let environment = ProcessInfo.processInfo.environment

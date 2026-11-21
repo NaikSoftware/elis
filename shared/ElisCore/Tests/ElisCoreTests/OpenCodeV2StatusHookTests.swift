@@ -10,7 +10,7 @@ struct OpenCodeV2StatusHookTests {
             .deletingLastPathComponent().deletingLastPathComponent()
         let process = Process()
         process.executableURL = URL(fileURLWithPath: node)
-        process.arguments = ["--test", root.appendingPathComponent("scripts/tests/opencode-v2-status.mjs").path]
+        process.arguments = ["--test", root.appendingPathComponent("../macos/scripts/tests/opencode-v2-status.mjs").path]
         process.environment = ["PATH": "/usr/bin:/bin"]
         let output = Pipe()
         process.standardOutput = output
