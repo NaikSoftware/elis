@@ -6,7 +6,7 @@ import Testing
     private static func fixtureLines(_ name: String) throws -> [String] {
         let url = URL(fileURLWithPath: #filePath)
             .deletingLastPathComponent()
-            .appendingPathComponent("Fixtures/assistant/\(name).jsonl")
+            .appendingPathComponent("../../../fixtures/assistant/\(name).jsonl")
         return try String(contentsOf: url, encoding: .utf8)
             .split(separator: "\n", omittingEmptySubsequences: true)
             .map(String.init)
