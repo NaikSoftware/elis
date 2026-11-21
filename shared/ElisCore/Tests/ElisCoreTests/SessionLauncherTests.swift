@@ -69,7 +69,7 @@ struct SessionLauncherTests {
         agent.agentSessionID = "c1"
         let remote = Session(initialCwd: "/b", remoteHost: "far", remoteSessionID: "R")
         let plain = Session(initialCwd: "/c")
-        #expect(Session.dropText([agent, remote, plain]) == "c1,R,\(plain.id.uuidString)")
+        #expect(Session.dropText([agent, remote, plain]) == "\(agent.id.uuidString),R,\(plain.id.uuidString)")
         #expect(Session.dropText([]) == nil)
     }
 
@@ -83,12 +83,6 @@ struct SessionLauncherTests {
     func aRemoteIdThatIsNotAPlainTokenDropsAsTheLocalId(remoteID: String) {
         let remote = Session(initialCwd: "/b", remoteHost: "far", remoteSessionID: remoteID)
         #expect(remote.dropID == remote.id.uuidString)
-    }
-
-    @MainActor @Test func anAgentIdThatIsNotAPlainTokenDropsAsTheNextFallback() {
-        let remote = Session(initialCwd: "/b", remoteHost: "far", remoteSessionID: "R")
-        remote.agentSessionID = "c1\nrm -rf ~"
-        #expect(remote.dropID == "R")
     }
 }
 

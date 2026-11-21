@@ -794,13 +794,7 @@ void Sidebar::startDrag(Qt::DropActions)
     else if (const QStringList ids = pressed.isEmpty() || selectedSessionIds().contains(pressed) ? selectedSessionIds() : QStringList{pressed};
              !ids.isEmpty()) {
         mime->setData(sessionsMime, ids.join(QLatin1Char(',')).toUtf8());
-        // dropped on a terminal, a session types its id: the claude conversation it runs (resume ends in the id), else elis's
-        QStringList text;
-        for (const QString &id : ids) {
-            const Session *s = m_store.session(id);
-            text << (s && !s->resume.isEmpty() ? s->resume.section(QLatin1Char(' '), -1) : id);
-        }
-        mime->setText(text.join(QLatin1Char(' ')));
+        mime->setText(ids.join(QLatin1Char(','))); // dropped on a terminal, types the Elis ids, as on the Mac
     } else
         return delete mime;
     auto *drag = new QDrag(this);

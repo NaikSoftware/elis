@@ -666,9 +666,9 @@ public final class Session: Identifiable {
         (splitFocused && splitSurface != nil ? splitTitle : oscTitle).map(Self.strippingTitleSpinner)
     }
 
-    /// The id a sidebar drag inserts: the agent's conversation, else the origin's session, else this row.
+    /// The id a sidebar drag inserts: the origin's Elis session, else this row's; never the agent's conversation.
     public var dropID: String {
-        agentSessionID.flatMap(SessionLauncher.plainSessionID) ?? remoteSessionID.flatMap(SessionLauncher.plainSessionID) ?? id.uuidString
+        remoteSessionID.flatMap(SessionLauncher.plainSessionID) ?? id.uuidString
     }
 
     /// The dragged sessions' ids joined by `,`; nil for none.

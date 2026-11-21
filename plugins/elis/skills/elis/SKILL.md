@@ -18,7 +18,7 @@ when_to_use: >
   split the pane, print a link that jumps to a session, close the overlay, hide the overlay for a moment, show a message over the session, show a question dialog, elisctl ask,
   ask the user to type a value or a message, let the user pick one or several items from a list,
   show an image inline, show this markdown file rendered, show this source file or log at a line, show me the diff of a file or the changes as links, tail or follow this log file, search the log or text page in the overlay, wrap long lines in the text or log page, show this HTML page or artifact, make an HTML page or explainer for this and show
-  it, make a page that switches sessions or returns a choice, preview the report you generated, show this URL or the running dev server, keep me logged in to a page shown in an overlay, search the scrollback, flag every session in a workspace, tint a session or workspace row a color, pin a project folder to a workspace, route a session to its project workspace, show status or activity under a session in the sidebar, show or hide the file panel (file tree), make a companion session, keep a related program next to a session, duplicate this session with its programs as a companion, make this session a companion, move a companion under another session, open a sub-session under this one, fold a session's companions, show a page as a companion of this session, open a page as its own session row in the sidebar, run my custom command, send a message to the other pane or another agent, read my messages, wait for a message, tell me when the selected session changes, wait until that worker session finishes, bring back the session I just closed, attach a session from another Mac, attach a remote session with all its companions, open a remote window for my Linux server, run sessions on a Linux host with elis-server, watch events or wait for a session on the elis-server host, install elis-server on a Linux host, detach or reattach a remote session, copy this to the clipboard, was Elis upgraded under the running app, upgrade Elis without losing sessions, what recipes are there, connect my phone, pair Elis Mobile, revoke a paired phone, fit a pane to the phone,
+  it, make a page that switches sessions or returns a choice, preview the report you generated, show this URL or the running dev server, keep me logged in to a page shown in an overlay, search the scrollback, flag every session in a workspace, tint a session or workspace row a color, pin a project folder to a workspace, route a session to its project workspace, show status or activity under a session in the sidebar, show or hide the file panel (file tree), make a companion session, keep a related program next to a session, duplicate this session with its programs as a companion, make this session a companion, move a companion under another session, open a sub-session under this one, fold a session's companions, show a page as a companion of this session, open a page as its own session row in the sidebar, run my custom command, send a message to the other pane or another agent, which agents are running, what is session ID doing, talk to the agent in that session, read my messages, wait for a message, tell me when the selected session changes, wait until that worker session finishes, bring back the session I just closed, attach a session from another Mac, attach a remote session with all its companions, open a remote window for my Linux server, run sessions on a Linux host with elis-server, watch events or wait for a session on the elis-server host, install elis-server on a Linux host, detach or reattach a remote session, copy this to the clipboard, was Elis upgraded under the running app, upgrade Elis without losing sessions, what recipes are there, connect my phone, pair Elis Mobile, revoke a paired phone, fit a pane to the phone,
   attach a script to a pane's terminal stream, lead or take over a pane from a script, does the phone lead a pane,
   show this on my phone, show a page where I am, show the dev server on my phone,
   the keymap editor will not open.
@@ -163,6 +163,19 @@ untargeted session command uses; `--target "$ELIS_SESSION_ID"` says the same and
 and a session led from the phone is never it. A `--socket` naming another Elis instance, or a `--window`,
 falls back to that instance's or window's `active`. Inside tmux or another long-lived program started from a
 different session the inherited id is that session's: pass `--target` there.
+
+## Other agents' sessions
+
+A bare id in your prompt (a UUID on the Mac, 12 hex digits on Linux) is usually an Elis session id: the user
+dropped a sidebar row on your terminal, and a multi-row drop gives several, comma-separated. Use it as `--target` (a unique prefix works too) to reach that
+session and whatever agent runs there:
+
+- Find it, or every agent, in `elisctl tree --json`: a session's `agent` (`claude`, `codex`, ...), `agentPane`,
+  `status`, `foreground`, `cwd`, `name` and `context` say who runs there and what it is doing.
+- Read it: `elisctl session text --lines 80 --target ID`.
+- Talk to it without typing into its prompt: `elisctl msg send --to ID:PANE TEXT`, PANE from `surfaces[].paneID`
+  or `left`/`right`; the receiver reads with `msg read`. `session type --target ID` types into its prompt instead.
+- Wait for it: `elisctl session wait --until completed --target ID`.
 
 ## Restore modes
 
@@ -401,8 +414,7 @@ omitted when expanded).
   place, keeping its program, id and companions (Convert to Companion).
   `session move --parent SID [--index N]` moves a companion under another top-level session, any workspace,
   still running (Move to in the row menu, or a sidebar drag).
-  Dropping a session or workspace row on a terminal types its session ids (Claude conversation id, else Elis id),
-  comma-separated.
+  Dropping a session or workspace row on a terminal types its Elis session ids, comma-separated.
   `session overlay open --html FILE --companion` (or `--url URL --companion`) adds a page companion: a row
   under the target session that shows the page and runs no shell. `--page` instead of `--companion` opens a
   top-level page session after the target's group, which holds companions of its own. Every local page row is
