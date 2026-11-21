@@ -35,6 +35,14 @@ scripts/smoke.sh                    # end-to-end over the control socket
 cmake --install build && kbuildsycoca6 --noincremental
 ```
 
+### Upgrading from agterm-qt
+
+Quit agterm-qt, install Elis as above, and run `scripts/migrate-from-agterm-qt.sh` once before Elis first starts.
+It ends the old session daemons (each pane comes back by re-running its command; its output is lost), moves your
+windows, phone pairing, keymap, hooks and restore denylist, and removes agterm-qt's binaries, `agtermctl` and menu entry.
+Elis's first start replaces agterm-qt's agent hooks, shell and Codex blocks, OpenCode plugin and skill with its own.
+Pair the phone again with the Elis phone app: the app id and the link scheme changed.
+
 ## What it does
 
 - Workspaces of sessions in a sidebar. A workspace remembers the folder its sessions last worked in, and new
