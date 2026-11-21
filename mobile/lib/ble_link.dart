@@ -1,5 +1,5 @@
 // The Bluetooth link to the Mac: Noise NNpsk0 over u16-length frames, raw DEFLATE inside.
-// test/fixtures/ble-vectors.json (copied verbatim from the Mac) is the byte-exact contract.
+// shared/fixtures/ble-vectors.json, which the Mac tests read too, is the byte-exact contract.
 import 'dart:convert';
 import 'dart:io';
 import 'dart:math';

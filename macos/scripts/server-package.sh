@@ -27,7 +27,7 @@ stage="$(mktemp -d "${TMPDIR:-/tmp}/elis-server-stage.XXXXXX")"
 trap 'rm -rf "$stage"' EXIT
 mkdir -p "$stage/resources/skill" "$stage/licenses/zmx"
 cp "$ROOT/build/server/$arch/elis-server" "$ROOT/build/server/$arch/elisctl" "$zmx" "$stage/"
-cp -R "$ROOT/build/linux/ghostty/shell-integration" "$ROOT/build/linux/terminfo" "$ROOT/Elis/Resources/agent-status" \
+cp -R "$ROOT/build/linux/ghostty/shell-integration" "$ROOT/build/linux/terminfo" "$ROOT/../shared/agent-status" \
   "$stage/resources/"
 cp -R "$ROOT/../plugins/elis/skills/elis" "$stage/resources/skill/"
 cp "$ROOT/build/linux/$arch/zmx/LICENSE" "$stage/licenses/zmx/"

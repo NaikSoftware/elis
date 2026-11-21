@@ -4,7 +4,7 @@ import { mkdtempSync, writeFileSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { setImmediate as nextTurn, setTimeout as delay } from "node:timers/promises";
-import plugin from "../../Elis/Resources/agent-status/opencode/elis-v2/tui.js";
+import plugin from "../../../shared/agent-status/opencode/elis-v2/tui.js";
 
 async function fixture(run, { selected = "root", sessions, active = {}, env = {}, configure } = {}) {
   const directory = mkdtempSync(join(tmpdir(), "elis-v2-"));

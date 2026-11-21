@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# static musl builds of elis-server and elisctl from this tree, for an install on any Linux of the architecture.
+# static musl builds of elis-server and elisctl from shared/ElisCore, for an install on any Linux of the architecture.
 # usage: scripts/server-build.sh aarch64|x86_64 [VERSION]   -> build/server/ARCH/{elis-server,elisctl}
 # VERSION (default 0.0.0) is stamped into ServerVersion.current in the build's own copy of the tree.
 set -euo pipefail
@@ -36,14 +36,13 @@ mkdir -p "$out"
 # the scratch path are per architecture, so two builds can run at once
 # the daemon rejects --cpus above its VM's count (Rancher Desktop defaults to fewer than 8)
 cpus="$(docker info --format '{{.NCPU}}')"; ((cpus > 8)) && cpus=8
-docker run --rm --cpus "$cpus" -v "$ROOT:/src:ro" -v "$bundle:/sdk.tar.gz:ro" -v elis-server-build:/build -v "$out:/out" \
+docker run --rm --cpus "$cpus" -v "$ROOT/../shared/ElisCore:/src:ro" -v "$bundle:/sdk.tar.gz:ro" -v elis-server-build:/build -v "$out:/out" \
   -e SDK="$SDK" -e ARCH="$arch" -e VERSION="$version" "$SWIFT_IMAGE" bash -euo pipefail -c '
     swift sdk list --swift-sdks-path /build/sdks | grep -qx "$SDK" \
       || swift sdk install --swift-sdks-path /build/sdks /sdk.tar.gz >/dev/null
     rm -rf "/build/tree-$ARCH"
-    mkdir -p "/build/tree-$ARCH"
-    tar -C /src --exclude=./build --exclude=./ElisCore/.build --exclude=./.git --exclude=./Elis/Resources -cf - . \
-      | tar -C "/build/tree-$ARCH" -xf -
+    mkdir -p "/build/tree-$ARCH/ElisCore"
+    tar -C /src --exclude=./.build -cf - . | tar -C "/build/tree-$ARCH/ElisCore" -xf -
     cd "/build/tree-$ARCH/ElisCore"
     stamp=Sources/ElisServerKit/ServerVersion.swift
     sed -i "s/public static let current = \"0.0.0\"/public static let current = \"$VERSION\"/" "$stamp"

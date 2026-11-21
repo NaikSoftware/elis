@@ -1,6 +1,6 @@
 ---
 worth: maybe
-where: ElisCore/Sources/ElisCore/AppStore+Messages.swift:livePanes
+where: shared/ElisCore/Sources/ElisCore/AppStore+Messages.swift:livePanes
 added: 2026-11-15
 ---
 # messages to a pane in a hidden split are refused as unknown pane

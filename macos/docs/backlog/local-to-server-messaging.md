@@ -1,6 +1,6 @@
 ---
 worth: yes
-where: ElisCore/Sources/ElisCore/AppStore+Messages.swift:messagePane
+where: shared/ElisCore/Sources/ElisCore/AppStore+Messages.swift:messagePane
 added: 2026-11-13
 ---
 # messaging between a local pane and an elis-server pane

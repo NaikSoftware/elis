@@ -23,8 +23,8 @@ QString bundled(const QString &name)
 {
     // next to the binary first, so a build-tree run never picks up an older installed copy from the data dirs
     QStringList candidates{QCoreApplication::applicationDirPath() + QStringLiteral("/../share/elis/") + name};
-#ifdef ELIS_SOURCE_SHARE
-    candidates << QStringLiteral(ELIS_SOURCE_SHARE "/") + name;
+#ifdef ELIS_SOURCE_AGENT_STATUS
+    candidates << (name == QLatin1String("agent-status") ? QStringLiteral(ELIS_SOURCE_AGENT_STATUS) : QStringLiteral(ELIS_SOURCE_SKILL));
 #endif
     candidates << QStandardPaths::locate(QStandardPaths::GenericDataLocation, QStringLiteral("elis/") + name, QStandardPaths::LocateDirectory);
     for (const QString &c : candidates)

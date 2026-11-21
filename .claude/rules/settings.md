@@ -6,9 +6,9 @@ paths:
   - "macos/Elis/SettingsCatalog.swift"
   - "macos/Elis/Views/WindowAppearance.swift"
   - "macos/Elis/NSColor+ElisHex.swift"
-  - "macos/ElisCore/Sources/ElisCore/AppSettings.swift"
-  - "macos/ElisCore/Sources/ElisCore/QuickTerminalMetrics.swift"
-  - "macos/ElisCore/Sources/ElisCore/SettingsStore.swift"
+  - "shared/ElisCore/Sources/ElisCore/AppSettings.swift"
+  - "shared/ElisCore/Sources/ElisCore/QuickTerminalMetrics.swift"
+  - "shared/ElisCore/Sources/ElisCore/SettingsStore.swift"
   - "macos/ElisUITests/SettingsUITests.swift"
 ---
 

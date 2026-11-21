@@ -37,6 +37,9 @@ scratch pane visibility, structural tree changes (an overlay, page or HUD openin
 and the app's launch; `hooks.conf` runs a shell line on any of them, so `on app.launched` is where a
 script recreates what a relaunch does not restore. They do not stream terminal output; use `session text` to read a buffer.
 
+On the Linux desktop app (Qt/KDE) read **linux.md** first: its environment, paths, keys and missing commands
+differ from what this file says.
+
 ## Am I inside Elis?
 
 Each shell Elis spawns gets these environment variables. Check `ELIS_ENABLED` before assuming
@@ -1185,6 +1188,7 @@ Full detail, templates, and the exact `gh` commands are in **troubleshooting.md*
   one as reference for a tricky workflow. The recipe list lives in the repo, not here; fetch it.
 - **troubleshooting.md** — diagnosing common problems (keymap editor, custom actions, logs) and the
   bug-issue / feature-Discussion reporting workflow (draft-first, scrub, never post without approval).
+- **linux.md** — what differs on the Linux desktop app: environment, paths, keys, unsupported commands.
 - **scripts/show-image.sh** — bundled helper that displays an image inline in an overlay (see above).
 
 Read those files when you need exact flags, return shapes, or worked examples.

@@ -39,7 +39,7 @@ void main() {
 }
 
 void expectDeclared(String file, List<String> keys) {
-  final source = File('../macos/ElisCore/Sources/$file').readAsStringSync();
+  final source = File('../shared/ElisCore/Sources/$file').readAsStringSync();
   for (final k in keys) {
     // a stored Codable property, a CodingKey case, a JSON literal key, or a pair-link query parameter
     final declared = RegExp('(let|var) $k\\b|case [\\w, ]*\\b$k\\b|"$k"|[?&")]$k=').hasMatch(source);

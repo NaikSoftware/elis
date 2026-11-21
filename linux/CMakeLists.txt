@@ -31,23 +31,23 @@ if(NOT TARGET KF6::Parts)
     INTERFACE_LINK_LIBRARIES "KF6::CoreAddons;KF6::XmlGui")
 endif()
 
-# ElisBridge: ElisCore (macos/ElisCore, shared with the Mac) behind a C ABI, built by SwiftPM with the Swift stdlib
+# ElisBridge: ElisCore (shared/ElisCore, shared with the Mac) behind a C ABI, built by SwiftPM with the Swift stdlib
 # linked in, so running Elis needs no Swift runtime
-find_program(SWIFT swift DOC "the Swift 6.3 toolchain's swift, which builds linux/shared")
+find_program(SWIFT swift DOC "the Swift 6.3 toolchain's swift, which builds linux/bridge")
 if(NOT SWIFT)
   message(FATAL_ERROR "swift not found: install Swift 6.3 (the swift.org tarball or swiftly) and put it on PATH, or pass -DSWIFT=/path/to/swift")
 endif()
 set(ELIS_BRIDGE ${CMAKE_BINARY_DIR}/swift/release/libElisBridge.so)
-file(GLOB_RECURSE ELIS_BRIDGE_SOURCES CONFIGURE_DEPENDS ${CMAKE_SOURCE_DIR}/shared/Sources/*.swift ${CMAKE_SOURCE_DIR}/../macos/ElisCore/Sources/*.swift)
+file(GLOB_RECURSE ELIS_BRIDGE_SOURCES CONFIGURE_DEPENDS ${CMAKE_SOURCE_DIR}/bridge/Sources/*.swift ${CMAKE_SOURCE_DIR}/../shared/ElisCore/Sources/*.swift)
 add_custom_command(OUTPUT ${ELIS_BRIDGE}
   # a soname, so what links it records the name and finds it on the rpath, not this build path
-  COMMAND ${SWIFT} build -c release -Xswiftc -static-stdlib -Xlinker -soname=libElisBridge.so -Xlinker --strip-all --package-path ${CMAKE_SOURCE_DIR}/shared --scratch-path ${CMAKE_BINARY_DIR}/swift
+  COMMAND ${SWIFT} build -c release -Xswiftc -static-stdlib -Xlinker -soname=libElisBridge.so -Xlinker --strip-all --package-path ${CMAKE_SOURCE_DIR}/bridge --scratch-path ${CMAKE_BINARY_DIR}/swift
   COMMAND ${CMAKE_COMMAND} -E touch ${ELIS_BRIDGE} # SwiftPM leaves an unchanged product's time alone
-  DEPENDS ${ELIS_BRIDGE_SOURCES} ${CMAKE_SOURCE_DIR}/shared/Package.swift ${CMAKE_SOURCE_DIR}/../macos/ElisCore/Package.swift
+  DEPENDS ${ELIS_BRIDGE_SOURCES} ${CMAKE_SOURCE_DIR}/bridge/Package.swift ${CMAKE_SOURCE_DIR}/../shared/ElisCore/Package.swift
   COMMENT "Building ElisBridge (Swift ElisCore)" USES_TERMINAL VERBATIM)
 add_custom_target(elis-bridge DEPENDS ${ELIS_BRIDGE})
 add_library(ElisBridge SHARED IMPORTED)
-set_target_properties(ElisBridge PROPERTIES IMPORTED_LOCATION ${ELIS_BRIDGE} INTERFACE_INCLUDE_DIRECTORIES ${CMAKE_SOURCE_DIR}/shared/include)
+set_target_properties(ElisBridge PROPERTIES IMPORTED_LOCATION ${ELIS_BRIDGE} INTERFACE_INCLUDE_DIRECTORIES ${CMAKE_SOURCE_DIR}/bridge/include)
 add_dependencies(ElisBridge elis-bridge)
 
 add_library(elis-core STATIC src/core/store.cpp src/core/control.cpp src/core/launcher.cpp src/core/keymap.cpp src/core/hooks.cpp src/core/restore.cpp src/core/commands.cpp src/core/installers.cpp src/core/livehost.cpp src/core/transcript.cpp)
@@ -73,10 +73,14 @@ add_dependencies(elis elis-session-host) # spawned from the app's own directory
 add_executable(elisctl src/ctl/elisctl.cpp src/ctl/mobile.cpp src/ctl/qrcodegen/qrcodegen.cpp)
 target_link_libraries(elisctl PRIVATE elis-core Qt6::Network)
 
+# shared with the Mac app; installed as share/elis/agent-status and share/elis/skill/elis
+set(ELIS_AGENT_STATUS ${CMAKE_SOURCE_DIR}/../shared/agent-status)
+set(ELIS_SKILL ${CMAKE_SOURCE_DIR}/../plugins/elis/skills/elis)
+
 enable_testing()
 add_executable(test_core tests/test_core.cpp)
 target_link_libraries(test_core PRIVATE elis-core Qt6::Sql Qt6::Test)
-target_compile_definitions(test_core PRIVATE ELIS_SOURCE_SHARE="${CMAKE_SOURCE_DIR}/share" ELIS_SESSION_HOST="$<TARGET_FILE:elis-session-host>")
+target_compile_definitions(test_core PRIVATE ELIS_SOURCE_AGENT_STATUS="${ELIS_AGENT_STATUS}" ELIS_SESSION_HOST="$<TARGET_FILE:elis-session-host>")
 add_dependencies(test_core elis-session-host)
 add_test(NAME core COMMAND test_core)
 add_test(NAME migrate COMMAND bash ${CMAKE_SOURCE_DIR}/scripts/tests/migrate-from-agterm-qt-test.sh $<TARGET_FILE:elis-session-host>)
@@ -100,6 +104,7 @@ set_target_properties(elis elisctl PROPERTIES INSTALL_RPATH "$ORIGIN/${ELIS_BRID
 configure_file(packaging/elis.desktop.in elis.desktop @ONLY) # Exec is absolute: the Plasma menu does not see ~/.local/bin
 install(FILES ${CMAKE_CURRENT_BINARY_DIR}/elis.desktop DESTINATION ${CMAKE_INSTALL_DATADIR}/applications)
 install(DIRECTORY resources/icons/ DESTINATION ${CMAKE_INSTALL_DATADIR}/icons)
-install(DIRECTORY share/agent-status share/skill USE_SOURCE_PERMISSIONS DESTINATION ${CMAKE_INSTALL_DATADIR}/elis)
+install(DIRECTORY ${ELIS_AGENT_STATUS} USE_SOURCE_PERMISSIONS DESTINATION ${CMAKE_INSTALL_DATADIR}/elis)
+install(DIRECTORY ${ELIS_SKILL} USE_SOURCE_PERMISSIONS DESTINATION ${CMAKE_INSTALL_DATADIR}/elis/skill)
 # a build-tree run finds the shipped agent-status package and skill in the source tree
-target_compile_definitions(elis-ui PRIVATE ELIS_SOURCE_SHARE="${CMAKE_SOURCE_DIR}/share")
+target_compile_definitions(elis-ui PRIVATE ELIS_SOURCE_AGENT_STATUS="${ELIS_AGENT_STATUS}" ELIS_SOURCE_SKILL="${ELIS_SKILL}")

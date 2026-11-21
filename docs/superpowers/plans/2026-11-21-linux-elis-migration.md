@@ -51,7 +51,7 @@ where Qt/KDE has its own idiom.
 
 Settled earlier and not reopened:
 - The relay is a C++ port that reuses the golden vectors (`phone-link-vectors.json`, `ble-vectors.json`).
-- Chat is not ported: Linux links `ElisCore` through `linux/shared` (ElisBridge), so one implementation serves both
+- Chat is not ported: Linux links `ElisCore` through `linux/bridge` (ElisBridge), so one implementation serves both
   (owner, 2026-11-21).
 - Scratch and the quick terminal stay dropped.
 
@@ -106,7 +106,7 @@ decoration and menu bar.
 
 ### Phase 2 — Chat on the phone (`session.transcript`)
 
-- Linux links `ElisCore` through `linux/shared` (ElisBridge, a C ABI over `ClaudeTranscript` and the argument check);
+- Linux links `ElisCore` through `linux/bridge` (ElisBridge, a C ABI over `ClaudeTranscript` and the argument check);
   `src/core/transcript.{h,cpp}` calls it, and the read runs on a worker. Plan:
   [2026-11-21-linux-phase-2-transcript.md](2026-11-21-linux-phase-2-transcript.md).
 - Tree: `agentSessionId` (the Claude conversation id the app already tracks for drop and reopen) and
@@ -164,7 +164,7 @@ decoration and menu bar.
 
 ### Phase 7 — Docs (lands with each phase)
 
-- Update `linux/README.md`, `linux/docs/PARITY.md`, `share/skill/elis`, `mobile/README.md` and the specs' "Linux
+- Update `linux/README.md`, `linux/docs/PARITY.md`, `plugins/elis/skills/elis/linux.md`, `mobile/README.md` and the specs' "Linux
   keeps the text view" lines.
 - Add Linux notes where `site/docs.html` and `site/commands.html` describe a feature differently on Linux.
 

@@ -121,7 +121,7 @@ Legend: [x] done · [ ] todo · (fork) = fork-only feature, not in upstream docs
   reattach. Not ported: `zmx.*`, `session restart`, a reset dialog; the replay is raw output, not a rendered screen
 - [x] `session transcript` (the phone's Chat), and the tree's `agentPane` and `agentSessionId` (sampled from both
   panes, the focused one first): the argument check and the reader are master's own `ElisCore`, linked through
-  `linux/shared` (ElisBridge); the read runs on a worker thread
+  `linux/bridge` (ElisBridge); the read runs on a worker thread
 - [x] Control API breadth: master's catalog with its argument names, errors and read-backs — `events` (an app-wide ring
   with run/after cursors; the CLI polls it), `workspace go|collapse|expand|flag`, `session context|reveal|collapse|expand|focus|resize|
   copy|paste|select-all|search`, `session text` (visible screen; `--all` and `--lines` page the scrollback through the view's
@@ -135,14 +135,14 @@ Legend: [x] done · [ ] todo · (fork) = fork-only feature, not in upstream docs
   Simplified: a terminal-style ask is a dialog over the window rather than drawn in the pane; pick rows show no status glyph;
   `msg send --all` reaches the addressed window only; search counts case-insensitive matches in the pane's history;
   `pane.focused` events are not emitted
-- [x] Agent skill (`share/skill/elis`, adapted to Elis) and Help ▸ Developer Documentation…. Unlike master, the
+- [x] Agent skill (the Mac's `plugins/elis/skills/elis`, with `linux.md` for what differs) and Help ▸ Developer Documentation…. Unlike master, the
   installers are not in the Help menu: an installed build runs all three in the background on its first launch and after
   each update (fingerprint of the shipped files and the binary path in `extras-installed`). Command line tool
   (links `~/.local/bin/elisctl`; an elisctl already there is left alone), agent status hooks (master's package and
   merge rules: Claude Code hooks + the swarm-companion mod, shell rc integration, Codex `config.toml` block, Pi extension,
   OpenCode v1/v2 plugin with the login-shell version probe; symlinks and modes kept, `.bak` backups, idempotent; an older
   Elis hook install is migrated), agent skill (Claude Code and Codex, ownership marker); no first-launch welcome.
-  `elis --install agent-hooks|skill|cli|all [--home DIR]` runs them by hand. The Codex adapter reads its hook JSON with python3 (master used macOS plutil). Not detected: an
+  `elis --install agent-hooks|skill|cli|all [--home DIR]` runs them by hand. The adapters (`shared/agent-status`, the Mac's) read hook JSON with plutil, else jq, else python3. Not detected: an
   unparseable `config.toml` (no TOML parser; a top-level `hooks` key is found line by line)
 - [x] Phone relay (Elis only): Settings ▸ Connect a Phone… or `elisctl mobile serve|reset` for the Elis Mobile app
   (`mobile/`): the control protocol over TLS, pinned by the certificate's SHA-256 and gated by a 256-bit token, paired by

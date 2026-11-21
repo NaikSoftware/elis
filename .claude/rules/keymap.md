@@ -1,11 +1,11 @@
 ---
 paths:
-  - "macos/ElisCore/Sources/ElisCore/Keybind.swift"
-  - "macos/ElisCore/Sources/ElisCore/KeybindMatcher.swift"
-  - "macos/ElisCore/Sources/ElisCore/Keymap.swift"
-  - "macos/ElisCore/Sources/ElisCore/BuiltinAction.swift"
-  - "macos/ElisCore/Sources/ElisCore/CustomCommand.swift"
-  - "macos/ElisCore/Sources/ElisCore/ConfigPaths.swift"
+  - "shared/ElisCore/Sources/ElisCore/Keybind.swift"
+  - "shared/ElisCore/Sources/ElisCore/KeybindMatcher.swift"
+  - "shared/ElisCore/Sources/ElisCore/Keymap.swift"
+  - "shared/ElisCore/Sources/ElisCore/BuiltinAction.swift"
+  - "shared/ElisCore/Sources/ElisCore/CustomCommand.swift"
+  - "shared/ElisCore/Sources/ElisCore/ConfigPaths.swift"
   - "macos/Elis/Commands/CustomCommandRunner.swift"
   - "macos/ElisUITests/KeymapUITests.swift"
 ---

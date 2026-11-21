@@ -1,0 +1,4 @@
+# the package lints under the app's rules (`make lint` runs both); Tests/ nests the test budget
+parent_config: ../../macos/.swiftlint.yml
+excluded:
+  - .build                      # SwiftPM build + vendored checkouts

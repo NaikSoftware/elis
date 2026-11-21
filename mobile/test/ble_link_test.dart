@@ -14,7 +14,7 @@ BleTransportKeys mirror(BleTransportKeys k) =>
     BleTransportKeys(send: NoiseCipher(k.receive.key), receive: NoiseCipher(k.send.key), handshakeHash: k.handshakeHash);
 
 void main() {
-  final v = jsonDecode(File('test/fixtures/ble-vectors.json').readAsStringSync()) as Map<String, dynamic>;
+  final v = jsonDecode(File('../shared/fixtures/ble-vectors.json').readAsStringSync()) as Map<String, dynamic>;
   final hs = v['handshake'] as Map<String, dynamic>;
 
   BleTransportKeys vectorPhone() {

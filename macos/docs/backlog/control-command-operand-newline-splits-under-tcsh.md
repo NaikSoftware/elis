@@ -1,6 +1,6 @@
 ---
 worth: maybe
-where: ElisCore/Sources/ElisCore/RemoteSession.swift:controlCommand
+where: shared/ElisCore/Sources/ElisCore/RemoteSession.swift:controlCommand
 added: 2026-11-11
 ---
 # remote control command splits a newline operand into commands under tcsh

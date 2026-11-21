@@ -12,7 +12,7 @@ paths:
 - Every job carries its own `timeout-minutes`, with generous headroom over observed runtime. A job without
   one inherits GitHub's 360-minute default, so a wedge can hold its check pending for six hours. Give a new
   job a cap in the commit that adds it.
-- The `dorny/paths-filter` Swift set includes `**/*.swift`, `macos/**`, `plugins/**`,
+- The `dorny/paths-filter` Swift set includes `**/*.swift`, `macos/**`, `shared/**`, `plugins/**`,
   `.claude-plugin/**`, `.agents/**`, and `ci.yml`.
   The macOS-tree jobs default to `working-directory: macos`; cache, `hashFiles` and artifact paths stay
   workspace-relative and carry the `macos/` prefix.
@@ -21,7 +21,7 @@ paths:
   must run the five Swift jobs.
 - `test`, `build` and `hosted` run in parallel and are each mostly compilation; merging any two puts
   both compiles on the critical path.
-- `test` runs `swift test --enable-code-coverage` in `ElisCore`, exports lcov, and uploads it.
+- `test` runs `swift test --enable-code-coverage` in `shared/ElisCore`, exports lcov, and uploads it.
   It installs fish with Homebrew and sets `ELIS_REQUIRE_FISH=1`, so a fish test fails rather than skips
   when fish is missing.
   It restores the zmx cache and runs `scripts/setup.sh --zmx-only`, which builds zmx on a miss without
@@ -40,7 +40,7 @@ paths:
   slow runner does not count against the 600s; `swift test` with the same flag reuses that build. The
   35-minute job cap leaves room for a slow build plus the watchdog's 600s and 120s.
   `coverage` downloads it for best-effort Coveralls.
-  `lint` installs SwiftLint and runs `swiftlint lint --strict`; every warning fails.
+  `lint` installs SwiftLint and runs `swiftlint lint --strict` in `macos` and in `shared/ElisCore`; every warning fails.
 - `linux` builds and tests `ElisCore` in the `swift:6.3.2-noble` container on ubuntu-24.04, the
   toolchain elis-server ships on, under the Swift filter. It installs jq, which the Codex status hook reads
   JSON with where `/usr/bin/plutil` is absent, and runs as an unprivileged user because root passes the
@@ -56,7 +56,7 @@ paths:
   to another user's process. The 45-minute cap covers the build plus both watchdog budgets.
   Darwin-only behavior keeps its tests behind
   `#if canImport(Darwin)` beside the code; everything else runs on both platforms.
-- `bridge` builds `linux/shared` (ElisBridge, the Qt app's link to `ElisCore`) in the same container under the
+- `bridge` builds `linux/bridge` (ElisBridge, the Qt app's link to `ElisCore`) in the same container under the
   Swift filter, with the flags `linux/CMakeLists.txt` passes, and fails when the library needs a Swift runtime.
   It does not build the Qt app: noble has no KF6.
 - `build` and `hosted` each restore separate revision-keyed caches for libghostty and zmx, including each
