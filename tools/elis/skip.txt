@@ -44,3 +44,14 @@ mobile/test/wire_names_test.dart	line	isNot\(contains\('agterm'\)\)
 # The install docs name the Agterm2 migration script and the old product.
 README.md	keep	migrate-from-agterm2\.sh|Agterm2
 site/docs.html	keep	migrate-from-agterm2\.sh|Agterm2
+
+# The Linux upgrade from agterm-qt: the script and its test keep every old name they migrate from, the installers
+# keep the names they remove, and the README names the script.
+linux/scripts/migrate-from-agterm-qt.sh	path
+linux/scripts/migrate-from-agterm-qt.sh	keep	(?i)agterm\w*
+linux/scripts/tests/migrate-from-agterm-qt-test.sh	path
+linux/scripts/tests/migrate-from-agterm-qt-test.sh	keep	(?i)agterm\w*
+linux/CMakeLists.txt	keep	migrate-from-agterm-qt-test\.sh
+linux/src/core/installers.cpp	keep	(?i)agterm\w*
+linux/tests/test_core.cpp	keep	(?i)agterm\w*
+linux/README.md	keep	(?i)agterm\w*
