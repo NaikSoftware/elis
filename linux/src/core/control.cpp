@@ -46,6 +46,8 @@ static QJsonObject withContext(QJsonObject node, const Session &s, const Store &
         node.insert("agentPane", s.agentPane);
     if (!s.context.isEmpty())
         node.insert("context", s.context);
+    if (!s.ci.isEmpty())
+        node.insert("ci", s.ci);
     if (store.collapsed.contains(s.id) && !const_cast<Store &>(store).companionsOf(s.id).isEmpty())
         node.insert("collapsed", true); // a parent with its companions folded
     return node;

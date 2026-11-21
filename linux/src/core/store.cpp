@@ -740,6 +740,15 @@ void Store::setAgentSessionId(const QString &id, const QString &claudeId)
     }
 }
 
+void Store::setCi(const QString &id, const QJsonObject &ci, const QList<InfoSpan> &spans)
+{
+    if (auto *s = session(id); s && (s->ci != ci || s->infoSpans != spans)) {
+        s->ci = ci;
+        s->infoSpans = spans;
+        Q_EMIT changed(); // tree.changed too: `ci` is read back there
+    }
+}
+
 void Store::setBusy(const QString &id, bool busy)
 {
     if (auto *s = session(id); s && s->busy != busy) {

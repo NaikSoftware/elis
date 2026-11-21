@@ -57,7 +57,8 @@ struct Session {
     QString parentId;            // a companion is pinned to its parent, listed right after it
     Tint tint;
     QString context; // a short line of what the session is about, set from outside (session.context)
-    QList<InfoSpan> infoSpans; // the sidebar's second line under the name; runtime only, empty = none
+    QList<InfoSpan> infoSpans; // the sidebar's second line under the name: the CI line; runtime only, empty = none
+    QJsonObject ci;            // the GitHub CI that line shows, the tree's `ci`; runtime only, empty = none
     // re-run restore: argv captured at quit (persisted), its one-shot replay this launch (not persisted), and a pinned
     // command that beats both (persisted; "" = pinned to nothing)
     QStringList foreground, splitForeground, replay, splitReplay;
@@ -220,6 +221,7 @@ public:
     void setAgent(const QString &id, const QString &agent, const QString &pane = QStringLiteral("left"));
     void setAgentSessionId(const QString &id, const QString &claudeId);
     void setBusy(const QString &id, bool busy);
+    void setCi(const QString &id, const QJsonObject &ci, const QList<InfoSpan> &spans);
     void setSettings(const Settings &s);
     void keyPressed(const QString &id, Key key);
     // ⌘D / ⌘⇧D: create, transpose (other axis), or hide (same axis)

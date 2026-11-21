@@ -20,6 +20,9 @@ char *elis_tint_parse(const char *command, const char *argsJSON);
 // {"colors":[{"name","light","dark"}],"shownParts":[…]}: the palette in menu order as #rrggbb per appearance, and the
 // tree's tintOn.
 char *elis_tint_palette(void);
+// Each cwd's GitHub CI from gh, in order: [{"ci"?:{branch,sha,pr?,runs},"spans":[{text,bold,italic,code,dim,color?}]}],
+// "ci" absent for none. Input a JSON array of cwds. Blocks on gh, so call it off the GUI thread, one call at a time.
+char *elis_ci_statuses(const char *cwdsJSON);
 void elis_free(char *result);
 
 // Live panes on zmx (bridge Sources/ElisBridge/Zmx.swift documents each shape).

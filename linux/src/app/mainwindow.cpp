@@ -1,5 +1,6 @@
 #include "mainwindow.h"
 
+#include "cipanel.h"
 #include "filepanel.h"
 #include "help.h"
 #include "hooks.h"
@@ -299,6 +300,7 @@ MainWindow::MainWindow(Store &store, const QString &statePath)
     : m_store(store), m_statePath(statePath)
 {
     m_tree = new Sidebar(store);
+    new CiLine(store, m_tree, this);
 
     // footer: new workspace and new session on the left, the workspace filter and the flagged view on the right, as elis's sidebar bar
     auto footerButton = [](const QString &glyph, const QString &tip) {

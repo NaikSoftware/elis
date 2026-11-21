@@ -820,8 +820,13 @@ void Sidebar::mouseMoveEvent(QMouseEvent *event)
 void Sidebar::mouseReleaseEvent(QMouseEvent *event)
 {
     if (const QString id = std::exchange(m_pressedId, {}); !id.isEmpty()) {
-        if (QTreeWidgetItem *item = itemAt(event->position().toPoint()); item && item->data(0, Id).toString() == id)
-            setCurrentItem(item); // a click without a drag shows the session, on release
+        const bool ci = std::exchange(m_pressedCi, false);
+        if (QTreeWidgetItem *item = itemAt(event->position().toPoint()); item && item->data(0, Id).toString() == id) {
+            if (ci)
+                Q_EMIT ciPanelRequested(id, event->globalPosition().toPoint());
+            else
+                setCurrentItem(item); // a click without a drag shows the session, on release
+        }
         return;
     }
     QTreeWidget::mouseReleaseEvent(event);
@@ -870,10 +875,14 @@ void Sidebar::mousePressEvent(QMouseEvent *event)
         item->setExpanded(!m_store.collapsed.contains(id));
         item->setData(0, Expanded, item->isExpanded());
     }
+    // a press on the CI line opens its panel on release and selects nothing, as on the Mac; a drag still moves the row
+    const QModelIndex index = indexFromItem(item);
+    const bool ci = shownInfo(index) && pos.y() > titleRect(index, visualItemRect(item)).bottom();
     // a plain press on another session selects on release, so a drag of it doesn't switch the terminal away first
-    if (item->data(0, Kind).toInt() == SessionRow && item != currentItem() && event->button() == Qt::LeftButton
+    if (item->data(0, Kind).toInt() == SessionRow && (item != currentItem() || ci) && event->button() == Qt::LeftButton
         && !(event->modifiers() & (Qt::ControlModifier | Qt::ShiftModifier))) {
         m_pressedId = item->data(0, Id).toString();
+        m_pressedCi = ci;
         m_pressPos = pos;
         return;
     }

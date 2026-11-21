@@ -82,6 +82,7 @@ Q_SIGNALS:
     void renameRequested(const QString &kind, const QString &id, const QString &name);
     void editFlaggedRequested(); // the empty flagged view's link
     void closeRequested(const QString &sessionId);
+    void ciPanelRequested(const QString &sessionId, const QPoint &globalPos); // a click on the CI line
 
 protected:
     void drawRow(QPainter *painter, const QStyleOptionViewItem &option, const QModelIndex &index) const override;
@@ -115,6 +116,7 @@ private:
     bool m_rebuilding = false;
     QModelIndex m_hovered;
     QString m_pressedId; // a session row pressed but not yet selected: shown on release, or dragged
+    bool m_pressedCi = false; // that press was on its CI line: a release opens the CI panel and selects nothing
     QPoint m_pressPos;
     QTimer m_blinkTimer;
     int m_blinkAlpha = 255;

@@ -32,9 +32,9 @@ struct CIPollerTests {
     private func poller(_ sessions: [Session], include: @escaping @MainActor (Session) -> Bool = { _ in true },
                         into box: Box) -> CIPoller {
         let clock = clock
-        return CIPoller(sessions: { sessions }, include: include, apply: { box.applied[$0.id] = .some($1) },
-                        runner: fake.runner, now: { clock.now },
-                        locate: { cwd in cwd.hasPrefix("/repo") ? CIRepo(root: "/repo", branch: "main") : nil })
+        let tracker = CITracker(runner: fake.runner, now: { clock.now },
+                                locate: { cwd in cwd.hasPrefix("/repo") ? CIRepo(root: "/repo", branch: "main") : nil })
+        return CIPoller(sessions: { sessions }, include: include, apply: { box.applied[$0.id] = .some($1) }, tracker: tracker)
     }
 
     @MainActor final class Box { var applied: [UUID: CIStatus?] = [:] }
