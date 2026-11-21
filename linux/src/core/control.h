@@ -4,6 +4,8 @@
 #include <QSize>
 #include <QString>
 
+#include <functional>
+
 class Store;
 
 // what one pane of a Duplicate as Companion starts: a shell in cwd, or another copy of its program
@@ -141,3 +143,6 @@ QString askArgsError(QJsonObject *args);       // "" when valid; adds the defaul
 
 // One request object ({cmd, target, args}) in, one response ({ok, result | error}) out.
 QJsonObject dispatch(Store &store, Terminals &terminals, const QJsonObject &request);
+// A command whose reply blocks on files (session.transcript) answers {"deferred": true} and leaves its work here: the
+// caller runs it on a worker thread and sends what it returns. Empty after any other command.
+std::function<QJsonObject()> takeDeferred();

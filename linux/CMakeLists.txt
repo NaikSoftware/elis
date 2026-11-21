@@ -31,9 +31,28 @@ if(NOT TARGET KF6::Parts)
     INTERFACE_LINK_LIBRARIES "KF6::CoreAddons;KF6::XmlGui")
 endif()
 
-add_library(elis-core STATIC src/core/store.cpp src/core/control.cpp src/core/launcher.cpp src/core/keymap.cpp src/core/hooks.cpp src/core/restore.cpp src/core/commands.cpp src/core/installers.cpp src/core/livehost.cpp)
+# ElisBridge: ElisCore (macos/ElisCore, shared with the Mac) behind a C ABI, built by SwiftPM with the Swift stdlib
+# linked in, so running Elis needs no Swift runtime
+find_program(SWIFT swift DOC "the Swift 6.3 toolchain's swift, which builds linux/shared")
+if(NOT SWIFT)
+  message(FATAL_ERROR "swift not found: install Swift 6.3 (the swift.org tarball or swiftly) and put it on PATH, or pass -DSWIFT=/path/to/swift")
+endif()
+set(ELIS_BRIDGE ${CMAKE_BINARY_DIR}/swift/release/libElisBridge.so)
+file(GLOB_RECURSE ELIS_BRIDGE_SOURCES CONFIGURE_DEPENDS ${CMAKE_SOURCE_DIR}/shared/Sources/*.swift ${CMAKE_SOURCE_DIR}/../macos/ElisCore/Sources/*.swift)
+add_custom_command(OUTPUT ${ELIS_BRIDGE}
+  # a soname, so what links it records the name and finds it on the rpath, not this build path
+  COMMAND ${SWIFT} build -c release -Xswiftc -static-stdlib -Xlinker -soname=libElisBridge.so -Xlinker --strip-all --package-path ${CMAKE_SOURCE_DIR}/shared --scratch-path ${CMAKE_BINARY_DIR}/swift
+  COMMAND ${CMAKE_COMMAND} -E touch ${ELIS_BRIDGE} # SwiftPM leaves an unchanged product's time alone
+  DEPENDS ${ELIS_BRIDGE_SOURCES} ${CMAKE_SOURCE_DIR}/shared/Package.swift ${CMAKE_SOURCE_DIR}/../macos/ElisCore/Package.swift
+  COMMENT "Building ElisBridge (Swift ElisCore)" USES_TERMINAL VERBATIM)
+add_custom_target(elis-bridge DEPENDS ${ELIS_BRIDGE})
+add_library(ElisBridge SHARED IMPORTED)
+set_target_properties(ElisBridge PROPERTIES IMPORTED_LOCATION ${ELIS_BRIDGE} INTERFACE_INCLUDE_DIRECTORIES ${CMAKE_SOURCE_DIR}/shared/include)
+add_dependencies(ElisBridge elis-bridge)
+
+add_library(elis-core STATIC src/core/store.cpp src/core/control.cpp src/core/launcher.cpp src/core/keymap.cpp src/core/hooks.cpp src/core/restore.cpp src/core/commands.cpp src/core/installers.cpp src/core/livehost.cpp src/core/transcript.cpp)
 target_include_directories(elis-core PUBLIC src/core)
-target_link_libraries(elis-core PUBLIC Qt6::Core PRIVATE Qt6::Sql)
+target_link_libraries(elis-core PUBLIC Qt6::Core ElisBridge PRIVATE Qt6::Sql)
 
 find_package(KF6Config REQUIRED)
 find_package(KF6WidgetsAddons REQUIRED)
@@ -75,6 +94,9 @@ set_tests_properties(filepanel PROPERTIES ENVIRONMENT "QT_QPA_PLATFORM=offscreen
 
 include(GNUInstallDirs)
 install(TARGETS elis elisctl elis-session-host RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR})
+install(FILES ${ELIS_BRIDGE} DESTINATION ${CMAKE_INSTALL_LIBDIR}/elis)
+file(RELATIVE_PATH ELIS_BRIDGE_RPATH ${CMAKE_INSTALL_PREFIX}/${CMAKE_INSTALL_BINDIR} ${CMAKE_INSTALL_PREFIX}/${CMAKE_INSTALL_LIBDIR}/elis)
+set_target_properties(elis elisctl PROPERTIES INSTALL_RPATH "$ORIGIN/${ELIS_BRIDGE_RPATH}")
 configure_file(packaging/elis.desktop.in elis.desktop @ONLY) # Exec is absolute: the Plasma menu does not see ~/.local/bin
 install(FILES ${CMAKE_CURRENT_BINARY_DIR}/elis.desktop DESTINATION ${CMAKE_INSTALL_DATADIR}/applications)
 install(DIRECTORY resources/icons/ DESTINATION ${CMAKE_INSTALL_DATADIR}/icons)

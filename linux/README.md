@@ -21,6 +21,9 @@ in Konsole.
 Needs Qt 6 (Widgets, Network, DBus, Svg), KDE Frameworks 6 (CoreAddons, XmlGui, Config, Notifications, KParts,
 SyntaxHighlighting, WindowSystem) and `konsole-kpart`. Install `wl-clipboard` (or `xclip` on X11) too: agents like Claude Code read a pasted image
 (Ctrl+V) through `wl-paste`/`xclip`, and without them the paste does nothing, in Elis and plain Konsole alike.
+Building also needs Swift 6.3 (the swift.org tarball or `swiftly`) on PATH, or `-DSWIFT=/path/to/swift`: `linux/shared`
+builds the Mac's `ElisCore` into `libElisBridge.so` with the Swift runtime linked in, so running Elis needs no Swift.
+The first build of it takes a few minutes; it installs to `lib/elis` beside the binaries' `bin`.
 
 ```sh
 cd linux
@@ -207,7 +210,8 @@ It prints the QR code and the link; Ctrl+C stops it. Nothing listens unless one 
   one at once.
 - `serve` listens on all interfaces by default; `--bind` restricts it. It reaches the phone over your LAN or a VPN such
   as Tailscale; `--host` only sets the address written into the link (e.g. the machine's Tailscale name or IP).
-- The session view is a polled plain-text snapshot of the pane (`session text`), not a terminal emulator.
+- A pane running Claude Code opens in Chat, as on the Mac, read from its transcript (`session transcript`).
+  Any other pane shows a polled plain-text snapshot (`session text`), not a terminal emulator.
 
 ## Credits and license
 

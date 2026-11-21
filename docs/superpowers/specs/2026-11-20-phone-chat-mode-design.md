@@ -28,6 +28,7 @@ Goals:
 
 Non-goals (v1):
 - Chat in the Linux Qt app: it stays disabled there; a C++ port comes later. **[owner]**
+  Superseded 2026-11-21: the Qt app links `ElisCore` through `linux/shared` (ElisBridge), and Chat works there.
   This is the owner-approved remote exception.
 - Adapters other than Claude Code; codex comes after M6. **[owner]**
 - Opening a subagent as its own chat (dropped by the owner; subagent rows stay). **[owner]**
@@ -546,9 +547,9 @@ and `plugins/elis/skills/elis/` with a `description` trigger such as "read a ses
 
 | Piece | Local Mac | Attached from another Mac | elis-server row | Linux Qt app |
 |---|---|---|---|---|
-| `agentSessionId` | Sampler (`Elis/SessionLaunchers.swift:87-110`) | Published by the origin (`AppStore+SessionState.swift:36-38`) | New `PaneObserver` detection | Not stored: Chat disabled **[owner]** |
-| `agent` (running) | Sampler | New `agent` presentation kind; missing → Chat disabled **[lead]** | New `PaneObserver` detection | — |
-| T | Local reader | Forwarded to the origin's `elisctl` | ssh read on the server | — |
+| `agentSessionId` | Sampler (`Elis/SessionLaunchers.swift:87-110`) | Published by the origin (`AppStore+SessionState.swift:36-38`) | New `PaneObserver` detection | Sampler (`sampleAgents`) |
+| `agent` (running) | Sampler | New `agent` presentation kind; missing → Chat disabled **[lead]** | New `PaneObserver` detection | Sampler |
+| T | Local reader | Forwarded to the origin's `elisctl` | ssh read on the server | `ElisCore`'s reader through ElisBridge |
 | E events (`status`, `tree.changed`) | Hooks → `events.read` | Mirrored by the origin | elis-server installs the hooks (`ServerHookInstall.swift`); reaching the phone's `events.read` is open check 15 | — |
 | G | Attach stream | Attach stream over ssh | Attach stream over ssh | — |
 | Keys: digit, Tab, arrows, Shift+Tab, Esc | Attach stream, one write each | Same, over ssh (open check 1) | Same (open check 1) | — |

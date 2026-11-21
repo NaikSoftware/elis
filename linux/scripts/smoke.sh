@@ -9,7 +9,7 @@ ctl() { "$bin/elisctl" "$@"; }
 pid=
 mpid=
 start() {
-  QT_QPA_PLATFORM=offscreen "$bin/elis" >"$ELIS_STATE_DIR/app.log" 2>&1 &
+  CLAUDE_CONFIG_DIR=$ELIS_STATE_DIR/claude QT_QPA_PLATFORM=offscreen "$bin/elis" >"$ELIS_STATE_DIR/app.log" 2>&1 &
   pid=$!
   for _ in $(seq 50); do ctl tree >/dev/null 2>&1 && return; sleep 0.2; done
   echo "socket never came up"; cat "$ELIS_STATE_DIR/app.log"; exit 1
@@ -75,6 +75,33 @@ ELIS_SESSION_ID=$id ctl session info | grep -q '^pid' || fail "info by env targe
 ctl session type "$root/share/agent-status/elis-claude-status.sh completed --auto-reset"$'\n' --target "$id"
 sleep 1
 ctl tree | grep probe | grep -q completed || fail "Claude hook adapter from a pane"
+# a claude in a pane names its conversation in the tree (its sessions/<pid>.json), which session transcript reads
+cat >"$ELIS_STATE_DIR/fake-claude.sh" <<'EOF'
+mkdir -p "$CLAUDE_CONFIG_DIR/sessions"
+printf '{"sessionId":"c1","cwd":"/tmp"}' >"$CLAUDE_CONFIG_DIR/sessions/$$.json"
+exec -a claude sleep 600
+EOF
+mkdir -p "$ELIS_STATE_DIR/claude/projects/-tmp"
+for n in 1 2 3; do
+  parent=null; [ "$n" = 1 ] || parent="\"u$((n - 1))\""
+  printf '{"type":"user","uuid":"u%s","parentUuid":%s,"isSidechain":false,"timestamp":"T","message":{"role":"user","content":"prompt %s %s"}}\n' \
+    "$n" "$parent" "$n" "$(printf 'x%.0s' $(seq 80))"
+done >"$ELIS_STATE_DIR/claude/projects/-tmp/c1.jsonl"
+agent=$(ctl session new --name agent --cwd /tmp)
+sleep 1
+ctl session type 'bash "$ELIS_STATE_DIR/fake-claude.sh"'$'\n' --target "$agent"
+for _ in $(seq 30); do ctl --json tree | grep -q '"agentSessionId":"c1"' && break; sleep 0.2; done
+ctl --json tree | grep -q '"agentPane":"left","agentSessionId":"c1"' || fail "tree agentSessionId and agentPane"
+out=$(ctl session transcript --target "$agent" 2>&1) || fail "session transcript ($out)"
+grep -q '^user  prompt 3 x' <<<"$out" && grep -q '^next ' <<<"$out" || fail "session transcript tail page ($out)"
+start=$(ctl --json session transcript --max-bytes 200 --target "$agent" | grep -o '"start":[0-9]*' | cut -d: -f2)
+[ -n "$start" ] && [ "$start" -gt 0 ] || fail "a small tail page starts past the file head"
+out=$(ctl session transcript --before "$start" --max-bytes 200 --target "$agent")
+grep -q '^user  prompt 2 x' <<<"$out" && ! grep -q 'prompt 3' <<<"$out" || fail "session transcript --before pages back ($out)"
+out=$(ctl session transcript --pane right --target "$agent" 2>&1) || true
+grep -q "no adapter" <<<"$out" || fail "session transcript: the pane without claude ($out)"
+ctl session transcript --after 1 --before 2 --target "$agent" 2>/dev/null && fail "--after with --before"
+ctl session close --target "$agent" >/dev/null # never captured for a re-run restore: its argv names claude
 ctl session split on --axis horizontal --target "$id"
 sleep 1
 ctl session info --target "$id" | grep -qE '^hasSplit +true' || fail "split not created"
@@ -278,7 +305,8 @@ ctl session grid --reset --target "$fit" >/dev/null
 ctl --json session text --target "$fit" | grep -q '"columns":48' && fail "session grid --reset gives the grid back to the view"
 # session scroll: wheel notches as a mouse would send; a shell's view scrolls back through its history
 ctl session type $'clear; seq 1 300\r' --target "$fit"
-sleep 0.6
+# all of it first: a scroll while seq still prints keeps the view where it was then
+for _ in $(seq 30); do ctl session text --target "$fit" | grep -qx 300 && break; sleep 0.2; done
 ctl session scroll -30 --target "$fit" >/dev/null || fail "session scroll"
 last=$(ctl session text --target "$fit" | grep -v '^$' | tail -1)
 [[ $last =~ ^2[0-9][0-9]$ ]] || fail "session scroll -30 shows older rows (last row $last)"
