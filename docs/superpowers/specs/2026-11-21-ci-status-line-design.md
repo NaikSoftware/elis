@@ -22,8 +22,8 @@ or log in to `gh`, jobs inside a workflow run (the run's GitHub page shows them)
 
 ## Data
 
-The repository is the session's focused cwd (`Session.focusedCwd`, the same cwd the row and title already track):
-`git rev-parse --show-toplevel` and the current branch. Then, in the repository root:
+The repository is the session's focused cwd (`Session.focusedCwd`, the same cwd the row and title already track),
+found by reading `.git` and `HEAD` upward from it off the main actor, with no git process. Then, in the root:
 
 1. `gh run list --branch <branch> --limit 30 --json databaseId,workflowName,status,conclusion,headSha,url,updatedAt`.
    The runs counted are those of the newest `headSha` in that list, one per workflow (the latest attempt).
@@ -63,9 +63,10 @@ Cost on the Mac: the line becomes its own hit target inside an `NSOutlineView` r
 the context menu and rename through untouched. The owner asked for the click, so this cost is accepted.
 
 - Header: `#56 PR title`, a link that opens the PR; without a PR, `branch · abc1234`.
-- Reviews: `Approved: alice, bob`, `Changes requested: carol`, or `Review required`.
+- Reviews: `Approved: alice, bob`, `Changes requested: carol`, or `No reviews yet` (the review decision is not
+  fetched, so "required" cannot be told from "optional").
 - Runs grouped Failed / Running / Passed / Skipped by workflow name, each opening its run page.
-- Footer: when it was last updated.
+- No "last updated" footer: a failed refresh already clears the panel, so a shown one is current.
 
 Escape or a click outside closes it. A remote viewer builds it from the mirrored data and opens links in its own
 browser.
@@ -77,7 +78,7 @@ browser.
 - Runs every 30 s while one runs, every 3 min once all settled; the PR every 2 min while open.
   Worst case per branch is about 150 GitHub requests an hour; ten active branches stay near 1500 of the 5000 an
   hour that the owner's agents share with Elis.
-- A cwd change, and a branch change seen on a cycle, refresh at once (2 s debounce).
+- The poller ticks every 5 s; a cwd or branch change seen on a tick refreshes at once.
 - Each `git`/`gh` call has a 15 s timeout.
 - A failed refresh clears the line and closes its open panel, so a stale "passed" never outlives the fact.
 
@@ -85,9 +86,9 @@ browser.
 
 - PATH: a Finder-launched app has no Homebrew PATH, so `gh` is resolved through `CommandPath.widened` as
   `CustomCommandRunner` and `OpenCodeEnvironmentProbe` do.
-- TCC: the app spawning `git`/`gh` in a repository under `~/Documents`, `~/Desktop` or `~/Downloads` may raise a
-  folder prompt attributed to Elis. Spawn them the way custom commands spawn, and check on a Mac that a
-  repository in `~/Documents` raises no new prompt before the PR merges.
+- TCC: the app reading `.git` and spawning `gh` in a repository under `~/Documents`, `~/Desktop` or `~/Downloads`
+  may raise a folder prompt attributed to Elis. Check on a Mac that a repository in `~/Documents` raises no new
+  prompt before the PR merges.
 
 ## Where the code goes
 
@@ -110,12 +111,12 @@ Protocol command, dispatcher, `ControlActions` entry, `elisctl session info`, el
 hide-after timers, the markdown source path of `SessionInfoMarkup` (span rendering stays for the CI line), the
 `info`/`infoMarkdown`/`infoHideAfter` read-back, `EventFormatter` text, `site/docs.html`, `site/commands.html`,
 the skill (`SKILL.md`, `reference.md`, `linux.md`), `ARCHITECTURE.md` and `.claude/rules` (`control-api.md`,
-`sidebar.md`, `settings.md`). Cookbook recipes that call it: see Open question.
+`sidebar.md`, `settings.md`). The cookbook recipes that called it go too (below).
 
 ## Control API
 
-Proposed (CLAUDE.md asks every capability for one): a read-only `ci` object on `ControlSessionNode` with `pr`
-(number, url, approved, changesRequested), the three counts and `runs` (workflow, state, url). No setter, no
+A read-only `ci` object on `ControlSessionNode`: `branch`, `sha`, `pr` (number, title, url, `approved` and
+`changesRequested` logins) and `runs` (workflow, state, url). No counts: they follow from `runs`. No setter, no
 refresh command. Agents can read "is my PR green" from it.
 
 ## Settings
@@ -123,11 +124,10 @@ refresh command. Agents can read "is my PR green" from it.
 The existing Settings ▸ Interface "Session info" picker (Always / Flagged / Off) is relabelled "CI status" and
 governs the line; no new preference.
 
-## Open question
+## Cookbook
 
-Three published cookbook recipes call `session info` and stop working when it goes:
-`claude-git-info` (@umputun), `multi-agent-git-info` (@megabyde), `subagent-status` (@bubakanov).
-The project's rule is not to edit another author's recipe unprompted.
+The three recipes that called `session info` (`claude-git-info`, `multi-agent-git-info`, `subagent-status`) are
+removed with it (owner, 2026-11-21).
 
 ## Testing
 

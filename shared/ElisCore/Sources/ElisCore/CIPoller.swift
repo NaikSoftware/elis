@@ -53,6 +53,13 @@ public final class CIPoller {
         }
     }
 
+    /// offPool runs blocking filesystem and gh work on a dispatch thread, never on the cooperative pool.
+    private nonisolated static func offPool<T: Sendable>(_ work: @escaping @Sendable () -> T) async -> T {
+        await withCheckedContinuation { continuation in
+            DispatchQueue.global(qos: .utility).async { continuation.resume(returning: work()) }
+        }
+    }
+
     public func stop() {
         loop?.cancel()
         loop = nil
@@ -60,9 +67,16 @@ public final class CIPoller {
 
     /// tick fetches every repository that is due and applies each session's current status.
     public func tick() async {
-        var groups: [CIRepo: [Session]] = [:]
+        var candidates: [Session] = []
         for session in sessions() where session.remoteHost == nil && session.remotePresentation == nil {
-            guard include(session), let repo = locate(session.focusedCwd) else {
+            if include(session) { candidates.append(session) } else { apply(session, nil) }
+        }
+        let locate = locate
+        let cwds = candidates.map(\.focusedCwd)
+        let repos = await Self.offPool { cwds.map(locate) }
+        var groups: [CIRepo: [Session]] = [:]
+        for (session, repo) in zip(candidates, repos) {
+            guard let repo else {
                 apply(session, nil)
                 continue
             }
@@ -76,19 +90,16 @@ public final class CIPoller {
             return runs || pullRequest ? (repo, runs, pullRequest) : nil
         }
         let runner = runner
-        // gh blocks for up to its timeout, so it waits on dispatch threads, never on the cooperative pool
-        let results = await withCheckedContinuation { continuation in
-            DispatchQueue.global(qos: .utility).async {
-                let lock = NSLock()
-                nonisolated(unsafe) var results: [(CIRepo, Fetched<(sha: String, runs: [CIRun])?>, Fetched<CIPullRequest?>)] = []
-                DispatchQueue.concurrentPerform(iterations: due.count) { index in
-                    let (repo, runs, pullRequest) = due[index]
-                    let result = (repo, runs ? Fetched.value(CIProbe.runs(repo, run: runner)) : .skipped,
-                                  pullRequest ? Fetched.value(CIProbe.pullRequest(repo, run: runner)) : .skipped)
-                    lock.withLock { results.append(result) }
-                }
-                continuation.resume(returning: results)
+        let results = await Self.offPool {
+            let lock = NSLock()
+            nonisolated(unsafe) var results: [(CIRepo, Fetched<(sha: String, runs: [CIRun])?>, Fetched<CIPullRequest?>)] = []
+            DispatchQueue.concurrentPerform(iterations: due.count) { index in
+                let (repo, runs, pullRequest) = due[index]
+                let result = (repo, runs ? Fetched.value(CIProbe.runs(repo, run: runner)) : .skipped,
+                              pullRequest ? Fetched.value(CIProbe.pullRequest(repo, run: runner)) : .skipped)
+                lock.withLock { results.append(result) }
             }
+            return results
         }
         let finished = now()
         for (repo, runs, pullRequest) in results where groups[repo] != nil {

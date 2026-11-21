@@ -11,9 +11,10 @@ public struct CIRepo: Hashable, Sendable {
     }
 
     /// locate walks up from `cwd` to the first `.git`, a directory or a worktree's `gitdir:` file. Nil outside
-    /// git and on a detached HEAD, which has no branch to ask GitHub about.
+    /// git, on a detached HEAD, which has no branch to ask GitHub about, and on an automount path. It blocks on
+    /// the filesystem, so callers run it off the main actor.
     public static func locate(cwd: String) -> CIRepo? {
-        guard cwd.hasPrefix("/") else { return nil }
+        guard let cwd = LinkPolicy.guardedLocalPath(cwd) else { return nil }
         var dir = URL(fileURLWithPath: cwd).standardizedFileURL
         while true {
             let dotGit = dir.appendingPathComponent(".git")
@@ -92,12 +93,20 @@ public enum CIProbe {
             process.standardError = FileHandle.nullDevice
             process.standardInput = FileHandle.nullDevice
             do { try process.run() } catch { return nil }
-            let pid = process.processIdentifier
-            let deadline = DispatchWorkItem { kill(pid, SIGKILL) }
-            DispatchQueue.global().asyncAfter(deadline: .now() + timeout, execute: deadline)
-            let data = output.fileHandleForReading.readDataToEndOfFile()
+            // a child gh leaves behind can hold the pipe open past gh's death, so EOF is waited for with a deadline
+            let reader = output.fileHandleForReading
+            let finished = DispatchSemaphore(value: 0)
+            nonisolated(unsafe) var data = Data()
+            DispatchQueue.global(qos: .utility).async {
+                data = reader.readDataToEndOfFile()
+                finished.signal()
+            }
+            guard finished.wait(timeout: .now() + timeout) == .success else {
+                // Foundation reaps the killed child itself; waiting for it here can block on the orphan's pipe
+                kill(process.processIdentifier, SIGKILL)
+                return nil
+            }
             process.waitUntilExit()
-            deadline.cancel()
             return process.terminationStatus == 0 ? data : nil
         }
     }

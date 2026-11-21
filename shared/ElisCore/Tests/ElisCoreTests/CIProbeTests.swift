@@ -58,6 +58,38 @@ struct CIProbeTests {
         #expect(CIProbe.pullRequest(repo, run: runner(["pr": nil])) == nil)
     }
 
+    /// ghResult runs the real runner against a fake `gh` script on a plain thread, as a blocking call must.
+    private func ghResult(_ script: String, timeout: TimeInterval) async throws -> (Data?, TimeInterval) {
+        let dir = FileManager.default.temporaryDirectory.appendingPathComponent("ci-gh-\(UUID().uuidString)")
+        try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: dir) }
+        let gh = dir.appendingPathComponent("gh")
+        try "#!/bin/sh\n\(script)\n".write(to: gh, atomically: true, encoding: .utf8)
+        try FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: gh.path)
+        let run = CIProbe.gh(environment: ["PATH": "\(dir.path):/usr/bin:/bin"], timeout: timeout)
+        let directory = dir.path
+        return await withCheckedContinuation { continuation in
+            Thread {
+                let started = Date()
+                let data = run(["run", "list"], directory)
+                continuation.resume(returning: (data, Date().timeIntervalSince(started)))
+            }.start()
+        }
+    }
+
+    @Test func theRunnerReturnsWhatGhPrintsAndNothingOnAFailure() async throws {
+        let (printed, _) = try await ghResult(#"echo "[$1]""#, timeout: 10)
+        #expect(printed.map { String(decoding: $0, as: UTF8.self) } == "[run]\n")
+        let (failed, _) = try await ghResult("echo partial; exit 1", timeout: 10)
+        #expect(failed == nil)
+    }
+
+    @Test func aGhWhoseChildHoldsThePipeIsAbandonedAtTheTimeout() async throws {
+        let (data, elapsed) = try await ghResult("sleep 20", timeout: 0.5)
+        #expect(data == nil)
+        #expect(elapsed < 10)
+    }
+
     @Test func locateReadsBranchFromCheckoutAndWorktree() throws {
         let base = FileManager.default.temporaryDirectory.appendingPathComponent("ci-probe-\(UUID().uuidString)")
         defer { try? FileManager.default.removeItem(at: base) }

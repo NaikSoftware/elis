@@ -60,7 +60,8 @@ struct PresentationFramesTests {
         PresentationFrame(gen: 1, rev: 30, body: .ci(CIStatus(branch: "main", sha: "abc",
             pr: CIPullRequest(number: 5, title: "t", url: "u", approved: ["a"]), runs: [CIRun(workflow: "build", state: .failed, url: "r")]))),
         PresentationFrame(gen: 1, rev: 30, body: .ci(nil)),
-        PresentationFrame(gen: 1, rev: 30, body: .snapshot(PresentationSnapshot(status: nil, hud: nil, ci: CIStatus(branch: "main", sha: "abc", runs: [CIRun(workflow: "build", state: .passed, url: "u")])))),
+        PresentationFrame(gen: 1, rev: 30, body: .snapshot(PresentationSnapshot(
+            status: nil, hud: nil, ci: CIStatus(branch: "main", sha: "abc", runs: [CIRun(workflow: "build", state: .passed, url: "u")])))),
         PresentationFrame(gen: 1, rev: 31, body: .sound(PresentationSound(name: "Glass"))),
         PresentationFrame(gen: 1, rev: 32, body: .sound(PresentationSound(name: nil))),
         PresentationFrame(gen: 1, rev: 33, body: .askRequest(PresentationAsk(
