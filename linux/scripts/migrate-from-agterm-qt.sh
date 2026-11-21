@@ -34,15 +34,24 @@ live=${XDG_RUNTIME_DIR:-${TMPDIR:-/tmp}}/agterm-qt-$(printf %s "$old_state" | sh
 if [ -d "$live" ]; then
     host=$bin/agterm-session-host
     [ -x "$host" ] || host=$(command -v elis-session-host || true)
-    n=0
+    # <socket>.pid names the pane's shell, which leads its own session; it is ours while its daemon names the socket
+    ours() { [[ "$1" =~ ^[0-9]+$ ]] && tr '\0' ' ' <"/proc/$(ps -o ppid= -p "$1" | tr -d ' ')/cmdline" 2>/dev/null | grep -qF -- "$2"; }
+    n=0 still=0
     for s in "$live"/*; do
         [ -S "$s" ] || continue
-        n=$((n + 1)) code=0
+        n=$((n + 1)) code=0 shell=$(cat "$s.pid" 2>/dev/null || true)
+        ours "$shell" "$s" || shell=
         [ -z "$host" ] || timeout 5 "$host" --kill "$s" >/dev/null 2>&1 || code=$?
         [ $code -ne 1 ] || rm -f "$s" # nothing listens: a crashed daemon's socket
+        [ -n "$shell" ] || continue
+        # an older host only hangs up, so a program ignoring SIGHUP (claude, agy) kept it running, orphaned
+        for _ in $(seq 20); do pgrep -s "$shell" >/dev/null || break; sleep 0.1; done
+        pkill -KILL -s "$shell" 2>/dev/null || true
+        for _ in $(seq 20); do pgrep -s "$shell" >/dev/null || break; sleep 0.1; done
+        ! pgrep -s "$shell" >/dev/null || still=$((still + 1))
     done
     rm -f "$live"/*.pid "$live"/*.id 2>/dev/null || true
-    still=$(find "$live" -mindepth 1 -type s | wc -l)
+    still=$((still + $(find "$live" -mindepth 1 -type s | wc -l)))
     rmdir "$live" 2>/dev/null || true
     [ "$n" -gt 0 ] && note_did "end $((n - still)) old session daemons; their panes start again with their commands"
     [ "$still" -gt 0 ] && note_left "$still old session daemons under $live did not stop; end each with elis-session-host --kill <socket>"

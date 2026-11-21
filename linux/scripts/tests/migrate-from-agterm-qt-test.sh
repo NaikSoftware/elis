@@ -9,6 +9,7 @@ root=$(mktemp -d /tmp/aqm.XXXXXX)
 H=$root/h RT=$root/rt
 cleanup() {
     for s in "$RT"/*/*; do [ -S "$s" ] && timeout 5 "$host" --kill "$s" >/dev/null 2>&1; done
+    [ -z "${stubborn:-}" ] || pkill -KILL -s "$stubborn" 2>/dev/null # left behind when the script regresses
     wait # the attach clients exit with their daemons
     [ -n "${KEEP:-}" ] || rm -rf "$root"
 }
@@ -65,9 +66,28 @@ printf 'png' > "$H/.local/share/icons/hicolor/64x64/apps/agterm-qt.png"
 for s in "$live/s1.main" "$RT/agterm-qt-0ther000/d1.main"; do
     "$H/.local/bin/agterm-session-host" "$s" -- sleep 300 </dev/null >/dev/null 2>&1 &
 done
-for _ in $(seq 50); do [ -s "$live/s1.main.pid" ] && [ -s "$RT/agterm-qt-0ther000/d1.main.pid" ] && break; sleep 0.1; done
-shell=$(cat "$live/s1.main.pid") other=$(cat "$RT/agterm-qt-0ther000/d1.main.pid")
-check "fixture daemons run" 'kill -0 "$shell" && kill -0 "$other"'
+# an old host: a kill only hangs up the shell's session, and a job ignoring SIGHUP keeps it and the host alive
+cat > "$root/oldhost.py" <<'EOF'
+import os, signal, socket, sys
+path = sys.argv[1]
+child = os.fork()
+if child == 0:
+    os.setsid()
+    os.execvp("sh", ["sh", "-c", "trap '' HUP; sleep 300 & wait"])
+open(path + ".pid", "w").write(str(child))
+s = socket.socket(socket.AF_UNIX)
+s.bind(path)
+s.listen(1)
+s.accept()
+os.unlink(path), os.unlink(path + ".pid")
+os.killpg(child, signal.SIGHUP)
+os.waitpid(child, 0)
+EOF
+python3 -I "$root/oldhost.py" "$live/s2.main" </dev/null >/dev/null 2>&1 &
+old=$!
+for _ in $(seq 50); do [ -s "$live/s1.main.pid" ] && [ -s "$live/s2.main.pid" ] && [ -s "$RT/agterm-qt-0ther000/d1.main.pid" ] && break; sleep 0.1; done
+shell=$(cat "$live/s1.main.pid") stubborn=$(cat "$live/s2.main.pid") other=$(cat "$RT/agterm-qt-0ther000/d1.main.pid")
+check "fixture daemons run" 'kill -0 "$shell" && kill -0 "$stubborn" && kill -0 "$other"'
 
 : > "$H/.local/share/elis/elis.lock"
 before=$(snap)
@@ -85,6 +105,7 @@ run
 check "first run succeeds" '[ $code -eq 0 ]'
 [ $code -eq 0 ] || echo "$out"
 check "the state's daemon ended" '! kill -0 "$shell" 2>/dev/null && [ ! -e "$live" ]'
+check "an old host's job that ignores the hangup ended too" '! pgrep -s "$stubborn" >/dev/null && ! kill -0 "$old" 2>/dev/null'
 check "another state's daemon survives" 'kill -0 "$other" && [ -S "$RT/agterm-qt-0ther000/d1.main" ]'
 new=$H/.local/share/elis
 check "windows moved" '[ -f "$new/windows.json" ] && grep -q "\"configDirectory\": \"\"" "$new/windows/w1.json"'
