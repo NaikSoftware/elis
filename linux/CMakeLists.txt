@@ -50,13 +50,44 @@ add_library(ElisBridge SHARED IMPORTED)
 set_target_properties(ElisBridge PROPERTIES IMPORTED_LOCATION ${ELIS_BRIDGE} INTERFACE_INCLUDE_DIRECTORIES ${CMAKE_SOURCE_DIR}/bridge/include)
 add_dependencies(ElisBridge elis-bridge)
 
-add_library(elis-core STATIC src/core/store.cpp src/core/control.cpp src/core/launcher.cpp src/core/keymap.cpp src/core/hooks.cpp src/core/restore.cpp src/core/commands.cpp src/core/installers.cpp src/core/livehost.cpp src/core/transcript.cpp)
+# zmx: the Mac's patched zmx, which Live panes run under. macos/scripts/setup.sh pins it, its patches and its zig
+# (ZMX_ZIG_FORMULA) and builds it here for the host arch; its stamp makes a rebuild free until a pin or patch moves.
+if(CMAKE_HOST_SYSTEM_PROCESSOR MATCHES "^(x86_64|amd64|AMD64)$")
+  set(ELIS_ZMX_ARCH x86_64)
+elseif(CMAKE_HOST_SYSTEM_PROCESSOR MATCHES "^(aarch64|arm64)$")
+  set(ELIS_ZMX_ARCH aarch64)
+else()
+  message(FATAL_ERROR "zmx builds for x86_64 and aarch64 only, not ${CMAKE_HOST_SYSTEM_PROCESSOR}")
+endif()
+file(GLOB ELIS_ZIG_HINTS $ENV{HOME}/.local/opt/zig-*-linux-0.16.*)
+find_program(ZIG zig HINTS ${ELIS_ZIG_HINTS} DOC "zig 0.16, which builds zmx")
+if(ZIG)
+  execute_process(COMMAND ${ZIG} version OUTPUT_VARIABLE ELIS_ZIG_VERSION OUTPUT_STRIP_TRAILING_WHITESPACE)
+endif()
+find_program(GIT git)
+find_program(SHASUM shasum)
+if(NOT ZIG OR NOT ELIS_ZIG_VERSION MATCHES "^0\\.16\\." OR NOT GIT OR NOT SHASUM)
+  message(FATAL_ERROR "zmx needs zig 0.16 (found: ${ZIG} ${ELIS_ZIG_VERSION}), git and shasum (perl). Unpack "
+    "https://ziglang.org/download/0.16.0/zig-${ELIS_ZMX_ARCH}-linux-0.16.0.tar.xz and pass -DZIG=<dir>/zig")
+endif()
+set(ELIS_ZMX ${CMAKE_BINARY_DIR}/zmx)
+file(GLOB ELIS_ZMX_PATCHES CONFIGURE_DEPENDS ${CMAKE_SOURCE_DIR}/../macos/scripts/zmx-patches/*.patch ${CMAKE_SOURCE_DIR}/../macos/scripts/zmx-patches/ghostty/*.patch)
+add_custom_command(OUTPUT ${ELIS_ZMX}
+  COMMAND ${CMAKE_COMMAND} -E env ELIS_ZMX_ZIG=${ZIG} ELIS_ZMX_TARGET=${ELIS_ZMX_ARCH}-linux-musl
+    ELIS_ZMX_STAGE_DIR=${CMAKE_BINARY_DIR}/zmx-stage ELIS_ZMX_STAMP_FILE=${CMAKE_BINARY_DIR}/zmx-stage.stamp
+    bash ${CMAKE_SOURCE_DIR}/../macos/scripts/setup.sh --zmx-only
+  COMMAND ${CMAKE_COMMAND} -E copy ${CMAKE_BINARY_DIR}/zmx-stage/zmx ${ELIS_ZMX}
+  DEPENDS ${CMAKE_SOURCE_DIR}/../macos/scripts/setup.sh ${ELIS_ZMX_PATCHES}
+  COMMENT "Building the patched zmx" USES_TERMINAL VERBATIM)
+add_custom_target(elis-zmx ALL DEPENDS ${ELIS_ZMX}) # not `zmx`, the output's own name
+
+add_library(elis-core STATIC src/core/store.cpp src/core/control.cpp src/core/launcher.cpp src/core/keymap.cpp src/core/hooks.cpp src/core/restore.cpp src/core/commands.cpp src/core/installers.cpp src/core/zmx.cpp src/core/transcript.cpp)
 target_include_directories(elis-core PUBLIC src/core)
 target_link_libraries(elis-core PUBLIC Qt6::Core ElisBridge PRIVATE Qt6::Sql)
 
 find_package(KF6Config REQUIRED)
 find_package(KF6WidgetsAddons REQUIRED)
-add_library(elis-ui STATIC src/app/mainwindow.cpp src/app/config.cpp src/app/settingsdialog.cpp src/app/sidebar.cpp src/app/palette.cpp src/app/overlay.cpp src/app/dashboard.cpp src/app/library.cpp src/app/attention.cpp src/app/konsoleprivate.cpp src/app/controlui.cpp src/app/help.cpp src/app/smoothwheel.cpp src/app/phone.cpp src/ctl/qrcodegen/qrcodegen.cpp
+add_library(elis-ui STATIC src/app/mainwindow.cpp src/app/config.cpp src/app/settingsdialog.cpp src/app/sidebar.cpp src/app/palette.cpp src/app/overlay.cpp src/app/dashboard.cpp src/app/library.cpp src/app/attention.cpp src/app/konsoleprivate.cpp src/app/controlui.cpp src/app/help.cpp src/app/smoothwheel.cpp src/app/phone.cpp src/app/paneleadcover.cpp src/ctl/qrcodegen/qrcodegen.cpp
   resources/resources.qrc)
 target_include_directories(elis-ui PUBLIC src/app)
 find_package(KF6Notifications REQUIRED)
@@ -66,9 +97,7 @@ target_link_libraries(elis-ui PUBLIC elis-core Qt6::Widgets Qt6::DBus Qt6::Svg K
 add_executable(elis src/app/main.cpp)
 target_link_libraries(elis PRIVATE elis-ui Qt6::Network KF6::ConfigCore)
 
-add_executable(elis-session-host src/host/sessionhost.cpp) # plain POSIX: it outlives the app, so no Qt
-target_link_libraries(elis-session-host PRIVATE util)
-add_dependencies(elis elis-session-host) # spawned from the app's own directory
+add_dependencies(elis elis-zmx) # spawned from the app's own directory
 
 add_executable(elisctl src/ctl/elisctl.cpp src/ctl/mobile.cpp src/ctl/qrcodegen/qrcodegen.cpp)
 target_link_libraries(elisctl PRIVATE elis-core Qt6::Network)
@@ -80,8 +109,8 @@ set(ELIS_SKILL ${CMAKE_SOURCE_DIR}/../plugins/elis/skills/elis)
 enable_testing()
 add_executable(test_core tests/test_core.cpp)
 target_link_libraries(test_core PRIVATE elis-core Qt6::Sql Qt6::Test)
-target_compile_definitions(test_core PRIVATE ELIS_SOURCE_AGENT_STATUS="${ELIS_AGENT_STATUS}" ELIS_SESSION_HOST="$<TARGET_FILE:elis-session-host>")
-add_dependencies(test_core elis-session-host)
+target_compile_definitions(test_core PRIVATE ELIS_SOURCE_AGENT_STATUS="${ELIS_AGENT_STATUS}")
+add_dependencies(test_core elis-zmx) # Zmx::executable() is beside the binary
 add_test(NAME core COMMAND test_core)
 add_executable(test_ui tests/test_ui.cpp)
 target_link_libraries(test_ui PRIVATE elis-ui Qt6::Test)
@@ -96,7 +125,11 @@ add_test(NAME filepanel COMMAND test_filepanel)
 set_tests_properties(filepanel PROPERTIES ENVIRONMENT "QT_QPA_PLATFORM=offscreen")
 
 include(GNUInstallDirs)
-install(TARGETS elis elisctl elis-session-host RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR})
+install(TARGETS elis elisctl RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR})
+install(PROGRAMS ${ELIS_ZMX} DESTINATION ${CMAKE_INSTALL_LIBEXECDIR}/elis) # off PATH, as the Mac's bundle keeps it
+file(RELATIVE_PATH ELIS_ZMX_FROM_BIN ${CMAKE_INSTALL_PREFIX}/${CMAKE_INSTALL_BINDIR} ${CMAKE_INSTALL_PREFIX}/${CMAKE_INSTALL_LIBEXECDIR}/elis)
+target_compile_definitions(elis-core PRIVATE ELIS_ZMX_FROM_BIN="${ELIS_ZMX_FROM_BIN}")
+install(FILES ${CMAKE_BINARY_DIR}/zmx-stage/LICENSE DESTINATION ${CMAKE_INSTALL_DOCDIR} RENAME zmx-LICENSE)
 install(FILES ${ELIS_BRIDGE} DESTINATION ${CMAKE_INSTALL_LIBDIR}/elis)
 file(RELATIVE_PATH ELIS_BRIDGE_RPATH ${CMAKE_INSTALL_PREFIX}/${CMAKE_INSTALL_BINDIR} ${CMAKE_INSTALL_PREFIX}/${CMAKE_INSTALL_LIBDIR}/elis)
 set_target_properties(elis elisctl PROPERTIES INSTALL_RPATH "$ORIGIN/${ELIS_BRIDGE_RPATH}")

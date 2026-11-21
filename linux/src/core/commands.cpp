@@ -28,7 +28,7 @@ static QJsonObject fail(const QString &error)
 QString unsupportedReason(const QString &cmd)
 {
     static const QList<std::pair<QString, QString>> absent{
-        {"zmx", "Elis's live sessions run on elis-session-host, not zmx"},
+        {"zmx", "the zmx commands are not ported to Elis yet"},
         {"session.restart", "it is not ported to Elis's live sessions"},
         {"session.lead", "pane leads belong to remote sessions, which Elis does not have"},
         {"browser", "Elis has no built-in browser: page overlays need Qt WebEngine"},

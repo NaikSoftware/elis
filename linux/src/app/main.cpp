@@ -2,7 +2,7 @@
 #include "help.h"
 #include "hooks.h"
 #include "library.h"
-#include "livehost.h"
+#include "zmx.h"
 #include "mainwindow.h"
 #include "paths.h"
 #include "phone.h"
@@ -164,12 +164,10 @@ int main(int argc, char **argv)
     WindowLibrary library(dir);
     library.load(); // the windows open at the last quit, each with its saved frame
     MainWindow &window = *library.active();
-    // Fresh shells and Re-run launches end every daemon a live run left, as master's reap; a live one has reattached
+    // master's reap: Fresh shells and Re-run launches end every daemon a live run left, a live one those no pane claims
     for (const auto &e : library.entries())
         if (e.store) { // a window closed at the last quit has no store loaded
-            if (e.store->restoreModeAtLaunch != QLatin1String("live"))
-                for (const QString &live : Live::sockets(dir))
-                    Live::kill(live);
+            Zmx::reap(dir, e.store->restoreModeAtLaunch, library.paneIds());
             break;
         }
 

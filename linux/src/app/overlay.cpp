@@ -1,6 +1,7 @@
 // Overlays (a program in a temporary terminal over a session or one pane) and the passive HUD.
 #include "mainwindow.h"
 #include "store.h"
+#include "zmx.h"
 
 #include <KParts/ReadOnlyPart>
 #include <kde_terminal_interface.h>
@@ -455,6 +456,30 @@ QJsonObject MainWindow::sessionExtras(const QString &id) const
         out.insert("paneOverlays", panes);
     if (!hidden.isEmpty())
         out.insert("hiddenOverlays", hidden);
+    // the Mac's surfaces[]: an overlay over the session or the pane leaves it neither active nor visible
+    const Session *s = const_cast<Store &>(m_store).session(id);
+    const Panes p = m_panes.value(id);
+    const bool covered = full.part && !full.hidden;
+    QJsonArray surfaces;
+    bool zmx = true;
+    for (const QString &kind : {QStringLiteral("left"), QStringLiteral("right")}) {
+        const bool right = kind == QLatin1String("right");
+        if (!s || (right && !s->hasSplit))
+            continue;
+        KParts::ReadOnlyPart *part = right ? p.right : p.main;
+        const Overlay ov = m_overlays.value(slotKey(id, kind));
+        const bool shown = !covered && !(ov.part && !ov.hidden) && (!right || s->splitVisible);
+        const bool backed = part && !part->property("elisZmx").toString().isEmpty();
+        zmx = zmx && backed;
+        surfaces << Zmx::surface({{"id", QStringLiteral("surface:%1:%2").arg(id, kind)},
+                                  {"kind", kind},
+                                  {"active", shown && m_splitFocused.value(id) == right},
+                                  {"visible", shown},
+                                  {"backedByZmx", backed},
+                                  {"paneID", part ? part->property("elisPaneId").toString() : QString()}});
+    }
+    out.insert("surfaces", surfaces);
+    out.insert("backedByZmx", zmx && !surfaces.isEmpty());
     if (auto *hud = static_cast<Hud *>(m_huds.value(id).data())) {
         QJsonObject h = hud->spec;
         h.insert("spinner", h.value("spinner").toString(QStringLiteral("none")));

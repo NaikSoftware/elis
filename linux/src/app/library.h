@@ -4,6 +4,9 @@
 #include <QList>
 #include <QObject>
 #include <QPointer>
+#include <QStringList>
+
+#include <optional>
 
 class MainWindow;
 class Store;
@@ -39,6 +42,8 @@ public:
     // from MainWindow::closeEvent; only a user's close or window.close keeps a bundle closed: Qt's quit closes every window too
     void windowClosed(MainWindow *window, bool byUser);
     bool saveIndex();
+    // every pane identity of every window, the closed ones read from their files; nullopt when one cannot be read
+    std::optional<QStringList> paneIds() const;
 
 Q_SIGNALS:
     void changed();

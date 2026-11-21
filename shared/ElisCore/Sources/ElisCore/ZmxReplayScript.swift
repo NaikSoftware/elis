@@ -63,6 +63,23 @@ public enum ZmxReplayScript {
         return "__elis_rearm() { \(rearm.joined(separator: "; ")); }; builtin trap __elis_rearm EXIT; " + statement
     }
 
+    /// plainShellArguments is the create-only payload that runs `commandLine`, then becomes `shell` as a login shell,
+    /// for a terminal that loads no ghostty integration (the Linux app's Konsole panes). As with `render`, the shell
+    /// starts after Ctrl-C or a failing line too; an unknown shell gets the line run by `/bin/sh`.
+    public static func plainShellArguments(commandLine: String, shell: String) -> [String] {
+        let exec = "builtin exec -- \(quoted(shell)) -il"
+        switch CommandRestore.basename(shell) {
+        case "zsh":
+            return [shell, "-lic", "{ 'builtin' 'eval' -- \(quoted(commandLine)) ; } always { \(exec) ; }"]
+        case "bash":
+            return [shell, "-lic", "__elis_rearm() { \(exec); }; builtin trap __elis_rearm EXIT; builtin eval \(quoted(commandLine))"]
+        case "fish":
+            return [shell, "-lic", "builtin status job-control full; builtin eval \(fishQuoted(commandLine)); exec \(fishQuoted(shell)) -il"]
+        default:
+            return ["/bin/sh", "-c", "trap 'exec \"$1\" -l' EXIT; eval \"$0\"", commandLine, shell]
+        }
+    }
+
     public static func renderFish(argv: [String], integrationRoot: String, shell: String) -> String {
         renderFish(statement: argv.map(fishQuoted).joined(separator: " "), integrationRoot: integrationRoot, shell: shell)
     }

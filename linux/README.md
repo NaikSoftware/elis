@@ -24,6 +24,10 @@ SyntaxHighlighting, WindowSystem) and `konsole-kpart`. Install `wl-clipboard` (o
 Building also needs Swift 6.3 (the swift.org tarball or `swiftly`) on PATH, or `-DSWIFT=/path/to/swift`: `linux/bridge`
 builds the shared `ElisCore` (`shared/ElisCore`) into `libElisBridge.so` with the Swift runtime linked in, so running Elis needs no Swift.
 The first build of it takes a few minutes; it installs to `lib/elis` beside the binaries' `bin`.
+Live sessions run under the Mac's patched zmx, which the build makes from source with zig 0.16, git and `shasum`
+(`macos/scripts/setup.sh --zmx-only`, network on the first build) and installs it to `libexec/elis`, off PATH. Unpack
+[zig 0.16.0](https://ziglang.org/download/) into `~/.local/opt`, where configure finds it, or pass `-DZIG=/path/to/zig`;
+the build patches that zig's `float.h` once, as the Mac build does.
 
 ```sh
 cd linux
@@ -73,7 +77,8 @@ cmake --install build && kbuildsycoca6 --noincremental
   side by side, view-only, with each session's name in its status colour; Enter or a click opens one.
 - Restore sessions (Settings ▸ General): fresh shells; re-run commands, which records what each pane runs at quit
   and types it into its new shell on the next launch (`restore-denylist.conf` lists programs to leave out); or live
-  sessions, where each pane's shell keeps running in an `elis-session-host` daemon and the next launch reattaches it.
+  sessions, where each pane's shell keeps running in a zmx daemon and the next launch reattaches it. A live pane
+  another zmx client leads (later, the phone) is covered until a key takes it back.
 - Overlays: `elisctl session overlay open <command>` runs a program in a temporary terminal over a session (full,
   floating with `--size-percent`, or one split pane with `--pane`); it closes when the program exits and
   `overlay result` (or `--block`) returns the status. Ctrl+Alt+Shift+J hides and shows them. `session hud` puts a
@@ -90,7 +95,6 @@ What Elis adds on top of Elis and Konsole:
   drag leaves the shown terminal in place.
 - Smooth, accelerated mouse-wheel scrolling in terminal panes, where Konsole jumps whole lines.
 - The dashboard hides the sidebar and file panel while it is open and gives them back on close.
-- Live sessions run in Elis's own `elis-session-host` daemon rather than zmx.
 - The agent hooks, skill and `elisctl` link install themselves on the first launch and after each update (below),
   instead of from the Help menu.
 - A phone app, Elis Mobile, paired from Settings ▸ Connect a Phone… ([below](#phone-app)).
