@@ -42,6 +42,10 @@ static QJsonObject sessionNode(const Session &s, const QString &selected)
 
 static QJsonObject withContext(QJsonObject node, const Session &s, const Store &store)
 {
+    if (!s.agentSessionId.isEmpty())
+        node.insert("agentSessionId", s.agentSessionId);
+    if (!s.agentPane.isEmpty())
+        node.insert("agentPane", s.agentPane);
     if (!s.context.isEmpty())
         node.insert("context", s.context);
     if (store.collapsed.contains(s.id) && !const_cast<Store &>(store).companionsOf(s.id).isEmpty())
