@@ -263,10 +263,13 @@ Qt::KeyboardModifiers linkClickModifiers(Qt::KeyboardModifiers modifiers, bool t
 
 // The part exposes no font API and its zoom actions live only in Konsole's main window, so this drives
 // the display's own Ctrl+wheel zoom, one point per notch.
-// shortcut: a profile with MouseWheelZoomEnabled=false makes this a no-op; upgrade if the part grows a font API
+// Konsole adds every notch to the angle earlier scrolling left over, so a notch can move nothing or several points;
+// only three unchanged in a row mean its 6 pt floor or zoom being off.
+// shortcut: a profile with MouseWheelZoomEnabled=false, or a plain wheel scroll in the last second, makes this a no-op;
+// upgrade if the part grows a font API
 void zoomFontTo(QWidget *display, double points)
 {
-    for (int guard = 0; display && guard < 200; ++guard) {
+    for (int guard = 0, still = 0; display && guard < 200 && still < 3; ++guard) {
         const double now = display->font().pointSizeF();
         if (qAbs(now - points) < 0.5)
             return;
@@ -274,8 +277,7 @@ void zoomFontTo(QWidget *display, double points)
         QWheelEvent wheel(at, display->mapToGlobal(at), {}, QPoint(0, now < points ? 120 : -120), Qt::NoButton, Qt::ControlModifier,
                           Qt::NoScrollPhase, false);
         QApplication::sendEvent(display, &wheel);
-        if (display->font().pointSizeF() == now)
-            return; // at Konsole's limit, or zoom is off in the profile
+        still = display->font().pointSizeF() == now ? still + 1 : 0;
     }
 }
 

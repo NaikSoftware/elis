@@ -31,6 +31,7 @@
 #include <QJsonArray>
 #include <QToolBar>
 #include <QTest>
+#include <QWheelEvent>
 #include "control.h"
 #include <QPushButton>
 #include <QWheelEvent>
@@ -500,6 +501,41 @@ private Q_SLOTS:
         QTRY_COMPARE(w.chromeState()["dashboardMembers"].toArray(), (QJsonArray{b + ":left"}));
         QTest::keyClick(QApplication::focusWidget(), Qt::Key_Escape);
         QVERIFY(!w.chromeState().contains("dashboardMembers"));
+    }
+
+    void dashboardClickGivesEveryPaneItsFontBack()
+    {
+        Store store;
+        MainWindow w(store, dir.filePath("dashfont.json"));
+        w.restore({});
+        const QString ws = store.addWorkspace("w");
+        const QString a = store.addSession(ws, {}, {});
+        const QString b = store.addSession(ws, {}, {});
+        store.select(b);
+        store.select(a);
+        w.show();
+        w.activateWindow();
+        QVERIFY(QTest::qWaitForWindowActive(&w));
+        QWidget *termA = display(w);
+        QVERIFY(termA);
+        store.select(b);
+        QWidget *termB = display(w);
+        QVERIFY(termB && termB != termA);
+        const double fontA = termA->font().pointSizeF(), fontB = termB->font().pointSizeF();
+        for (auto [d, dy] : {std::pair{termA, -130}, std::pair{termB, 130}}) { // scrolling leaves partial notches in Konsole's wheel accumulator
+            QWheelEvent wheel(QPointF(4, 4), d->mapToGlobal(QPointF(4, 4)), {}, QPoint(0, dy), Qt::NoButton, {}, Qt::ScrollUpdate, false);
+            QApplication::sendEvent(d, &wheel);
+        }
+        QTest::qWait(1100); // Konsole ignores Ctrl+wheel for a second after a scroll
+        w.namedAction("dashboard")->trigger();
+        QCOMPARE(w.chromeState()["dashboardMembers"].toArray().size(), 2);
+        QVERIFY(termA->font().pointSizeF() < fontA);
+        QVERIFY(termB->font().pointSizeF() < fontB);
+        QTest::mouseClick(termA, Qt::LeftButton, {}, QPoint(20, 20));
+        QTRY_VERIFY(!w.chromeState().contains("dashboardMembers"));
+        QCOMPARE(store.selected, a);
+        QCOMPARE(termA->font().pointSizeF(), fontA);
+        QCOMPARE(termB->font().pointSizeF(), fontB);
     }
 
     void windowLibraryMigratesAndEachWindowKeepsItsOwnShortcuts()
