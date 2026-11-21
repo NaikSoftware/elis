@@ -1,6 +1,6 @@
 ---
 worth: maybe
-where: ElisCore/Tests/elisctlKitTests/OverlayRunJobTests.swift
+where: shared/ElisCore/Tests/elisctlKitTests/OverlayRunJobTests.swift
 added: 2026-11-16
 ---
 # overlay job cancel and page tests failed once during a macOS CI stall

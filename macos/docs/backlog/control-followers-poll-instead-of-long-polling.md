@@ -1,6 +1,6 @@
 ---
 worth: maybe
-where: ElisCore/Sources/elisctlKit/EventCommands.swift:Events
+where: shared/ElisCore/Sources/elisctlKit/EventCommands.swift:Events
 added: 2026-11-10
 ---
 # idle event and message followers still cost CPU by polling every 250 ms

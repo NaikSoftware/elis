@@ -1,6 +1,6 @@
 ---
 worth: maybe
-where: ElisCore/Tests/SessionHostRuntimeTests/SessionHostServerTests.swift:Fixture.start
+where: shared/ElisCore/Tests/SessionHostRuntimeTests/SessionHostServerTests.swift:Fixture.start
 added: 2026-11-08
 ---
 # session-host test fixture sometimes sees no pidfile within 5 s

@@ -1,6 +1,6 @@
 ---
 worth: maybe
-where: ElisCore/Sources/ElisCore/AppStore+Status.swift:applyControlStatus
+where: shared/ElisCore/Sources/ElisCore/AppStore+Status.swift:applyControlStatus
 added: 2026-11-16
 ---
 # a local active replaces the origin's status on an attached row

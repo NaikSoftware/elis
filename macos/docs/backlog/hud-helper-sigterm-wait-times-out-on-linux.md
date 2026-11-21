@@ -1,6 +1,6 @@
 ---
 worth: maybe
-where: ElisCore/Tests/ElisCoreTests/HudHelperTests.swift:Run.stop
+where: shared/ElisCore/Tests/ElisCoreTests/HudHelperTests.swift:Run.stop
 added: 2026-11-15
 ---
 # hud helper test reports an ignored SIGTERM on Linux CI

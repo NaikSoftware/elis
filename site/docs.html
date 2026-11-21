@@ -421,11 +421,12 @@ bash migrate-from-agterm2.sh</code></pre>
 </ul>
 <h3 id="install-source">Build from source</h3>
 <p>Requires macOS 14+, Xcode 26 with <code>xcodegen</code> on PATH (plus its Metal Toolchain), and Homebrew.</p>
-<pre class="bash"><code>scripts/setup.sh              # build libghostty and stage resources (safe to rerun)
+<pre class="bash"><code>cd macos
+scripts/setup.sh              # build libghostty and stage resources (safe to rerun)
 scripts/run.sh                # generate the Xcode project, build Debug, launch
-cd ElisCore &amp;&amp; swift test   # unit tests, no Xcode needed</code></pre>
+cd ../shared/ElisCore &amp;&amp; swift test   # unit tests, no Xcode needed</code></pre>
 <p>The app bundles the CLI, but <code>elisctl</code> also builds on its own from the <code>ElisCore</code> Swift package, without Xcode or libghostty:</p>
-<pre class="bash"><code>cd ElisCore &amp;&amp; swift build -c release   # binary at ElisCore/.build/release/elisctl</code></pre>
+<pre class="bash"><code>cd ../shared/ElisCore &amp;&amp; swift build -c release   # binary at shared/ElisCore/.build/release/elisctl</code></pre>
 </section>
 
           <!-- EXTEND -->

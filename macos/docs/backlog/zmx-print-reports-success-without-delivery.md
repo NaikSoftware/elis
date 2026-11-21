@@ -1,6 +1,6 @@
 ---
 worth: later
-where: ElisCore/Sources/ElisCore/TerminalClipboard.swift:copy
+where: shared/ElisCore/Sources/ElisCore/TerminalClipboard.swift:copy
 added: 2026-10-08
 ---
 # zmx print exits 0 without proof the daemon took the write

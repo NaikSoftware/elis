@@ -86,7 +86,7 @@ These run inside the app, so a mistake can kill the host instead of failing an a
 - **Never run XCUITests while the user is testing a handed-off build.** They activate apps and send real
   keyboard/mouse events even in the background. Run them before handoff or after the user finishes.
   Host-free tests are safe.
-- Always run `cd ElisCore && swift test`, normally about 0.2 seconds. Ask before XCUITest.
+- Always run `cd ../shared/ElisCore && swift test`, normally about 0.2 seconds. Ask before XCUITest.
   The tree is 44 classes and 429 methods, and a class costs about its own test bodies: 31 seconds for
   EditMenu's four, 7.5 minutes for ControlAPI's 82. Per-method preamble is about 0.1 seconds; if it
   returns to 18-25 seconds the scheme's `preferredScreenCaptureFormat` has regressed to

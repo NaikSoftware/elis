@@ -21,11 +21,11 @@ Two source-confirmed routes can create a daemon under the app without a timeout;
 as the route taken in this failure:
 
 - An initial inventory launch, exit or parse failure in
-  `ElisCore/Sources/SessionHostRuntime/HostBackend.swift:149` makes
-  `Host.swift:82` return a `before` failure. `ElisCore/Sources/ElisCore/SessionHost.swift:190`
-  selects `fullAttach`, and `ElisCore/Sources/SessionHostRuntime/Client.swift:45` executes the
+  `shared/ElisCore/Sources/SessionHostRuntime/HostBackend.swift:149` makes
+  `Host.swift:82` return a `before` failure. `shared/ElisCore/Sources/ElisCore/SessionHost.swift:190`
+  selects `fullAttach`, and `shared/ElisCore/Sources/SessionHostRuntime/Client.swift:45` executes the
   original attach from the app's child. If the daemon is absent, that client creates it.
-- A temporary attach spawn failure at `ElisCore/Sources/SessionHostRuntime/Host.swift:87`, or an
+- A temporary attach spawn failure at `shared/ElisCore/Sources/SessionHostRuntime/Host.swift:87`, or an
   early child exit at `Host.swift:117`, returns a `started` failure. The client selects `uncertain`.
   A `session new --command` request (`--ends-pane`) then attaches with a "session is gone" guard
   (`Client.attachArgv`), which never replays the payload and ends the pane when the daemon is absent, so

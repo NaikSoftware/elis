@@ -51,7 +51,7 @@ you resolved in step 1, and nothing else is ever interpolated:
    runs on the next keypress.
 
 A local checkout is used instead only when the session sits in an actual Elis repository: a git
-repo whose root holds `cookbook/` alongside `ElisCore/` and `project.yml`, not merely a directory
+repo whose root holds `cookbook/` alongside `shared/ElisCore/` and `macos/project.yml`, not merely a directory
 containing `cookbook/`. State the path and whether the tree is dirty before using anything out of it.
 A dirty tree is not a blocker: testing a local edit is a normal case.
 

@@ -2,16 +2,16 @@
 paths:
   - "macos/Elis/Control/ControlServer*.swift"
   - "macos/Elis/Control/ControlTargetResolver.swift"
-  - "macos/ElisCore/Sources/ElisCore/ControlProtocol.swift"
-  - "macos/ElisCore/Sources/ElisCore/ControlResolve.swift"
-  - "macos/ElisCore/Sources/elisctlKit/*.swift"
-  - "macos/ElisCore/Sources/elisctl/main.swift"
+  - "shared/ElisCore/Sources/ElisCore/ControlProtocol.swift"
+  - "shared/ElisCore/Sources/ElisCore/ControlResolve.swift"
+  - "shared/ElisCore/Sources/elisctlKit/*.swift"
+  - "shared/ElisCore/Sources/elisctl/main.swift"
   - "macos/Elis/CLIInstaller.swift"
   - "macos/Elis/AgentHooksInstaller.swift"
   - "macos/Elis/SkillInstaller.swift"
-  - "macos/ElisCore/Sources/ElisCore/CLIInstall.swift"
-  - "macos/ElisCore/Sources/ElisCore/AgentHooksInstall.swift"
-  - "macos/ElisCore/Sources/ElisCore/SkillInstall.swift"
+  - "shared/ElisCore/Sources/ElisCore/CLIInstall.swift"
+  - "shared/ElisCore/Sources/ElisCore/AgentHooksInstall.swift"
+  - "shared/ElisCore/Sources/ElisCore/SkillInstall.swift"
   - "macos/ElisUITests/Control*.swift"
   - "macos/ElisUITests/SessionTextUITests.swift"
   - "plugins/elis/skills/elis/**"
@@ -48,7 +48,7 @@ paths:
   `Notification[permission_prompt]` waits about six idle seconds and stays for the sandboxed network
   prompt, which `PermissionRequest` skips. The main thread's PostToolUse clears a prior block because there is
   no answer event; a subagent's cannot, being `--if-idle`.
-  `elis-claude-status.sh` reads the hook payload (non-terminal stdin, 2-second bound, plutil or jq key paths):
+  `elis-claude-status.sh` reads the hook payload (non-terminal stdin, 2-second bound, plutil, jq or python3 key paths):
   an event carrying `agent_id` adds `--if-idle` to `active`, and a Stop whose `background_tasks` lists a
   running subagent, workflow or shell, or whose `session_crons` is non-empty, posts `active --blink` in place of `completed`, dropping the caller's flags
   so `--auto-reset` cannot idle the row. Anything else, an unreadable payload included, posts argv.
@@ -88,7 +88,7 @@ paths:
   merge, marker, backup, and optional-agent policy.
 - Skill installation targets every existing Claude/Codex skill root, creating Claude only when neither
   exists. Refuse an unmarked `SKILL.md`. The sole source is `plugins/elis/skills/elis/` with
-  `SKILL.md`, references, examples, cookbook, troubleshooting, and `scripts/show-image.sh`. The whole
+  `SKILL.md`, references, examples, cookbook, troubleshooting, `linux.md`, and `scripts/show-image.sh`. The whole
   directory copies verbatim, so a new file ships automatically — but the loader opens only what `SKILL.md`
   routes to, so a file added without a `description`/`when_to_use` trigger and a body pointer is dead
   weight.
@@ -429,9 +429,8 @@ A Bluetooth wrong-key handshake emits no `phone.refused`: a stranger in radio ra
 `tree.phone.bluetooth` changes emit no event; it is poll-only.
 A connected central can still read the GAP device name, a known limit of the rotating UUID against an active observer.
 
-The phone link v2 frame contract lives in `ElisCore/Sources/ElisCore/PhoneLink/`.
-Its vectors file has a byte-identical copy in the phone app
-(`mobile/test/fixtures/phone-link-vectors.json`) that changes with it.
+The phone link v2 frame contract lives in `shared/ElisCore/Sources/ElisCore/PhoneLink/`.
+Its vectors file, `shared/fixtures/phone-link-vectors.json`, is read by the phone app's tests too.
 
 `session wait` is not a fourth exemption but a client-side composite, like `overlay open --block`: it
 opens the socket only for existing reads (`events.read`, `window.list`, `tree`), so there is no

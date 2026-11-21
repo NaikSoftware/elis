@@ -14,7 +14,8 @@ An elis-server host is not this app: SKILL.md's "Remote windows and elis-server"
   pane's `PATH`. If plain `elisctl` reports an unknown command this skill documents, a login profile put an older
   one first: call `"$ELISCTL"`. Add `-u ELISCTL` when scrubbing the variables.
 - Socket: `--socket PATH`, else `$ELIS_STATE_DIR/elis.sock`, else `~/.local/share/elis/elis.sock`.
-- Help ▸ Install Command Line Tool links `elisctl` into `~/.local/bin`; nothing is installed automatically.
+- An installed build links `elisctl` into `~/.local/bin` and installs the status hooks and this skill at its first
+  launch and after each update; `elis --install agent-hooks|skill|cli|all` runs them by hand.
 - Config is `~/.config/elis/` (or `$ELIS_STATE_DIR/config`): `keymap.conf`, `hooks.conf`, `restore-denylist.conf`.
   There is no Ghostty config: colours, font and scrollback come from the Konsole profile.
 
@@ -28,8 +29,8 @@ An elis-server host is not this app: SKILL.md's "Remote windows and elis-server"
   floating frame.
 - On Wayland `window move` is refused and `window list` omits `x`/`y`.
 - Live restore keeps each shell in an `elis-session-host` daemon, not zmx.
-- The phone: `elisctl mobile serve [--port N] [--bind ADDR] [--host NAME]` runs the relay and prints the pairing
-  QR code and link; `mobile reset` replaces the token. There is no `phone …` command.
+- The phone: Settings ▸ Connect a Phone…, or `elisctl mobile serve [--port N] [--bind ADDR] [--host NAME]`, which
+  runs the relay and prints the pairing QR code and link; `mobile reset` replaces the token. There is no `phone …` command.
 
 ## Not supported
 

@@ -1,9 +1,9 @@
 ---
 paths:
-  - "macos/ElisCore/Sources/ElisCore/WindowLibrary.swift"
-  - "macos/ElisCore/Sources/ElisCore/WindowGeometry.swift"
-  - "macos/ElisCore/Sources/ElisCore/QuitPrompt.swift"
-  - "macos/ElisCore/Sources/ElisCore/QuitReason.swift"
+  - "shared/ElisCore/Sources/ElisCore/WindowLibrary.swift"
+  - "shared/ElisCore/Sources/ElisCore/WindowGeometry.swift"
+  - "shared/ElisCore/Sources/ElisCore/QuitPrompt.swift"
+  - "shared/ElisCore/Sources/ElisCore/QuitReason.swift"
   - "macos/Elis/WindowRegistry.swift"
   - "macos/Elis/AppDelegate.swift"
   - "macos/Elis/AppDelegate+DockMenu.swift"

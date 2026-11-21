@@ -6,8 +6,9 @@ C-boundary concurrency before changing the bridge.
 `README.md` is the product synopsis, not the reference.
 The macOS app lives in `macos/`: run every command there, and read every path below relative to it,
 except the repository-root `README.md`, `CONTRIBUTING.md`, `CLAUDE.md`, `.claude/`, `.github/`,
-`.claude-plugin/`, `.agents/`, `plugins/`, `cookbook/`, `site/`, `tools/`, `docs/screenshots/` and `docs/superpowers/`.
+`.claude-plugin/`, `.agents/`, `plugins/`, `cookbook/`, `site/`, `tools/`, `shared/`, `docs/screenshots/` and `docs/superpowers/`.
 `linux/` holds the Qt6/KDE app and `mobile/` the Flutter Android app; each has its own README.
+`shared/` holds what they share: the `ElisCore` package, the agent-status scripts and the phone link golden vectors.
 
 ## Working norms
 
@@ -107,11 +108,12 @@ except the repository-root `README.md`, `CONTRIBUTING.md`, `CLAUDE.md`, `.claude
 - Commands:
   - `scripts/run.sh`: setup, generate, Debug build, launch.
   - `scripts/build.sh`: setup, generate, Release build.
-  - `cd ElisCore && swift test`: host-free tests; `scripts/test.sh` wraps it.
+  - `cd ../shared/ElisCore && swift test`: host-free tests; `scripts/test.sh` wraps it.
   - `scripts/test-app.sh`: isolated hosted AppKit tests.
   - `make prep|build|run|release|deploy|test|test-app|lint|clean`; `make dist VERSION=x.y.z [PUBLISH=1]`.
-- `make lint` runs strict SwiftLint from `macos/`. Root limits are 200-column lines, 1000-line source
-  files, and 800-line types; test configs raise file/type limits to 2000 and inherit all other rules.
+- `make lint` runs strict SwiftLint from `macos/` and from `shared/ElisCore`, which inherits the same rules.
+  Root limits are 200-column lines, 1000-line source files, and 800-line types;
+  test configs raise file/type limits to 2000 and inherit all other rules.
   Disabled/tuned rules reflect deliberate conventions. Zero findings are required.
 - Every change must build, pass `swift test`, `make test-app`, and `make lint`.
 - A `linux/` change builds with CMake and passes `ctest --test-dir build` on Linux (see `linux/README.md`).
@@ -124,7 +126,7 @@ except the repository-root `README.md`, `CONTRIBUTING.md`, `CLAUDE.md`, `.claude
   via `-only-testing:<Target>/<Class>/<test>`. Never re-run a whole XCUITest suite to verify a narrow
   change; `ElisUITests/ControlAPIUITests` alone is 82 methods and about 7.5 minutes, and tells you
   nothing the targeted run did not.
-- The app build's Bundle helper executables phase runs `swift build` on `ElisCore/.build`, so any SwiftPM
+- The app build's Bundle helper executables phase runs `swift build` on `shared/ElisCore/.build`, so any SwiftPM
   process holding that directory (a hung `swift test` included) stalls `xcodebuild` there with no output;
   check `ps` for one before reading a quiet build as compiling.
 - An XCUITest or hosted test run that times out at runner init (`Timed out while enabling automation mode`)

@@ -1,6 +1,6 @@
 ---
 paths:
-  - "macos/ElisCore/Tests/**"
+  - "shared/ElisCore/Tests/**"
   - "macos/ElisTests/**"
   - "macos/ElisUITests/**"
 ---

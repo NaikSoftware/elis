@@ -1,8 +1,8 @@
 ---
 paths:
   - "macos/Elis/Notifications/NotificationManager.swift"
-  - "macos/ElisCore/Sources/ElisCore/Notifications.swift"
-  - "macos/ElisCore/Sources/ElisCore/AgentStatus.swift"
+  - "shared/ElisCore/Sources/ElisCore/Notifications.swift"
+  - "shared/ElisCore/Sources/ElisCore/AgentStatus.swift"
 ---
 
 ## Notifications

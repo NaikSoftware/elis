@@ -21,8 +21,8 @@ in Konsole.
 Needs Qt 6 (Widgets, Network, DBus, Svg), KDE Frameworks 6 (CoreAddons, XmlGui, Config, Notifications, KParts,
 SyntaxHighlighting, WindowSystem) and `konsole-kpart`. Install `wl-clipboard` (or `xclip` on X11) too: agents like Claude Code read a pasted image
 (Ctrl+V) through `wl-paste`/`xclip`, and without them the paste does nothing, in Elis and plain Konsole alike.
-Building also needs Swift 6.3 (the swift.org tarball or `swiftly`) on PATH, or `-DSWIFT=/path/to/swift`: `linux/shared`
-builds the Mac's `ElisCore` into `libElisBridge.so` with the Swift runtime linked in, so running Elis needs no Swift.
+Building also needs Swift 6.3 (the swift.org tarball or `swiftly`) on PATH, or `-DSWIFT=/path/to/swift`: `linux/bridge`
+builds the shared `ElisCore` (`shared/ElisCore`) into `libElisBridge.so` with the Swift runtime linked in, so running Elis needs no Swift.
 The first build of it takes a few minutes; it installs to `lib/elis` beside the binaries' `bin`.
 
 ```sh

@@ -1,6 +1,6 @@
 ---
 worth: later
-where: ElisCore/Sources/ElisCore/AppStore+HtmlOverlay.swift:htmlOverlaySlot
+where: shared/ElisCore/Sources/ElisCore/AppStore+HtmlOverlay.swift:htmlOverlaySlot
 added: 2026-11-13
 ---
 # window overlay: an HTML page owned by the window, shown with or without a session
