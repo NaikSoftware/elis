@@ -61,6 +61,18 @@ void drawStatusGlyph(QPainter *p, const QPointF &c, qreal r, const QString &shap
     }
 }
 
+void paintStatus(QPainter *p, const Settings &settings, const QString &status, bool blink, int blinkAlpha, QPointF centre)
+{
+    if (status.isEmpty() || status == QLatin1String("idle"))
+        return;
+    QColor c = statusColor(settings, status);
+    if (blink)
+        c.setAlpha(blinkAlpha);
+    p->setPen(Qt::NoPen);
+    p->setBrush(c);
+    drawStatusGlyph(p, centre, 5, statusShape(settings, status));
+}
+
 static int attentionRank(const QString &status)
 {
     return status == QLatin1String("blocked") ? 0 : status == QLatin1String("active") ? 1 : 2;
@@ -102,6 +114,7 @@ void drawGlyph(QPainter *p, const QRectF &r, const QString &name, const QColor &
 {
     drawSvg(p, r, QStringLiteral(":/glyphs/%1.svg").arg(name), c);
 }
+} // namespace
 
 void drawLauncher(QPainter *p, const QRectF &r, const QString &id, const QColor &c)
 {
@@ -110,7 +123,6 @@ void drawLauncher(QPainter *p, const QRectF &r, const QString &id, const QColor 
     else
         drawSvg(p, r, QStringLiteral(":/launchers/%1.svg").arg(id), c);
 }
-} // namespace
 
 QColor tintColor(const QString &name)
 {
@@ -422,12 +434,7 @@ void SidebarDelegate::paint(QPainter *p, const QStyleOptionViewItem &opt, const 
             p->drawLine(c + QPointF(-4, 4), c + QPointF(4, -4));
             right -= 20;
         } else if (status != QLatin1String("idle")) {
-            QColor c = statusColor(m_sidebar->settings(), status);
-            if (index.data(Blink).toBool())
-                c.setAlpha(m_sidebar->blinkAlpha());
-            p->setPen(Qt::NoPen);
-            p->setBrush(c);
-            drawStatusGlyph(p, QPointF(right - 6, cy), 5, statusShape(m_sidebar->settings(), status));
+            paintStatus(p, m_sidebar->settings(), status, index.data(Blink).toBool(), m_sidebar->blinkAlpha(), QPointF(right - 6, cy));
             right -= 20;
         }
         if (const int unseen = index.data(Unseen).toInt(); unseen > 0 && m_sidebar->settings().notificationBadgeEnabled) {

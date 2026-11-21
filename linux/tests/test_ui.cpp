@@ -3,6 +3,7 @@
 #include "help.h"
 #include "hooks.h"
 #include "library.h"
+#include "palette.h"
 #include "sidebar.h"
 #include "store.h"
 
@@ -724,8 +725,162 @@ private Q_SLOTS:
         QStringList listed;
         for (int i = 0; i < list->count(); ++i)
             listed << list->item(i)->text();
-        QCOMPARE(listed, (QStringList{"alpha", "beta"})); // the shown session is not a jump target
+        QCOMPARE(listed, (QStringList{"Needs you", "alpha", "Recent", "beta"})); // the shown idle session is not a jump target
         QTest::keyClick(list, Qt::Key_Escape);
+    }
+
+    void sessionPaletteRowsCarryStatusAndIdleHasNone()
+    {
+        Store store;
+        MainWindow w(store, dir.filePath("status_roles.json"));
+        w.restore({});
+        const QString ws = store.addWorkspace("w");
+        const QString a = store.addSession(ws, "blocked-s", {}), b = store.addSession(ws, "active-s", {}),
+                      c = store.addSession(ws, "done-s", {}), d = store.addSession(ws, "idle-s", {}),
+                      e = store.addSession(ws, "cur-s", {});
+        store.select(a);
+        store.select(b);
+        store.select(c);
+        store.select(d);
+        store.select(e);
+        store.setStatus(a, "blocked");
+        store.setStatus(b, "active", false, true);
+        store.setStatus(c, "completed");
+        w.show();
+        w.namedAction("session_palette")->trigger();
+        auto *list = w.findChild<QFrame *>("palette")->findChild<QListWidget *>();
+        QTRY_VERIFY(list->isVisible());
+        auto statusOf = [&](const QString &name) {
+            auto *row = list->findItems(name, Qt::MatchExactly).value(0);
+            return row ? row->data(PaletteRole::Status).toString() : QStringLiteral("MISSING");
+        };
+        QCOMPARE(statusOf("blocked-s"), QStringLiteral("blocked"));
+        QCOMPARE(statusOf("active-s"), QStringLiteral("active"));
+        QCOMPARE(statusOf("done-s"), QStringLiteral("completed"));
+        QCOMPARE(statusOf("idle-s"), QString());
+        QVERIFY(list->findItems("active-s", Qt::MatchExactly).value(0)->data(PaletteRole::Blink).toBool());
+        QTest::keyClick(w.findChild<QFrame *>("palette")->findChild<QLineEdit *>(), Qt::Key_Escape);
+
+        // Ctrl+Tab switcher keeps a flat list with no headers and carries the same status role
+        w.namedAction("mru_switcher")->trigger();
+        QTRY_VERIFY(list->isVisible());
+        for (int i = 0; i < list->count(); ++i)
+            QVERIFY(!list->item(i)->data(PaletteRole::Header).toBool());
+        QCOMPARE(statusOf("blocked-s"), QStringLiteral("blocked"));
+        QCOMPARE(statusOf("active-s"), QStringLiteral("active"));
+        QCOMPARE(statusOf("done-s"), QStringLiteral("completed"));
+        QCOMPARE(statusOf("idle-s"), QString());
+        QTest::keyClick(&w, Qt::Key_Escape);
+    }
+
+    void sessionPaletteSectionsOrderSelectedAttentionAndSearchSwap()
+    {
+        Store store;
+        MainWindow w(store, dir.filePath("sections.json"));
+        w.restore({});
+        const QString ws = store.addWorkspace("proj");
+        const QString a = store.addSession(ws, "done-s", {}), b = store.addSession(ws, "active-s", {}),
+                      c = store.addSession(ws, "blocked-s", {}), d = store.addSession(ws, "recent-s", {}),
+                      e = store.addSession(ws, "closed-s", {});
+        store.select(d);
+        store.select(a);
+        store.select(b);
+        store.select(c);
+        store.setStatus(a, "completed");
+        store.setStatus(b, "active");
+        store.setStatus(c, "blocked"); // currently selected AND non-idle: stays in Needs you
+        store.removeSession(e);
+        w.show();
+        w.namedAction("session_palette")->trigger();
+        auto *palette = w.findChild<QFrame *>("palette");
+        auto *list = palette->findChild<QListWidget *>();
+        auto *search = palette->findChild<QLineEdit *>();
+        QTRY_VERIFY(list->isVisible());
+
+        QStringList rows;
+        QList<bool> headers;
+        for (int i = 0; i < list->count(); ++i) {
+            rows << list->item(i)->text();
+            headers << list->item(i)->data(PaletteRole::Header).toBool();
+        }
+        QCOMPARE(rows, (QStringList{"Needs you", "blocked-s", "active-s", "done-s", "Recent", "recent-s", "Recently closed", "closed-s"}));
+        QCOMPARE(headers, (QList<bool>{true, false, false, false, true, false, true, false}));
+        QCOMPARE(list->currentItem()->text(), QStringLiteral("blocked-s")); // first real row, not header
+
+        // non-empty query replaces the three sections with one "Sessions" header
+        QTest::keyClicks(search, "-s");
+        QStringList filtered;
+        for (int i = 0; i < list->count(); ++i)
+            filtered << list->item(i)->text();
+        QCOMPARE(filtered, (QStringList{"Sessions", "done-s", "active-s", "blocked-s", "recent-s", "closed-s"}));
+        QVERIFY(list->item(0)->data(PaletteRole::Header).toBool());
+        QCOMPARE(list->currentItem()->text(), QStringLiteral("done-s"));
+        QTest::keyClick(search, Qt::Key_Escape);
+    }
+
+    void sessionPaletteArrowsSkipHeaders()
+    {
+        Store store;
+        MainWindow w(store, dir.filePath("skip_headers.json"));
+        w.restore({});
+        const QString ws = store.addWorkspace("w");
+        const QString a = store.addSession(ws, "alpha", {}), b = store.addSession(ws, "beta", {}), c = store.addSession(ws, "gamma", {});
+        store.select(a);
+        store.select(b);
+        store.select(c);
+        store.setStatus(a, "blocked");
+        w.show();
+        w.namedAction("session_palette")->trigger();
+        auto *palette = w.findChild<QFrame *>("palette");
+        auto *list = palette->findChild<QListWidget *>();
+        auto *search = palette->findChild<QLineEdit *>();
+        QTRY_VERIFY(list->isVisible());
+        // 0: Needs you (header), 1: alpha, 2: Recent (header), 3: beta
+        QCOMPARE(list->currentRow(), 1);
+        QCOMPARE(list->currentItem()->text(), QStringLiteral("alpha"));
+        QTest::keyClick(search, Qt::Key_Down);
+        QCOMPARE(list->currentRow(), 3);
+        QCOMPARE(list->currentItem()->text(), QStringLiteral("beta"));
+        QTest::keyClick(search, Qt::Key_Up);
+        QCOMPARE(list->currentRow(), 1);
+        QCOMPARE(list->currentItem()->text(), QStringLiteral("alpha"));
+        QTest::keyClick(search, Qt::Key_J, Qt::ControlModifier);
+        QCOMPARE(list->currentRow(), 3);
+        QTest::keyClick(search, Qt::Key_K, Qt::ControlModifier);
+        QCOMPARE(list->currentRow(), 1);
+        // clicking a header does nothing
+        QTest::mouseClick(list->viewport(), Qt::LeftButton, {}, list->visualItemRect(list->item(2)).center());
+        QVERIFY(palette->isVisible());
+        QCOMPARE(list->currentRow(), 1);
+        QTest::keyClick(search, Qt::Key_Escape);
+    }
+
+    void sessionPaletteRecentlyClosedDetailIsWorkspaceName()
+    {
+        Store store;
+        MainWindow w(store, dir.filePath("closed_detail.json"));
+        w.restore({});
+        const QString ws = store.addWorkspace("mobile");
+        const QString a = store.addSession(ws, "keep", {}), b = store.addSession(ws, "ble-spike", {}),
+                      c = store.addSession(ws, "resumed", {}, {}, -1, QStringLiteral("claude --resume abc"));
+        store.select(a);
+        store.removeSession(b);
+        store.removeSession(c);
+        w.show();
+        w.namedAction("session_palette")->trigger();
+        auto *palette = w.findChild<QFrame *>("palette");
+        auto *list = palette->findChild<QListWidget *>();
+        QTRY_VERIFY(list->isVisible());
+        auto *plainRow = list->findItems("ble-spike", Qt::MatchExactly).value(0);
+        auto *claudeRow = list->findItems("resumed", Qt::MatchExactly).value(0);
+        QVERIFY(plainRow && claudeRow);
+        QCOMPARE(plainRow->data(PaletteRole::Subtitle).toString(), QStringLiteral("mobile"));
+        QVERIFY(!plainRow->data(PaletteRole::Subtitle).toString().contains(QStringLiteral("closed"), Qt::CaseInsensitive));
+        QCOMPARE(plainRow->data(PaletteRole::Workspace).toString(), QString());
+        QCOMPARE(plainRow->data(PaletteRole::Status).toString(), QString());
+        QCOMPARE(plainRow->data(PaletteRole::Icon).toString(), QStringLiteral("terminal"));
+        QCOMPARE(claudeRow->data(PaletteRole::Icon).toString(), QStringLiteral("claude"));
+        QTest::keyClick(palette->findChild<QLineEdit *>(), Qt::Key_Escape);
     }
 
     void footerFilterNarrowsTheTreeAndTintReachesTheRow()

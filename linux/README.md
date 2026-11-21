@@ -59,9 +59,9 @@ cmake --install build && kbuildsycoca6 --noincremental
 - Auto-follow (Settings ▸ Agent Status) moves to the oldest blocked session once you have been idle for a chosen time.
 - Splits, terminal zoom, full screen.
 - Session (Ctrl+P, or the title bar's session pill) and action (Ctrl+Shift+P) palettes and a Ctrl-Tab recent-session
-  switcher. The session palette lists what needs you, then recent sessions, then recently closed ones, kept across
-  restarts (a Claude Code one resumes its conversation). A close can be undone
-  for 3 seconds.
+  switcher. The session palette groups one-line rows (agent logo, detail, workspace, status glyph) under Needs you
+  (across open windows), Recent and Recently closed (kept across restarts; a Claude Code one resumes its conversation),
+  and typing searches all sessions under one Sessions list. A close can be undone for 3 seconds.
 - A file panel (the session folder as a tree with file-type icons, a built-in viewer that highlights source code as
   Kate does, clipboard, drag and drop).
 - Settings (Ctrl+Shift+,) with Elis's six pages; terminal font, colour scheme and cursor apply to every open
