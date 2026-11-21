@@ -7,6 +7,26 @@ public enum TintColor: String, CaseIterable, Codable, Sendable {
 
     /// validNamesList is the accepted spelling for help and rejection text, derived so it cannot go stale.
     public static var validNamesList: String { allCases.map(\.rawValue).joined(separator: "|") }
+
+    /// rgb is the macOS system color of this name as `0xRRGGBB` in the light or dark appearance, for an app
+    /// without AppKit to draw (the Linux one).
+    public func rgb(dark: Bool) -> UInt32 {
+        let pair: (light: UInt32, dark: UInt32) = switch self {
+        case .red: (0xFF3B30, 0xFF453A)
+        case .orange: (0xFF9500, 0xFF9F0A)
+        case .yellow: (0xFFCC00, 0xFFD60A)
+        case .green: (0x34C759, 0x30D158)
+        case .blue: (0x007AFF, 0x0A84FF)
+        case .purple: (0xAF52DE, 0xBF5AF2)
+        case .gray: (0x8E8E93, 0x98989D)
+        case .teal: (0x30B0C7, 0x40C8E0)
+        case .pink: (0xFF2D55, 0xFF375F)
+        case .brown: (0xA2845E, 0xAC8E68)
+        case .indigo: (0x5856D6, 0x5E5CE6)
+        case .mint: (0x00C7BE, 0x63E6E2)
+        }
+        return dark ? pair.dark : pair.light
+    }
 }
 
 /// TintValue is a row tint's color: a palette name, or a `#rrggbb` hex the control API accepts. The raw

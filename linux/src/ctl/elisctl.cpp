@@ -20,7 +20,7 @@ static const char *usage = R"(usage: elisctl <command> [args] [--target T] [--so
   workspace new [--name N] [--tint COLOR]
   workspace rename <name>               (--target: workspace id/prefix/name, default active)
   workspace tint <color|clear>          the row, the band around its sessions and their terminals
-  session tint <color|clear>            red|orange|yellow|green|blue|purple|gray
+  session tint <color|clear>            red|orange|yellow|green|blue|purple|gray|teal|pink|brown|indigo|mint, or #rrggbb
   workspace delete | select
   workspace go --to next|prev            the next or previous visible workspace's first session
   workspace collapse | expand

@@ -14,6 +14,12 @@ char *elis_transcript_read(const char *argsJSON, const char *claudeDir, const ch
 // sidebar.density's mode against the current density: {"ok":true,"density":"default|compact"} or the Mac's refusal.
 // Input {"mode"?,"current"}; an absent mode toggles.
 char *elis_sidebar_density(const char *json);
+// A row tint by the Mac's parse: command session.tint/workspace.tint takes {"mode","tint"?,"tintOn"?}, any other a new's
+// {"tint"?,"tintOn"?}. {"ok":true,"tint"?} is the normalized tint the row gets (absent: none), else the Mac's refusal.
+char *elis_tint_parse(const char *command, const char *argsJSON);
+// {"colors":[{"name","light","dark"}],"shownParts":[…]}: the palette in menu order as #rrggbb per appearance, and the
+// tree's tintOn.
+char *elis_tint_palette(void);
 void elis_free(char *result);
 
 // Live panes on zmx (bridge Sources/ElisBridge/Zmx.swift documents each shape).

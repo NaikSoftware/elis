@@ -24,7 +24,7 @@ static QJsonObject fail(const QString &error)
 static QJsonObject withTint(QJsonObject node, const Tint &t)
 {
     if (!t.color.isEmpty())
-        node.insert("tint", t.color);
+        node.insert("tint", t.color), node.insert("tintOn", Store::tintShownParts());
     return node;
 }
 
@@ -213,39 +213,14 @@ static QJsonObject restoreCommand(Store &store, Terminals &terminals, const QStr
     return fail(QStringLiteral("unknown command '%1'").arg(cmd));
 }
 
-// a colour from the palette; "" when valid
-static QString tintArgs(const QJsonObject &args, QString *color)
-{
-    *color = args.value("tint").toString().toLower();
-    if (!Store::tintColors.contains(*color))
-        return QStringLiteral("invalid tint: %1 (%2)").arg(args.value("tint").toString(), Store::tintColors.join(QLatin1Char('|')));
-    return {};
-}
-
-// session.tint / workspace.tint: a clear refuses a colour rather than ignoring it
+// session.tint / workspace.tint, by ElisCore's parse
 static QString applyTint(Store &store, const QString &id, const QString &cmd, const QJsonObject &args)
 {
-    const QString mode = args.value("mode").toString();
-    QString color;
-    if (mode == QLatin1String("clear")) {
-        if (args.contains("tint"))
-            return QStringLiteral("%1 clear takes no color").arg(cmd);
-    } else if (mode == QLatin1String("set")) {
-        if (!args.contains("tint"))
-            return QStringLiteral("%1 set requires a color").arg(cmd);
-        if (QString e = tintArgs(args, &color); !e.isEmpty())
-            return e;
-    } else {
-        return QStringLiteral("invalid tint mode: %1 (set|clear)").arg(mode);
-    }
-    store.setTint(id, color);
-    return {};
-}
-
-// session.new / workspace.new: validated before anything is created
-static QString creationTint(const QJsonObject &args, QString *color)
-{
-    return args.contains("tint") ? tintArgs(args, color) : QString();
+    QString tint;
+    const QString error = Store::parseTint(cmd, args, &tint);
+    if (error.isEmpty())
+        store.setTint(id, tint);
+    return error;
 }
 
 static QJsonObject merged(QJsonObject node, const QJsonObject &extra)
@@ -402,7 +377,7 @@ static QJsonObject sessionNew(Store &store, const QJsonObject &args)
         cwd = QFileInfo(cwd).absoluteFilePath();
 
     QString error, wsId, tint;
-    if (error = creationTint(args, &tint); !error.isEmpty())
+    if (error = Store::parseTint(QStringLiteral("session.new"), args, &tint); !error.isEmpty())
         return fail(error);
     if (args.contains("parent")) {
         const QString parent = store.resolveSession(args.value("parent").toString(), &error);
@@ -519,7 +494,7 @@ QJsonObject dispatch(Store &store, Terminals &terminals, const QJsonObject &requ
         return ok({{"text", QStringLiteral("Elis %1").arg(QLatin1String(appVersion))}});
     if (cmd == QLatin1String("workspace.new")) {
         QString tint;
-        if (error = creationTint(args, &tint); !error.isEmpty())
+        if (error = Store::parseTint(cmd, args, &tint); !error.isEmpty())
             return fail(error);
         const QString id = store.addWorkspace(args.value("name").toString());
         store.setTint(id, tint);

@@ -47,8 +47,9 @@ cmake --install build && kbuildsycoca6 --noincremental
 - A session row shows the logo of the agent running in it, its status dot (active, blocked, completed), an unseen
   notification count, and a filled icon when flagged. Companions sit indented under their parent; Duplicate as
   Companion copies a session's split layout and the program in each pane.
-- Tint a session or workspace row (row menu ▸ Tint: seven colours). A tint colours the icon and the name; a
-  workspace's draws a band around its sessions, a session's washes its row, and both wash the terminal very lightly.
+- Tint a session or workspace row (row menu ▸ Tint: the Mac's twelve colours; a `#rrggbb` set with `elisctl` shows as
+  Custom). A tint colours the icon and the name; a workspace's draws a band around its sessions, a session's washes
+  its row, and both wash the terminal very lightly.
 - Rename inline (double-click), multi-select, drag to reorder or move between workspaces, and drop folders from the
   file manager to open sessions there. Drop a session on a terminal to type its Elis session id. The footer has New Session, New Workspace, the workspace filter and the
   flagged view. Mark workspaces with Focus / Add to Focus in their row menu; the grid button applies or suspends

@@ -3,17 +3,65 @@
 #include <QDateTime>
 #include "restore.h"
 
+#include "elis_bridge.h"
+
 #include <QDir>
 #include <QFileInfo>
 #include <QJsonArray>
+#include <QJsonDocument>
 #include <QSet>
 #include <QTimer>
 #include <QUuid>
 
 const QStringList Store::statuses = {QStringLiteral("idle"), QStringLiteral("active"), QStringLiteral("completed"),
                                      QStringLiteral("blocked")};
-const QStringList Store::tintColors = {QStringLiteral("red"),  QStringLiteral("orange"), QStringLiteral("yellow"), QStringLiteral("green"),
-                                       QStringLiteral("blue"), QStringLiteral("purple"), QStringLiteral("gray")};
+static QJsonObject tintPaletteJson()
+{
+    char *raw = elis_tint_palette();
+    const QJsonObject reply = QJsonDocument::fromJson(raw ? QByteArray(raw) : QByteArray()).object();
+    elis_free(raw);
+    return reply;
+}
+
+const QList<TintSwatch> &Store::tintPalette()
+{
+    static const QList<TintSwatch> palette = [] {
+        QList<TintSwatch> list;
+        for (const QJsonValue &c : tintPaletteJson().value("colors").toArray())
+            list.append({c["name"].toString(), c["light"].toString(), c["dark"].toString()});
+        return list;
+    }();
+    return palette;
+}
+
+const QJsonArray &Store::tintShownParts()
+{
+    static const QJsonArray parts = tintPaletteJson().value("shownParts").toArray();
+    return parts;
+}
+
+QString Store::parseTint(const QString &cmd, const QJsonObject &args, QString *tint)
+{
+    // only the tint keys: the rest of a new's arguments are not ElisCore's to decode
+    QJsonObject request;
+    for (const char *key : {"mode", "tint", "tintOn"})
+        if (args.contains(QLatin1String(key)))
+            request.insert(QLatin1String(key), args.value(QLatin1String(key)));
+    char *raw = elis_tint_parse(cmd.toUtf8().constData(), QJsonDocument(request).toJson(QJsonDocument::Compact).constData());
+    const QJsonObject reply = QJsonDocument::fromJson(raw ? QByteArray(raw) : QByteArray()).object();
+    elis_free(raw);
+    if (!reply.value("ok").toBool())
+        return reply.value("error").toString(QStringLiteral("the tint check gave no answer"));
+    *tint = reply.value("tint").toString();
+    return {};
+}
+
+// a stored colour as ElisCore reads it; "" when unknown
+static QString tintValue(const QString &raw)
+{
+    QString tint;
+    return Store::parseTint({}, {{"tint", raw}}, &tint).isEmpty() ? tint : QString();
+}
 
 static QJsonValue tintJson(const Tint &t)
 {
@@ -24,7 +72,7 @@ static Tint tintFromJson(const QJsonValue &v)
 {
     // an unknown colour drops the tint
     const QString color = v.toObject().value("color").toString();
-    return Store::tintColors.contains(color) ? Tint{color} : Tint{};
+    return color.isEmpty() ? Tint{} : Tint{tintValue(color)};
 }
 
 QString Session::displayName() const
@@ -644,9 +692,10 @@ Tint *Store::tintOf(const QString &id)
 void Store::setTint(const QString &id, const QString &color)
 {
     Tint *t = tintOf(id);
-    if (!t || (!color.isEmpty() && !tintColors.contains(color)) || t->color == color)
+    const QString c = color.isEmpty() ? color : tintValue(color);
+    if (!t || c.isEmpty() != color.isEmpty() || t->color == c)
         return;
-    t->color = color;
+    t->color = c;
     Q_EMIT changed();
 }
 

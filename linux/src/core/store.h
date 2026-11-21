@@ -1,6 +1,7 @@
 #pragma once
 
 #include <QHash>
+#include <QJsonArray>
 #include <QJsonObject>
 #include <QList>
 #include <QObject>
@@ -10,10 +11,16 @@
 
 #include <optional>
 
-// A sidebar row colour, one of Store::tintColors: its icon, its name, and a workspace's band or a session's wash; empty = none.
+// A sidebar row colour, a Store::tintPalette name or a lowercase #rrggbb: its icon, its name, and a workspace's band or a
+// session's wash; empty = none.
 struct Tint {
     QString color;
     bool operator==(const Tint &) const = default;
+};
+
+// One ElisCore TintColor with its macOS system colour per appearance, as #rrggbb.
+struct TintSwatch {
+    QString name, light, dark;
 };
 
 // One styled run of a session's sidebar second line: the spans array ElisBridge produces, color one of ElisCore's
@@ -122,7 +129,11 @@ class Store : public QObject
 public:
     enum class Key { Plain, Submit, Interrupt };
     static const QStringList statuses;
-    static const QStringList tintColors; // red orange yellow green blue purple gray
+    static const QList<TintSwatch> &tintPalette(); // ElisCore's, in menu order
+    static const QJsonArray &tintShownParts();     // the tree's tintOn
+    // A tint request by ElisCore's parse: cmd session.tint/workspace.tint, else a new's optional tint. Sets *tint to the
+    // normalized colour ("" = none) and returns "", or returns the refusal.
+    static QString parseTint(const QString &cmd, const QJsonObject &args, QString *tint);
 
     QList<Workspace> workspaces;
     QString selected;
