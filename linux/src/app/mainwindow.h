@@ -99,8 +99,9 @@ private:
     QAction *action(const QString &name, const QString &text, const QString &icon, const QKeySequence &key, std::function<void()> slot);
     void createMenus();
     void createTerminal(const QString &id);
+    // takeover: a fresh attach of a live pane's daemon that never creates one, claiming the lead or taking it if unowned
     KParts::ReadOnlyPart *spawnPart(const QString &id, const QString &pane, const QString &cwd, const QString &command, QWidget *parent,
-                                    const QStringList &env = {});
+                                    const QStringList &env = {}, bool takeover = false, bool claim = false);
     struct Overlay {
         QPointer<QWidget> frame;
         KParts::ReadOnlyPart *part = nullptr;
@@ -182,6 +183,8 @@ private:
     QTimer m_followTimer;
     void syncDashboardButton();
     void paneExited(const QString &id, KParts::ReadOnlyPart *part);
+    void leadReport(const QString &id, KParts::ReadOnlyPart *part, const QString &title); // a zmx role report
+    void takeOver(const QString &id, KParts::ReadOnlyPart *part, bool claim); // a fresh attach in the pane's slot
     void swapPanes(const QString &id);
     void newCompanion(const QString &parentId);
     void duplicateCompanion(const QString &id);

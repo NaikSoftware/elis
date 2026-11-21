@@ -3,10 +3,10 @@
 #include "installers.h"
 #include "keymap.h"
 #include "launcher.h"
-#include "livehost.h"
 #include "restore.h"
 #include "store.h"
 #include "transcript.h"
+#include "zmx.h"
 
 #include <QDir>
 #include <QFileInfo>
@@ -96,6 +96,53 @@ struct TranscriptFixture {
     }
     QString error(const QJsonObject &args) { return read(args).value("error").toString(); }
 };
+
+// a zmx client on a pty, as Konsole runs it
+static void startClient(QProcess &p, const QMap<QString, QString> &set, const QStringList &argv)
+{
+    QProcessEnvironment env = QProcessEnvironment::systemEnvironment();
+    for (const QString &k : env.keys())
+        if (k.startsWith(QLatin1String("ELIS_")) || k.startsWith(QLatin1String("ZMX_")))
+            env.remove(k);
+    for (auto it = set.begin(); it != set.end(); ++it)
+        env.insert(it.key(), it.value());
+    p.setProcessEnvironment(env);
+    p.start(QStringLiteral("script"), {QStringLiteral("-qfec"), Restore::shellQuoted(argv), QStringLiteral("/dev/null")});
+}
+static int clients(const QString &state, const QString &daemon)
+{
+    for (const Zmx::Record &r : Zmx::list(state).value_or(QList<Zmx::Record>()))
+        if (r.name == daemon)
+            return r.clients;
+    return -1; // not listed
+}
+// every daemon a test starts lives in its own namespace, killed by its pane ids and removed with it
+struct ZmxNamespace {
+    QTemporaryDir state;
+    QStringList panes;
+    QString dir;
+    QString pane()
+    {
+        panes << QUuid::createUuid().toString(QUuid::WithoutBraces);
+        return panes.last();
+    }
+    ~ZmxNamespace()
+    {
+        Zmx::kill(state.path(), panes);
+        if (!dir.isEmpty())
+            QDir(dir).removeRecursively();
+    }
+};
+static QString createDetached(ZmxNamespace &ns, const QString &pane, const QString &command)
+{
+    Zmx::Attach a = Zmx::attach(ns.state.path(), pane, QStringLiteral("/bin/sh"), {}, command, false);
+    ns.dir = a.set.value("ZMX_DIR");
+    a.argv.insert(2, QStringLiteral("--detached"));
+    QProcess p;
+    startClient(p, a.set, a.argv);
+    p.waitForFinished(5000);
+    return a.daemon;
+}
 
 class TestCore : public QObject
 {
@@ -845,55 +892,130 @@ private Q_SLOTS:
         QCOMPARE(call(live, t, "restore.mode")["result"]["restore"]["active"].toString(), QStringLiteral("live"));
     }
 
-    void liveDaemonOutlivesItsClientAndReplays()
+    void zmxPayloadRunsOnlyWhenTheAttachCreatesTheDaemon()
     {
-        QTemporaryDir state;
-        const QString sock = Live::socket(state.path(), QStringLiteral("s1"), QStringLiteral("main"));
-        Live::makeDir(state.path());
+        ZmxNamespace ns;
+        const QString pane = ns.pane(), mark = ns.state.filePath("ran");
+        const Zmx::Attach a = Zmx::attach(ns.state.path(), pane, QStringLiteral("/bin/sh"), QStringLiteral("echo once >> %1").arg(mark), {}, false);
+        ns.dir = a.set.value("ZMX_DIR");
+        QVERIFY(a.error.isEmpty());
+        QVERIFY(ns.dir.startsWith(qEnvironmentVariable("XDG_RUNTIME_DIR", QStringLiteral("/tmp")) + QStringLiteral("/elis-zmx-")));
+        QCOMPARE(a.argv.mid(1, 2), (QStringList{"attach", a.daemon}));
+        QVERIFY(a.daemon.startsWith(QLatin1String("elis-")) && a.daemon.size() == 37);
+        QVERIFY(!a.set.value("ZMX_MANAGED").isEmpty() && !a.set.contains("ZMX_MANAGED_CLAIM") && a.unset.contains("ZMX_MANAGED_CLAIM"));
         QProcess first;
-        first.start(QStringLiteral(ELIS_SESSION_HOST), {sock, "--", "/bin/sh", "-c", "printf 'first\\033[?2004h'; exec cat"});
-        QByteArray seen;
-        QTRY_VERIFY((seen += first.readAllStandardOutput()).contains("first"));
-        QTRY_VERIFY(Live::alive(sock));
+        startClient(first, a.set, a.argv);
+        QTRY_VERIFY(QFile::exists(mark));
+        QTRY_VERIFY(Zmx::shellPid(ns.state.path(), pane) > 0);
+        const int shell = Zmx::shellPid(ns.state.path(), pane);
         first.kill();
         first.waitForFinished();
-        QVERIFY(Live::alive(sock));
-        QCOMPARE(Live::sockets(state.path()), QStringList{sock});
+        QTRY_COMPARE(clients(ns.state.path(), a.daemon), 0); // the daemon outlives its client
 
+        const Zmx::Attach again = Zmx::attach(ns.state.path(), pane, QStringLiteral("/bin/sh"), QStringLiteral("echo twice >> %1").arg(mark), {}, false);
         QProcess second;
-        second.start(QStringLiteral(ELIS_SESSION_HOST), {sock, "--", "/bin/sh", "-c", "echo second"});
-        seen.clear();
-        QTRY_VERIFY((seen += second.readAllStandardOutput()).endsWith("\x1b[?2004h")); // the replay, then the modes in force
-        QVERIFY(seen.startsWith("first") && !seen.contains("second"));
-        second.write("ping\n");
-        QTRY_VERIFY((seen += second.readAllStandardOutput()).contains("ping"));
+        startClient(second, again.set, again.argv);
+        QTRY_COMPARE(clients(ns.state.path(), a.daemon), 1);
+        QCOMPARE(Zmx::shellPid(ns.state.path(), pane), shell); // the same shell, not a new one
+        QFile f(mark);
+        QVERIFY(f.open(QIODevice::ReadOnly));
+        QCOMPARE(f.readAll(), QByteArray("once\n")); // a surviving daemon ignores the payload
 
-        Live::kill(sock);
-        QVERIFY(!Live::alive(sock));
-        QVERIFY(!QFile::exists(Live::dir(state.path())));
-        QVERIFY(second.waitForFinished(3000));
+        second.write("exit\r"); // the shell's exit ends the daemon, and with it the pane's client
+        QTRY_COMPARE(clients(ns.state.path(), a.daemon), -1);
+        QTRY_COMPARE(second.state(), QProcess::NotRunning);
     }
 
-    void liveKillEndsAForegroundJobIgnoringHangup()
+    void zmxKillEndsAForegroundJobIgnoringHangup()
     {
-        QTemporaryDir state;
-        const QString sock = Live::socket(state.path(), QStringLiteral("s1"), QStringLiteral("main")), pidFile = state.filePath("job.pid");
-        Live::makeDir(state.path());
-        QProcess client;
+        ZmxNamespace ns;
+        const QString pane = ns.pane(), pidFile = ns.state.filePath("job.pid");
         // set -m gives the job its own process group in front of the shell's, as an interactive shell does
-        client.start(QStringLiteral(ELIS_SESSION_HOST),
-                     {sock, "--", "/bin/bash", "-c", QStringLiteral("set -m; sh -c 'trap \"\" HUP; echo $$ > %1; exec sleep 60'; exit").arg(pidFile)});
+        createDetached(ns, pane, QStringLiteral("set -m; sh -c 'trap \"\" HUP; echo $$ > %1; exec sleep 60'; exit").arg(pidFile));
         const auto readJob = [&] {
             QFile f(pidFile);
             return f.open(QIODevice::ReadOnly) ? f.readAll().trimmed().toInt() : 0;
         };
         QTRY_VERIFY(readJob() > 1);
         const int job = readJob();
-        QVERIFY(::kill(job, 0) == 0);
-        QCOMPARE(Live::foregroundPid(Live::shellPid(sock)), job);
-        Live::kill(sock);
+        QTRY_COMPARE(Zmx::foregroundPid(Zmx::shellPid(ns.state.path(), pane)), job);
+        Zmx::kill(ns.state.path(), {pane});
         QTRY_VERIFY(::kill(job, 0) != 0);
-        QTRY_COMPARE(client.state(), QProcess::NotRunning);
+    }
+
+    void zmxLaunchReapFollowsTheRequestedMode()
+    {
+        ZmxNamespace ns;
+        const QString claimed = ns.pane(), stray = ns.pane();
+        const QString a = createDetached(ns, claimed, QStringLiteral("exec sleep 60")), b = createDetached(ns, stray, QStringLiteral("exec sleep 60"));
+        QTRY_COMPARE(clients(ns.state.path(), b), 0);
+        Zmx::reap(ns.state.path(), QStringLiteral("live"), std::nullopt); // an unreadable window file: nothing is safe to end
+        QCOMPARE(clients(ns.state.path(), b), 0);
+        Zmx::reap(ns.state.path(), QStringLiteral("live"), QStringList{claimed});
+        QCOMPARE(clients(ns.state.path(), a), 0);
+        QCOMPARE(clients(ns.state.path(), b), -1);
+        Zmx::reap(ns.state.path(), QStringLiteral("none"), QStringList{claimed}); // Fresh shells claims nothing
+        QCOMPARE(clients(ns.state.path(), a), -1);
+    }
+
+    void zmxRoleReportsCoverAPaneThatDoesNotLead()
+    {
+        ZmxNamespace ns;
+        const QString pane = ns.pane();
+        const Zmx::Attach a = Zmx::attach(ns.state.path(), pane, QStringLiteral("/bin/sh"), {}, {}, false);
+        ns.dir = a.set.value("ZMX_DIR");
+        QProcess mine;
+        startClient(mine, a.set, a.argv);
+        const QString nonce = a.set.value("ZMX_MANAGED");
+        QByteArray seen;
+        const auto report = [&](const QString &role) {
+            const QByteArray marker = QStringLiteral("\x1b]2;zmx-role;%1:%2:").arg(nonce, role).toUtf8();
+            const qsizetype at = (seen += mine.readAllStandardOutput()).lastIndexOf(marker);
+            return at < 0 ? QString() : QString::fromUtf8(seen.mid(at + 4, seen.indexOf("\x1b\\", at) - at - 4));
+        };
+        QTRY_VERIFY(!report("leader").isEmpty());
+        QVERIFY(!Zmx::report(pane, report("leader")).covered);
+        QCOMPARE(Zmx::lead(pane).role, QStringLiteral("leader"));
+
+        QMap<QString, QString> other = a.set; // another client claims the lead, as a phone will
+        other.insert("ZMX_MANAGED", QStringLiteral("phone"));
+        other.insert("ZMX_MANAGED_CLAIM", QStringLiteral("1"));
+        QProcess phone;
+        startClient(phone, other, a.argv);
+        QTRY_VERIFY(!report("follower").isEmpty());
+        const Zmx::Lead covered = Zmx::report(pane, report("follower"));
+        QVERIFY(covered.report && covered.changed && covered.covered);
+        QCOMPARE(covered.role, QStringLiteral("follower"));
+        QVERIFY(!Zmx::report(pane, report("follower")).changed); // the same report twice changes nothing
+        QVERIFY(!Zmx::report(pane, QStringLiteral("zmx-role;forged:leader:99")).changed); // another attachment's nonce
+        QVERIFY(!Zmx::report(pane, QStringLiteral("vim")).report);
+        const QJsonObject node = Zmx::surface(
+            {{"id", "surface:s1:left"}, {"kind", "left"}, {"active", true}, {"visible", true}, {"backedByZmx", true}, {"paneID", pane}});
+        QCOMPARE(node, (QJsonObject{{"id", "surface:s1:left"}, {"kind", "left"}, {"active", true}, {"visible", true}, {"backedByZmx", true},
+                                    {"paneID", pane}, {"lead", "follower"}}));
+        Zmx::forget(pane);
+        QVERIFY(!Zmx::lead(pane).covered);
+        phone.kill();
+        mine.kill();
+        phone.waitForFinished();
+        mine.waitForFinished();
+        QCOMPARE(Zmx::surface({{"id", "x"}, {"kind", "right"}, {"active", false}, {"visible", false}, {"backedByZmx", false}, {"paneID", ""}}),
+                 (QJsonObject{{"id", "x"}, {"kind", "right"}, {"active", false}, {"visible", false}, {"backedByZmx", false}}));
+    }
+
+    void paneIdsPersistWithTheirSplit()
+    {
+        Store s;
+        const QString id = s.addSession(s.addWorkspace("w"), {}, QDir::homePath());
+        s.session(id)->paneId = QStringLiteral("a");
+        s.session(id)->splitPaneId = QStringLiteral("b"); // left over from a closed split
+        Store next;
+        next.fromJson(s.toJson());
+        QCOMPARE(next.session(id)->paneId, QStringLiteral("a"));
+        QVERIFY(next.session(id)->splitPaneId.isEmpty());
+        s.session(id)->hasSplit = true;
+        next.fromJson(s.toJson());
+        QCOMPARE(next.session(id)->splitPaneId, QStringLiteral("b"));
     }
 
     void dashboardTargetsExpandDropAndTrim()

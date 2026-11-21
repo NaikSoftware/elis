@@ -3,7 +3,7 @@
 #include "hooks.h"
 
 #include "control.h"
-#include "livehost.h"
+#include "zmx.h"
 #include "mainwindow.h"
 #include "store.h"
 
@@ -49,6 +49,39 @@ WindowLibrary::~WindowLibrary()
 QString WindowLibrary::path(const QString &id) const
 {
     return m_dir + QStringLiteral("/windows/") + id + QStringLiteral(".json");
+}
+
+static QStringList filePaneIds(const QJsonObject &window)
+{
+    QStringList out;
+    for (const auto &w : window.value("workspaces").toArray())
+        for (const auto &s : w.toObject().value("sessions").toArray())
+            for (const char *key : {"paneId", "splitPaneId"})
+                if (const QString id = s.toObject().value(QLatin1String(key)).toString(); !id.isEmpty())
+                    out << id;
+    return out;
+}
+
+std::optional<QStringList> WindowLibrary::paneIds() const
+{
+    QStringList out;
+    for (const Entry &e : m_entries) {
+        if (e.store) {
+            for (const Session *s : e.store->allSessions())
+                out << s->paneId << s->splitPaneId;
+            continue;
+        }
+        QFile f(path(e.id));
+        if (!f.exists())
+            continue;
+        QJsonParseError error{};
+        const QJsonDocument doc = f.open(QIODevice::ReadOnly) ? QJsonDocument::fromJson(f.readAll(), &error) : QJsonDocument();
+        if (!doc.isObject())
+            return std::nullopt; // a pane it names could look unclaimed
+        out << filePaneIds(doc.object());
+    }
+    out.removeAll(QString());
+    return out;
 }
 
 void WindowLibrary::load()
@@ -243,10 +276,7 @@ bool WindowLibrary::remove(const QString &id, QString *error)
             }
     close(id);
     if (QFile f(path(id)); f.open(QIODevice::ReadOnly)) // a deleted window's live daemons go with its sessions
-        for (const auto &w : QJsonDocument::fromJson(f.readAll()).object().value("workspaces").toArray())
-            for (const auto &s : w.toObject().value("sessions").toArray())
-                for (const char *pane : {"main", "right"})
-                    Live::kill(Live::socket(m_dir, s.toObject().value("id").toString(), QLatin1String(pane)));
+        Zmx::kill(m_dir, filePaneIds(QJsonDocument::fromJson(f.readAll()).object()));
     QFile::remove(path(id));
     m_entries.removeIf([&id](const Entry &x) { return x.id == id; });
     saveIndex();

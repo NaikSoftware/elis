@@ -33,25 +33,26 @@ shell, for zsh, bash, fish and any other shell.
 
 - CMake stages zmx with `macos/scripts/setup.sh --zmx-only` for the host arch (zig 0.16, its stamp in the build dir),
   copies it beside `elis`, installs it to `bin` with its licence; configure fails with what to install when it cannot.
-- `src/core/zmx.{h,cpp}`: runs `zmx list` and `zmx kill` with the bridge's environment, caches each pane's shell pid
-  from the listing, and keeps the one-time reaper of the old `elis-session-host` sockets (the `k` frame).
+- `src/core/zmx.{h,cpp}`: runs `zmx list` and `zmx kill` with the bridge's environment, and caches each pane's shell
+  pid from the listing.
 - Store: each session persists `paneId` and `splitPaneId`, the pane identities behind the daemon names and
   `ELIS_PANE_ID`; a swap or a promoted split exchanges them.
 - Panes: Konsole runs `zmx attach` with the payload; role reports are taken off the OSC titles of both panes; a pane
   that does not lead gets a cover (Qt palette), a key takes the lead with a fresh claiming attach in a new part.
 - Delete, split close and window delete read the foreground job, `zmx kill --force`, then hang it up as
-  `ServerPanes.end` does. Launch: the old daemons go first, then `ZmxReapPolicy` over every window file.
-- Removed: `src/host/sessionhost.cpp`, its target, install entry and tests.
+  `ServerPanes.end` does. Launch: `ZmxReapPolicy` over every window file.
+- Removed: `src/host/sessionhost.cpp`, its target, install entry and tests. No migration (owner, 2026-11-21): the
+  owner restarts the sessions the old daemons hold.
 
 ## Tests
 
 - ElisCore: `ZmxReplayScriptTests` and `ZmxSupportTests` cases for the additions.
 - `test_core`: a real zmx daemon in a temp socket directory (attach payload runs once, list, shell pid, kill ends a
   job ignoring SIGHUP, reap keeps claimed and kills unclaimed); the lead report state machine through the bridge;
-  `surfaces[]` in the tree; pane ids persisted, swapped and promoted; the legacy reaper against a fake listener.
+  `surfaces[]` encoding; pane ids persisted.
 - smoke: live launch replays the captured command once as payload, a reattach keeps the program and the shell, a
-  session delete ends its daemon, a Fresh shells launch reaps the rest, and the old daemon socket is reaped at launch.
-- The migrate test keeps a stand-in for the old daemon protocol.
+  split close and a session delete end their daemons, a Fresh shells launch reaps the rest, `surfaces[]` reads back.
+- The agterm-qt migrate test gets a stand-in for `agterm-session-host`, which it used to copy from the deleted host.
 
 ## Done when
 

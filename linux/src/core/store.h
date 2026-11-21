@@ -58,6 +58,9 @@ struct Session {
     // the line that resumes the agent conversation it ran last (claude --resume <id>), not persisted; a closed
     // session keeps it, and its reopened shell types it
     QString resume;
+    // each pane's identity (a UUID): its ELIS_PANE_ID and the name of its live zmx daemon; persisted, and a pane that
+    // starts over (a split opened again, a parent's respawn) gets a new one
+    QString paneId, splitPaneId;
 
     QString displayName() const;
 };

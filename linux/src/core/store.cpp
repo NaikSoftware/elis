@@ -879,6 +879,10 @@ QJsonObject Store::toJson() const
                 so.insert("splitRestoreCommand", *s.splitRestorePin);
             if (!s.context.isEmpty())
                 so.insert("context", s.context);
+            if (!s.paneId.isEmpty())
+                so.insert("paneId", s.paneId);
+            if (s.hasSplit && !s.splitPaneId.isEmpty())
+                so.insert("splitPaneId", s.splitPaneId);
             ss << so;
         }
         QJsonObject wo{{"id", w.id}, {"name", w.name}, {"folder", w.folder}, {"sessions", ss}};
@@ -933,6 +937,8 @@ void Store::fromJson(const QJsonObject &o)
                 s.restorePin = so.value("restoreCommand").toString();
             if (so.contains("splitRestoreCommand"))
                 s.splitRestorePin = so.value("splitRestoreCommand").toString();
+            s.paneId = so.value("paneId").toString();
+            s.splitPaneId = s.hasSplit ? so.value("splitPaneId").toString() : QString();
             if (!s.id.isEmpty())
                 w.sessions << s;
         }

@@ -7,8 +7,9 @@
 #include "launcher.h"
 #include "transcript.h"
 #include "library.h"
-#include "livehost.h"
+#include "zmx.h"
 #include "palette.h"
+#include "paneleadcover.h"
 #include "restore.h"
 #include "paths.h"
 #include "phone.h"
@@ -66,7 +67,6 @@
 
 #include <csignal>
 
-// A live pane's shell runs under its daemon, behind the attach client Konsole started; Konsole sees only the client.
 // A very light wash of the shown session's background tint over the terminal, so panels tell apart by colour.
 // Not in the stack's layout: it covers the whole stack and lets every mouse event through to the terminal.
 // elis's chrome glyphs: the text colour, dimmed as its title-bar and footer buttons are
@@ -206,29 +206,31 @@ private:
     QString m_agent, m_workspace, m_session, m_context, m_hint;
 };
 
+// A live pane's shell runs under its zmx daemon, behind the attach client Konsole started; Konsole sees only the
+// client. Its `elisZmx` property is the pane identity the daemon is named by.
 static int shellPid(KParts::ReadOnlyPart *part)
 {
     auto *t = qobject_cast<TerminalInterface *>(part);
     if (!t)
         return -1;
-    const QString live = part->property("elisLive").toString();
-    return live.isEmpty() ? t->terminalProcessId() : Live::shellPid(live);
+    const QString zmx = part->property("elisZmx").toString();
+    return zmx.isEmpty() ? t->terminalProcessId() : Zmx::shellPid(stateDir(), zmx);
 }
 
 // Konsole's foregroundProcessId lags a command starting; the shell's tty says who is in front right now
 static int freshForegroundPid(KParts::ReadOnlyPart *part)
 {
-    return Live::foregroundPid(shellPid(part));
+    return Zmx::foregroundPid(shellPid(part));
 }
 
-// a foreground job ignoring SIGHUP (nohup, a trap) must not outlive its closed pane; a live pane's host ends its own
+// a foreground job ignoring SIGHUP (nohup, a trap) must not outlive its closed pane; a live pane's kill ends its own
 static void endForegroundJob(KParts::ReadOnlyPart *part)
 {
-    if (!part || !part->property("elisLive").toString().isEmpty())
+    if (!part || !part->property("elisZmx").toString().isEmpty())
         return;
-    const int shell = shellPid(part), job = Live::foregroundPid(shell);
+    const int shell = shellPid(part), job = Zmx::foregroundPid(shell);
     if (job > 0 && job != shell)
-        QTimer::singleShot(2000, [job] { ::kill(-job, SIGKILL); }); // the hangup first, as the session host does
+        QTimer::singleShot(2000, [job] { ::kill(-job, SIGKILL); }); // the hangup first, as a closed terminal sends
 }
 
 static int foregroundPid(KParts::ReadOnlyPart *part)
@@ -236,8 +238,7 @@ static int foregroundPid(KParts::ReadOnlyPart *part)
     auto *t = qobject_cast<TerminalInterface *>(part);
     if (!t)
         return -1;
-    const QString live = part->property("elisLive").toString();
-    return live.isEmpty() ? t->foregroundProcessId() : Live::foregroundPid(Live::shellPid(live));
+    return part->property("elisZmx").toString().isEmpty() ? t->foregroundProcessId() : Zmx::foregroundPid(shellPid(part));
 }
 
 QWidget *terminalDisplay(KParts::ReadOnlyPart *part)
@@ -477,13 +478,15 @@ MainWindow::MainWindow(Store &store, const QString &statePath)
         dashboardForget(id); // its panes go back home first, so they die with the view
         // taken first, so the parts dying with their view are not mistaken for shells that exited
         if (Panes p = m_panes.take(id); p.view) {
+            QStringList daemons; // a deleted session's daemons go with it; a closed window's stay
+            for (KParts::ReadOnlyPart *part : {p.main, p.right})
+                if (part && !part->property("elisZmx").toString().isEmpty())
+                    daemons << part->property("elisZmx").toString();
+            Zmx::kill(stateDir(), daemons);
             endForegroundJob(p.main);
             endForegroundJob(p.right);
             p.view->deleteLater(); // closes the ptys, which hangs up the shells
         }
-        for (const char *pane : {"main", "right"}) // a deleted session's daemons go with it; a closed window's stay
-            if (const QString live = Live::socket(stateDir(), id, QLatin1String(pane)); QFile::exists(live))
-                Live::kill(live);
     });
     connect(&m_store, &Store::selectionChanged, this, &MainWindow::showSelected);
     connect(&m_store, &Store::paneLayoutChanged, this, &MainWindow::applyLayout);
@@ -892,7 +895,7 @@ void MainWindow::restore(const QJsonObject &window)
 }
 
 KParts::ReadOnlyPart *MainWindow::spawnPart(const QString &id, const QString &pane, const QString &cwd, const QString &command, QWidget *parent,
-                                            const QStringList &env)
+                                            const QStringList &env, bool takeover, bool claim)
 {
     auto result = KParts::PartLoader::instantiatePart<KParts::ReadOnlyPart>(KPluginMetaData(QStringLiteral("kf6/parts/konsolepart")), parent, this);
     if (!result) {
@@ -926,29 +929,39 @@ KParts::ReadOnlyPart *MainWindow::spawnPart(const QString &id, const QString &pa
                      QStringLiteral("PATH=") + appDir + QLatin1Char(':') + qEnvironmentVariable("PATH")};
     if (!windowId.isEmpty())
         argv << QStringLiteral("ELIS_WINDOW_ID=") + windowId;
-    QString live;
-    // without the host binary the pane would exit at once and take its session with it, so it gets a plain shell
-    if ((pane == QLatin1String("main") || pane == QLatin1String("right")) && m_store.restoreModeAtLaunch == QLatin1String("live")
-        && QFile::exists(appDir + QStringLiteral("/elis-session-host")))
-        live = Live::socket(stateDir(), id, pane), Live::makeDir(stateDir());
-    const bool reattach = !live.isEmpty() && Live::alive(live);
-    if (pane == QLatin1String("main") || pane == QLatin1String("right")) { // msg.* addresses a pane by it; a respawn gets a new one
-        // a reattached shell keeps the id it was started with
-        const QString paneId = reattach && !Live::paneId(live).isEmpty() ? Live::paneId(live) : QUuid::createUuid().toString(QUuid::WithoutBraces);
-        if (!live.isEmpty() && !reattach)
-            Live::setPaneId(live, paneId);
+    const bool shellPane = pane == QLatin1String("main") || pane == QLatin1String("right");
+    Session *s = m_store.session(id);
+    if (shellPane && s) { // msg.* addresses a pane by it, and a live pane's daemon is named after it
+        QString &paneId = pane == QLatin1String("right") ? s->splitPaneId : s->paneId;
+        if (paneId.isEmpty())
+            paneId = QUuid::createUuid().toString(QUuid::WithoutBraces), m_saveTimer.start();
         part->setProperty("elisPaneId", paneId);
         argv << QStringLiteral("ELIS_PANE_ID=") + paneId;
     }
     argv << env;
-    if (!live.isEmpty()) { // a surviving daemon ignores the rest of argv: its shell already runs
-        argv << appDir + QStringLiteral("/elis-session-host") << live << QStringLiteral("--");
-        part->setProperty("elisLive", live);
-        part->setProperty("elisReattached", reattach);
+    // without zmx the pane would exit at once and take its session with it, so it gets a plain shell
+    if (shellPane && s && m_store.restoreModeAtLaunch == QLatin1String("live") && QFileInfo(Zmx::executable()).isExecutable()) {
+        const QString paneId = part->property("elisPaneId").toString();
+        // a surviving daemon ignores the payload: its shell already runs; a missing one runs it once
+        const QString line = takeover || !command.isEmpty() ? QString() : m_store.takeReplay(id, pane == QLatin1String("right"), m_denylist);
+        // a takeover only attaches: a daemon gone meanwhile ends the pane rather than hand back a new shell
+        const Zmx::Attach a = takeover ? Zmx::attach(stateDir(), paneId, QStringLiteral("/bin/sh"), {},
+                                                     QStringLiteral("printf '%s\\n' 'elis: session is gone'; exit 1"), claim, true)
+                                       : Zmx::attach(stateDir(), paneId, shell, line, command, false);
+        for (const QString &name : a.unset)
+            argv.insert(3, name), argv.insert(3, QStringLiteral("-u")); // env's options go before its assignments
+        for (auto it = a.set.begin(); it != a.set.end(); ++it)
+            argv << it.key() + QLatin1Char('=') + it.value();
+        argv << a.argv;
+        part->setProperty("elisZmx", paneId);
+        auto *cover = new PaneLeadCover(part->widget(), terminalDisplay(part), [this, id, part] { takeOver(id, part, true); },
+                                        [this](QKeyEvent *e) { return isOwnShortcut(e); });
+        cover->apply(Zmx::lead(paneId));
+    } else {
+        argv << shell;
+        if (!command.isEmpty())
+            argv << QStringLiteral("-c") << command;
     }
-    argv << shell;
-    if (!command.isEmpty())
-        argv << QStringLiteral("-c") << command;
     qobject_cast<TerminalInterface *>(part)->startProgram(argv.first(), argv);
     if (QWidget *display = terminalDisplay(part)) { // the profile's font, what Settings and reset return to
         display->setProperty("elisProfileFont", display->font());
@@ -1032,11 +1045,11 @@ void MainWindow::applyLayout(const QString &id)
         p.split->handle(1)->setProperty("elisSession", id);
     } else if (!s->hasSplit && p.right) {
         auto *right = std::exchange(p.right, nullptr);
-        const QString live = right->property("elisLive").toString();
+        if (const QString zmx = right->property("elisZmx").toString(); !zmx.isEmpty())
+            Zmx::kill(stateDir(), {zmx});
         endForegroundJob(right);
         delete right; // closes the split shell whatever it runs
-        if (!live.isEmpty())
-            Live::kill(live);
+        s->splitPaneId.clear(); // a split opened again is a new pane
     }
     p.split->setOrientation(s->splitAxis == QLatin1String("horizontal") ? Qt::Vertical : Qt::Horizontal);
     if (p.right) {
@@ -1060,8 +1073,10 @@ void MainWindow::paneExited(const QString &id, KParts::ReadOnlyPart *part)
         p.right = p.right == part ? nullptr : p.right;
         return;
     }
+    Zmx::forget(part->property("elisZmx").toString());
     if (part == p.right) {
         p.right = nullptr;
+        m_store.session(id)->splitPaneId.clear();
         m_store.setSplit(id, false, false, m_store.session(id)->splitAxis);
     } else if (part == p.main) {
         p.main = nullptr;
@@ -1069,16 +1084,14 @@ void MainWindow::paneExited(const QString &id, KParts::ReadOnlyPart *part)
         if (p.right) { // the split survivor becomes the session's only shell
             p.main = std::exchange(p.right, nullptr);
             p.main->widget()->show();
-            if (const QString live = p.main->property("elisLive").toString(); !live.isEmpty()) {
-                const QString main = Live::socket(stateDir(), id, QStringLiteral("main"));
-                Live::move(live, main);
-                p.main->setProperty("elisLive", main);
-            }
+            Session *s = m_store.session(id); // its identity, and so its daemon, moves with it
+            s->paneId = std::exchange(s->splitPaneId, {});
             m_store.setSplit(id, false, false, m_store.session(id)->splitAxis);
         } else if (!m_store.companionsOf(id).isEmpty() && m_respawned.value(id).msecsTo(QDateTime::currentDateTime()) > 2000) {
             // a parent with companions gets a fresh shell; one that exits again within 2 s closes the group
             m_respawned.insert(id, QDateTime::currentDateTime());
-            const Session *s = m_store.session(id);
+            Session *s = m_store.session(id);
+            s->paneId.clear(); // a new shell, a new pane
             p.main = spawnPart(id, QStringLiteral("main"), s->cwd, {}, p.split);
             if (p.main) {
                 p.split->insertWidget(0, p.main->widget());
@@ -1090,6 +1103,50 @@ void MainWindow::paneExited(const QString &id, KParts::ReadOnlyPart *part)
         }
     }
     dashboardForget(id);
+}
+
+void MainWindow::leadReport(const QString &id, KParts::ReadOnlyPart *part, const QString &title)
+{
+    const Panes p = m_panes.value(id);
+    if (part != p.main && part != p.right)
+        return; // a retired part's late report
+    const Zmx::Lead lead = Zmx::report(part->property("elisZmx").toString(), title);
+    if (!lead.changed)
+        return;
+    if (auto *cover = part->widget()->findChild<PaneLeadCover *>())
+        cover->apply(lead);
+    if (lead.role == QLatin1String("unowned")) // the leader left: lead only if nobody claims it meanwhile
+        takeOver(id, part, false);
+}
+
+// The Mac's PaneLead.reattach: taking the lead is a fresh attach in a new part, since the covered one drew output
+// laid out for another grid. None of the pane's close paths run, so its program keeps its ELIS_PANE_ID.
+void MainWindow::takeOver(const QString &id, KParts::ReadOnlyPart *part, bool claim)
+{
+    Panes &p = m_panes[id];
+    const Session *s = m_store.session(id);
+    const bool right = part == p.right;
+    const int at = p.split ? p.split->indexOf(part->widget()) : -1;
+    if (!s || (!right && part != p.main) || at < 0)
+        return; // shortcut: a pane shown in the dashboard is not taken over there; it is once it is back home
+    const QList<int> sizes = p.split->sizes();
+    const bool focused = part->widget()->isAncestorOf(QApplication::focusWidget());
+    auto *fresh = spawnPart(id, right ? QStringLiteral("right") : QStringLiteral("main"), liveCwd(id), {}, p.split, {}, true, claim);
+    if (!fresh)
+        return;
+    disconnect(part, &QObject::destroyed, this, nullptr); // its client's exit is not the pane's
+    (right ? p.right : p.main) = fresh;
+    p.split->insertWidget(at, fresh->widget());
+    fresh->widget()->setVisible(part->widget()->isVisible());
+    part->widget()->hide();
+    part->deleteLater(); // the cover asking for this is still on the stack
+    p.split->setSizes(sizes);
+    if (const double size = right ? s->splitFontSize : s->fontSize; size > 0)
+        zoomFontTo(terminalDisplay(fresh), size);
+    if (!right)
+        m_sessions.remove(id);
+    if (focused)
+        fresh->widget()->setFocus();
 }
 
 void MainWindow::newCompanion(const QString &parentId)
@@ -1168,8 +1225,8 @@ bool MainWindow::panePlan(const QString &sessionId, const QString &pane, PanePla
 void MainWindow::replay(const QString &id, KParts::ReadOnlyPart *part, bool split)
 {
     // typed into the login shell rather than exec'd, so the shell remains when the program ends
-    // a reattached live pane still runs it, so the capture is only the fallback for a daemon that is gone
-    if (const QString line = m_store.takeReplay(id, split, m_denylist); !line.isEmpty() && part && !part->property("elisReattached").toBool())
+    // a live pane got it as its attach payload, which only a daemon the attach creates runs
+    if (const QString line = m_store.takeReplay(id, split, m_denylist); !line.isEmpty() && part && part->property("elisZmx").toString().isEmpty())
         qobject_cast<TerminalInterface *>(part)->sendInput(line + QLatin1Char('\n'));
 }
 
@@ -1198,11 +1255,9 @@ void MainWindow::swapPanes(const QString &id)
         return;
     p.split->insertWidget(0, p.right->widget()); // physical positions and the primary role move together
     std::swap(p.main, p.right);
-    const QString a = p.main->property("elisLive").toString(), b = p.right->property("elisLive").toString();
-    if (!a.isEmpty() && !b.isEmpty()) { // each daemon is named by its role
-        Live::swap(a, b);
-        p.main->setProperty("elisLive", b);
-        p.right->setProperty("elisLive", a);
+    if (Session *s = m_store.session(id)) { // each pane keeps its identity, and so its daemon, in its new role
+        std::swap(s->paneId, s->splitPaneId);
+        m_saveTimer.start();
     }
     m_sessions.remove(id);
 }
@@ -1316,6 +1371,8 @@ void MainWindow::paneTitle(const QString &id, QObject *part, const QString &titl
     // on every line (bash's user@host: dir) does not. Konsole sends the caption lazily, often only once the next
     // command is in front, so the prompt's title is remembered to tell it apart.
     auto *p = qobject_cast<KParts::ReadOnlyPart *>(part);
+    if (p && title.startsWith(QLatin1String("zmx-role;"))) // a zmx client's role report is never a title
+        return leadReport(id, p, title);
     if (!p || p != m_panes.value(id).main)
         return;
     const int fg = freshForegroundPid(p);
@@ -1369,7 +1426,7 @@ QJsonObject MainWindow::info(const QString &sessionId)
         return {};
     KParts::ReadOnlyPart *part = m_panes.value(sessionId).main;
     QFile comm(QStringLiteral("/proc/%1/comm").arg(foregroundPid(part)));
-    const bool live = !part->property("elisLive").toString().isEmpty();
+    const bool live = !part->property("elisZmx").toString().isEmpty();
     return {{"pid", shellPid(part)},
             {"foreground", live && comm.open(QIODevice::ReadOnly) ? QString::fromUtf8(comm.readAll()).trimmed() : t->foregroundProcessName()},
             {"foregroundPid", foregroundPid(part)},
@@ -1502,7 +1559,7 @@ void MainWindow::sampleAgents()
     for (auto *s : m_store.allSessions()) {
         KParts::ReadOnlyPart *part = m_panes.value(s->id).main;
         const int fg = foregroundPid(part);
-        if (part && !part->property("elisLive").toString().isEmpty())
+        if (part && !part->property("elisZmx").toString().isEmpty())
             m_store.setCwd(s->id, liveCwd(s->id)); // Konsole tracks only its own child, the attach client
         auto argvsOf = [](const QList<int> &group) {
             QList<QStringList> argvs;

@@ -4,7 +4,7 @@ set -euo pipefail
 root=$(cd "$(dirname "$0")/.." && pwd)
 bin=$root/build
 export ELIS_STATE_DIR=$(mktemp -d /tmp/agq.XXXX)
-unset ELIS_SESSION_ID ELIS_SOCKET
+for v in $(env | sed -n 's/^\(ELIS_[A-Z_]*\|ZMX_[A-Z_]*\|AGTERM_[A-Z_]*\)=.*/\1/p'); do [ "$v" = ELIS_STATE_DIR ] || unset "$v"; done
 ctl() { "$bin/elisctl" "$@"; }
 pid=
 mpid=
@@ -17,8 +17,14 @@ start() {
 stop() { kill "$pid"; wait "$pid" 2>/dev/null || true; }
 fail() { echo "FAIL: $*"; ctl tree || true; stop; exit 1; }
 fail0() { echo "FAIL: $*"; exit 1; } # before the app runs
-livedir=${XDG_RUNTIME_DIR:-/tmp}/elis-$(printf %s "$ELIS_STATE_DIR" | sha1sum | cut -c1-8)
-reap() { for s in "$livedir"/*.main "$livedir"/*.right; do [ -S "$s" ] && "$bin/elis-session-host" --kill "$s"; done; rm -rf "$livedir"; }
+# this state dir's zmx namespace (ZmxSupport.socketDirectory: FNV-1a 64 of the resolved path)
+zdir=${XDG_RUNTIME_DIR:-/tmp}/elis-zmx-$(python3 -I -c 'import os,sys
+h=14695981039346656037
+for b in os.path.realpath(sys.argv[1]).encode(): h=((h^b)*1099511628211)%2**64
+print("%016x"%h)' "$ELIS_STATE_DIR")
+zmx() { ZMX_DIR=$zdir ZMX_SESSION= ZMX_SESSION_PREFIX= "$bin/zmx" "$@"; }
+daemons() { if [ -d "$zdir" ]; then zmx list --short 2>/dev/null | grep -c '^elis-' || true; else echo 0; fi; }
+reap() { [ -d "$zdir" ] && for n in $(zmx list --short 2>/dev/null); do zmx kill "$n" --force >/dev/null; done; rm -rf "$zdir"; }
 trap 'kill $pid $mpid 2>/dev/null || true; reap; rm -rf "$ELIS_STATE_DIR"' EXIT
 
 mkdir -p "$ELIS_STATE_DIR/config" # an isolated state dir keeps keymap.conf and hooks.conf there too
@@ -341,11 +347,13 @@ ctl restore mode live >/dev/null
 stop
 timeout 3 openssl s_client -connect "127.0.0.1:$port" </dev/null >/dev/null 2>&1 && fail0 "the relay outlived the app"
 
-start # live: every pane starts its daemon, and the captured sleep is replayed into the fresh shell once
+start # live: every pane starts its daemon, and the captured sleep is the attach payload, run once
 ctl restore mode | grep -q 'active     live' || fail "live mode at launch"
 for _ in $(seq 20); do ctl session get --target src | grep -qE '^foreground +sleep' && break; sleep 0.2; done
 spid=$(ctl session get --target src | awk '/^foregroundPid /{print $2}')
 [ -n "$spid" ] && [ "$spid" -gt 0 ] || fail "live pane foreground"
+ctl tree --json | grep -q '"backedByZmx":true' || fail "a live session reads backedByZmx"
+ctl tree --json | grep -q '"kind":"left","lead":"leader","paneID":"[0-9a-f-]*","visible":true' || fail "tree surfaces[]"
 ctl session type $'LIVE_VAR=kept\n' --target renamed
 sleep 0.5
 stop
@@ -357,10 +365,23 @@ for _ in $(seq 20); do ctl session get --target src | grep -qE '^foreground +sle
 ctl session type 'echo "V=$LIVE_VAR"'$'\n' --target renamed
 for _ in $(seq 20); do ctl session text --target renamed --lines 5 | grep -q 'V=kept' && break; sleep 0.2; done
 ctl session text --target renamed --lines 5 | grep -q 'V=kept' || fail "live reattach keeps the shell"
+gone=$(ctl session new --name gone --no-select)
+for _ in $(seq 20); do [ "$(daemons)" -gt "$(ctl tree --json | grep -o '"kind":"left"' | wc -l)" ] && break; sleep 0.2; done
+before=$(daemons)
+ctl session split on --target "$gone" >/dev/null
+for _ in $(seq 20); do [ "$(daemons)" -gt "$before" ] && break; sleep 0.2; done
+[ "$(daemons)" -gt "$before" ] || fail "a live split starts its own daemon"
+ctl session split close --target "$gone"
+for _ in $(seq 20); do [ "$(daemons)" = "$before" ] && break; sleep 0.2; done
+[ "$(daemons)" = "$before" ] || fail "closing a split ends its daemon"
+ctl session close --target "$gone" >/dev/null
+for _ in $(seq 20); do [ "$(daemons)" -lt "$before" ] && break; sleep 0.2; done
+[ "$(daemons)" -lt "$before" ] || fail "deleting a session ends its daemon"
 ctl restore mode none >/dev/null
 stop
 
 start # a Fresh shells launch ends what a live run left
 kill -0 "$spid" 2>/dev/null && fail "fresh launch reaps live daemons"
+[ "$(daemons)" = 0 ] || fail "fresh launch leaves no daemon"
 stop
 echo "smoke OK"
