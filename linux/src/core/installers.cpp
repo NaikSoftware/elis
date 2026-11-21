@@ -105,6 +105,8 @@ static QString dropAgtermBlock(const QString &text, const QString &needle)
         return text;
     if (b > 0 && lines[b - 1].trimmed().isEmpty())
         --b;
+    else if (b == 0 && e + 1 < lines.size() && lines[e + 1].trimmed().isEmpty())
+        ++e; // at the top, the blank line after it goes instead
     lines.remove(b, e - b + 1);
     return lines.join(QLatin1Char('\n'));
 }

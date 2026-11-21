@@ -1203,7 +1203,7 @@ private Q_SLOTS:
         QCOMPARE(QJsonDocument::fromJson(text.toUtf8()).object()["env"].toObject()["CLAUDE_CODE_PLUGIN_DIRS"].toString(), "/x/mod:" + pkg + "/claude-mods/swarm-companion");
         QVERIFY(slurp(home + "/.bashrc").startsWith("export A=1\n\n# >>> elis agent-status >>>\nsource "));
         QVERIFY(!slurp(home + "/.bashrc").contains("agterm"));
-        QVERIFY(slurp(home + "/.config/fish/config.fish").startsWith("\nset x 1\n\n# >>> elis agent-status >>>"));
+        QVERIFY(slurp(home + "/.config/fish/config.fish").startsWith("set x 1\n\n# >>> elis agent-status >>>"));
         const QString toml = slurp(home + "/.codex/config.toml");
         QVERIFY(toml.startsWith("model = \"o3\"\n\n# >>> elis agent-status >>>") && toml.contains("elis-codex-status.sh' stop\""));
         QVERIFY(!toml.contains("agterm") && !toml.contains("hooks.state"));
