@@ -1165,6 +1165,67 @@ private Q_SLOTS:
         QVERIFY(r.text().contains("OpenCode v2 status plugin installed"));
     }
 
+    void agentHooksInstallerRemovesAgtermQt()
+    {
+        QTemporaryDir tmp;
+        const QString home = tmp.path(), bundle = QStringLiteral(ELIS_SOURCE_SHARE "/agent-status"), pkg = Install::packageDir(home);
+        const QString old = home + "/.config/agterm-qt/agent-status", settings = home + "/.claude/settings.json";
+        const auto hook = [](const QString &command) { return QJsonObject{{"hooks", QJsonArray{QJsonObject{{"type", "command"}, {"command", command}}}}}; };
+        const QString adapter = Install::shellQuote(old + "/agterm-claude-status.sh") + " ";
+        const QJsonObject before{{"hooks", QJsonObject{{"Stop", QJsonArray{hook(adapter + "completed --auto-reset")}},
+                                                       {"UserPromptSubmit", QJsonArray{hook(adapter + "active --blink"), hook("mine")}},
+                                                       {"PermissionRequest", QJsonArray{hook(Install::shellQuote(old + "/agterm-agent-status.sh") + " blocked")}}}},
+                                 {"env", QJsonObject{{"CLAUDE_CODE_PLUGIN_DIRS", "/x/mod:" + old + "/claude-mods/swarm-companion"}}}};
+        spit(settings, QString::fromUtf8(QJsonDocument(before).toJson()));
+        const QString block = "# >>> agterm agent-status >>>\nsource " + Install::shellQuote(old + "/shell/integration.sh") + "\n# <<< agterm agent-status <<<\n";
+        spit(home + "/.bashrc", "export A=1\n\n" + block);
+        spit(home + "/.config/fish/config.fish", block + "\nset x 1\n");
+        spit(home + "/.codex/config.toml", "model = \"o3\"\n\n# >>> agterm agent-status >>>\n[[hooks.Stop]]\n[[hooks.Stop.hooks]]\ntype = \"command\"\n"
+                                           "command = \"" + old + "/agterm-codex-status.sh stop\"\n\n[hooks.state.x]\ntrusted = true\n# <<< agterm agent-status <<<\n");
+        spit(home + "/.pi/agent/extensions/agterm-status.ts", "// agterm-pi-status-extension\n");
+        spit(home + "/.config/opencode/plugins/agterm-status.js", "// agterm-opencode-status-plugin\n");
+        spit(home + "/oc2/plugins/agterm-v2/tui.js", "// agterm-opencode-v2-status-plugin\n");
+        spit(home + "/.config/opencode/plugins/agterm-v2/tui.js", "// my own\n");
+
+        Install::Report r = Install::agentHooks(home, bundle, QCoreApplication::applicationFilePath(), {2, home + "/oc2"});
+        QVERIFY2(r.error.isEmpty(), qPrintable(r.error));
+        const QString text = slurp(settings);
+        QVERIFY(!text.contains("agterm"));
+        const QJsonObject hooks = QJsonDocument::fromJson(text.toUtf8()).object()["hooks"].toObject();
+        for (const char *event : {"Stop", "UserPromptSubmit", "PermissionRequest", "PostToolUse", "Notification"}) {
+            int ours = 0;
+            for (const auto &entry : hooks[event].toArray())
+                for (const auto &h : entry.toObject()["hooks"].toArray())
+                    ours += h.toObject()["command"].toString().contains(pkg + "/elis-claude-status.sh");
+            QVERIFY2(ours == 1, event);
+        }
+        QCOMPARE(hooks["UserPromptSubmit"][0]["hooks"][0]["command"].toString(), QStringLiteral("mine"));
+        QCOMPARE(QJsonDocument::fromJson(text.toUtf8()).object()["env"].toObject()["CLAUDE_CODE_PLUGIN_DIRS"].toString(), "/x/mod:" + pkg + "/claude-mods/swarm-companion");
+        QVERIFY(slurp(home + "/.bashrc").startsWith("export A=1\n\n# >>> elis agent-status >>>\nsource "));
+        QVERIFY(!slurp(home + "/.bashrc").contains("agterm"));
+        QVERIFY(slurp(home + "/.config/fish/config.fish").startsWith("set x 1\n\n# >>> elis agent-status >>>"));
+        const QString toml = slurp(home + "/.codex/config.toml");
+        QVERIFY(toml.startsWith("model = \"o3\"\n\n# >>> elis agent-status >>>") && toml.contains("elis-codex-status.sh' stop\""));
+        QVERIFY(!toml.contains("agterm") && !toml.contains("hooks.state"));
+        QVERIFY(!QFileInfo::exists(home + "/.pi/agent/extensions/agterm-status.ts"));
+        QVERIFY(!QFileInfo::exists(home + "/.config/opencode/plugins/agterm-status.js"));
+        QVERIFY(!QFileInfo::exists(home + "/oc2/plugins/agterm-v2"));
+        QCOMPARE(slurp(home + "/.config/opencode/plugins/agterm-v2/tui.js"), QStringLiteral("// my own\n"));
+
+        const QString settled = slurp(settings), rc = slurp(home + "/.bashrc");
+        Install::agentHooks(home, bundle, QCoreApplication::applicationFilePath(), {2, home + "/oc2"});
+        QCOMPARE(slurp(settings), settled);
+        QCOMPARE(slurp(home + "/.bashrc"), rc);
+        QCOMPARE(slurp(home + "/.codex/config.toml"), toml);
+
+        spit(home + "/.claude/skills/agterm/SKILL.md", "<!-- agterm-skill -->\n");
+        spit(home + "/.codex/skills/agterm/SKILL.md", "someone else's\n");
+        spit(home + "/bundle/SKILL.md", "<!-- elis-skill -->\n");
+        Install::skill(home, home + "/bundle");
+        QVERIFY(!QFileInfo::exists(home + "/.claude/skills/agterm"));
+        QVERIFY(QFileInfo::exists(home + "/.codex/skills/agterm/SKILL.md"));
+    }
+
     void agentHooksInstallerLeavesWhatItCannotMerge()
     {
         QTemporaryDir tmp;
