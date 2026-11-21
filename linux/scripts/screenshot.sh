@@ -4,6 +4,7 @@ set -euo pipefail
 root=$(cd "$(dirname "$0")/.." && pwd)
 bin=$root/build
 out=$(realpath -m "${1:-screenshot.png}")
+rm -f "$out" # the wait below would take an old file for this run's grab
 export ELIS_STATE_DIR=$(mktemp -d /tmp/agq.XXXX)
 mkdir -p "$ELIS_STATE_DIR"
 trap 'kill $pid 2>/dev/null || true; rm -rf "$ELIS_STATE_DIR"' EXIT
@@ -28,7 +29,6 @@ ctl session status blocked --target "$c"
 ctl session new --name "dev server" --cwd /usr --workspace-name website --no-select >/dev/null
 ctl session new --name nvim --cwd "$HOME" --workspace-name dotfiles --create-workspace --no-select >/dev/null
 ctl workspace tint purple --target elis
-ctl workspace tint orange --target website
 ctl workspace tint blue --target dotfiles
 ctl session type $'ls -la | head -12\n' --target "$c"
 # a stand-in agent: the sidebar only reads the foreground argv's name

@@ -229,7 +229,7 @@ void MainWindow::showSettings()
     page(tr("Interface"), QStringLiteral("preferences-desktop-theme-global"),
          {group(tr("Title Bar"), twoColumns({element(QStringLiteral("filePanel"), tr("File panel toggle")), element(QStringLiteral("sidebarToggle"), tr("Sidebar toggle")),
                                              element(QStringLiteral("workspaceName"), tr("Workspace name")), element(QStringLiteral("sessionName"), tr("Session name")),
-                                             element(QStringLiteral("recentSessions"), tr("Recent sessions")), element(QStringLiteral("split"), tr("Split view")),
+                                             element(QStringLiteral("recentSessions"), tr("Session switcher")), element(QStringLiteral("split"), tr("Split view")),
                                              element(QStringLiteral("dashboard"), tr("Dashboard")), element(QStringLiteral("customCommands"), tr("Custom commands"))})),
           group(tr("Sidebar"), twoColumns({element(QStringLiteral("newSession"), tr("New session")), element(QStringLiteral("newWorkspace"), tr("New workspace")),
                                            element(QStringLiteral("focusFilter"), tr("Workspace filter")), element(QStringLiteral("flaggedView"), tr("Flagged view")),

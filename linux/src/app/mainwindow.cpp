@@ -175,7 +175,8 @@ protected:
         };
         if (showWs)
             text(ws, font(), faded(0.58));
-        text(name, bold(), ink);
+        if (!name.isEmpty())
+            text(name, bold(), ink);
         if (!ctx.isEmpty())
             text(ctx, font(), faded(0.58));
         if (!m_hint.isEmpty())
@@ -1404,8 +1405,11 @@ void MainWindow::showSelected()
     const QString name = s ? s->displayName() : QString();
     m_title->setText(name);
     m_context->setText(s ? s->context : QString());
-    static_cast<SessionPill *>(m_pill)->set(s ? s->agent : QString(), s ? m_store.workspaceOf(s->id)->name.trimmed() : QString(), s ? name : QStringLiteral("Elis"),
-                                            s ? s->context : QString(),
+    // the workspace breadcrumb always shows; the Session name and Session context toggles gate their parts
+    const Settings &st = m_store.settings;
+    static_cast<SessionPill *>(m_pill)->set(s ? s->agent : QString(), s ? m_store.workspaceOf(s->id)->name.trimmed() : QString(),
+                                            !st.shows(QStringLiteral("sessionName")) ? QString() : s ? name : QStringLiteral("Elis"),
+                                            s && st.shows(QStringLiteral("sessionContext")) ? s->context : QString(),
                                             m_actions.value(QStringLiteral("session_palette"))->shortcut().toString(QKeySequence::NativeText));
     m_workspaceLabel->setText(s ? m_store.workspaceOf(s->id)->name.left(24) + QStringLiteral("  /") : QString());
     setWindowTitle(name);

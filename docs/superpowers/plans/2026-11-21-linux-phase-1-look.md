@@ -14,8 +14,9 @@ Roadmap: `2026-11-21-linux-elis-migration.md`, Phase 1 and D2. The Mac code is t
 - The pill is the Mac's `recentSessions` element ("Session switcher"): it replaces the clock, and the plain title
   labels are its fallback when hidden. No new Interface preference.
 - The selection pill takes the workspace tint, else the session tint, else the accent (`WorkspaceSidebar+Bands.swift:93`).
-- A tint always colours icon and name, a workspace tint draws the band and a session tint a 9% wash;
-  the Mac ignores `--tint-on` (`TintCommands.swift:42`).
+- On the Mac a tint always colours icon and name, a workspace tint draws the band and a session tint a 9% wash,
+  and `--tint-on` is ignored (`TintCommands.swift:42`). Linux keeps its placements for now: the band and the wash
+  follow `background`, which a new tint includes. Dropping them is an owner question.
 
 ## Tasks
 
@@ -23,7 +24,8 @@ Roadmap: `2026-11-21-linux-elis-migration.md`, Phase 1 and D2. The Mac code is t
 2. Glyphs: the Mac's Lucide assets (`workspace-stack`, `session-terminal`, `session-plus`, `focus-frame`) in
    `resources/glyphs`, tinted like the launcher logos.
 3. Sidebar delegate: workspace bands (radius 11, 10% fill, 16% stroke, gap 4, padding 3), selection pill
-   (radius 8, 20%/12% fill, 55%/35% hairline), hover 7%, session wash 9%. The tint menu drops its placements.
+   (radius 8, 20%/12% fill, 55%/35% hairline), hover 7%, session wash 9%, the Mac's default status shapes and the
+   indigo flag mark.
 4. Density: `sidebarDensity` (`default`|`compact`) in Settings ▸ Appearance, `sidebar.density`, `elisctl sidebar
    density`, `sidebarDensity` in `tree`.
 5. Title strip: the centred session pill (agent logo · workspace › session · context · Ctrl+P hint, radius 9,
