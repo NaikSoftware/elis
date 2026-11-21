@@ -235,8 +235,8 @@ elisctl ask "Deploy to $env?" --button yes=Deploy --button no=Cancel --default n
 
 - `session text [--all | --lines N] [--pane left|right]`: the visible screen; `--all` adds the scrollback;
   `--lines N` the last N non-blank rows. Read the other pane with `--pane right`.
-- `session transcript`: the Mac's read of a pane's Claude Code conversation; on Linux it checks its arguments and
-  answers `too old for session.transcript` until the transcript reader lands (reference.md).
+- `session transcript [--after N | --before N]`: the Claude Code conversation a pane runs, page by page, read from
+  its transcript (items, open prompts, title, model, todos); `next` and `start` are the cursors (reference.md).
 - `session type <text> | --stdin [--pane left|right]`: keystrokes into the main pane, or the other with `--pane right`.
 - `session copy` (the selection), `session paste`, `session select-all`.
 - `session search [needle] [--next | --prev | --close]`: Konsole's search bar; selects the session and prints the

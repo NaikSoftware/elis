@@ -50,8 +50,9 @@ where Qt/KDE has its own idiom.
   whether to ship it: if one route fails, the spike tries the next until one works.
 
 Settled earlier and not reopened:
-- The relay and Chat are C++ ports that reuse the golden vectors
-  (`phone-link-vectors.json`, `ble-vectors.json`; the transcript cases are inline in `ClaudeTranscript*Tests.swift`).
+- The relay is a C++ port that reuses the golden vectors (`phone-link-vectors.json`, `ble-vectors.json`).
+- Chat is not ported: Linux links `ElisCore` through `linux/shared` (ElisBridge), so one implementation serves both
+  (owner, 2026-11-21).
 - Scratch and the quick terminal stay dropped.
 
 ## Phases
@@ -105,9 +106,9 @@ decoration and menu bar.
 
 ### Phase 2 — Chat on the phone (`session.transcript`)
 
-- `src/core/transcript.{h,cpp}`: a C++ port of `ClaudeTranscript*` and `ClaudeCommandCatalog` from `ElisCore`
-  (index, items, byte-offset cursor, ~48 KiB pages, tool output clipped at ~4 KiB, the record allowlist).
-  The spec `2026-11-20-phone-chat-mode-design.md` owns the shapes, and the ported Swift fixtures test it.
+- Linux links `ElisCore` through `linux/shared` (ElisBridge, a C ABI over `ClaudeTranscript` and the argument check);
+  `src/core/transcript.{h,cpp}` calls it, and the read runs on a worker. Plan:
+  [2026-11-21-linux-phase-2-transcript.md](2026-11-21-linux-phase-2-transcript.md).
 - Tree: `agentSessionId` (the Claude conversation id the app already tracks for drop and reopen) and
   `agentPane`.
 - Protocol, dispatcher, `elisctl session transcript` and its read-back, then the docs listed in Phase 7.

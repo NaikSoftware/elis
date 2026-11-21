@@ -119,9 +119,9 @@ Legend: [x] done · [ ] todo · (fork) = fork-only feature, not in upstream docs
   falls back to the captured command, as master's create-only payload. Deleting a session, closing a split or deleting
   a window ends its daemons; closing a window keeps them; a `none`/`rerun` launch reaps them all. Pane ids survive a
   reattach. Not ported: `zmx.*`, `session restart`, a reset dialog; the replay is raw output, not a rendered screen
-- [ ] `session transcript` (the phone's Chat): master's arguments, errors and pane refusals, and the tree's `agentPane`
-  and `agentSessionId` (sampled from both panes, the focused one first); the transcript reader is not ported, so a
-  valid read answers master's `too old for session.transcript` and the phone keeps the text view
+- [x] `session transcript` (the phone's Chat), and the tree's `agentPane` and `agentSessionId` (sampled from both
+  panes, the focused one first): the argument check and the reader are master's own `ElisCore`, linked through
+  `linux/shared` (ElisBridge); the read runs on a worker thread
 - [x] Control API breadth: master's catalog with its argument names, errors and read-backs — `events` (an app-wide ring
   with run/after cursors; the CLI polls it), `workspace go|collapse|expand|flag`, `session context|reveal|collapse|expand|focus|resize|
   copy|paste|select-all|search`, `session text` (visible screen; `--all` and `--lines` page the scrollback through the view's
