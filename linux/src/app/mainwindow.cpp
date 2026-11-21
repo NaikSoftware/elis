@@ -750,7 +750,10 @@ void MainWindow::createMenus()
     auto sessionDetail = [](const Session &s) {
         const QString name = s.displayName();
         const QString title = s.title.trimmed();
-        return !title.isEmpty() && title != name ? title : s.cwd;
+        if (!title.isEmpty() && title != name)
+            return title;
+        const QString home = QDir::homePath(); // ~ for home, as elis's switcher abbreviates it
+        return s.cwd == home || s.cwd.startsWith(home + QLatin1Char('/')) ? QLatin1Char('~') + s.cwd.mid(home.size()) : s.cwd;
     };
     auto sessionRow = [sessionDetail](const Session &s, const QString &ws, std::function<void()> run) {
         const QString st = s.status == QLatin1String("idle") ? QString() : s.status;
