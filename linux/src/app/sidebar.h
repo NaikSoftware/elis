@@ -19,7 +19,7 @@ QIcon chromeIcon(const QString &name, const QColor &color);
 QColor statusColor(const Settings &settings, const QString &status);
 QString statusShape(const Settings &settings, const QString &status);
 void drawStatusGlyph(QPainter *p, const QPointF &center, qreal radius, const QString &shape);
-// a tint name as the macOS system colour of that name, light or dark by the current palette; invalid for ""
+// a tint name as the macOS system colour of that name, light or dark by the current palette, or a #rrggbb; invalid for ""
 QColor tintColor(const QString &name);
 
 namespace SidebarRole {

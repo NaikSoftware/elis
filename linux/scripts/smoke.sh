@@ -177,9 +177,9 @@ for _ in $(seq 20); do kill -0 "$dpid" 2>/dev/null || break; sleep 0.1; done
 kill -0 "$dpid" 2>/dev/null && fail "closing a session left its shell running"
 ctl session tint red --target "$id"
 ctl tree --json | grep -q '"tint":"red"' || fail "session tint read-back"
-ctl session tint pink --target "$id" 2>/dev/null && fail "unknown tint accepted"
-ctl workspace new --name tinted --tint green >/dev/null
-ctl tree --json | grep -q '"name":"tinted","rememberedFolder":"","sessions":\[\],"tint":"green"' || ctl tree --json | grep -q '"tint":"green"' || fail "workspace new --tint"
+ctl session tint fuchsia --target "$id" 2>/dev/null && fail "unknown tint accepted"
+ctl workspace new --name tinted --tint '#33AA55' >/dev/null
+ctl tree --json | grep -q '"tint":"#33aa55","tintOn":\["icon","name"\]' || fail "workspace new --tint hex"
 ctl workspace focus on --target agents
 ctl tree --json | grep -q '"workspaceFilter":true' || fail "workspace focus on"
 ctl workspace filter off
@@ -331,6 +331,7 @@ ctl tree | grep -q 'renamed' || fail "session not restored"
 ctl tree | grep renamed | grep -q idle || fail "status must not survive a restart"
 ctl tree | grep renamed | grep -q '/usr' || fail "cwd not tracked"
 ctl tree --json | grep -q '"tint":"red"' || fail "tint not restored"
+ctl tree --json | grep -q '"tint":"#33aa55"' || fail "hex tint not restored"
 ctl tree --json | grep -q '"context":"PR 12"' || fail "context not restored"
 ctl restore mode | grep -q 'active     rerun' || fail "restore mode at launch"
 [ "$(ctl window list | grep -c ' open$')" = 2 ] || fail "open windows reopen at launch"

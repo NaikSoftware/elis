@@ -24,9 +24,10 @@ Legend: [x] done · [ ] todo · (fork) = fork-only feature, not in upstream docs
 - [x] Session context menu: New Companion
 - [x] Workspace context menu: New Session, Rename, Flag All Sessions, Delete Workspace
 - [x] Workspace context menu: Focus/Unfocus, Add to/Remove from Focus, Tint
-- [x] Session context menu: Tint (None, seven colours; batch), palette Tint Session items, `session|workspace tint`, `--tint` on new.
+- [x] Session context menu: Tint (None, the twelve colours, Custom for a hex; batch), palette Tint Session items,
+  `session|workspace tint` with a name or `#rrggbb`, `--tint` on new, parsed by ElisCore through ElisBridge.
   A tint colours icon and name, a workspace's band and a session's wash, as on the Mac; Linux also washes the terminal
-  very lightly. There is no `--on`/`--tint-on`
+  very lightly. elisctl has no deprecated `--on`/`--tint-on`; a raw `tintOn` is checked and ignored as on the Mac
 - [ ] `session info` (the Mac's sidebar info line) is not on Linux. The row's second line and Settings ▸ Interface ▸
   Session info are drawn and wait for the CI summary to feed them. Linux's process-detail read (the node plus `pid`,
   `foreground`, `foregroundPid`, `liveCwd`, `profile`) has no Mac counterpart and is `session get` (`session.get`)
