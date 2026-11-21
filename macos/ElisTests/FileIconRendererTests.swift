@@ -36,9 +36,10 @@ final class FileIconRendererTests: XCTestCase {
     }
 
     func testImageRasterizesOffTheMainThread() async {
-        nonisolated(unsafe) let image = FileIconRenderer.image(
-            for: FileIconCatalog.icon(forName: "off-main.rs", isDirectory: false), pointSize: 18, dark: true)
-        let painted = await Task.detached { Self.painted(image) }.value
+        // a box, not nonisolated(unsafe): the region checker rejects a captured nonisolated(unsafe) local
+        let box = ImageBox(image: FileIconRenderer.image(
+            for: FileIconCatalog.icon(forName: "off-main.rs", isDirectory: false), pointSize: 18, dark: true))
+        let painted = await Task.detached { Self.painted(box.image) }.value
         XCTAssertTrue(painted)
     }
 
@@ -47,6 +48,8 @@ final class FileIconRendererTests: XCTestCase {
         let mjs = FileIconRenderer.image(for: FileIconCatalog.icon(forName: "a.mjs", isDirectory: false), pointSize: 16, dark: true)
         XCTAssertFalse(js === mjs)
     }
+
+    private struct ImageBox: @unchecked Sendable { let image: NSImage }
 
     private nonisolated static func painted(_ image: NSImage) -> Bool {
         guard let cg = image.cgImage(forProposedRect: nil, context: nil, hints: nil) else { return false }
