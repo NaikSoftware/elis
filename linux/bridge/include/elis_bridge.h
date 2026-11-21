@@ -25,6 +25,8 @@ char *elis_zmx_lead_report(const char *json); // a pane's title as a role report
 char *elis_zmx_lead_state(const char *pane);
 void elis_zmx_lead_forget(const char *pane);
 char *elis_zmx_surface(const char *json);     // one tree surfaces[] entry
+char *elis_zmx_type_bytes(const char *text);  // session.type text as zmx type input, its final Return paced
+char *elis_zmx_screen(const char *output, int lines); // zmx screen's reply as text; lines > 0 keeps the last ones
 
 #ifdef __cplusplus
 }

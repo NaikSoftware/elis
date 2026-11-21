@@ -25,7 +25,7 @@ Building also needs Swift 6.3 (the swift.org tarball or `swiftly`) on PATH, or `
 builds the shared `ElisCore` (`shared/ElisCore`) into `libElisBridge.so` with the Swift runtime linked in, so running Elis needs no Swift.
 The first build of it takes a few minutes; it installs to `lib/elis` beside the binaries' `bin`.
 Live sessions run under the Mac's patched zmx, which the build makes from source with zig 0.16, git and `shasum`
-(`macos/scripts/setup.sh --zmx-only`, network on the first build) and installs as `bin/zmx`. Unpack
+(`macos/scripts/setup.sh --zmx-only`, network on the first build) and installs it to `libexec/elis`, off PATH. Unpack
 [zig 0.16.0](https://ziglang.org/download/) into `~/.local/opt`, where configure finds it, or pass `-DZIG=/path/to/zig`;
 the build patches that zig's `float.h` once, as the Mac build does.
 

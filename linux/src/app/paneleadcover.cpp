@@ -51,7 +51,7 @@ QString PaneLeadCover::title(const QString &role, bool reattaching)
         return tr("Taking over…");
     if (role == QLatin1String("unowned"))
         return tr("Reconnecting…");
-    return tr("In use in another terminal");
+    return tr("In use from another terminal"); // the Mac's "In use from another Mac", for a lead on this machine
 }
 
 void PaneLeadCover::apply(const Zmx::Lead &lead)

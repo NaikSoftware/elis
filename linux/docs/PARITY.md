@@ -127,10 +127,13 @@ Legend: [x] done · [ ] todo · (fork) = fork-only feature, not in upstream docs
   reattaches to the rendered screen; a daemon that is gone runs the captured command, pin or resume line as the
   create-only payload. Deleting a session, closing a split or deleting a window ends its daemons and hangs up their
   foreground jobs; closing a window keeps them; a launch reaps as master (`none`/`rerun`: every idle daemon, `live`:
-  the ones no window claims). Role reports cover a pane that does not lead ("In use in another terminal",
-  "Reconnecting…", "Taking over…"); a key takes the lead with a fresh claiming attach. Tree `surfaces[]`
-  (`id`, `kind`, `active`, `visible`, `backedByZmx`, `lead`, `paneID`) and `backedByZmx`. Not ported: `zmx.*`,
-  `session restart`, a reset dialog; a dashboard cell is not taken over in place
+  the ones no window claims). Role reports cover a pane that does not lead ("In use from another terminal",
+  "Reconnecting…", "Taking over…"), in its split or its dashboard cell; a key takes the lead with a fresh claiming
+  attach. Once its zmx reported a role a pane's `session type` goes through `zmx type`, and a covered pane's
+  `session text` (any pane's `--all`/`--lines`) through `zmx screen`; `session copy|paste|selectall|search` refuse a
+  covered pane. Tree `surfaces[]` (`id`, `kind`, `active`, `visible`, `backedByZmx`, `lead`, `paneID`) and
+  `backedByZmx`. zmx installs to `libexec/elis`, off PATH. Not ported: `zmx.*`, `session restart|lead`, a reset
+  dialog, the phone's "In use on your phone" (Phase 4)
 - [x] `session transcript` (the phone's Chat), and the tree's `agentPane` and `agentSessionId` (sampled from both
   panes, the focused one first): the argument check and the reader are master's own `ElisCore`, linked through
   `linux/bridge` (ElisBridge); the read runs on a worker thread

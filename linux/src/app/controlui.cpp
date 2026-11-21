@@ -4,7 +4,9 @@
 #include "hooks.h"
 #include "konsoleprivate.h"
 #include "palette.h"
+#include "paths.h"
 #include "store.h"
+#include "zmx.h"
 
 #include <KActionCollection>
 #include <KParts/ReadOnlyPart>
@@ -66,6 +68,14 @@ QString MainWindow::text(const QString &sessionId, const QString &pane, bool scr
     KParts::ReadOnlyPart *part = panePart(sessionId, pane);
     if (!part)
         return *error = QStringLiteral("session not realized"), QString();
+    // a covered pane holds another grid's output, so the daemon answers; with a role, the scrollback reads come from it too
+    if (const QString zmx = part->property("elisZmx").toString(); !zmx.isEmpty()) {
+        const Zmx::Lead lead = Zmx::lead(zmx);
+        if (lead.covered || (scrollback && !lead.role.isEmpty())) {
+            const std::optional<QString> out = Zmx::screen(stateDir(), zmx, scrollback, 0);
+            return out ? *out : (*error = QStringLiteral("failed to read surface buffer"), QString());
+        }
+    }
     prime(m_panes.value(sessionId).view, part->widget());
     QObject *s = sessionOf(part);
     QString out;
@@ -501,6 +511,10 @@ bool MainWindow::uiCommand(const QString &cmd, const QString &id, const QJsonObj
     QObject *session = part ? sessionOf(part) : nullptr;
     if (!part || !session)
         return *error = QStringLiteral("session not realized"), false;
+    // the Mac's coveredRefusal: a covered pane shows another grid's output and the daemon drops what it sends
+    if (const QString zmx = part->property("elisZmx").toString();
+        !zmx.isEmpty() && Zmx::lead(zmx).covered && !(cmd == QLatin1String("session.search") && args.value("to").toString() == QLatin1String("close")))
+        return *error = QStringLiteral("pane is covered while another terminal leads it; press a key on it to take the lead"), false;
     if (cmd == QLatin1String("session.copy")) {
         const QString text = KonsolePrivate::selectedText(session);
         if (text.isEmpty())

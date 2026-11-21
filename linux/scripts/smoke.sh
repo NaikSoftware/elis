@@ -365,22 +365,39 @@ for _ in $(seq 20); do ctl session get --target src | grep -qE '^foreground +sle
 ctl session type 'echo "V=$LIVE_VAR"'$'\n' --target renamed
 for _ in $(seq 20); do ctl session text --target renamed --lines 5 | grep -q 'V=kept' && break; sleep 0.2; done
 ctl session text --target renamed --lines 5 | grep -q 'V=kept' || fail "live reattach keeps the shell"
-# another client claims a pane's lead, as the phone will: the pane follows, and takes the lead back once it leaves
-spane=$(ctl tree --json | python3 -I -c 'import json,sys
+# another client claims a pane's lead, as the phone will: the pane follows, typed and read through its daemon, and
+# takes the lead back once that client leaves
+paneof() { ctl tree --json | python3 -I -c 'import json,sys
 d=json.load(sys.stdin); d=d.get("result",d); d=d.get("tree",d)
-print([f["paneID"] for w in d["workspaces"] for s in w["sessions"] if s["name"]=="src" for f in s["surfaces"] if f["kind"]=="left"][0])')
-mkfifo "$ELIS_STATE_DIR/claim-in"
-ZMX_MANAGED=other ZMX_MANAGED_CLAIM=1 ZMX_DIR=$zdir ZMX_SESSION= ZMX_SESSION_PREFIX= \
-  script -qfec "$bin/zmx attach elis-${spane//-/}" /dev/null <"$ELIS_STATE_DIR/claim-in" >/dev/null 2>&1 &
-mpid=$!
-exec 8>"$ELIS_STATE_DIR/claim-in"
-for _ in $(seq 25); do ctl tree --json | grep -q '"lead":"follower"' && break; sleep 0.2; done
-ctl tree --json | grep -q '"lead":"follower"' || fail "a pane another client leads reads follower"
-kill "$mpid"
-exec 8>&-
-for _ in $(seq 25); do ctl tree --json | grep -q '"lead":"follower"' || break; sleep 0.2; done
-ctl tree --json | grep -q '"lead":"follower"' && fail "the pane takes the lead back once the other client leaves"
+print([f["paneID"] for w in d["workspaces"] for s in w["sessions"] if s["name"]==sys.argv[1] for f in s["surfaces"] if f["kind"]=="left"][0])' "$1"; }
+claim() {
+  rm -f "$ELIS_STATE_DIR/claim-in" && mkfifo "$ELIS_STATE_DIR/claim-in"
+  ZMX_MANAGED=other ZMX_MANAGED_CLAIM=1 ZMX_DIR=$zdir ZMX_SESSION= ZMX_SESSION_PREFIX= \
+    script -qfec "$bin/zmx attach elis-$(paneof "$1" | tr -d -)" /dev/null <"$ELIS_STATE_DIR/claim-in" >/dev/null 2>&1 &
+  mpid=$!
+  exec 8>"$ELIS_STATE_DIR/claim-in"
+  for _ in $(seq 25); do ctl tree --json | grep -q '"lead":"follower"' && return; sleep 0.2; done
+  fail "a pane another client leads reads follower"
+}
+release() {
+  kill "$mpid"
+  exec 8>&-
+  for _ in $(seq 25); do ctl tree --json | grep -q '"lead":"follower"' || return 0; sleep 0.2; done
+  fail "the pane takes the lead back once the other client leaves"
+}
+claim renamed
+ctl session type 'echo "COVERED=$((40+2))"'$'\n' --target renamed || fail "a covered pane types through its daemon"
+for _ in $(seq 20); do ctl session text --target renamed --lines 5 | grep -q 'COVERED=42' && break; sleep 0.2; done
+ctl session text --target renamed --lines 5 | grep -q 'COVERED=42' || fail "a covered pane reads from its daemon"
+out=$(ctl session copy --target renamed 2>&1 || true); grep -q 'pane is covered' <<<"$out" || fail "a covered pane refuses copy ($out)"
+release
+ctl session text --target renamed --lines 5 | grep -q 'COVERED=42' || fail "the taken-back pane shows the daemon's screen"
+ctl dashboard "$src" >/dev/null # taken over in its dashboard cell
+claim src
+release
+ctl tree --json | grep -q "\"dashboardMembers\":\[\"$src:left\"\]" || fail "a takeover keeps the dashboard cell"
 [ "$(ctl session info --target src | awk '/^foregroundPid /{print $2}')" = "$spid" ] || fail "a takeover keeps the pane's program"
+ctl dashboard --close >/dev/null
 gone=$(ctl session new --name gone --no-select)
 for _ in $(seq 20); do [ "$(daemons)" -gt "$(ctl tree --json | grep -o '"kind":"left"' | wc -l)" ] && break; sleep 0.2; done
 before=$(daemons)

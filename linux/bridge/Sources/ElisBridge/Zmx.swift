@@ -133,6 +133,23 @@ public func elisZmxLeadForget(_ identity: UnsafePointer<CChar>) {
     if let id = pane(String(cString: identity)) { _ = leads.withLock { $0.removeValue(forKey: id) } }
 }
 
+/// `session.type`'s text as `zmx type` input: `{"head": base64 bytes, "pacedReturn", "gapMs"}`; a paced final Return
+/// goes as its own call after `KeystrokeSegments.submitGap`.
+@_cdecl("elis_zmx_type_bytes")
+public func elisZmxTypeBytes(_ text: UnsafePointer<CChar>) -> UnsafeMutablePointer<CChar>? {
+    let paced = KeystrokeSegments.paced(String(cString: text))
+    return returned(["head": Data(KeystrokeSegments.ptyBytes(paced.head)).base64EncodedString(), "pacedReturn": paced.pacedReturn,
+                     "gapMs": Int(KeystrokeSegments.submitGap * 1000)])
+}
+
+/// `zmx screen`'s stdout and a line count -> `{"ok":true,"text","columns","rows"}`, `{"ok":false}` for anything else.
+@_cdecl("elis_zmx_screen")
+public func elisZmxScreen(_ output: UnsafePointer<CChar>, _ lines: Int32) -> UnsafeMutablePointer<CChar>? {
+    guard let screen = ZmxScreen(output: String(cString: output)) else { return returned(["ok": false]) }
+    return returned(["ok": true, "text": lines > 0 ? screen.lastLines(Int(lines)) : screen.text, "columns": screen.columns,
+                     "rows": screen.rows])
+}
+
 /// One tree `surfaces[]` entry, as the Mac encodes it: `{"id","kind","active","visible","backedByZmx","paneID"?}`
 /// in, with `lead` read from the pane's state.
 @_cdecl("elis_zmx_surface")

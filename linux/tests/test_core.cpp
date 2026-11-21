@@ -999,6 +999,10 @@ private Q_SLOTS:
         QVERIFY(!Zmx::report(pane, report("follower")).changed); // the same report twice changes nothing
         QVERIFY(!Zmx::report(pane, QStringLiteral("zmx-role;forged:leader:99")).changed); // another attachment's nonce
         QVERIFY(!Zmx::report(pane, QStringLiteral("vim")).report);
+        QString error; // a follower's own keys are dropped; the daemon takes them, and its screen is the one to read
+        QVERIFY2(Zmx::type(ns.state.path(), pane, QStringLiteral("echo T=$((1+2))\n"), &error), qPrintable(error));
+        QTRY_VERIFY(Zmx::screen(ns.state.path(), pane, false, 0).value_or(QString()).contains(QLatin1String("T=3")));
+        QVERIFY(Zmx::screen(ns.state.path(), pane, true, 0).value_or(QString()).contains(QLatin1String("T=3")));
         const QJsonObject node = Zmx::surface(
             {{"id", "surface:s1:left"}, {"kind", "left"}, {"active", true}, {"visible", true}, {"backedByZmx", true}, {"paneID", pane}});
         QCOMPARE(node, (QJsonObject{{"id", "surface:s1:left"}, {"kind", "left"}, {"active", true}, {"visible", true}, {"backedByZmx", true},

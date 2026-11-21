@@ -14,6 +14,7 @@
 #include <QTimer>
 
 #include <csignal>
+#include <unistd.h>
 
 namespace {
 
@@ -33,7 +34,7 @@ QJsonObject names(const QString &stateDir, const QStringList &paneIds)
 }
 
 // zmx <args> in the state dir's namespace; nullopt when it did not finish in time
-std::optional<QByteArray> run(const QString &stateDir, const QStringList &args)
+std::optional<QByteArray> run(const QString &stateDir, const QStringList &args, const QByteArray &input = {})
 {
     const QJsonObject n = names(stateDir, {});
     if (!QFileInfo::exists(n.value("socketDir").toString()))
@@ -45,6 +46,9 @@ std::optional<QByteArray> run(const QString &stateDir, const QStringList &args)
     QProcess p;
     p.setProcessEnvironment(env);
     p.start(Zmx::executable(), args);
+    if (!input.isEmpty() && p.waitForStarted(10000))
+        p.write(input);
+    p.closeWriteChannel();
     if (!p.waitForFinished(10000)) {
         p.kill();
         p.waitForFinished(1000);
@@ -64,7 +68,10 @@ namespace Zmx {
 
 QString executable()
 {
-    return QCoreApplication::applicationDirPath() + QStringLiteral("/zmx");
+    // the build tree keeps it beside elis; an install keeps it off PATH, in libexec, as the Mac keeps it in its bundle
+    const QString dir = QCoreApplication::applicationDirPath();
+    const QString beside = dir + QStringLiteral("/zmx");
+    return QFileInfo(beside).isExecutable() ? beside : QDir::cleanPath(dir + QStringLiteral("/" ELIS_ZMX_FROM_BIN "/zmx"));
 }
 
 Attach attach(const QString &stateDir, const QString &paneId, const QString &shell, const QString &line, const QString &command, bool claim,
@@ -195,6 +202,34 @@ void reap(const QString &stateDir, const QString &requestedMode, const std::opti
     for (const auto &v : r.value("kill").toArray())
         daemons << v.toString();
     end(stateDir, daemons);
+}
+
+bool type(const QString &stateDir, const QString &paneId, const QString &text, QString *error)
+{
+    const QJsonObject paced = taken(elis_zmx_type_bytes(text.toUtf8().constData()));
+    const QByteArray head = QByteArray::fromBase64(paced.value("head").toString().toLatin1());
+    const QStringList args{QStringLiteral("type"), daemonName(stateDir, paneId)};
+    if (!head.isEmpty() && !run(stateDir, args, head))
+        return *error = QStringLiteral("the pane's zmx daemon did not accept the input"), false;
+    if (paced.value("pacedReturn").toBool()) {
+        ::usleep(useconds_t(paced.value("gapMs").toInt() * 1000)); // blocking, so nothing overtakes the Return
+        // a failed call does not prove the Return was dropped: the daemon queues before it answers
+        if (!run(stateDir, args, QByteArray("\r")))
+            return *error = QStringLiteral("text typed, but its final Return could not be confirmed; do not retype the text"), false;
+    }
+    return true;
+}
+
+std::optional<QString> screen(const QString &stateDir, const QString &paneId, bool all, int lines)
+{
+    QStringList args{QStringLiteral("screen"), daemonName(stateDir, paneId)};
+    if (all)
+        args << QStringLiteral("--all");
+    const std::optional<QByteArray> out = run(stateDir, args);
+    const QJsonObject r = out ? taken(elis_zmx_screen(out->constData(), lines)) : QJsonObject();
+    if (!r.value("ok").toBool())
+        return std::nullopt;
+    return r.value("text").toString();
 }
 
 static Lead leadFrom(const QJsonObject &o)

@@ -39,6 +39,9 @@ struct Lead {
     bool report = false, changed = false, covered = false, reattaching = false;
     QString role; // leader | follower | unowned; "" before the first report
 };
+// a pane whose zmx reported a role types and reads through its daemon (the Mac's coveredType and coveredText)
+bool type(const QString &stateDir, const QString &paneId, const QString &text, QString *error);
+std::optional<QString> screen(const QString &stateDir, const QString &paneId, bool all, int lines); // nullopt: unread
 Lead report(const QString &paneId, const QString &title); // report false: an ordinary title
 Lead lead(const QString &paneId);
 void forget(const QString &paneId);

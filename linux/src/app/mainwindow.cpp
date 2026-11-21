@@ -1126,23 +1126,36 @@ void MainWindow::takeOver(const QString &id, KParts::ReadOnlyPart *part, bool cl
     Panes &p = m_panes[id];
     const Session *s = m_store.session(id);
     const bool right = part == p.right;
-    const int at = p.split ? p.split->indexOf(part->widget()) : -1;
-    if (!s || (!right && part != p.main) || at < 0)
-        return; // shortcut: a pane shown in the dashboard is not taken over there; it is once it is back home
+    QWidget *old = part->widget();
+    DashCell *cell = nullptr; // a pane the dashboard shows is taken over in its cell, as the Mac's dashboard does
+    for (DashCell &c : m_dashCells)
+        if (c.widget == old)
+            cell = &c;
+    const int at = p.split ? p.split->indexOf(old) : -1;
+    if (!s || (!right && part != p.main) || (at < 0 && !cell))
+        return;
     const QList<int> sizes = p.split->sizes();
-    const bool focused = part->widget()->isAncestorOf(QApplication::focusWidget());
-    auto *fresh = spawnPart(id, right ? QStringLiteral("right") : QStringLiteral("main"), liveCwd(id), {}, p.split, {}, true, claim);
+    const bool focused = old->isAncestorOf(QApplication::focusWidget());
+    QWidget *host = cell ? static_cast<QWidget *>(cell->frame) : p.split;
+    auto *fresh = spawnPart(id, right ? QStringLiteral("right") : QStringLiteral("main"), liveCwd(id), {}, host, {}, true, claim);
     if (!fresh)
         return;
     disconnect(part, &QObject::destroyed, this, nullptr); // its client's exit is not the pane's
     (right ? p.right : p.main) = fresh;
-    p.split->insertWidget(at, fresh->widget());
-    fresh->widget()->setVisible(part->widget()->isVisible());
-    part->widget()->hide();
+    // the old part's size, a dashboard cell's transient one included: a cell restores the pane's own at close
+    if (QWidget *d = terminalDisplay(part))
+        zoomFontTo(terminalDisplay(fresh), d->font().pointSizeF());
+    if (cell) {
+        delete cell->frame->layout()->replaceWidget(old, fresh->widget());
+        cell->widget = fresh->widget();
+        fresh->widget()->show();
+    } else {
+        p.split->insertWidget(at, fresh->widget());
+        fresh->widget()->setVisible(old->isVisible());
+        p.split->setSizes(sizes);
+    }
+    old->hide();
     part->deleteLater(); // the cover asking for this is still on the stack
-    p.split->setSizes(sizes);
-    if (const double size = right ? s->splitFontSize : s->fontSize; size > 0)
-        zoomFontTo(terminalDisplay(fresh), size);
     if (!right)
         m_sessions.remove(id);
     if (focused)
@@ -1408,12 +1421,19 @@ QObject *MainWindow::konsoleSession(const QString &id)
 
 bool MainWindow::type(const QString &sessionId, const QString &pane, const QString &text, QString *error)
 {
-    auto *t = qobject_cast<TerminalInterface *>(panePart(sessionId, pane));
+    KParts::ReadOnlyPart *part = panePart(sessionId, pane);
+    auto *t = qobject_cast<TerminalInterface *>(part);
     if (!t) {
         *error = QStringLiteral("session has no terminal");
         return false;
     }
-    t->sendInput(text);
+    // once its zmx reported a role the daemon takes the keys, acknowledged, whoever leads: a follower's are dropped
+    if (const QString zmx = part->property("elisZmx").toString(); !zmx.isEmpty() && !Zmx::lead(zmx).role.isEmpty()) {
+        if (!Zmx::type(stateDir(), zmx, text, error))
+            return false;
+    } else {
+        t->sendInput(text);
+    }
     if (text.contains(QLatin1Char('\n')) || text.contains(QLatin1Char('\r')))
         m_store.keyPressed(sessionId, Store::Key::Submit); // injected text carrying a newline is a submit
     return true;
