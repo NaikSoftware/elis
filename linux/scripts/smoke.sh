@@ -396,7 +396,7 @@ ctl dashboard "$src" >/dev/null # taken over in its dashboard cell
 claim src
 release
 ctl tree --json | grep -q "\"dashboardMembers\":\[\"$src:left\"\]" || fail "a takeover keeps the dashboard cell"
-[ "$(ctl session info --target src | awk '/^foregroundPid /{print $2}')" = "$spid" ] || fail "a takeover keeps the pane's program"
+fg=$(ctl session get --target src | awk '/^foregroundPid /{print $2}'); [ "$fg" = "$spid" ] || fail "a takeover keeps the pane's program ($fg, was $spid)"
 ctl dashboard --close >/dev/null
 gone=$(ctl session new --name gone --no-select)
 for _ in $(seq 20); do [ "$(daemons)" -gt "$(ctl tree --json | grep -o '"kind":"left"' | wc -l)" ] && break; sleep 0.2; done
@@ -410,7 +410,7 @@ for _ in $(seq 20); do [ "$(daemons)" = "$before" ] && break; sleep 0.2; done
 ctl session close --target "$gone" >/dev/null
 for _ in $(seq 20); do [ "$(daemons)" -lt "$before" ] && break; sleep 0.2; done
 [ "$(daemons)" -lt "$before" ] || fail "deleting a session ends its daemon"
-wpid=$(ctl session info --target "$inw2" | awk '/^pid /{print $2}')
+wpid=$(ctl session get --target "$inw2" | awk '/^pid /{print $2}')
 [ -n "$wpid" ] && [ "$wpid" -gt 0 ] || fail "a live pane in the second window"
 ctl window close "$w2"
 before=$(daemons)
