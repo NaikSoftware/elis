@@ -135,7 +135,8 @@ public struct Elisctl: ParsableCommand {
         commandName: "elisctl",
         abstract: "Drive Elis over its control socket, and install its terminfo entry on other hosts.",
         subcommands: [Tree.self, Events.self, Workspace.self, Session.self, Surface.self, Dashboard.self, Window.self, Quick.self,
-                      Sidebar.self, FilePanel.self, Notify.self, Msg.self, Font.self, Keymap.self, Hooks.self, Browser.self, Config.self, Theme.self, Pick.self, Ask.self, Restore.self,
+                      Sidebar.self, FilePanel.self, Notify.self, Msg.self, Assistant.self, Reply.self, Font.self, Keymap.self,
+                      Hooks.self, Browser.self, Config.self, Theme.self, Pick.self, Ask.self, Restore.self,
                       Recent.self, Zmx.self, Catalog.self, Terminfo.self] + hostSubcommands + [Clipboard.self, Version.self]
     )
 

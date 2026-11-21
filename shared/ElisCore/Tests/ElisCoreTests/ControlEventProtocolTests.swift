@@ -41,6 +41,8 @@ struct ControlEventProtocolTests {
             ControlEvent(seq: 19, ts: 19.5, kind: .phoneDetached, payload: ControlEventPayload(paneID: "tok")),
             ControlEvent(seq: 20, ts: 20.5, kind: .phoneClaimed, payload: ControlEventPayload(paneID: "tok", ip: "10.0.0.5")),
             ControlEvent(seq: 21, ts: 21.5, kind: .phoneReleased, payload: ControlEventPayload(paneID: "tok")),
+            ControlEvent(seq: 22, ts: 22.5, kind: .assistantMessage,
+                         payload: ControlEventPayload(from: "sess-1", kind: "reply", handle: "claude-1", text: "done")),
         ]
 
         let data = try JSONEncoder().encode(events)
@@ -89,6 +91,8 @@ struct ControlEventProtocolTests {
             ControlEvent(seq: 19, ts: 19.5, kind: .phoneDetached, payload: ControlEventPayload(paneID: "tok")),
             ControlEvent(seq: 20, ts: 20.5, kind: .phoneClaimed, payload: ControlEventPayload(paneID: "tok", ip: "10.0.0.5")),
             ControlEvent(seq: 21, ts: 21.5, kind: .phoneReleased, payload: ControlEventPayload(paneID: "tok")),
+            ControlEvent(seq: 22, ts: 22.5, kind: .assistantMessage,
+                         payload: ControlEventPayload(from: "sess-1", kind: "reply", handle: "claude-1", text: "done")),
         ]
         let expected = [
             ##"{"kind":"status","payload":{"blink":true,"color":"#aabbcc","name":"api","pane":"right","##
@@ -113,6 +117,7 @@ struct ControlEventProtocolTests {
             ##"{"kind":"phone.detached","payload":{"paneID":"tok"},"seq":19,"ts":19.5}"##,
             ##"{"kind":"phone.claimed","payload":{"ip":"10.0.0.5","paneID":"tok"},"seq":20,"ts":20.5}"##,
             ##"{"kind":"phone.released","payload":{"paneID":"tok"},"seq":21,"ts":21.5}"##,
+            ##"{"kind":"assistant.message","payload":{"from":"sess-1","handle":"claude-1","kind":"reply","text":"done"},"seq":22,"ts":22.5}"##,
         ]
 
         #expect(try events.map(canonicalJSON) == expected)
@@ -212,6 +217,14 @@ struct ControlEventProtocolTests {
 
         #expect(decoded == request)
         #expect(decoded.args?.kinds == ["status", "future.kind"])
+    }
+
+    @Test func olderEventPayloadWithoutAssistantFieldsDecodes() throws {
+        let json = #"{"kind":"message","payload":{"from":"S:Q","messageID":"m1"},"seq":1,"ts":1.0}"#
+        let decoded = try JSONDecoder().decode(ControlEvent.self, from: Data(json.utf8))
+        #expect(decoded.kind == .message)
+        #expect(decoded.payload.from == "S:Q")
+        #expect(decoded.payload.kind == nil && decoded.payload.handle == nil && decoded.payload.text == nil)
     }
 
     private func canonicalJSON<T: Encodable>(_ value: T) throws -> String {

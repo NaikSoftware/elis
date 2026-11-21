@@ -22,6 +22,7 @@ public enum ControlEventKind: String, Codable, CaseIterable, Sendable, Equatable
     case phoneDetached = "phone.detached"
     case phoneClaimed = "phone.claimed"
     case phoneReleased = "phone.released"
+    case assistantMessage = "assistant.message"
 }
 
 /// Kind-specific event data. Optional fields keep the encoded payload compact while preserving one
@@ -57,13 +58,23 @@ public struct ControlEventPayload: Codable, Sendable, Equatable {
     public var remoteSessionID: String?
     /// The `phone.*` events' phone address; nil on a `phone.detached` or `phone.released` the relay's exit caused.
     public var ip: String?
+    /// The `assistant.message` event's entry kind (`user`, `assistant`, `sent`, `reply`, `error`).
+    public var kind: String?
+    /// The `assistant.message` event's sender handle.
+    public var handle: String?
+    /// The `assistant.message` event's message text.
+    public var text: String?
 
     public init(name: String? = nil, status: String? = nil, pane: String? = nil,
                 blink: Bool? = nil, color: String? = nil, shape: String? = nil,
                 previous: String? = nil, title: String? = nil, body: String? = nil,
                 host: String? = nil, paneID: String? = nil, parent: String? = nil,
-                from: String? = nil, messageID: String? = nil, remoteSessionID: String? = nil, ip: String? = nil) {
+                from: String? = nil, messageID: String? = nil, remoteSessionID: String? = nil, ip: String? = nil,
+                kind: String? = nil, handle: String? = nil, text: String? = nil) {
         self.ip = ip
+        self.kind = kind
+        self.handle = handle
+        self.text = text
         self.remoteSessionID = remoteSessionID
         self.parent = parent
         self.from = from

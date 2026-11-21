@@ -303,6 +303,13 @@ struct EventCommandsTests {
         }
         #expect(leads == ["00:00:00 phone.claimed ip=10.0.0.3 pane-id=tok", "00:00:00 phone.released ip=10.0.0.3 pane-id=tok"])
 
+        let assistant = EventFormatter.human(
+            ControlEvent(seq: 23, ts: 0, kind: .assistantMessage,
+                         payload: ControlEventPayload(from: "s1", kind: "reply", handle: "claude-1", text: "done")),
+            timeZone: TimeZone(secondsFromGMT: 0)!
+        )
+        #expect(assistant == "00:00:00 assistant.message kind=reply from=claude-1 done")
+
         for event in events {
             let line = try EventFormatter.json(event)
             #expect(!line.contains("\n"))
