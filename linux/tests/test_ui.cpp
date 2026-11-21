@@ -767,6 +767,52 @@ private Q_SLOTS:
         QCOMPARE(store.selected, beta);
     }
 
+    void sessionPaletteRowRunsOnClick()
+    {
+        Store store;
+        MainWindow w(store, dir.filePath("click.json"));
+        w.restore({});
+        const QString ws = store.addWorkspace("w");
+        store.select(store.addSession(ws, "alpha", {}));
+        const QString beta = store.addSession(ws, "beta", {});
+        w.show();
+        w.activateWindow();
+        QVERIFY(QTest::qWaitForWindowActive(&w));
+        QTRY_VERIFY_WITH_TIMEOUT(QApplication::focusWidget() && QApplication::focusWidget() != &w, 5000);
+        QTest::keyClick(QApplication::focusWidget(), Qt::Key_P, Qt::ControlModifier);
+        auto *list = w.findChild<QFrame *>("palette")->findChild<QListWidget *>();
+        QTRY_VERIFY(list->isVisible() && list->count() > 0);
+        QListWidgetItem *row = list->findItems("beta", Qt::MatchContains).value(0);
+        QVERIFY(row);
+        const QPoint at = list->visualItemRect(row).center();
+        const QPointF inWindow(list->viewport()->mapTo(&w, at));
+        QMouseEvent press(QEvent::MouseButtonPress, inWindow, list->viewport()->mapToGlobal(QPointF(at)), Qt::LeftButton, Qt::LeftButton, Qt::NoModifier);
+        QCoreApplication::sendEvent(w.windowHandle(), &press); // as the platform delivers it: the window first
+        QVERIFY(list->isVisible());
+        QTest::mouseClick(list->viewport(), Qt::LeftButton, {}, at);
+        QTRY_COMPARE(store.selected, beta);
+    }
+
+    void sessionPaletteKeepsItsSearchFieldWhenNothingMatches()
+    {
+        Store store;
+        MainWindow w(store, dir.filePath("nomatch.json"));
+        w.restore({});
+        store.select(store.addSession(store.addWorkspace("w"), "alpha", {}));
+        w.show();
+        w.activateWindow();
+        QVERIFY(QTest::qWaitForWindowActive(&w));
+        QTRY_VERIFY_WITH_TIMEOUT(QApplication::focusWidget() && QApplication::focusWidget() != &w, 5000);
+        QTest::keyClick(QApplication::focusWidget(), Qt::Key_P, Qt::ControlModifier);
+        QTRY_VERIFY(qobject_cast<QLineEdit *>(QApplication::focusWidget()));
+        auto *search = qobject_cast<QLineEdit *>(QApplication::focusWidget());
+        QTest::keyClicks(search, "qws");
+        auto *palette = w.findChild<QFrame *>("palette");
+        QVERIFY(!palette->findChild<QListWidget *>()->isVisible());
+        QTRY_VERIFY(search->height() >= search->sizeHint().height());
+        QVERIFY(palette->geometry().contains(palette->mapToParent(search->geometry().bottomRight())));
+    }
+
     void secondLineGrowsItsRowWhereSettingsShowIt()
     {
         Store store;
