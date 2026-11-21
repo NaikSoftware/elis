@@ -96,14 +96,16 @@ decoration and menu bar.
 
 ### Phase 3 — Live panes on zmx (D3)
 
+Implemented, plan [2026-11-21-linux-phase-3-zmx.md](2026-11-21-linux-phase-3-zmx.md). The owner dropped the migration
+of running `elis-session-host` daemons (2026-11-21): the host is simply deleted.
+
 - Build: `setup-zmx-linux.sh` or a shared script stages zmx for the host arch, and CMake installs it beside
   `elis`.
   zig 0.16 becomes a build dependency, or the build fetches the release tarball's zmx.
 - Konsole panes run `zmx attach <name>` with `ZMX_MANAGED`.
   The app reads the role reports and covers a pane while a phone leads it (the Mac's `PaneLeadCover`).
 - The tree gains `surfaces[]`, with `backedByZmx` set as the phone reads it.
-- Moving to the new daemon: the first launch on zmx reaps the `elis-session-host` daemons through the captured
-  command fallback, then the host and its sources are deleted.
+- `elis-session-host` and its sources are deleted.
 - Restore, reap and delete behave as PARITY documents them today.
   The smoke test and `test_core` cover each.
 

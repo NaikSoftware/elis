@@ -121,12 +121,16 @@ Legend: [x] done · [ ] todo · (fork) = fork-only feature, not in upstream docs
   re-run captures each pane's foreground group leader argv from /proc at a clean quit (idle shells skipped) and types it
   into the new shell once; `restore-denylist.conf` (starter: tmux, screen, zellij); `restore mode|capture|clear`,
   `session restore <cmd>|--none|--clear [--pane]` pins, read-back `restoreCommand`/`splitRestoreCommand`
-- [x] Live sessions: each main/right pane runs under `elis-session-host` (in place of master's zmx), a daemon in
-  `$XDG_RUNTIME_DIR/elis-<state hash>/` that keeps the pty across quits; the next launch reattaches, replaying the
-  last 4 MB of output plus the DEC modes in force and making the foreground program redraw. A daemon that is gone
-  falls back to the captured command, as master's create-only payload. Deleting a session, closing a split or deleting
-  a window ends its daemons; closing a window keeps them; a `none`/`rerun` launch reaps them all. Pane ids survive a
-  reattach. Not ported: `zmx.*`, `session restart`, a reset dialog; the replay is raw output, not a rendered screen
+- [x] Live sessions: each main/right pane runs `zmx attach` (master's patched zmx, built and installed beside `elis`)
+  with `ZMX_MANAGED`, in `$XDG_RUNTIME_DIR/elis-zmx-<state hash>/` as elis-server's; daemons are named by the pane's
+  persisted identity, which is also its `ELIS_PANE_ID` and follows a swap or a promoted split. The next launch
+  reattaches to the rendered screen; a daemon that is gone runs the captured command, pin or resume line as the
+  create-only payload. Deleting a session, closing a split or deleting a window ends its daemons and hangs up their
+  foreground jobs; closing a window keeps them; a launch reaps as master (`none`/`rerun`: every idle daemon, `live`:
+  the ones no window claims). Role reports cover a pane that does not lead ("In use in another terminal",
+  "Reconnecting…", "Taking over…"); a key takes the lead with a fresh claiming attach. Tree `surfaces[]`
+  (`id`, `kind`, `active`, `visible`, `backedByZmx`, `lead`, `paneID`) and `backedByZmx`. Not ported: `zmx.*`,
+  `session restart`, a reset dialog; a dashboard cell is not taken over in place
 - [x] `session transcript` (the phone's Chat), and the tree's `agentPane` and `agentSessionId` (sampled from both
   panes, the focused one first): the argument check and the reader are master's own `ElisCore`, linked through
   `linux/bridge` (ElisBridge); the read runs on a worker thread
