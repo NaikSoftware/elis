@@ -99,7 +99,9 @@ browser.
   elis-server runs the same poller for its sessions.
 - Mac app: store wiring, the row line in `SidebarInfoCellView`, the popover.
 - Linux: `linux/bridge/Sources/ElisBridge/CIInfo.swift` (not `Bridge.swift`): `elis_ci_probe(cwd) → JSON`, called
-  on a worker thread, and `elis_ci_line(JSON) → spans` in the JSON shape the phase 1 renderer already takes.
+  on a worker thread, and `elis_ci_line(JSON) → spans` in the JSON shape the phase 1 renderer already takes:
+  `[{text, bold, italic, code, dim, color?}]`, `color` one of ElisCore's 12 colour names.
+  Phase 1 removes `elis_session_info`, so Linux shows no second line until this feed lands.
   The Qt app owns its timer and popup. Linux UI waits for the Linux phase 1 branch to land.
 
 ## Removed with `session info`
