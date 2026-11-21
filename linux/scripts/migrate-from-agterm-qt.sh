@@ -37,14 +37,15 @@ if [ -d "$live" ]; then
     n=0
     for s in "$live"/*; do
         [ -S "$s" ] || continue
-        [ -n "$host" ] && timeout 5 "$host" --kill "$s" >/dev/null 2>&1 || true
-        n=$((n + 1))
+        n=$((n + 1)) code=0
+        [ -z "$host" ] || timeout 5 "$host" --kill "$s" >/dev/null 2>&1 || code=$?
+        [ $code -ne 1 ] || rm -f "$s" # nothing listens: a crashed daemon's socket
     done
     rm -f "$live"/*.pid "$live"/*.id 2>/dev/null || true
     still=$(find "$live" -mindepth 1 -type s | wc -l)
     rmdir "$live" 2>/dev/null || true
     [ "$n" -gt 0 ] && note_did "end $((n - still)) old session daemons; their panes start again with their commands"
-    [ "$still" -gt 0 ] && note_left "$still old session daemons under $live did not stop; end them with agterm-session-host --kill <socket>"
+    [ "$still" -gt 0 ] && note_left "$still old session daemons under $live did not stop; end each with elis-session-host --kill <socket>"
 fi
 
 moved=()

@@ -7,10 +7,9 @@ host=${1:?usage: $0 <elis-session-host>}
 # a short /tmp root keeps the daemon socket paths under the 108-byte limit
 root=$(mktemp -d /tmp/aqm.XXXXXX)
 H=$root/h RT=$root/rt
-clients=()
 cleanup() {
     for s in "$RT"/*/*; do [ -S "$s" ] && timeout 5 "$host" --kill "$s" >/dev/null 2>&1; done
-    for p in "${clients[@]}"; do kill "$p" 2>/dev/null; done
+    wait # the attach clients exit with their daemons
     [ -n "${KEEP:-}" ] || rm -rf "$root"
 }
 trap cleanup EXIT
@@ -36,7 +35,7 @@ printf '{\n    "settings": {\n        "configDirectory": "~/.config/agterm-qt",\
 printf 'CERT\n' > "$state/mobile/cert.pem"
 printf 'TOKEN\n' > "$state/mobile/token" && chmod 600 "$state/mobile/token"
 printf '999999\nagterm-qt\nhost\n' > "$state/agterm.lock"
-python3 -I -c 'import socket,sys; socket.socket(socket.AF_UNIX).bind(sys.argv[1])' "$state/agterm.sock"
+for s in "$state/agterm.sock" "$live/gone.main"; do python3 -I -c "import socket,sys; socket.socket(socket.AF_UNIX).bind(sys.argv[1])" "$s"; done
 printf 'f\n' > "$state/extras-installed"
 printf 'old\n' > "$state/agent-status/agterm-agent-status.sh"
 printf '<!-- agterm-skill -->\n' > "$state/skill/agterm/SKILL.md"
@@ -65,7 +64,6 @@ printf 'png' > "$H/.local/share/icons/hicolor/64x64/apps/agterm-qt.png"
 # a daemon of the migrated state and one of another state dir, which must survive
 for s in "$live/s1.main" "$RT/agterm-qt-0ther000/d1.main"; do
     "$H/.local/bin/agterm-session-host" "$s" -- sleep 300 </dev/null >/dev/null 2>&1 &
-    clients+=($!)
 done
 for _ in $(seq 50); do [ -s "$live/s1.main.pid" ] && [ -s "$RT/agterm-qt-0ther000/d1.main.pid" ] && break; sleep 0.1; done
 shell=$(cat "$live/s1.main.pid") other=$(cat "$RT/agterm-qt-0ther000/d1.main.pid")
