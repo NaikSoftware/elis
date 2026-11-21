@@ -14,7 +14,7 @@ public struct ClaudeTranscriptArguments: Sendable, Equatable {
 extension ControlResponse: Error {}
 
 extension ControlDispatcher {
-    public static func transcriptArguments(_ args: ControlArgs?) -> Result<ClaudeTranscriptArguments, ControlResponse> {
+    nonisolated public static func transcriptArguments(_ args: ControlArgs?) -> Result<ClaudeTranscriptArguments, ControlResponse> {
         func refuse(_ error: String) -> Result<ClaudeTranscriptArguments, ControlResponse> {
             .failure(ControlResponse(ok: false, error: error))
         }
@@ -51,13 +51,16 @@ extension ControlDispatcher {
 
     // a dispatch queue, never a Task: a first scan of a large file would park a cooperative-pool thread
     nonisolated private static func readTranscript(_ source: ControlTranscriptSource, _ arguments: ClaudeTranscriptArguments) async -> ControlResponse {
+        await withCheckedContinuation { (continuation: CheckedContinuation<ControlResponse, Never>) in
+            DispatchQueue.global(qos: .userInitiated).async { continuation.resume(returning: transcriptResponse(source, arguments)) }
+        }
+    }
+
+    /// The blocking read behind `session.transcript`, public for the Linux Qt app's bridge (`linux/shared`).
+    nonisolated public static func transcriptResponse(_ source: ControlTranscriptSource, _ arguments: ClaudeTranscriptArguments) -> ControlResponse {
         let request = ClaudeTranscriptRequest(sessionID: source.claudeSessionID, after: arguments.after, before: arguments.before,
                                               held: arguments.held, maxBytes: arguments.maxBytes)
-        let reader = ClaudeTranscript.instance(directory: source.claudeDirectory)
-        let read = await withCheckedContinuation { (continuation: CheckedContinuation<Result<ClaudeTranscriptPage, ClaudeTranscriptError>, Never>) in
-            DispatchQueue.global(qos: .userInitiated).async { continuation.resume(returning: reader.page(request)) }
-        }
-        switch read {
+        switch ClaudeTranscript.instance(directory: source.claudeDirectory).page(request) {
         case .failure(let error): return ControlResponse(ok: false, error: error.description)
         case .success(let page):
             var result = ControlResult()

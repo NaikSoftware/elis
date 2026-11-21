@@ -9,7 +9,7 @@ extension ControlDispatcher {
 
     /// The shared `--pane` selector: nil when absent, the parsed pane when `parse` accepts it, and `error`
     /// as the pinned rejection otherwise. No live session needed either way.
-    static func parsePane<Pane>(_ raw: String?, error: String, parse: (String) -> Pane?) -> PaneSelection<Pane> {
+    nonisolated static func parsePane<Pane>(_ raw: String?, error: String, parse: (String) -> Pane?) -> PaneSelection<Pane> {
         guard let raw else { return .pane(nil) }
         guard let parsed = parse(raw) else { return .rejected(ControlResponse(ok: false, error: error)) }
         return .pane(parsed)
@@ -25,7 +25,7 @@ extension ControlDispatcher {
     /// so the role and position aliases resolve, but the rejection keeps the per-command
     /// `invalid pane: <value>` these three answer, which the reference records as their difference from
     /// `session.status`/`.restore`. Unifying the wording is a separate decision from parsing the value.
-    static func parseSurfacePane(_ raw: String?) -> PaneSelection<StatusPane> {
+    nonisolated static func parseSurfacePane(_ raw: String?) -> PaneSelection<StatusPane> {
         Self.parsePane(raw, error: "invalid pane: \(raw ?? "")") { StatusPane(controlName: $0) }
     }
 
