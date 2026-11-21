@@ -133,7 +133,9 @@ void Palette::place()
     int rows = 0;
     for (int i = 0; i < m_list->count() && i < 9; ++i)
         rows += m_list->sizeHintForRow(i);
-    const int height = (m_switcher ? 0 : m_search->sizeHint().height()) + rows + 20;
+    const QMargins m = layout()->contentsMargins();
+    const int chrome = m.top() + m.bottom() + 2 * frameWidth() + (rows ? layout()->spacing() + 2 * m_list->frameWidth() : 0);
+    const int height = (m_switcher ? 0 : m_search->sizeHint().height()) + rows + chrome;
     if (m_anchor && m_anchor->isVisible()) {
         const QRect at(m_anchor->mapTo(w, QPoint()), m_anchor->size());
         const int x = qBound(8, at.center().x() - width / 2, w->width() - width - 8);
@@ -162,6 +164,7 @@ void Palette::filter()
         if (m_list->item(i)->data(IndexRole).toInt() == m_initial)
             row = i;
     m_list->setCurrentRow(row);
+    m_list->setVisible(m_list->count() > 0); // an empty list keeps a minimum height that squeezed the search field
     if (isVisible())
         place();
 }
@@ -195,7 +198,9 @@ bool Palette::eventFilter(QObject *watched, QEvent *event)
         runCurrent();
         return true;
     }
-    if (event->type() == QEvent::MouseButtonPress && !isAncestorOf(qobject_cast<QWidget *>(watched)) && watched != this) {
+    // widgets only: the press reaches the window's QWindow first, which is no widget and read as a click elsewhere
+    auto *widget = qobject_cast<QWidget *>(watched);
+    if (event->type() == QEvent::MouseButtonPress && widget && widget != this && !isAncestorOf(widget)) {
         dismiss();
         return false;
     }
