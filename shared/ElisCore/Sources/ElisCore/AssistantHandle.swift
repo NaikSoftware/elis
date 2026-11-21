@@ -1,6 +1,7 @@
 public enum AssistantHandle {
     public static func assign(_ items: [(id: String, name: String)]) -> [String: String] {
-        var taken = Set<String>()
+        // `all` is the `@all` group tag.
+        var taken: Set<String> = ["all"]
         var result: [String: String] = [:]
         result.reserveCapacity(items.count)
 

@@ -10,6 +10,10 @@ struct AssistantHandleTests {
         #expect(AssistantHandle.assign([("a", "fix the sidebar filter")]) == ["a": "fix-side"])
     }
 
+    @Test func allIsNeverAHandle() {
+        #expect(AssistantHandle.assign([("a", "all")]) == ["a": "all-2"])
+    }
+
     @Test func duplicatesGetSuffixesInOrder() {
         #expect(AssistantHandle.assign([("a", "logcat"), ("b", "logcat")]) == ["a": "logcat", "b": "logcat-2"])
     }
