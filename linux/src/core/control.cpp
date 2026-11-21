@@ -46,11 +46,6 @@ static QJsonObject withContext(QJsonObject node, const Session &s, const Store &
         node.insert("agentPane", s.agentPane);
     if (!s.context.isEmpty())
         node.insert("context", s.context);
-    if (!s.info.source.isEmpty()) {
-        node.insert("info", s.info.source);
-        node.insert("infoMarkdown", s.info.markdown);
-        node.insert("infoHideAfter", s.info.hideAfter);
-    }
     if (store.collapsed.contains(s.id) && !const_cast<Store &>(store).companionsOf(s.id).isEmpty())
         node.insert("collapsed", true); // a parent with its companions folded
     return node;
@@ -218,8 +213,7 @@ static QJsonObject restoreCommand(Store &store, Terminals &terminals, const QStr
     return fail(QStringLiteral("unknown command '%1'").arg(cmd));
 }
 
-// a colour from the palette; "" when valid. A tint always colours icon, name and background, so a raw client's
-// old `tintOn` placement is ignored, as on the Mac
+// a colour from the palette; "" when valid
 static QString tintArgs(const QJsonObject &args, QString *color)
 {
     *color = args.value("tint").toString().toLower();
@@ -715,7 +709,7 @@ QJsonObject dispatch(Store &store, Terminals &terminals, const QJsonObject &requ
                 return fail(QStringLiteral("session has no split pane"));
             if (!terminals.type(id, pane, args.value("text").toString(), &error))
                 return fail(error);
-        } else if (cmd == QLatin1String("session.get")) { // the Mac's session.info sets the sidebar line
+        } else if (cmd == QLatin1String("session.get")) {
             QJsonObject node = merged(withContext(withRestore(sessionNode(*store.session(id), store.selected), *store.session(id)), *store.session(id), store),
                                       terminals.sessionExtras(id));
             node.insert("workspace", store.workspaceOf(id)->id);

@@ -7,7 +7,7 @@
 
 class Store;
 struct Settings;
-struct SessionInfo;
+struct InfoSpan;
 class QPainter;
 
 // A launcher's icon as a template tinted `color`: the terminal glyph, or the agent's logo.
@@ -62,7 +62,7 @@ public:
     static QMargins edgeExtras(Edge edge);
     QRect contentRect(const QModelIndex &index, const QRect &row) const;
     QRect titleRect(const QModelIndex &index, const QRect &row) const; // the content less its info line: name, icons, buttons
-    const SessionInfo *shownInfo(const QModelIndex &index) const;      // the session's info line where Settings shows it
+    const QList<InfoSpan> *shownInfo(const QModelIndex &index) const;  // the session's second line where Settings shows it
     int titleHeight(const QFontMetrics &fm) const;                     // a plain row's content height at the density
     static QFont infoFont(const QFont &rowFont);
     static QRectF pillRect(const QRect &content, bool flat); // the selection pill, hover and wash

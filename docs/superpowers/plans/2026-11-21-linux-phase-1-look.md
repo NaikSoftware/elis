@@ -9,7 +9,7 @@ Roadmap: `2026-11-21-linux-elis-migration.md`, Phase 1 and D2. The Mac code is t
   Linux dropped scratch and the quick terminal, so its cluster is split, dashboard and custom commands.
   The Mac's overlay toggle is `hiddenByDefault` and not in the shots; the owner declined it on Linux.
 - The line under a session's name is the Mac's `session.info` info line (`SidebarInfoCell.swift`), not its
-  `context`, which the title pill shows. Linux's `session.info` was a read command; it becomes `session.get` (task 8).
+  `context`, which the title pill shows. Linux's `session.info` read becomes `session.get` (task 8).
 - The pill is the Mac's `recentSessions` element ("Session switcher"): it replaces the clock, and the plain title
   labels are its fallback when hidden. No new Interface preference.
 - The selection pill takes the workspace tint, else the session tint, else the accent (`WorkspaceSidebar+Bands.swift:93`).
@@ -32,9 +32,10 @@ Roadmap: `2026-11-21-linux-elis-migration.md`, Phase 1 and D2. The Mac code is t
 6. Footer: new workspace, new session | workspace filter, flagged view, with the Mac glyphs and a top hairline.
 7. Tint placements go: a tint colours icon, name and band or wash; `--on`/`--tint-on` and the Show On submenu are
    removed, and an older file's placement is ignored.
-8. `session.info set|clear` with `markdown` and `hideAfter`, drawn under the name; read back `info`, `infoMarkdown`,
-   `infoHideAfter`; Settings ▸ Interface gets Session context and the Session info picker; the session palette hangs
-   under the pill.
+8. The row's second line (spans `{text,bold,italic,code,dim,color?}` on `Session::infoSpans`) with its height and the
+   Settings ▸ Interface ▸ Session info picker; the CI summary feeds it later, so `session.info` is not ported.
+   `session.get` keeps Linux's process-detail read. Settings ▸ Interface gets Session context; the session palette
+   hangs under the pill.
 
 ## Done when
 

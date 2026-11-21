@@ -50,7 +50,7 @@ add_library(ElisBridge SHARED IMPORTED)
 set_target_properties(ElisBridge PROPERTIES IMPORTED_LOCATION ${ELIS_BRIDGE} INTERFACE_INCLUDE_DIRECTORIES ${CMAKE_SOURCE_DIR}/bridge/include)
 add_dependencies(ElisBridge elis-bridge)
 
-add_library(elis-core STATIC src/core/store.cpp src/core/sessioninfo.cpp src/core/control.cpp src/core/launcher.cpp src/core/keymap.cpp src/core/hooks.cpp src/core/restore.cpp src/core/commands.cpp src/core/installers.cpp src/core/livehost.cpp src/core/transcript.cpp)
+add_library(elis-core STATIC src/core/store.cpp src/core/control.cpp src/core/launcher.cpp src/core/keymap.cpp src/core/hooks.cpp src/core/restore.cpp src/core/commands.cpp src/core/installers.cpp src/core/livehost.cpp src/core/transcript.cpp)
 target_include_directories(elis-core PUBLIC src/core)
 target_link_libraries(elis-core PUBLIC Qt6::Core ElisBridge PRIVATE Qt6::Sql)
 

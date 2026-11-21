@@ -237,7 +237,7 @@ void MainWindow::showSettings()
                                        element(QStringLiteral("focusFilter"), tr("Workspace filter")), element(QStringLiteral("flaggedView"), tr("Flagged view")),
                                        element(QStringLiteral("workspaceAddSession"), tr("Workspace add-session")),
                                        element(QStringLiteral("workspaceIcons"), tr("Workspace icons")), element(QStringLiteral("sessionIcons"), tr("Session icons"))});
-              // where session.info lines show; hiding never clears one
+              // where a session's second line shows; hiding never clears it
               auto *info = new QHBoxLayout;
               info->addWidget(new QLabel(tr("Session info")));
               info->addWidget(picker({{tr("Always"), QStringLiteral("always")}, {tr("Flagged"), QStringLiteral("flagged")}, {tr("Off"), QStringLiteral("off")}},

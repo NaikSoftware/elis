@@ -620,7 +620,7 @@ private Q_SLOTS:
         QVERIFY(!s.session(c1) && !s.session(c2));
     }
 
-    void tintIsAColourThatPersistsAndIgnoresOldPlacements()
+    void tintIsAColourThatPersists()
     {
         Store s;
         FakeTerminals t;
@@ -628,8 +628,6 @@ private Q_SLOTS:
         QVERIFY(s.workspaces.isEmpty()); // a refused tint creates nothing
         const QString ws = call(s, t, "workspace.new", {}, {{"name", "prod"}, {"tint", "Red"}})["result"]["id"].toString();
         QCOMPARE(s.workspace(ws)->tint, Tint{"red"});
-        // a raw client's old placement is ignored, as on the Mac
-        QVERIFY(call(s, t, "workspace.tint", ws, {{"mode", "set"}, {"tint", "red"}, {"tintOn", QJsonArray{"glyph"}}})["ok"].toBool());
         const QString a = s.addSession(ws, {}, {});
         QVERIFY(s.session(a)->tint.color.isEmpty()); // a workspace tint never reaches its sessions
         QVERIFY(call(s, t, "session.tint", a, {{"mode", "set"}, {"tint", "blue"}})["ok"].toBool());
@@ -642,77 +640,8 @@ private Q_SLOTS:
         Store r;
         r.fromJson(s.toJson());
         QCOMPARE(r.session(a)->tint, Tint{"blue"});
-        QJsonObject old = s.toJson();
-        QJsonArray wss = old["workspaces"].toArray();
-        QJsonObject w0 = wss[0].toObject();
-        w0["tint"] = QJsonObject{{"color", "green"}, {"on", QJsonArray{"name"}}}; // a file from before placements went
-        wss[0] = w0;
-        old["workspaces"] = wss;
-        Store o;
-        o.fromJson(old);
-        QCOMPARE(o.workspace(ws)->tint, Tint{"green"});
         QVERIFY(call(s, t, "session.tint", a, {{"mode", "clear"}})["ok"].toBool());
         QVERIFY(!call(s, t, "tree")["result"]["tree"]["workspaces"][0]["sessions"][0].toObject().contains("tint"));
-    }
-
-    void sessionInfoMarkdownParsesTheInlineForms()
-    {
-        QString e;
-        auto spans = [&](const QString &src) { return SessionInfo::make(src, true, 0, &e).spans; };
-        QCOMPARE(spans("**3** agents ^[running](color: \"green\") ^[idle](dim: true)"),
-                 (QList<InfoSpan>{{"3", true}, {" agents "}, {"running", false, false, false, false, "green"}, {" "}, {"idle", false, false, false, true}}));
-        QCOMPARE(spans("*a* `b_c` [docs](https://x) snake_case &amp; \\*x\\*"),
-                 (QList<InfoSpan>{{"a", false, true}, {" "}, {"b_c", false, false, true}, {" docs snake_case & *x*"}}));
-        QCOMPARE(spans("^[**big**](color: \"Red\")"), (QList<InfoSpan>{{"big", true, false, false, false, "red"}}));
-        QVERIFY(e.isEmpty());
-        QCOMPARE(SessionInfo::make("**x**", false, 0, &e).spans, (QList<InfoSpan>{{"**x**"}})); // plain text is literal
-        const QList<std::tuple<QString, bool, double, QString>> refused{
-            {QString(513, QLatin1Char('a')), false, 0, "info text is over 512 bytes"},
-            {"two\nlines", false, 0, "info text must be one line"},
-            {"   ", false, 0, "info text is empty"},
-            {"bell\a", false, 0, "info text contains a control character"},
-            {"^[x](color: \"navy\")", true, 0, "unknown info color: navy (red|orange|yellow|green|blue|purple|gray|teal|pink|brown|indigo|mint)"},
-            {"^[x](color: green)", true, 0, "invalid info markdown; quote attribute values: ^[text](color: \"green\")"},
-            {"ok", false, 86401, "--hide-after must be 0...86400 seconds"}};
-        for (const auto &[src, markdown, hide, message] : refused) {
-            e.clear();
-            SessionInfo::make(src, markdown, hide, &e);
-            QCOMPARE(e, message);
-        }
-    }
-
-    void sessionInfoSetsClearsExpiresAndIsNeverSaved()
-    {
-        Store s;
-        FakeTerminals t;
-        const QString ws = s.addWorkspace("w"), a = s.addSession(ws, "a", {});
-        auto node = [&] { return call(s, t, "tree")["result"]["tree"]["workspaces"][0]["sessions"][0].toObject(); };
-        QVERIFY(!node().contains("info"));
-        QVERIFY(call(s, t, "session.info", a, {{"mode", "set"}, {"text", "step **2**"}, {"markdown", true}, {"hideAfter", 30}})["ok"].toBool());
-        QCOMPARE(node()["info"].toString(), QStringLiteral("step **2**"));
-        QVERIFY(node()["infoMarkdown"].toBool());
-        QCOMPARE(node()["infoHideAfter"].toDouble(), 30.0);
-        QCOMPARE(call(s, t, "session.info", a, {{"mode", "set"}, {"text", "a\nb"}})["error"].toString(), QStringLiteral("session.info: info text must be one line"));
-        QCOMPARE(node()["info"].toString(), QStringLiteral("step **2**")); // a refused set changes nothing
-        QVERIFY(call(s, t, "session.info", a, {{"mode", "set"}, {"text", "plain"}})["ok"].toBool());
-        QVERIFY(!node()["infoMarkdown"].toBool());
-        QCOMPARE(node()["infoHideAfter"].toDouble(), 0.0); // an omitted hideAfter cancels the expiry
-        QCOMPARE(call(s, t, "session.info", a, {{"mode", "clear"}, {"text", "x"}})["error"].toString(),
-                 QStringLiteral("session.info clear takes no text, markdown or hide-after"));
-        QCOMPARE(call(s, t, "session.info", a, {{"mode", "x"}})["error"].toString(), QStringLiteral("invalid info mode: x (set|clear)"));
-        QCOMPARE(s.session(s.duplicateSession(a, {}))->info, SessionInfo{}); // never copied
-        Store r;
-        r.fromJson(s.toJson());
-        QCOMPARE(r.session(a)->info, SessionInfo{}); // never saved
-        QVERIFY(call(s, t, "session.info", a, {{"mode", "clear"}})["ok"].toBool());
-        QVERIFY(!node().contains("info"));
-        QVERIFY(call(s, t, "session.info", a, {{"mode", "set"}, {"text", "soon gone"}, {"hideAfter", 0.05}})["ok"].toBool());
-        QTRY_VERIFY(s.session(a)->info.source.isEmpty());
-        QVERIFY(call(s, t, "session.info", a, {{"mode", "set"}, {"text", "timed"}, {"hideAfter", 60}})["ok"].toBool());
-        QVERIFY(s.softClose({a}));
-        QVERIFY(s.undoClose());
-        QVERIFY(s.session(a)->info.source.isEmpty()); // an undo never brings back a timed line
-        QCOMPARE(call(s, t, "session.get", a)["result"]["session"]["pid"].toInt(), 42); // the old read, renamed
     }
 
     void sidebarDensityToggleAndReadBack()

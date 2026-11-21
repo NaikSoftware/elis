@@ -1,6 +1,5 @@
 #pragma once
 
-#include "sessioninfo.h"
 #include <QHash>
 #include <QJsonObject>
 #include <QList>
@@ -15,6 +14,15 @@
 struct Tint {
     QString color;
     bool operator==(const Tint &) const = default;
+};
+
+// One styled run of a session's sidebar second line: the spans array ElisBridge produces, color one of ElisCore's
+// TintColor names ("" = the row's own colour).
+struct InfoSpan {
+    QString text;
+    bool bold = false, italic = false, code = false, dim = false;
+    QString color;
+    bool operator==(const InfoSpan &) const = default;
 };
 
 struct Session {
@@ -42,7 +50,7 @@ struct Session {
     QString parentId;            // a companion is pinned to its parent, listed right after it
     Tint tint;
     QString context; // a short line of what the session is about, set from outside (session.context)
-    SessionInfo info; // the sidebar line under the name (session.info); runtime only
+    QList<InfoSpan> infoSpans; // the sidebar's second line under the name; runtime only, empty = none
     // re-run restore: argv captured at quit (persisted), its one-shot replay this launch (not persisted), and a pinned
     // command that beats both (persisted; "" = pinned to nothing)
     QStringList foreground, splitForeground, replay, splitReplay;
@@ -95,7 +103,7 @@ struct Settings {
     bool autoFollowStayOnActive = false;                  // hold the selection while the current session is active
     QString flaggedViewLayout = QStringLiteral("flat");   // flat (session : workspace) | plain | tree
     QString sidebarDensity = QStringLiteral("default");   // default | compact
-    QString sessionInfoDisplay = QStringLiteral("always"); // where the sidebar draws session.info lines: always | flagged | off
+    QString sessionInfoDisplay = QStringLiteral("always"); // where the sidebar draws a session's second line: always | flagged | off
     // Key Mapping: the directory holding keymap.conf and hooks.conf; "" = the default
     QString configDirectory;
     QString restoreMode = QStringLiteral("none"); // none | rerun | live; takes effect at the next launch
@@ -193,8 +201,6 @@ public:
     void setFilter(bool on);
     // id names a session or a workspace; color "" clears
     void setTint(const QString &id, const QString &color);
-    // the session's info line; a positive hideAfter clears it after that long, restarted by every set
-    void setInfo(const QString &id, const SessionInfo &info);
     void setCwd(const QString &id, const QString &cwd);
     void setTitle(const QString &id, const QString &title);
     void setAgent(const QString &id, const QString &agent, const QString &pane = QStringLiteral("left"));
@@ -231,7 +237,6 @@ private:
     static QString newId();
     QString goTo(const QString &direction, QString *error);
     Tint *tintOf(const QString &id);
-    QHash<QString, int> m_infoRevision; // a newer set disarms an older one's expiry
     int indexIn(const Workspace &w, const QString &sessionId) const;
     void commitFocus(QStringList ids, bool enabled);
     void reselect(const Workspace *w, int i); // after the selected session left w at row i; w null when w went too

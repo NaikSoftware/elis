@@ -25,7 +25,6 @@ t=$(ctl session new --name tests --cwd "$root/tests" --no-select)
 ctl session status completed --target "$t"
 c=$(ctl session new --name "claude · copy" --cwd "$root" --workspace-name website --create-workspace)
 ctl session context "Landing page copy for the next release" --target "$c"
-ctl session info 'Drafting the **hero** ^[3 of 5](color: "green")' --markdown --target "$c" >/dev/null
 ctl session status blocked --target "$c"
 ctl session new --name "dev server" --cwd /usr --workspace-name website --no-select >/dev/null
 ctl session new --name nvim --cwd "$HOME" --workspace-name dotfiles --create-workspace --no-select >/dev/null

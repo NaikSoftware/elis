@@ -22,7 +22,7 @@ static QJsonValue tintJson(const Tint &t)
 
 static Tint tintFromJson(const QJsonValue &v)
 {
-    // an unknown colour drops the tint; an older file's "on" placement is ignored
+    // an unknown colour drops the tint
     const QString color = v.toObject().value("color").toString();
     return Store::tintColors.contains(color) ? Tint{color} : Tint{};
 }
@@ -346,8 +346,6 @@ bool Store::softClose(const QStringList &ids)
         if (group.contains(s->id)) {
             auto *w = workspaceOf(s->id);
             close.sessions << Parked{w->id, indexIn(*w, s->id), *s};
-            if (close.sessions.last().session.info.hideAfter > 0)
-                close.sessions.last().session.info = {}; // an undo never brings back a line whose time ran out
         }
     if (close.sessions.isEmpty())
         return false;
@@ -372,9 +370,6 @@ bool Store::softRemoveWorkspace(const QString &id)
         return false;
     PendingClose close{++m_pendingSerial};
     close.workspace = *at;
-    for (Session &s : close.workspace.sessions)
-        if (s.info.hideAfter > 0)
-            s.info = {};
     close.workspaceIndex = int(at - workspaces.cbegin());
     close.focusMember = focused.contains(id);
     focused.removeAll(id);
@@ -652,23 +647,6 @@ void Store::setTint(const QString &id, const QString &color)
     if (!t || (!color.isEmpty() && !tintColors.contains(color)) || t->color == color)
         return;
     t->color = color;
-    Q_EMIT changed();
-}
-
-void Store::setInfo(const QString &id, const SessionInfo &info)
-{
-    Session *s = session(id);
-    if (!s)
-        return;
-    const int revision = ++m_infoRevision[id];
-    if (info.hideAfter > 0)
-        QTimer::singleShot(qRound(info.hideAfter * 1000), this, [this, id, revision] {
-            if (m_infoRevision.value(id) == revision)
-                setInfo(id, {});
-        });
-    if (s->info == info)
-        return;
-    s->info = info;
     Q_EMIT changed();
 }
 

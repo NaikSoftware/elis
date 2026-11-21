@@ -53,7 +53,6 @@ Pair the phone again with the Elis phone app: the app id and the link scheme cha
   Companion copies a session's split layout and the program in each pane.
 - Tint a session or workspace row (row menu ▸ Tint: seven colours). A tint colours the icon and the name; a
   workspace's draws a band around its sessions, a session's washes its row, and both wash the terminal very lightly.
-- An info line under a session's name (`elisctl session info`), for an agent or script to say what it is doing now.
 - Rename inline (double-click), multi-select, drag to reorder or move between workspaces, and drop folders from the
   file manager to open sessions there. Drop a session on a terminal to type its id: the Claude Code conversation id
   it runs (or ran last), else Elis's session id. The footer has New Session, New Workspace, the workspace filter and the

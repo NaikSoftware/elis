@@ -243,12 +243,12 @@ qreal infoLift(const Settings &st)
 
 // one line of styled spans from the top of `at`, the last one that does not fit elided. A colour stays on a
 // selected row, as a row tint does; plain text follows the row's text colour.
-void drawInfo(QPainter *p, const SessionInfo &info, const QRectF &at, const QFont &rowFont, const QColor &text, bool selected)
+void drawInfo(QPainter *p, const QList<InfoSpan> &spans, const QRectF &at, const QFont &rowFont, const QColor &text, bool selected)
 {
     const QFont base = Sidebar::infoFont(rowFont);
     const qreal height = QFontMetricsF(base).height();
     qreal x = at.left();
-    for (const InfoSpan &span : info.spans) {
+    for (const InfoSpan &span : spans) {
         QFont f = span.code ? QFontDatabase::systemFont(QFontDatabase::FixedFont) : base;
         f.setPointSizeF(base.pointSizeF());
         f.setBold(span.bold);
@@ -472,8 +472,8 @@ void SidebarDelegate::paint(QPainter *p, const QStyleOptionViewItem &opt, const 
         const bool dark = pal.color(QPalette::Window).lightness() < 128;
         drawGlyph(p, QRectF(end + 6, cy - 5.5, 11, 11), QStringLiteral("flag-lucide"), QColor(dark ? 0x5E5CE6 : 0x5856D6)); // systemIndigo
     }
-    if (const SessionInfo *info = m_sidebar->shownInfo(index))
-        drawInfo(p, *info, QRectF(x, title.bottom() + 1 - infoLift(m_sidebar->settings()), r.right() - 8 - x, 0), opt.font, text, selected);
+    if (const QList<InfoSpan> *spans = m_sidebar->shownInfo(index))
+        drawInfo(p, *spans, QRectF(x, title.bottom() + 1 - infoLift(m_sidebar->settings()), r.right() - 8 - x, 0), opt.font, text, selected);
     p->restore();
 }
 
@@ -574,12 +574,12 @@ QRect Sidebar::contentRect(const QModelIndex &index, const QRect &row) const
     return row.marginsRemoved(edgeExtras(groupEdge(index)));
 }
 
-const SessionInfo *Sidebar::shownInfo(const QModelIndex &index) const
+const QList<InfoSpan> *Sidebar::shownInfo(const QModelIndex &index) const
 {
     if (index.data(Kind).toInt() != SessionRow || index.data(Info).toString().isEmpty())
         return nullptr;
     const ::Session *s = m_store.session(index.data(Id).toString());
-    return s && !s->info.source.isEmpty() ? &s->info : nullptr;
+    return s && !s->infoSpans.isEmpty() ? &s->infoSpans : nullptr;
 }
 
 int Sidebar::titleHeight(const QFontMetrics &fm) const
@@ -708,7 +708,10 @@ void Sidebar::rebuild()
         // what the info line shows; set only where Settings shows it, so the row's height follows
         const QString display = m_store.settings.sessionInfoDisplay;
         const bool showsInfo = display == QLatin1String("always") || (display == QLatin1String("flagged") && m_store.flaggedView);
-        item->setData(0, Info, showsInfo ? s.info.source + (s.info.markdown ? QStringLiteral("\n*") : QString()) : QString());
+        QString info; // the spans as a key, so a changed line re-asks the row's height
+        for (const InfoSpan &span : s.infoSpans)
+            info += span.text + QChar(span.bold | span.italic << 1 | span.code << 2 | span.dim << 3) + span.color + QChar(0);
+        item->setData(0, Info, showsInfo ? info : QString());
         item->setData(0, Split, !s.hasSplit ? QString() : s.splitAxis == QLatin1String("horizontal") ? QStringLiteral("splitH") : QStringLiteral("split"));
         item->setToolTip(0, s.title.isEmpty() ? s.cwd : s.title + QLatin1Char('\n') + s.cwd);
         item->setFlags(Qt::ItemIsEnabled | Qt::ItemIsSelectable | Qt::ItemIsEditable | Qt::ItemIsDragEnabled);

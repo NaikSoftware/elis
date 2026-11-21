@@ -733,14 +733,13 @@ private Q_SLOTS:
         QCOMPARE(store.selected, beta);
     }
 
-    void sessionInfoLineGrowsItsRowWhereSettingsShowIt()
+    void secondLineGrowsItsRowWhereSettingsShowIt()
     {
         Store store;
         const QString ws = store.addWorkspace("w");
         const QString a = store.addSession(ws, "a", {}), b = store.addSession(ws, "b", {});
         store.addSession(ws, "c", {});
-        QString e;
-        store.setInfo(a, SessionInfo::make("step 2", false, 0, &e));
+        store.session(a)->infoSpans = {{"step "}, {"2", true}};
         Sidebar tree(store);
         tree.rebuild();
         tree.resize(260, 400);
@@ -757,7 +756,7 @@ private Q_SLOTS:
         store.setSettings(st);
         tree.rebuild();
         QTRY_COMPARE(height(a), height(b)); // hidden outside the flagged view, still set
-        QCOMPARE(store.session(a)->info.source, QStringLiteral("step 2"));
+        QCOMPARE(store.session(a)->infoSpans.size(), 2);
     }
 
     void foldingAWorkspaceByClickRefreshesItsBandPadding()

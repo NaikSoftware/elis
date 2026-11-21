@@ -59,36 +59,6 @@ private struct Refusal: Encodable {
     let error: String
 }
 
-/// `session.info` set's text, validated and parsed as the Mac does: `{"ok":true,"spans":[…]}` or the Mac's
-/// rejection message. Input `{"source","markdown","hideAfter"}`.
-@_cdecl("elis_session_info")
-public func elisSessionInfo(_ json: UnsafePointer<CChar>) -> UnsafeMutablePointer<CChar>? {
-    struct Input: Decodable {
-        let source: String
-        let markdown: Bool?
-        let hideAfter: Double?
-    }
-    struct Span: Encodable {
-        let text: String
-        let bold, italic, code, dim: Bool
-        let color: String?
-    }
-    struct Parsed: Encodable {
-        var ok = true
-        let spans: [Span]
-    }
-    guard let input = try? JSONDecoder().decode(Input.self, from: Data(String(cString: json).utf8)) else {
-        return encoded(Refusal(error: "invalid arguments"))
-    }
-    switch SessionInfo.make(source: input.source, markdown: input.markdown ?? false, hideAfter: input.hideAfter ?? 0) {
-    case .failure(let rejection): return encoded(Refusal(error: rejection.message))
-    case .success(let info):
-        return encoded(Parsed(spans: info.spans.map {
-            Span(text: $0.text, bold: $0.bold, italic: $0.italic, code: $0.code, dim: $0.dim, color: $0.color?.rawValue)
-        }))
-    }
-}
-
 /// `sidebar.density`'s mode against the current density: `{"ok":true,"density":"default|compact"}` or the Mac's
 /// refusal. Input `{"mode"?,"current"}`; an absent mode toggles.
 @_cdecl("elis_sidebar_density")

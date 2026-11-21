@@ -1,5 +1,7 @@
 // Control commands added to reach master's catalog: events, navigation, sidebar, context, recent, messages, and the
 // app-side ones routed through Terminals::appCommand.
+#include "elis_bridge.h"
+#include <QJsonDocument>
 #include "control.h"
 #include "hooks.h"
 #include "store.h"
@@ -108,27 +110,18 @@ static QJsonObject workspaceGo(Store &store, const QJsonObject &args)
     return ok({{"id", dest->id}});
 }
 
-// session.info: the sidebar line under the name. A set replaces the whole line (an omitted markdown is plain text, an
-// omitted hideAfter cancels an expiry); a refused set leaves the line and its expiry as they were
-static QJsonObject sessionInfo(Store &store, const QString &id, const QJsonObject &args)
+// sidebar.density's mode ("" toggles) against the current density, by ElisCore's parse; "" and *error on a refusal
+static QString sidebarDensity(const QString &mode, const QString &current, QString *error)
 {
-    const QString mode = args.value("mode").toString();
-    if (mode == QLatin1String("clear")) {
-        if (args.contains("text") || args.contains("markdown") || args.contains("hideAfter"))
-            return fail(QStringLiteral("session.info clear takes no text, markdown or hide-after"));
-        store.setInfo(id, {});
-    } else if (mode == QLatin1String("set")) {
-        if (!args.contains("text"))
-            return fail(QStringLiteral("session.info set requires text"));
-        QString error;
-        const SessionInfo info = SessionInfo::make(args.value("text").toString(), args.value("markdown").toBool(), args.value("hideAfter").toDouble(), &error);
-        if (!error.isEmpty())
-            return fail(QStringLiteral("session.info: ") + error);
-        store.setInfo(id, info);
-    } else {
-        return fail(QStringLiteral("invalid info mode: %1 (set|clear)").arg(mode));
-    }
-    return ok({{"id", id}});
+    QJsonObject request{{"current", current}};
+    if (!mode.isEmpty())
+        request.insert("mode", mode);
+    char *raw = elis_sidebar_density(QJsonDocument(request).toJson(QJsonDocument::Compact).constData());
+    const QJsonObject reply = QJsonDocument::fromJson(raw ? QByteArray(raw) : QByteArray()).object();
+    elis_free(raw);
+    if (!reply.value("ok").toBool())
+        *error = reply.value("error").toString(QStringLiteral("the density check gave no answer"));
+    return reply.value("density").toString();
 }
 
 static QJsonObject sessionContext(Store &store, const QString &id, const QJsonObject &args)
@@ -687,7 +680,7 @@ QJsonObject moreCommands(Store &store, Terminals &terminals, const QString &cmd,
     }
     if (cmd == QLatin1String("session.transcript"))
         return sessionTranscript(store, terminals, target, args);
-    static const QStringList sessionCmds{"session.context", "session.info", "session.collapse", "session.expand", "session.resize", "session.grid", "session.scroll", "session.text", "session.focus",
+    static const QStringList sessionCmds{"session.context", "session.collapse", "session.expand", "session.resize", "session.grid", "session.scroll", "session.text", "session.focus",
                                          "session.copy", "session.paste", "session.selectall", "session.search", "session.reveal", "ask.open"};
     if (!sessionCmds.contains(cmd)) {
         *handled = false;
@@ -700,8 +693,6 @@ QJsonObject moreCommands(Store &store, Terminals &terminals, const QString &cmd,
         return fail(error);
     if (cmd == QLatin1String("session.context"))
         return sessionContext(store, id, args);
-    if (cmd == QLatin1String("session.info"))
-        return sessionInfo(store, id, args);
     if (cmd == QLatin1String("session.resize"))
         return sessionResize(store, id, args);
     if (cmd == QLatin1String("session.text"))
