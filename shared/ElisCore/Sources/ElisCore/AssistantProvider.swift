@@ -5,30 +5,32 @@ public enum AssistantMode: Sendable, Equatable {
     case stream, perInput
 }
 
-/// Launch configuration for a streaming assistant process.
+/// How the host starts a provider: `environment` is added to the inherited one, and `preamble`
+/// is prepended to the text of the first input encoded into a fresh conversation.
 public struct AssistantLaunch: Sendable, Equatable {
     public let argv: [String]
     public let mode: AssistantMode
+    public let environment: [String: String]
+    public let preamble: String?
 
-    public init(argv: [String], mode: AssistantMode) {
+    public init(argv: [String], mode: AssistantMode, environment: [String: String] = [:], preamble: String? = nil) {
         self.argv = argv
         self.mode = mode
+        self.environment = environment
+        self.preamble = preamble
     }
 }
 
-/// Argv and environment builders for each assistant CLI supported by Elis.
+/// Argv builders for each assistant CLI; every one runs headless with no permission prompt.
 public enum AssistantProvider {
-    // Request-review + explicit command(elisctl) allow rule overrides any user auto/always-proceed setting.
-    private static let antigravitySettings = #"{"agentMode":"","toolPermission":"request-review","permissions":{"allow":["command(elisctl)"]}}"#
-    private static let opencodePermission = #"{"*":"deny","bash":{"*":"deny","elisctl *":"allow"}}"#
-
     /// Launchers eligible for the assistant picker (drops plain `.terminal`).
     public static func choices(_ available: [SessionLauncher]) -> [SessionLauncher] {
         available.filter { $0 != .terminal }
     }
 
-    /// Long-lived launch command for `.stream` providers; `.perInput` providers return `argv: []`.
+    /// Long-lived launch for `.stream` providers; `.perInput` providers return `argv: []` and use `turn`.
     public static func launch(_ p: SessionLauncher, prompt: String, resume: String?) -> AssistantLaunch {
+        let resume = resume.flatMap { $0.isEmpty ? nil : $0 }
         switch p {
         case .claude:
             var argv = [
@@ -36,21 +38,22 @@ public enum AssistantProvider {
                 "--input-format", "stream-json",
                 "--output-format", "stream-json",
                 "--verbose",
-                "--allowedTools", "Bash(elisctl:*)",
+                "--permission-mode", "bypassPermissions",
             ]
             if !prompt.isEmpty { argv += ["--append-system-prompt", prompt] }
-            if let resume, !resume.isEmpty { argv += ["--resume", resume] }
+            if let resume { argv += ["--resume", resume] }
             return AssistantLaunch(argv: argv, mode: .stream)
         case .antigravity:
-            // agy -p consumes the following flag as its prompt and has no system-prompt flag.
+            // agy has no system-prompt flag, and -p would take the next flag as its prompt.
             var argv = [
                 "agy",
+                "--dangerously-skip-permissions",
                 "--input-format", "stream-json",
                 "--output-format", "stream-json",
-                "--settings", antigravitySettings,
             ]
-            if let resume, !resume.isEmpty { argv += ["--conversation", resume] }
-            return AssistantLaunch(argv: argv, mode: .stream)
+            if let resume { argv += ["--conversation", resume] }
+            let preamble = resume == nil && !prompt.isEmpty ? "\(prompt)\n\n" : nil
+            return AssistantLaunch(argv: argv, mode: .stream, preamble: preamble)
         case .codex, .opencode:
             return AssistantLaunch(argv: [], mode: .perInput)
         case .terminal:
@@ -59,31 +62,21 @@ public enum AssistantProvider {
     }
 
     /// Per-input command for `.perInput` providers; prepends `prompt` on the initial turn.
+    /// `--` keeps an input such as `--help` from parsing as an option.
     public static func turn(_ p: SessionLauncher, input: String, prompt: String, resume: String?) -> [String] {
-        let isInitial = resume?.isEmpty ?? true
-        let effectiveInput = isInitial && !prompt.isEmpty ? "\(prompt)\n\n\(input)" : input
+        let resume = resume.flatMap { $0.isEmpty ? nil : $0 }
+        let text = resume == nil && !prompt.isEmpty ? "\(prompt)\n\n\(input)" : input
         switch p {
         case .codex:
-            let flags = ["--json", "-c", #"approval_policy="never""#, "-c", #"sandbox_mode="read-only""#, "--skip-git-repo-check"]
-            if let resume, !resume.isEmpty {
-                return ["codex", "exec", "resume"] + flags + [resume, effectiveInput]
-            }
-            return ["codex", "exec"] + flags + [effectiveInput]
+            let flags = ["--json", "--dangerously-bypass-approvals-and-sandbox", "--skip-git-repo-check", "--"]
+            if let resume { return ["codex", "exec", "resume"] + flags + [resume, text] }
+            return ["codex", "exec"] + flags + [text]
         case .opencode:
-            var argv = ["opencode", "run", "--format", "json"]
-            if let resume, !resume.isEmpty { argv += ["--session", resume] }
-            argv.append(effectiveInput)
-            return argv
+            var argv = ["opencode", "run", "--format", "json", "--auto"]
+            if let resume { argv += ["--session", resume] }
+            return argv + ["--", text]
         case .terminal, .claude, .antigravity:
             return []
-        }
-    }
-
-    /// Extra environment variables needed to constrain tool permissions for a provider.
-    public static func environment(_ p: SessionLauncher) -> [String: String] {
-        switch p {
-        case .opencode: ["OPENCODE_PERMISSION": opencodePermission]
-        case .terminal, .claude, .codex, .antigravity: [:]
         }
     }
 }

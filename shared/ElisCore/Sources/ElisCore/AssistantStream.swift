@@ -84,20 +84,16 @@ public enum AssistantStream {
         case "init":
             guard let id = nonEmpty(obj["conversation_id"]) else { return [] }
             return [.conversation(id)]
-        case "step_update":
-            guard let step = obj["step_update"] as? [String: Any],
-                  step["step_type"] as? String == "agent_response",
-                  let delta = nonEmpty(step["text_delta"])
-            else { return [] }
-            return [.text(delta)]
         case "result":
+            // The whole reply arrives here; step_update text_delta fragments would split it into many entries.
             guard let result = obj["result"] as? [String: Any] else { return [] }
+            let reply = (result["response"] as? String)?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+            let text: [AssistantStreamEvent] = reply.isEmpty ? [] : [.text(reply)]
             let status = result["status"] as? String
             if status == nil || status == "SUCCESS" {
-                return [.turnEnded(error: nil)]
+                return text + [.turnEnded(error: nil)]
             }
-            let err = nonEmpty(result["error"]) ?? status ?? "error"
-            return [.turnEnded(error: err)]
+            return text + [.turnEnded(error: nonEmpty(result["error"]) ?? status ?? "error")]
         default:
             return []
         }

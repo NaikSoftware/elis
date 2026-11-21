@@ -17,73 +17,48 @@ import Testing
         #expect(choices == [.claude, .codex, .opencode, .antigravity])
     }
 
-    @Test func claudeLaunchIsStreamWithElisctlOnly() {
+    @Test func claudeLaunchIsStreamWithoutPermissionPrompts() {
         let first = AssistantProvider.launch(.claude, prompt: "Be concise.", resume: nil)
-        #expect(first.mode == .stream)
-        #expect(first.argv.first == "claude")
-        #expect(first.argv.contains("-p"))
-        #expect(first.argv.contains("--input-format"))
-        #expect(first.argv.contains("stream-json"))
-        #expect(first.argv.contains("--output-format"))
-        #expect(first.argv.contains("Bash(elisctl:*)"))
-        #expect(first.argv.contains("--append-system-prompt"))
-        #expect(first.argv.contains("Be concise."))
-        #expect(!first.argv.contains("--resume"))
+        #expect(first == AssistantLaunch(argv: [
+            "claude", "-p", "--input-format", "stream-json", "--output-format", "stream-json", "--verbose",
+            "--permission-mode", "bypassPermissions", "--append-system-prompt", "Be concise.",
+        ], mode: .stream, environment: [:], preamble: nil))
 
         let resumed = AssistantProvider.launch(.claude, prompt: "Be concise.", resume: "sess-123")
-        #expect(resumed.mode == .stream)
-        #expect(resumed.argv.contains("--resume"))
-        #expect(resumed.argv.contains("sess-123"))
+        #expect(resumed.argv.suffix(2) == ["--resume", "sess-123"])
+        #expect(resumed.preamble == nil)
     }
 
-    @Test func antigravityLaunchIsStreamWithElisctlSettings() throws {
+    @Test func antigravityLaunchSkipsPermissionsAndCarriesThePrompt() {
         let first = AssistantProvider.launch(.antigravity, prompt: "Be concise.", resume: nil)
-        #expect(first.mode == .stream)
-        #expect(first.argv.first == "agy")
-        #expect(!first.argv.contains("-p"))
-        #expect(first.argv.contains("--input-format"))
-        #expect(first.argv.contains("--output-format"))
-        #expect(first.argv.contains("stream-json"))
-        let settingsIdx = try #require(first.argv.firstIndex(of: "--settings"))
-        let settings = first.argv[settingsIdx + 1]
-        #expect(settings.contains("command(elisctl)"))
-        #expect(settings.contains("request-review"))
-        #expect(!first.argv.contains("--conversation"))
+        #expect(first == AssistantLaunch(argv: [
+            "agy", "--dangerously-skip-permissions", "--input-format", "stream-json", "--output-format", "stream-json",
+        ], mode: .stream, environment: [:], preamble: "Be concise.\n\n"))
 
         let resumed = AssistantProvider.launch(.antigravity, prompt: "Be concise.", resume: "conv-456")
-        #expect(resumed.argv.contains("--conversation"))
-        #expect(resumed.argv.contains("conv-456"))
+        #expect(resumed.argv.suffix(2) == ["--conversation", "conv-456"])
+        #expect(resumed.preamble == nil)
     }
 
-    @Test func codexTurnUsesExecAndResumeWithReadOnlySandbox() {
-        #expect(AssistantProvider.launch(.codex, prompt: "sys", resume: nil).mode == .perInput)
+    @Test func codexTurnBypassesApprovalsAndEndsOptions() {
+        #expect(AssistantProvider.launch(.codex, prompt: "sys", resume: nil) == AssistantLaunch(argv: [], mode: .perInput))
+        let flags = ["--json", "--dangerously-bypass-approvals-and-sandbox", "--skip-git-repo-check", "--"]
 
         let first = AssistantProvider.turn(.codex, input: "pong", prompt: "sys", resume: nil)
-        #expect(first.prefix(3) == ["codex", "exec", "--json"])
-        #expect(first.contains(#"sandbox_mode="read-only""#))
-        #expect(first.contains(#"approval_policy="never""#))
-        #expect(first.last == "sys\n\npong")
+        #expect(first == ["codex", "exec"] + flags + ["sys\n\npong"])
 
-        let resumed = AssistantProvider.turn(.codex, input: "ping", prompt: "sys", resume: "thread-1")
-        #expect(resumed.prefix(4) == ["codex", "exec", "resume", "--json"])
-        #expect(resumed.contains(#"sandbox_mode="read-only""#))
-        #expect(resumed.contains(#"approval_policy="never""#))
-        #expect(resumed.suffix(2) == ["thread-1", "ping"])
+        let resumed = AssistantProvider.turn(.codex, input: "--help", prompt: "sys", resume: "thread-1")
+        #expect(resumed == ["codex", "exec", "resume"] + flags + ["thread-1", "--help"])
     }
 
-    @Test func opencodeTurnUsesRunFormatJsonAndElisctlEnv() {
-        #expect(AssistantProvider.launch(.opencode, prompt: "sys", resume: nil).mode == .perInput)
+    @Test func opencodeTurnAutoApprovesAndEndsOptions() {
+        #expect(AssistantProvider.launch(.opencode, prompt: "sys", resume: nil) == AssistantLaunch(argv: [], mode: .perInput))
 
         let first = AssistantProvider.turn(.opencode, input: "pong", prompt: "sys", resume: nil)
-        #expect(first == ["opencode", "run", "--format", "json", "sys\n\npong"])
+        #expect(first == ["opencode", "run", "--format", "json", "--auto", "--", "sys\n\npong"])
 
-        let resumed = AssistantProvider.turn(.opencode, input: "ping", prompt: "sys", resume: "ses_1")
-        #expect(resumed == ["opencode", "run", "--format", "json", "--session", "ses_1", "ping"])
-
-        let env = AssistantProvider.environment(.opencode)
-        let perm = env["OPENCODE_PERMISSION"] ?? ""
-        #expect(perm.contains("elisctl *"))
-        #expect(perm.contains("deny"))
+        let resumed = AssistantProvider.turn(.opencode, input: "--help", prompt: "sys", resume: "ses_1")
+        #expect(resumed == ["opencode", "run", "--format", "json", "--auto", "--session", "ses_1", "--", "--help"])
     }
 
     @Test func encodeProducesOneLine() throws {
@@ -122,10 +97,8 @@ import Testing
         #expect(events == [
             .conversation("bac4b533-7bc3-4ad8-bad7-5ebb1121ab06"),
             .text("pong"),
-            .text("\n"),
             .turnEnded(error: nil),
             .text("ping"),
-            .text("\n"),
             .turnEnded(error: nil),
         ])
     }
@@ -164,6 +137,9 @@ import Testing
     @Test func decodesErrorsPerProvider() {
         #expect(AssistantStream.decode(.claude, line: #"{"type":"result","subtype":"error_during_execution","is_error":true,"errors":["boom"]}"#) == [.turnEnded(error: "boom")])
         #expect(AssistantStream.decode(.antigravity, line: #"{"event":"result","result":{"status":"ERROR","error":"denied"}}"#) == [.turnEnded(error: "denied")])
+        #expect(AssistantStream.decode(.antigravity, line: #"{"event":"result","result":{"status":"ERROR","response":"half","error":"cut"}}"#) == [
+            .text("half"), .turnEnded(error: "cut"),
+        ])
         #expect(AssistantStream.decode(.codex, line: #"{"type":"turn.failed","error":{"message":"unauthorized"}}"#) == [.turnEnded(error: "unauthorized")])
         #expect(AssistantStream.decode(.opencode, line: #"{"type":"error","sessionID":"ses_1","error":{"name":"APIError","data":{"message":"bad key"}}}"#) == [.turnEnded(error: "bad key")])
     }
