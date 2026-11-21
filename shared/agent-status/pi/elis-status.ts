@@ -1,6 +1,6 @@
 // elis-pi-status-extension
 //
-// Pi lifecycle extension installed by elis on install and update.
+// Pi lifecycle extension installed by elis.
 // It uses the installed elis wrapper for session, pane, socket, and CLI resolution, so it is
 // a harmless no-op outside elis.
 

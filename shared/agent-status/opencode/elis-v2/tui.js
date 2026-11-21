@@ -1,6 +1,6 @@
 // elis-opencode-v2-status-plugin
 //
-// OpenCode v2 CLI plugin installed by elis on install and update.
+// OpenCode v2 CLI plugin installed by elis.
 // Reports agent status through the installed elis wrapper; a clean no-op outside elis.
 //
 // Runs in the terminal client, not the shared server: only the client has this pane's ELIS_* env.

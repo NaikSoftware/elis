@@ -1,6 +1,6 @@
 // elis-opencode-status-plugin
 //
-// OpenCode lifecycle plugin installed by elis on install and update.
+// OpenCode lifecycle plugin installed by elis.
 // Reports agent status through the installed elis wrapper; a clean no-op outside elis.
 //
 // IMPORTANT: this module must export ONLY plugin function(s). OpenCode's legacy loader treats

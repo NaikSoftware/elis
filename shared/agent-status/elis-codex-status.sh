@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Codex lifecycle hook installed by elis on install and update.
+# Codex lifecycle hook installed by elis.
 #
 # Codex fires PermissionRequest before Auto Review decides whether a person must approve. Treating
 # that raw event as blocked therefore false-flags automatically reviewed tools. This hook keeps the
@@ -27,14 +27,19 @@ report_status() {
 }
 
 # macOS 14 ships plutil but no jq. A Linux plutil, swift-corelibs' port, has no -type, so the platform picks the
-# tool, and the server installer requires jq there.
+# tool: jq on Linux (the server installer requires it), else python3 (a Linux desktop without jq).
 # json_string prints a top-level string field of the JSON on stdin and fails when it is absent or not a string.
 json_string() {
   if [[ $OSTYPE == darwin* ]]; then
     /usr/bin/plutil -extract "$1" raw -o - - 2>/dev/null
     return
   fi
-  jq -er --arg key "$1" '.[$key] | strings' 2>/dev/null
+  if command -v jq >/dev/null 2>&1; then
+    jq -er --arg key "$1" '.[$key] | strings' 2>/dev/null
+    return
+  fi
+  python3 -c 'import json, sys; v = json.load(sys.stdin).get(sys.argv[1]); sys.exit(1) if not isinstance(v, str) else print(v)' \
+    "$1" 2>/dev/null
 }
 
 # json_null succeeds when the JSON on stdin has the field and it is null.
@@ -43,7 +48,12 @@ json_null() {
     [ "$(/usr/bin/plutil -type "$1" - 2>/dev/null)" = "(any)" ]
     return
   fi
-  jq -e --arg key "$1" 'has($key) and .[$key] == null' >/dev/null 2>&1
+  if command -v jq >/dev/null 2>&1; then
+    jq -e --arg key "$1" 'has($key) and .[$key] == null' >/dev/null 2>&1
+    return
+  fi
+  python3 -c 'import json, sys; d = json.load(sys.stdin); sys.exit(0 if isinstance(d, dict) and sys.argv[1] in d and d[sys.argv[1]] is None else 1)' \
+    "$1" >/dev/null 2>&1
 }
 
 assistant_message_contains_question() {

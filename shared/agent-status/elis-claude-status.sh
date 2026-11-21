@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Claude Code status adapter installed by elis on install and update.
+# Claude Code status adapter installed by elis.
 #
 # A worker agent spawned from inside a session (headless `claude -p` from a tool call, a second CLI
 # agent) inherits the spawner's ELIS_* environment, so its own hooks would repaint the SPAWNER's
@@ -94,6 +94,16 @@ field() { # key path value, array length for an array, empty when absent or unpa
   elif command -v jq >/dev/null 2>&1; then
     printf '%s' "$payload" | jq -r --arg p "$1" \
       'getpath($p | split(".") | map(tonumber? // .)) | if type == "array" then length else . // empty end' 2>/dev/null
+  elif command -v python3 >/dev/null 2>&1; then # a Linux desktop without jq
+    printf '%s' "$payload" | python3 -c '
+import json, sys
+v = json.load(sys.stdin)
+for k in sys.argv[1].split("."):
+    v = v[int(k)] if isinstance(v, list) else v[k]
+v = len(v) if isinstance(v, list) else v
+if v is not None and v is not False:
+    sys.stdout.write(v if isinstance(v, str) else json.dumps(v))
+' "$1" 2>/dev/null
   fi
 }
 
