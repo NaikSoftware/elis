@@ -12,6 +12,7 @@ class QPainter;
 
 // A launcher's icon as a template tinted `color`: the terminal glyph, or the agent's logo.
 QIcon launcherIcon(const QString &launcherId, const QColor &color);
+void drawLauncher(QPainter *p, const QRectF &r, const QString &id, const QColor &color);
 // elis's title-bar and footer glyphs: sidebar, filepanel, clock, split|splitH[Filled], splitLeft|Right|Top|Bottom,
 // dashboard[Filled], and the bundled ones (workspace-stack, session-plus, focus-frame[-fill], ...)
 QIcon chromeIcon(const QString &name, const QColor &color);
@@ -19,6 +20,7 @@ QIcon chromeIcon(const QString &name, const QColor &color);
 QColor statusColor(const Settings &settings, const QString &status);
 QString statusShape(const Settings &settings, const QString &status);
 void drawStatusGlyph(QPainter *p, const QPointF &center, qreal radius, const QString &shape);
+void paintStatus(QPainter *p, const Settings &settings, const QString &status, bool blink, int blinkAlpha, QPointF centre);
 // a tint name as the macOS system colour of that name, light or dark by the current palette, or a #rrggbb; invalid for ""
 QColor tintColor(const QString &name);
 

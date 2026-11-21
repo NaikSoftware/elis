@@ -745,7 +745,19 @@ void MainWindow::createMenus()
 
     auto *nav = menuBar()->addMenu(tr("&Navigate"));
     m_palette = new Palette(this);
-    auto sessionItems = [this](bool byRecency) {
+    m_palette->settings = &m_store.settings;
+    m_palette->blinkAlpha = [this] { return m_tree->blinkAlpha(); };
+    auto sessionDetail = [](const Session &s) {
+        const QString name = s.displayName();
+        const QString title = s.title.trimmed();
+        return !title.isEmpty() && title != name ? title : s.cwd;
+    };
+    auto sessionRow = [sessionDetail](const Session &s, const QString &ws, std::function<void()> run) {
+        const QString st = s.status == QLatin1String("idle") ? QString() : s.status;
+        return Palette::Item{s.displayName(), sessionDetail(s), std::move(run), true, {}, s.id,
+                             s.agent.isEmpty() ? QStringLiteral("terminal") : s.agent, ws, st, !st.isEmpty() && s.blink, true};
+    };
+    auto sessionItems = [this, sessionDetail](bool byRecency) {
         QList<Palette::Item> items;
         QList<Session *> all = m_store.navigableSessions(); // the palettes stay inside the flagged view or the filter
         if (byRecency) {
@@ -756,27 +768,92 @@ void MainWindow::createMenus()
         } else {
             std::stable_sort(all.begin(), all.end(), [](Session *a, Session *b) { return a->displayName().compare(b->displayName(), Qt::CaseInsensitive) < 0; });
         }
-        for (Session *s : all)
-            items.append({s->displayName(), m_store.workspaceOf(s->id)->name + QStringLiteral(" · ") + s->cwd, [this, id = s->id] { m_store.select(id); }, true, {}, s->id});
+        for (Session *s : all) {
+            const QString st = s->status == QLatin1String("idle") ? QString() : s->status;
+            items.append({s->displayName(), m_store.workspaceOf(s->id)->name + QStringLiteral(" · ") + sessionDetail(*s),
+                          [this, id = s->id] { m_store.select(id); }, true, {}, s->id, {}, {}, st, !st.isEmpty() && s->blink, false});
+        }
         return items;
     };
     nav->addAction(action(QStringLiteral("session_palette"), tr("Go to Session…"), QStringLiteral("search"), QKeySequence(QStringLiteral("Ctrl+P")),
-                          [this, sessionItems] {
-                              // elis's switcher: the sessions that need you, the recent ones, then the recently closed
-                              QList<Palette::Item> items, rest;
-                              for (const Palette::Item &it : sessionItems(true)) {
-                                  const Session *s = m_store.session(it.id);
-                                  if (s->id == m_store.selected)
-                                      continue;
-                                  (s->status == QLatin1String("blocked") || s->status == QLatin1String("completed") ? items : rest) << it;
+                          [this, sessionRow] {
+                              // elis's switcher: Needs you across open windows, then Recent, then Recently closed
+                              struct Att {
+                                  int rank, mru;
+                                  QString winId, winName;
+                                  Store *store;
+                                  Session *session;
+                              };
+                              QList<Att> attention;
+                              bool multiWindow = false;
+                              auto collectAttention = [&](const QString &winId, const QString &winName, Store *st) {
+                                  for (Session *s : st->allSessions()) {
+                                      if (s->status == QLatin1String("idle"))
+                                          continue;
+                                      const int rank = s->status == QLatin1String("blocked") ? 0 : s->status == QLatin1String("active") ? 1 : 2;
+                                      const qsizetype mru = st->recent.indexOf(s->id);
+                                      attention.append({rank, mru < 0 ? 1 << 30 : int(mru), winId, winName, st, s});
+                                  }
+                              };
+                              if (library) {
+                                  int openCount = 0;
+                                  for (const auto &e : library->entries())
+                                      if (e.open && e.store)
+                                          ++openCount, collectAttention(e.id, e.name, e.store);
+                                  multiWindow = openCount > 1;
+                              } else {
+                                  collectAttention(windowId, {}, &m_store);
                               }
-                              items << rest;
+                              std::stable_sort(attention.begin(), attention.end(), [](const Att &a, const Att &b) {
+                                  return a.rank != b.rank ? a.rank < b.rank : a.mru < b.mru;
+                              });
+                              QList<Palette::Item> needsYou, recent, closed, search;
+                              QSet<QString> listed;
+                              for (const Att &a : std::as_const(attention)) {
+                                  if (a.store == &m_store)
+                                      listed.insert(a.session->id);
+                                  const Workspace *w = a.store->workspaceOf(a.session->id);
+                                  const QString wsName = w ? w->name : QString();
+                                  const QString wsCol = multiWindow ? a.winName + QStringLiteral(" · ") + wsName : wsName;
+                                  needsYou.append(sessionRow(*a.session, wsCol, [this, winId = a.winId, sid = a.session->id] {
+                                      if (library) {
+                                          library->select(winId);
+                                          for (const auto &e : library->entries())
+                                              if (e.id == winId && e.store)
+                                                  e.store->select(sid);
+                                      } else {
+                                          m_store.select(sid);
+                                      }
+                                  }));
+                              }
+                              QList<Session *> navSessions = m_store.navigableSessions();
+                              QList<Session *> byMru = navSessions;
+                              std::stable_sort(byMru.begin(), byMru.end(), [this](Session *a, Session *b) {
+                                  const qsizetype ia = m_store.recent.indexOf(a->id), ib = m_store.recent.indexOf(b->id);
+                                  return (ia < 0 ? 1 << 30 : ia) < (ib < 0 ? 1 << 30 : ib);
+                              });
+                              for (Session *s : std::as_const(byMru)) {
+                                  if (s->id == m_store.selected || listed.contains(s->id))
+                                      continue;
+                                  const Workspace *w = m_store.workspaceOf(s->id);
+                                  recent.append(sessionRow(*s, w ? w->name : QString(), [this, id = s->id] { m_store.select(id); }));
+                                  if (recent.size() >= 10)
+                                      break;
+                              }
                               for (const auto &c : m_store.closed.mid(0, 15)) {
                                   const Workspace *w = m_store.workspace(c.workspaceId);
-                                  items.append({c.title, tr("closed") + (w ? QStringLiteral(" · ") + w->name : QString()), [this, id = c.id] { m_store.reopenClosed(id); }});
+                                  closed.append({c.title, w ? w->name : QString(), [this, id = c.id] { m_store.reopenClosed(id); }, true, {}, c.id,
+                                                 c.resume.isEmpty() ? QStringLiteral("terminal") : QStringLiteral("claude"), {}, {}, false, true});
                               }
+                              for (Session *s : std::as_const(navSessions)) {
+                                  const Workspace *w = m_store.workspaceOf(s->id);
+                                  search.append(sessionRow(*s, w ? w->name : QString(), [this, id = s->id] { m_store.select(id); }));
+                              }
+                              search.append(closed);
                               m_palette->anchor = m_pill;
-                              m_palette->open(tr("Jump to a session"), items);
+                              m_palette->open(tr("Jump to a session"),
+                                              {{tr("Needs you"), needsYou}, {tr("Recent"), recent}, {tr("Recently closed"), closed}},
+                                              tr("Sessions"), search);
                           }));
     nav->addAction(action(QStringLiteral("command_palette"), tr("Action Palette…"), QStringLiteral("run-build"), QKeySequence(QStringLiteral("Ctrl+Shift+P")), [this] {
         QList<Palette::Item> items;

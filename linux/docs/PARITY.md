@@ -56,9 +56,10 @@ Legend: [x] done · [ ] todo · (fork) = fork-only feature, not in upstream docs
 
 - [x] Session palette ⌃P, action palette ⌃⇧P (fuzzy, Ctrl-J/K, disabled actions greyed)
 - [x] Custom-commands palette ⌃⇧O → Ctrl+Alt+O (Ctrl+Shift+O is ⌘O, Open Directory, so its Shift becomes Alt)
-- [x] Ctrl-Tab MRU switcher (hold Ctrl, Tab walks, release switches; one tap flips back)
-- [x] Session switcher pill: opens the session palette with the sessions that need you, then the recent ones, then the
-  recently closed (persisted with the window state); a closed Claude Code session reopens with `claude --resume <id>`
+- [x] Ctrl-Tab MRU switcher (hold Ctrl, Tab walks, release switches; one tap flips back; rows show status glyphs)
+- [x] Session switcher pill / Ctrl+P palette: single-line rows (agent logo, detail, workspace, status glyph) under Needs
+  you (all non-idle sessions across open windows), Recent (MRU, up to 10) and Recently closed (up to 15, persisted; a
+  closed Claude Code session reopens with `claude --resume <id>`); typing swaps them for one Sessions search list
 - [x] Flagged view layout (Settings ▸ General: Flat list `session : workspace`, Flat list names only, Workspace tree sharing the
   tree's collapse state), View ▸ Edit Flagged Sessions… / Edit Focused Workspaces… (live checklists; the empty flagged view links
   to the first). The flat list follows tree order, not a per-window flagged order of its own
