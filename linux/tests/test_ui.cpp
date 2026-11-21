@@ -1,4 +1,5 @@
 #include "mainwindow.h"
+#include "cipanel.h"
 #include "help.h"
 #include "hooks.h"
 #include "library.h"
@@ -13,6 +14,8 @@
 #include <QLineEdit>
 #include <QListWidget>
 #include <QDialog>
+#include <QFrame>
+#include <QLabel>
 #include <QMenu>
 #include <QMenuBar>
 #include <QTimer>
@@ -791,6 +794,55 @@ private Q_SLOTS:
         tree.rebuild();
         QTRY_COMPARE(height(a), height(b)); // hidden outside the flagged view, still set
         QCOMPARE(store.session(a)->infoSpans.size(), 2);
+    }
+
+    void aClickOnTheCiLineOpensItsPanelAndSelectsNothing()
+    {
+        Store store;
+        const QString ws = store.addWorkspace("w");
+        const QString a = store.addSession(ws, "a", {}), b = store.addSession(ws, "b", {});
+        store.addSession(ws, "c", {});
+        store.select(b);
+        Sidebar tree(store);
+        CiLine line(store, &tree, nullptr);
+        QTest::qWait(300); // the first poll finds no repository and clears nothing
+        const QJsonObject ci{{"branch", "main"}, {"sha", "abc1234"},
+                             {"pr", QJsonObject{{"number", 56}, {"title", "Refactor"}, {"url", "https://github.com/o/r/pull/56"},
+                                                {"approved", QJsonArray{"alice"}}, {"changesRequested", QJsonArray{}}}},
+                             {"runs", QJsonArray{QJsonObject{{"workflow", "build"}, {"state", "failed"}, {"url", "https://github.com/o/r/actions/runs/1"}}}}};
+        store.setCi(a, ci, {{QStringLiteral("#56"), true}, {QStringLiteral(" · "), false, false, false, true}, {QStringLiteral("✗ build"), false, false, false, false, QStringLiteral("red")}});
+        tree.resize(300, 400);
+        tree.show();
+        tree.rebuild();
+        QVERIFY(QTest::qWaitForWindowExposed(&tree));
+        QSignalSpy panel(&tree, &Sidebar::ciPanelRequested);
+        const QRect rect = tree.visualItemRect(tree.topLevelItem(0)->child(0));
+        const QRect title = tree.titleRect(tree.indexAt(rect.center()), rect);
+        QTest::mouseClick(tree.viewport(), Qt::LeftButton, {}, QPoint(rect.center().x(), title.bottom() - 4)); // the line's top edge
+        QCOMPARE(panel.count(), 1);
+        QCOMPARE(panel.at(0).at(0).toString(), a);
+        QCOMPARE(tree.selectedSessionIds(), QStringList{b});
+        QFrame *shown = nullptr;
+        QTRY_VERIFY((shown = [] {
+            for (QWidget *w : QApplication::topLevelWidgets())
+                if (auto *f = qobject_cast<QFrame *>(w); f && f->isVisible() && f->windowFlags().testFlag(Qt::Popup))
+                    return f;
+            return static_cast<QFrame *>(nullptr);
+        }()));
+        QStringList texts;
+        for (QLabel *label : shown->findChildren<QLabel *>())
+            texts << label->text();
+        QVERIFY(texts.first().contains("https://github.com/o/r/pull/56") && texts.first().contains("#56 Refactor"));
+        QVERIFY(texts.contains("Approved: alice"));
+        QVERIFY(texts.contains("Failed"));
+        QVERIFY(texts.last().contains("https://github.com/o/r/actions/runs/1") && texts.last().contains("build"));
+        const QPointer<QFrame> guard = shown;
+        store.setCi(a, {}, {});
+        QTRY_VERIFY(guard.isNull() || !guard->isVisible()); // the panel goes with its line
+
+        QTest::mouseClick(tree.viewport(), Qt::LeftButton, {}, QPoint(rect.center().x(), title.center().y()));
+        QCOMPARE(panel.count(), 1);
+        QTRY_COMPARE(tree.selectedSessionIds(), QStringList{a});
     }
 
     void foldingAWorkspaceByClickRefreshesItsBandPadding()

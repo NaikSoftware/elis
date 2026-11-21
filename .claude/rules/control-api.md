@@ -1755,9 +1755,10 @@ the spec `docs/superpowers/specs/2026-11-20-phone-chat-mode-design.md` owns the 
   `context` is the shown value: an attached row also shows its origin's context, and the Remote sessions
   section owns that rule.
 - The sidebar's second line is the session's GitHub CI (`CIStatus`), internal with no setter: the owner removed
-  `session.info` on 2026-11-21. `CIPoller` (ElisCore) runs in the Mac app and in elis-server: one fetch per
-  repository and branch read from `.git` (no git process), `gh run list` and `gh pr view` through `CIProbe.gh` on
-  dispatch threads, never the cooperative pool, since a call blocks up to its 15 s timeout. Any failure applies nil,
+  `session.info` on 2026-11-21. `CITracker` (ElisCore) owns the schedule: one fetch per repository and branch read
+  from `.git` (no git process), `gh run list` and `gh pr view` through `CIProbe.gh`, blocking up to its 15 s timeout.
+  The Mac app and elis-server drive it through `CIPoller` on dispatch threads, never the cooperative pool, and the
+  Qt app through `elis_ci_statuses` on its thread pool. Any failure applies nil,
   so a stale line never outlives the fact. Remote rows are skipped; their origin polls. Read back `ci` from
   `effectiveCI`, omitted when nil; it is runtime-only and a change emits `tree.changed`.
 

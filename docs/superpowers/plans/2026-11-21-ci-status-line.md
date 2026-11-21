@@ -69,4 +69,5 @@ document the CI line and the `ci` read-back; delete the three recipes and their 
 
 ### Task 7: Linux bridge (after the Linux phase 1 branch lands)
 
-`ElisBridge/CIInfo.swift`: `elis_ci_probe(cwd) → JSON`, `elis_ci_line(JSON) → spans JSON`; the Qt timer and popup.
+`ElisBridge/CIInfo.swift`: `elis_ci_statuses(cwds) → [{ci?, spans}]` over a shared `CITracker` (the poller's schedule,
+split out of `CIPoller`); `CiLine` in the Qt app polls it on the thread pool and shows the popup.

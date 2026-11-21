@@ -92,18 +92,18 @@ browser.
 
 ## Where the code goes
 
-- `shared/ElisCore`: the model, `gh` JSON decoding, the groups, the line spans, the probe (git + gh via `Process`,
-  injectable runner) and the poller (injectable clock). All of it builds and tests on Linux.
+- `shared/ElisCore`: the model, `gh` JSON decoding, the groups, the line spans, the probe (`.git` reads + gh via
+  `Process`, injectable runner), `CITracker` (the per-repository schedule, blocking, injectable clock) and
+  `CIPoller` (the Mac's and elis-server's main-actor driver of it). All of it builds and tests on Linux.
 - `Session.info`/`mirroredInfo`/`effectiveInfo` become `ci`/`mirroredCI`/`effectiveCI` of the new model.
 - Remote presentation: a new frame kind `ci` replaces `info`. Unknown kinds decode as `.unknown` and the hello
   negotiates kinds, so a viewer and an origin on different versions only miss the line, never break.
   elis-server runs the same poller for its sessions.
 - Mac app: store wiring, the row line in `SidebarInfoCellView`, the popover.
-- Linux: `linux/bridge/Sources/ElisBridge/CIInfo.swift` (not `Bridge.swift`): `elis_ci_probe(cwd) → JSON`, called
-  on a worker thread, and `elis_ci_line(JSON) → spans` in the JSON shape the phase 1 renderer already takes:
-  `[{text, bold, italic, code, dim, color?}]`, `color` one of ElisCore's 12 colour names.
-  Phase 1 removes `elis_session_info`, so Linux shows no second line until this feed lands.
-  The Qt app owns its timer and popup. Linux UI waits for the Linux phase 1 branch to land.
+- Linux: `linux/bridge/Sources/ElisBridge/CIInfo.swift` (not `Bridge.swift`): `elis_ci_statuses(cwds) →
+  [{ci?, spans}]` drives one process-wide `CITracker`, so the schedule is the Mac's. The spans are the shape the
+  phase 1 renderer takes (`Session::infoSpans`). `CiLine` (`src/app/cipanel.cpp`) calls it every 5 s on the
+  thread pool and owns the popup, which is a snapshot that closes when the line goes.
 
 ## Removed with `session info`
 

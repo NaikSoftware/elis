@@ -877,7 +877,7 @@ void Sidebar::mousePressEvent(QMouseEvent *event)
     }
     // a press on the CI line opens its panel on release and selects nothing, as on the Mac; a drag still moves the row
     const QModelIndex index = indexFromItem(item);
-    const bool ci = shownInfo(index) && pos.y() > titleRect(index, visualItemRect(item)).bottom();
+    const bool ci = shownInfo(index) && pos.y() > titleRect(index, visualItemRect(item)).bottom() + 1 - infoLift(m_store.settings);
     // a plain press on another session selects on release, so a drag of it doesn't switch the terminal away first
     if (item->data(0, Kind).toInt() == SessionRow && (item != currentItem() || ci) && event->button() == Qt::LeftButton
         && !(event->modifiers() & (Qt::ControlModifier | Qt::ShiftModifier))) {
