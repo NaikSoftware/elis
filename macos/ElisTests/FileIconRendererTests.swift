@@ -35,12 +35,13 @@ final class FileIconRendererTests: XCTestCase {
         XCTAssertTrue(FileIconRenderer.image(for: icon, pointSize: 16, dark: false) === image)
     }
 
-    func testImageRasterizesOffTheMainThread() async {
-        // a box, not nonisolated(unsafe): the region checker rejects a captured nonisolated(unsafe) local
-        let box = ImageBox(image: FileIconRenderer.image(
-            for: FileIconCatalog.icon(forName: "off-main.rs", isDirectory: false), pointSize: 18, dark: true))
-        let painted = await Task.detached { Self.painted(box.image) }.value
-        XCTAssertTrue(painted)
+    // nonisolated, so it paints off the main thread; Xcode 26's region checker crashes on the Task.detached form
+    nonisolated func testImageRasterizesOffTheMainThread() async {
+        let box = await MainActor.run {
+            ImageBox(image: FileIconRenderer.image(
+                for: FileIconCatalog.icon(forName: "off-main.rs", isDirectory: false), pointSize: 18, dark: true))
+        }
+        XCTAssertTrue(Self.painted(box.image))
     }
 
     func testSameGlyphInAnotherColorIsNotShared() {
