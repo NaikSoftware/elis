@@ -1037,6 +1037,23 @@ private Q_SLOTS:
         QCOMPARE(call("msg.read", {}, {{"identity", id + ":" + panes[0]}, {"ack", true}})["result"]["messages"][0]["body"].toString(), QStringLiteral("hello"));
     }
 
+    void footerPlusAddsASessionToTheCurrentWorkspace()
+    {
+        Store store;
+        MainWindow w(store, dir.filePath("plus.json"));
+        w.restore({});
+        const QString ws = store.addWorkspace("w");
+        store.select(store.addSession(ws, {}, {}));
+        QToolButton *plus = nullptr;
+        for (QToolButton *b : w.findChildren<QToolButton *>())
+            if (b->accessibleName() == QLatin1String("New Session"))
+                plus = b;
+        QVERIFY(plus && !plus->menu());
+        const int before = store.workspace(ws)->sessions.size();
+        plus->click();
+        QCOMPARE(store.workspace(ws)->sessions.size(), before + 1);
+    }
+
     void helpMenuHoldsOnlyTheDocs()
     {
         Store store;
