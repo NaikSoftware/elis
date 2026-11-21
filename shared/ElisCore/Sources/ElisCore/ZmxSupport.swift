@@ -135,10 +135,7 @@ public enum ZmxSupport {
             }
             environment["GHOSTTY_SHELL_INTEGRATION_XDG_DIR"] = integrationRoot
         }
-        environment["ZMX_DIR"] = socketDirectory
-        environment["ZMX_SESSION"] = ""
-        environment["ZMX_SESSION_PREFIX"] = ""
-        environment["ZMX_NO_DETACH_KEY"] = "1"
+        environment.merge(clientEnvironment(socketDirectory: socketDirectory)) { _, new in new }
         // a stale value inherited from the app's own environment would opt the client in under a
         // nonce no pane expects
         environment[ZmxLeadAttachment.nonceVariable] = nil
@@ -159,6 +156,12 @@ public enum ZmxSupport {
             sessionHostExecutablePath: host,
             commandShell: inputs.commandShell
         ))
+    }
+
+    /// clientEnvironment is what a pane's zmx client sets over its inherited environment: the namespace, no session
+    /// name or prefix of an enclosing zmx, and no detach key.
+    public static func clientEnvironment(socketDirectory: String) -> [String: String] {
+        ["ZMX_DIR": socketDirectory, "ZMX_SESSION": "", "ZMX_SESSION_PREFIX": "", "ZMX_NO_DETACH_KEY": "1"]
     }
 
     public static func launchDisposition(requested: RestoreMode, active: RestoreMode,
