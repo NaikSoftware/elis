@@ -27,6 +27,13 @@ An elis-server host is not this app: SKILL.md's "Remote windows and elis-server"
 - `theme list|set` lists and sets Konsole colour schemes.
 - `session overlay open` runs the program in a temporary Konsole terminal; `--background-color` tints only the
   floating frame.
+- Most mutations print nothing rather than `ok`; create commands still print the new id.
+- `tree` carries no pane ids (`surfaces[].paneID`) and no per-pane status: a receiver tells its peers its own
+  `$ELIS_PANE_ID`, or senders address a role.
+- `msg send --all` reaches the addressed window only.
+- A terminal-style `ask` is a dialog over the window, not drawn in the pane; `pick` rows show no status glyph.
+- The `pane.focused`, `pane.scratch` and `remote.*` event kinds are accepted and never fire.
+- `keymap.conf`: `--repeat` is accepted with a diagnostic and not honoured; `global-hotkey` is skipped.
 - On Wayland `window move` is refused and `window list` omits `x`/`y`.
 - Live restore keeps each shell in an `elis-session-host` daemon, not zmx.
 - The phone: Settings ▸ Connect a Phone…, or `elisctl mobile serve [--port N] [--bind ADDR] [--host NAME]`, which
@@ -45,7 +52,7 @@ These answer `<cmd> is not supported on this platform (<reason>)`:
   `--text` to `overlay open` (`--markdown FILE` would run FILE as the command).
   Show a file by running a viewer as the overlay program (`less +N file`, `glow file`).
 
-Also absent from the CLI: `session wait` (use `events`), `clipboard set` (use `wl-copy`/`xclip`), `terminfo`,
+Also absent from the CLI: `session wait` (use `events`), `clipboard set` (use `wl-copy`/`xclip`), `terminfo`, `overlay copy`,
 `session info` as an activity line, per-call status colour, shape, sound and pane, and
 `session new --wait|--after|--before`.
 
