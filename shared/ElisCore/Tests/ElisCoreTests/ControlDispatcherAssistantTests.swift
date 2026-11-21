@@ -43,6 +43,26 @@ struct ControlDispatcherAssistantTests {
         #expect(actions.streamInputs == [entry])
     }
 
+    @Test func askAndReplyMarkTheAssistantRunning() async {
+        let (ask, askChat) = (actions(), AssistantChat())
+        let (reply, replyChat) = (actions(), AssistantChat())
+
+        _ = await dispatch(.assistantAsk, ControlArgs(text: "hi"), actions: ask, chat: askChat)
+        _ = await dispatch(.assistantReply, target: "shell1-uuid", ControlArgs(text: "ok"), actions: reply, chat: replyChat)
+
+        #expect(askChat.running && replyChat.running)
+    }
+
+    @Test func refusedAskLeavesTheAssistantIdle() async {
+        let blank = AssistantChat()
+        let unsupported = AssistantChat()
+
+        _ = await dispatch(.assistantAsk, ControlArgs(text: " "), actions: actions(), chat: blank)
+        _ = await dispatch(.assistantAsk, ControlArgs(text: "hi"), actions: MockControlActions(), chat: unsupported)
+
+        #expect(!blank.running && !unsupported.running)
+    }
+
     @Test func askRequiresText() async {
         let response = await dispatch(.assistantAsk, ControlArgs(text: "  \n"), actions: actions(), chat: AssistantChat())
         #expect(response?.error == "assistant.ask requires text")

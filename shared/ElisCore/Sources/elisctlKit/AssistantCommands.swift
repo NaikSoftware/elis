@@ -60,7 +60,7 @@ extension Assistant {
         var text: String
         @Flag(name: .long, help: "Wait until the assistant finishes its turn.")
         var wait = false
-        @Option(name: .long, help: "With --wait, seconds before exiting \(timeoutExitCode).")
+        @Option(name: .long, help: "With --wait, seconds before exiting \(timeoutExitCode); omitted, waits indefinitely.")
         var timeout: Double?
         @OptionGroup var options: BasicOptions
 
@@ -262,20 +262,22 @@ struct Reply: ParsableCommand, ConnectedCommand {
 
     var connection: any ConnectionOptions { options }
 
+    static let outsideSession = "elisctl reply runs inside an Elis session"
+
     func validate() throws {
         guard (text != nil) != stdin else { throw ValidationError("provide the reply as TEXT or --stdin, exactly one") }
     }
 
     func makeRequest(body: String) throws -> ControlRequest {
         guard let session = CallerEnvironment.ownSession else {
-            throw SocketClientError("elisctl reply runs inside an Elis session")
+            throw SocketClientError(Self.outsideSession)
         }
         return ControlRequest(cmd: .assistantReply, target: session, args: ControlArgs(text: body))
     }
 
     func run() throws {
         guard CallerEnvironment.ownSession != nil else {
-            throw SocketClientError("elisctl reply runs inside an Elis session")
+            throw SocketClientError(Self.outsideSession)
         }
         let body = try text ?? decodeTypedStdin(FileHandle.standardInput.readDataToEndOfFile())
         let reply = try SocketClient(path: options.socketPath()).send(makeRequest(body: body))
