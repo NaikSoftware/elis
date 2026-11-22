@@ -1,5 +1,9 @@
-#if os(macOS)
+#if !canImport(Musl)
+#if canImport(Darwin)
 import Darwin
+#else
+import Glibc
+#endif
 import Foundation
 import ElisCore
 
@@ -69,9 +73,17 @@ extension PhoneLinkPresenter {
     // shortcut: IPv4 copies of the app target's RemotePortForward.freePort/accepts; hoist both to ElisCore if a third caller appears
     /// A port nothing listens on at 127.0.0.1; ExitOnForwardFailure fails the forward if another process takes it first.
     static func freeLoopbackPort() -> UInt16? {
+        #if canImport(Darwin)
         let fd = socket(AF_INET, SOCK_STREAM, 0)
+        #else
+        let fd = socket(AF_INET, Int32(SOCK_STREAM.rawValue), 0)
+        #endif
         guard fd >= 0 else { return nil }
+        #if canImport(Darwin)
         defer { Darwin.close(fd) }
+        #else
+        defer { Glibc.close(fd) }
+        #endif
         var address = loopback(port: 0)
         var length = socklen_t(MemoryLayout<sockaddr_in>.size)
         let named = withUnsafeMutablePointer(to: &address) {
@@ -81,9 +93,17 @@ extension PhoneLinkPresenter {
     }
 
     static func loopbackAccepts(_ port: UInt16) -> Bool {
+        #if canImport(Darwin)
         let fd = socket(AF_INET, SOCK_STREAM, 0)
+        #else
+        let fd = socket(AF_INET, Int32(SOCK_STREAM.rawValue), 0)
+        #endif
         guard fd >= 0 else { return false }
+        #if canImport(Darwin)
         defer { Darwin.close(fd) }
+        #else
+        defer { Glibc.close(fd) }
+        #endif
         var address = loopback(port: port)
         return withUnsafePointer(to: &address) {
             $0.withMemoryRebound(to: sockaddr.self, capacity: 1) { connect(fd, $0, socklen_t(MemoryLayout<sockaddr_in>.size)) == 0 }
