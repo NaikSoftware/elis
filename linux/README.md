@@ -79,7 +79,7 @@ cmake --install build && kbuildsycoca6 --noincremental
 - Restore sessions (Settings ▸ General): fresh shells; re-run commands, which records what each pane runs at quit
   and types it into its new shell on the next launch (`restore-denylist.conf` lists programs to leave out); or live
   sessions, where each pane's shell keeps running in a zmx daemon and the next launch reattaches it. A live pane
-  another zmx client leads (later, the phone) is covered until a key takes it back.
+  led by another zmx client or the phone ("In use on your phone") is covered until a key takes it back.
 - Overlays: `elisctl session overlay open <command>` runs a program in a temporary terminal over a session (full,
   floating with `--size-percent`, or one split pane with `--pane`); it closes when the program exits and
   `overlay result` (or `--block`) returns the status. Ctrl+Alt+Shift+J hides and shows them. `session hud` puts a
@@ -151,8 +151,8 @@ and `ELISCTL`, so
 line) on `<state dir>/elis.sock`. The state dir is `~/.local/share/elis`, or `ELIS_STATE_DIR`.
 Beyond sessions and workspaces it streams events (`elisctl events`), shows pickers and questions (`pick`, `ask`),
 passes messages between panes (`msg`, addressed by `ELIS_PANE_ID`), reads a pane's screen or scrollback
-(`session text --all`), types into either pane (`session type --pane right`), and zooms a pane's font
-(`font inc|dec|reset`), sets a pane's grid apart from its window (`session grid <cols>x<rows>`, `--reset`), and wheels a pane as a mouse
+(`session text --all`), types into either pane (`session type --pane right`), zooms a pane's font
+(`font inc|dec|reset`), attaches a terminal to a Live pane (`session attach [--claim]`), sets a pane's grid apart from its window (`session grid <cols>x<rows>`, `--reset`), and wheels a pane as a mouse
 would (`session scroll <lines>`). Commands for features Elis
 lacks answer "not supported on this platform".
 
