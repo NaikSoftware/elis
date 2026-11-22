@@ -3,10 +3,12 @@
 #include "paths.h"
 #include "restore.h"
 #include "store.h"
+#include "elis_bridge.h"
 
 #include <QDir>
 #include <QFileInfo>
 #include <QJsonArray>
+#include <QJsonDocument>
 #include <QRegularExpression>
 
 #include <cmath>
@@ -334,17 +336,30 @@ QString overlayArgsError(const QString &cmd, QJsonObject *args)
     return {};
 }
 
+// workspace.new --folder / workspace.folder set: ElisCore's check, then the host's, before any target resolves
+static QString projectFolder(const QString &raw, QString *folder)
+{
+    char *r = elis_project_folder(raw.toUtf8().constData());
+    const QJsonObject reply = QJsonDocument::fromJson(r ? QByteArray(r) : QByteArray()).object();
+    elis_free(r);
+    if (!reply.value("ok").toBool())
+        return reply.value("error").toString(QStringLiteral("the folder check gave no answer"));
+    *folder = reply.value("folder").toString();
+    return QFileInfo(*folder).isDir() ? QString() : QStringLiteral("no such directory: %1").arg(*folder);
+}
+
 static QJsonObject tree(Store &store, const Terminals &terminals)
 {
+    QString ignored;
+    const QString activeWs = store.resolveWorkspace({}, &ignored);
     QJsonArray ws;
     for (const auto &w : store.workspaces) {
         QJsonArray ss;
-        bool active = false;
-        for (const auto &s : w.sessions) {
+        for (const auto &s : w.sessions)
             ss << merged(withContext(withRestore(sessionNode(s, store.selected), s), s, store), terminals.sessionExtras(s.id));
-            active |= s.id == store.selected;
-        }
-        QJsonObject node = withTint({{"id", w.id}, {"name", w.name}, {"rememberedFolder", w.folder}, {"active", active}, {"sessions", ss}}, w.tint);
+        QJsonObject node = withTint({{"id", w.id}, {"name", w.name}, {"rememberedFolder", w.folder}, {"active", w.id == activeWs}, {"sessions", ss}}, w.tint);
+        if (!w.projectFolder.isEmpty())
+            node.insert("projectFolder", w.projectFolder);
         if (store.focused.contains(w.id))
             node.insert("focused", true); // membership, whether or not the filter applies (workspaceFilter)
         if (store.collapsed.contains(w.id))
@@ -402,6 +417,8 @@ static QJsonObject sessionNew(Store &store, const QJsonObject &args)
             wsId = store.addWorkspace(wsName);
     } else if (store.workspaces.isEmpty() && args.value("workspace").toString().isEmpty()) {
         wsId = store.addWorkspace(QStringLiteral("main"));
+    } else if (!cwd.isEmpty() && args.value("workspace").toString().isEmpty() && !store.workspaceOwning(cwd).isEmpty()) {
+        wsId = store.workspaceOwning(cwd);
     } else if (!cwd.isEmpty() && args.value("workspace").toString().isEmpty() && !store.workspaceRemembering(cwd).isEmpty()) {
         wsId = store.workspaceRemembering(cwd); // a bare --cwd joins the workspace that lives there
     } else if (wsId = store.resolveWorkspace(args.value("workspace").toString(), &error); wsId.isEmpty()) {
@@ -483,11 +500,14 @@ QJsonObject dispatch(Store &store, Terminals &terminals, const QJsonObject &requ
     }
     if (cmd == QLatin1String("filepanel") || cmd == QLatin1String("filepanel.width")) {
         const QString mode = cmd == QLatin1String("filepanel") ? args.value("mode").toString(QStringLiteral("toggle")) : QString();
-        const int width = args.value("width").toInt();
-        if (cmd == QLatin1String("filepanel.width") && width < 120)
-            return fail(QStringLiteral("width must be at least 120"));
+        int width = 0;
+        if (cmd == QLatin1String("filepanel.width")) {
+            if (!args.value("filePanelWidth").isDouble())
+                return fail(QStringLiteral("filepanel.width requires a width in points"));
+            width = qBound(160, int(std::round(args.value("filePanelWidth").toDouble())), 560); // AppStore.clampFilePanelWidth
+        }
         if (!mode.isEmpty() && mode != QLatin1String("show") && mode != QLatin1String("hide") && mode != QLatin1String("toggle"))
-            return fail(QStringLiteral("mode must be show, hide or toggle"));
+            return fail(QStringLiteral("invalid filepanel mode: %1").arg(mode));
         if (!terminals.filePanel(mode, width, &error))
             return fail(error);
         return ok(terminals.chromeState());
@@ -495,11 +515,48 @@ QJsonObject dispatch(Store &store, Terminals &terminals, const QJsonObject &requ
     if (cmd == QLatin1String("version"))
         return ok({{"text", QStringLiteral("Elis %1").arg(QLatin1String(appVersion))}});
     if (cmd == QLatin1String("workspace.new")) {
-        QString tint;
+        QString tint, folder;
         if (error = Store::parseTint(cmd, args, &tint); !error.isEmpty())
             return fail(error);
-        const QString id = store.addWorkspace(args.value("name").toString());
+        if (args.contains("folder") && !args.value("folder").isNull())
+            if (error = projectFolder(args.value("folder").toString(), &folder); !error.isEmpty())
+                return fail(error);
+        const bool collapsed = args.value("collapsed").toBool();
+        const QString id = store.addWorkspace(args.value("name").toString().trimmed(), collapsed, folder, !collapsed);
         store.setTint(id, tint);
+        return ok({{"id", id}});
+    }
+    if (cmd == QLatin1String("workspace.folder")) {
+        const QString mode = args.value("mode").toString();
+        QString folder;
+        if (mode == QLatin1String("set")) {
+            if (!args.contains("folder") || args.value("folder").isNull())
+                return fail(QStringLiteral("workspace.folder set requires a folder"));
+            if (error = projectFolder(args.value("folder").toString(), &folder); !error.isEmpty())
+                return fail(error);
+        } else if (mode == QLatin1String("clear")) {
+            if (args.contains("folder") && !args.value("folder").isNull())
+                return fail(QStringLiteral("workspace.folder clear takes no folder"));
+        } else {
+            return fail(QStringLiteral("invalid folder mode: %1 (set|clear)").arg(mode));
+        }
+        const QString id = store.resolveWorkspace(target, &error);
+        if (id.isEmpty())
+            return fail(error);
+        store.workspace(id)->projectFolder = folder;
+        Q_EMIT store.changed();
+        return ok({{"id", id}});
+    }
+    if (cmd == QLatin1String("workspace.move")) {
+        if (!args.contains("to") || args.value("to").isNull())
+            return fail(QStringLiteral("workspace.move requires --to"));
+        const QString to = args.value("to").toString();
+        if (!QStringList{"up", "down", "top", "bottom"}.contains(to))
+            return fail(QStringLiteral("workspace.move --to must be up|down|top|bottom"));
+        const QString id = store.resolveWorkspace(target, &error);
+        if (id.isEmpty())
+            return fail(error);
+        store.reorderWorkspace(id, to);
         return ok({{"id", id}});
     }
     if (cmd == QLatin1String("session.new"))
@@ -555,8 +612,6 @@ QJsonObject dispatch(Store &store, Terminals &terminals, const QJsonObject &requ
             if (args.value("name").toString().isEmpty())
                 return fail(QStringLiteral("name is required"));
             store.renameWorkspace(id, args.value("name").toString());
-        } else if (cmd == QLatin1String("workspace.move")) {
-            store.moveWorkspace(id, args.value("index").toInt());
         } else if (cmd == QLatin1String("workspace.focus")) {
             if (!store.focusWorkspace(id, args.value("mode").toString(QStringLiteral("toggle"))))
                 return fail(QStringLiteral("mode must be on, off, toggle or add"));
@@ -564,12 +619,11 @@ QJsonObject dispatch(Store &store, Terminals &terminals, const QJsonObject &requ
             if (error = applyTint(store, id, cmd, args); !error.isEmpty())
                 return fail(error);
         } else if (cmd == QLatin1String("workspace.delete")) {
+            if (store.workspaces.size() <= 1)
+                return fail(QStringLiteral("cannot delete last workspace"));
             store.removeWorkspace(id);
         } else if (cmd == QLatin1String("workspace.select")) {
-            const auto &ss = store.workspace(id)->sessions;
-            if (ss.isEmpty())
-                return fail(QStringLiteral("workspace has no sessions"));
-            store.select(ss.first().id);
+            store.selectWorkspace(id);
         } else {
             return fail(QStringLiteral("unknown command '%1'").arg(cmd));
         }
@@ -622,11 +676,6 @@ QJsonObject dispatch(Store &store, Terminals &terminals, const QJsonObject &requ
         } else if (cmd == QLatin1String("session.tint")) {
             if (error = applyTint(store, id, cmd, args); !error.isEmpty())
                 return fail(error);
-        } else if (cmd == QLatin1String("session.move")) {
-            const QString ws = store.resolveWorkspace(args.value("workspace").toString(), &error);
-            if (ws.isEmpty())
-                return fail(error);
-            store.moveSession(id, ws, args.contains("index") ? args.value("index").toInt() : -1);
         } else if (cmd == QLatin1String("session.split")) {
             const Session *s = store.session(id);
             const QString axis = args.value("axis").toString(s->splitAxis);

@@ -4,6 +4,7 @@
 
 #include <QCoreApplication>
 #include <QDateTime>
+#include <QDir>
 #include <QFile>
 #include <QJsonArray>
 #include <QJsonDocument>
@@ -17,8 +18,9 @@ static const char *usage = R"(usage: elisctl <command> [args] [--target T] [--so
 
   tree                                  workspaces and sessions
   version
-  workspace new [--name N] [--tint COLOR]
+  workspace new [name] [--name N] [--collapsed] [--tint COLOR] [--folder DIR]
   workspace rename <name>               (--target: workspace id/prefix/name, default active)
+  workspace folder <set DIR|clear>      pin a project folder so session new --cwd under it routes here
   workspace tint <color|clear>          the row, the band around its sessions and their terminals
   session tint <color|clear>            red|orange|yellow|green|blue|purple|gray|teal|pink|brown|indigo|mint, or #rrggbb
   workspace delete | select
@@ -41,12 +43,12 @@ static const char *usage = R"(usage: elisctl <command> [args] [--target T] [--so
   session duplicate [--no-select]
   session duplicate --companion [--no-select]   a companion copying the split layout and each pane's program
   session flag [on|off|toggle]
-  session move <workspace> [--index N]
+  session move <workspace> | --to up|down|top|bottom | --after SID | --before SID
   session focus [left|right|other]      move keyboard focus between the split panes
   session scroll <lines> [--pane left|right]   wheel the pane like a mouse over it; negative = up (older)
   session grid <cols>x<rows> | --reset [--pane left|right]   the program's grid apart from the window (a phone's) | back
   session resize --split-ratio R | --grow-left D | --grow-right D   (also --grow-top/-bottom/-primary/-split)
-  workspace move --index N
+  workspace move --to up|down|top|bottom
   session split [on|off|toggle] [--axis vertical|horizontal]
   session split close
   session swap
@@ -54,7 +56,7 @@ static const char *usage = R"(usage: elisctl <command> [args] [--target T] [--so
   recent list | clear
   recent open [id]                      reopen a closed session (default: the most recent)
   filepanel [show|hide|toggle]          the session folder tree beside the sidebar
-  filepanel width <px>
+  filepanel width <points>              160...560
   notify <body> [--title T]             desktop notification + unseen badge on the session
   session seen                          clear the session's unseen badge without focusing it
   session type <text> | --stdin [--pane left|right]
@@ -98,7 +100,7 @@ static const char *usage = R"(usage: elisctl <command> [args] [--target T] [--so
   session overlay open <command> [--cwd DIR] [--wait | --block] [--size-percent N [--width PT] [--height PT]]
                        [--background-color #rrggbb] [--follow] [--pane left|right]
                                         a program over the session (full, floating, or one pane); closes when it exits
-  session overlay close | result | text [--lines N] [--pane left|right]
+  session overlay close | result | copy | text [--lines N] [--pane left|right]
   session overlay hide | show | toggle [--pane left|right]
   session overlay resize (--size-percent N [--width PT] [--height PT] | --width PT | --height PT | --full)
   session hud [open] <message> | --file F [--markdown] [--font-size PT] [--detail T] [--spinner] [--spinner-style S]
@@ -125,7 +127,7 @@ static const char *usage = R"(usage: elisctl <command> [args] [--target T] [--so
   restore clear                         forget every captured command
   session restore <command> | --none | --clear [--pane left|right]   pin what this pane re-runs (rerun mode)
 
-Not in elis (the app answers "<cmd> is not supported on this platform"): zmx, session restart/lead/background,
+Not in elis (the app answers "<cmd> is not supported on this platform"): zmx, session restart/lead/background/page,
 surface cursor, config reload, browser, page overlays and companions, quick terminal, scratch terminal.
 )";
 
@@ -246,12 +248,20 @@ static std::pair<QString, QString> pairOf(const QString &token)
     return eq < 0 ? std::pair{token, token} : std::pair{token.left(eq), token.mid(eq + 1)};
 }
 
+// relative paths resolve against the caller's cwd before crossing the socket
+static QString callerPath(const QString &path)
+{
+    if (path.trimmed().isEmpty() || path.startsWith(QLatin1Char('/')) || path.startsWith(QLatin1Char('~')))
+        return path;
+    return QDir::cleanPath(QDir::current().absoluteFilePath(path));
+}
+
 int main(int argc, char **argv)
 {
     QCoreApplication app(argc, argv);
     const QStringList flags{"json", "stdin", "all", "no-select", "create-workspace", "auto-reset", "blink", "if-idle", "undoable", "companion",
                             "wait", "block", "follow", "full", "markdown", "sticky", "no-frame", "spinner", "none", "clear", "mru", "auto-size", "close", "minimized",
-                            "next", "prev", "allow-custom", "no-block", "multiple", "ack", "no-qr", "reset"};
+                            "next", "prev", "allow-custom", "no-block", "multiple", "ack", "no-qr", "reset", "collapsed", "page"};
     QStringList pos;
     QHash<QString, QString> opt;
     QHash<QString, QStringList> multi; // every value of a repeatable option, in order
@@ -298,6 +308,10 @@ int main(int argc, char **argv)
         cmd = QStringLiteral("session.companion.duplicate");
     if (cmd == QLatin1String("session.overlay") && !pos.isEmpty())
         cmd += QLatin1Char('.') + pos.takeFirst();
+    if (cmd == QLatin1String("session.overlay.open") && opt.contains(QStringLiteral("page")))
+        cmd = QStringLiteral("session.page");
+    else if (cmd == QLatin1String("session.overlay.open") && opt.contains(QStringLiteral("companion")))
+        cmd = QStringLiteral("session.companion.page");
     if (cmd == QLatin1String("session.hud"))
         cmd += QStringList{"open", "update", "close"}.contains(pos.value(0)) ? QLatin1Char('.') + pos.takeFirst() : QStringLiteral(".open");
     if (cmd == QLatin1String("session.split") && pos.value(0) == QLatin1String("close"))
@@ -319,6 +333,8 @@ int main(int argc, char **argv)
     copy("workspace-name", "workspaceName");
     copy("command", "command");
     copy("to", "to");
+    copy("after", "after");
+    copy("before", "before");
     copy("title", "title");
     copy("parent", "parent");
     copy("body", "body");
@@ -331,10 +347,13 @@ int main(int argc, char **argv)
     flag("undoable", "undoable");
     if (opt.contains(QStringLiteral("lines")))
         args.insert("lines", opt.value(QStringLiteral("lines")).toInt());
-    if (opt.contains(QStringLiteral("index")))
-        args.insert("index", opt.value(QStringLiteral("index")).toInt());
-    if (cmd == QLatin1String("filepanel.width"))
-        args.insert("width", arg.toInt());
+    if (cmd == QLatin1String("filepanel.width")) {
+        bool number = false;
+        const double w = arg.toDouble(&number);
+        if (!number)
+            return die(QStringLiteral("points must be a number"));
+        args.insert("filePanelWidth", w);
+    }
     if (cmd == QLatin1String("session.scroll"))
         args.insert("lines", arg.toInt());
     if (cmd == QLatin1String("session.grid")) {
@@ -348,7 +367,23 @@ int main(int argc, char **argv)
     if (QStringList{"session.flag", "session.split", "workspace.focus", "workspace.filter"}.contains(cmd))
         args.insert("mode", arg.isEmpty() ? QStringLiteral("toggle") : arg);
     copy("axis", "axis");
-    if (cmd == QLatin1String("session.move"))
+    if (cmd == QLatin1String("workspace.new")) {
+        if (!args.contains("name") && !arg.isEmpty())
+            args.insert("name", arg);
+        flag("collapsed", "collapsed");
+        if (opt.contains(QStringLiteral("folder")))
+            args.insert("folder", callerPath(opt.value(QStringLiteral("folder"))));
+    }
+    if (cmd == QLatin1String("workspace.folder")) {
+        if (arg != QLatin1String("set") && arg != QLatin1String("clear"))
+            return die(QStringLiteral("mode must be set or clear"));
+        args.insert("mode", arg);
+        if (!pos.value(1).isEmpty())
+            args.insert("folder", callerPath(pos.value(1)));
+        else if (opt.contains(QStringLiteral("folder")))
+            args.insert("folder", callerPath(opt.value(QStringLiteral("folder"))));
+    }
+    if (cmd == QLatin1String("session.move") && !arg.isEmpty())
         args.insert("workspace", arg);
     if (cmd == QLatin1String("keymap.run") || cmd == QLatin1String("theme.set"))
         args.insert("name", arg);
@@ -771,6 +806,8 @@ int main(int argc, char **argv)
         return printf("%s\n", qPrintable(QString::number(result["ratio"].toDouble(), 'f', 3))), 0; // C-locale digits, as master
     if (result.contains("sidebarWidth") && cmd == QLatin1String("sidebar.width"))
         return printf("%s\n", qPrintable(QString::number(result["sidebarWidth"].toDouble(), 'f', 1))), 0;
+    if (result.contains("filePanelWidth") && cmd == QLatin1String("filepanel.width"))
+        return printf("%s\n", qPrintable(QString::number(result["filePanelWidth"].toDouble(), 'f', 1))), 0;
     if (cmd == QLatin1String("session.overlay.open") && opt.contains(QStringLiteral("block"))) {
         // exits with the program's status, printing none of its output
         QJsonObject pollArgs;

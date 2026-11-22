@@ -41,8 +41,9 @@ cmake --install build && kbuildsycoca6 --noincremental
 
 ## What it does
 
-- Workspaces of sessions in a sidebar. A workspace remembers the folder its sessions last worked in, and new
-  sessions open there. Its "+" (on hover) starts Terminal, Claude Code, Codex, OpenCode or Antigravity (whichever
+- Workspaces of sessions in a sidebar. A workspace remembers the folder its sessions last worked in (or pins a project
+  folder with `workspace folder set DIR` / `workspace new --folder DIR` so `session new --cwd` under it routes there),
+  and new sessions open there. Its "+" (on hover) starts Terminal, Claude Code, Codex, OpenCode or Antigravity (whichever
   your login shell finds), and the button beside it repeats the last choice.
 - A session row shows the logo of the agent running in it, its status dot (active, blocked, completed), an unseen
   notification count, and a filled icon when flagged. Companions sit indented under their parent; Duplicate as

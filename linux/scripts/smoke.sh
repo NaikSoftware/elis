@@ -146,8 +146,9 @@ for _ in $(seq 20); do ctl session get --target "$bg" | grep -qE '^unseen +1' &&
 ctl session get --target "$bg" | grep -qE '^unseen +1' || fail "OSC 9 from a pane raises the badge"
 grep -q "\"session\":\"$bg\"" "$ELIS_STATE_DIR/created" || fail "session.created hook got the event on stdin"
 ctl filepanel show >/dev/null
-ctl tree --json | grep -q '"filePanel":{"visible":true' || fail "file panel show"
-ctl filepanel width 260 >/dev/null
+ctl tree --json | grep -q '"filePanelVisible":true' || fail "file panel show"
+[ "$(ctl filepanel width 260)" = 260.0 ] || fail "file panel width"
+ctl tree --json | grep -q '"filePanelWidth":260' || fail "file panel width read-back"
 ctl filepanel hide >/dev/null
 ctl session new --parent "$id" --name logs --no-select >/dev/null
 ctl tree --json | grep -q "\"parent\":\"$id\"" || fail "companion"
@@ -186,6 +187,39 @@ ctl tree --json | grep -q '"tint":"red"' || fail "session tint read-back"
 ctl session tint fuchsia --target "$id" 2>/dev/null && fail "unknown tint accepted"
 ctl workspace new --name tinted --tint '#33AA55' >/dev/null
 ctl tree --json | grep -q '"tint":"#33aa55","tintOn":\["icon","name"\]' || fail "workspace new --tint hex"
+mkdir -p "$ELIS_STATE_DIR/proj/sub"
+wsorder() { ctl tree | awk '!/^ /{print $1}'; }
+rows() { ctl tree | awk -v w="$1" '!/^ /{on = $1 == w; next} on {print ($1 == "*") ? $2 : $1}'; }
+pws=$(ctl workspace new pinned --collapsed --folder "$ELIS_STATE_DIR/proj")
+ctl tree --json | grep -q "\"collapsed\":true,\"id\":\"$pws\",\"name\":\"pinned\",\"projectFolder\":\"$ELIS_STATE_DIR/proj\"" \
+  || fail "workspace new positional --collapsed --folder"
+err=$(ctl workspace new --folder / 2>&1) && fail "workspace new --folder / accepted"
+[[ $err == *'project folder must not be / or the home folder'* ]] || fail "workspace new --folder / error ($err)"
+err=$(ctl workspace new --folder "$ELIS_STATE_DIR/nope" 2>&1) && fail "workspace new --folder missing accepted"
+[[ $err == *"no such directory: $ELIS_STATE_DIR/nope"* ]] || fail "workspace new --folder missing error ($err)"
+ctl workspace select --target "$pws"
+ctl tree --json | grep -q "\"active\":true,\"collapsed\":true,\"id\":\"$pws\"" || fail "workspace select on an empty workspace"
+ctl session select --target "$id"
+routed=$(ctl session new --name inproj --cwd "$ELIS_STATE_DIR/proj/sub" --no-select)
+ctl session get --target "$routed" | grep -qE "^workspace +$pws" || fail "projectFolder routes session new --cwd"
+ctl workspace folder clear --target "$pws"
+ctl tree --json | grep -q '"projectFolder"' && fail "workspace folder clear"
+ctl workspace folder set "$ELIS_STATE_DIR/proj" --target "$pws"
+ctl tree --json | grep -q "\"projectFolder\":\"$ELIS_STATE_DIR/proj\"" || fail "workspace folder set"
+ctl workspace move --to top --target "$pws"
+[ "$(wsorder | head -1)" = "$pws" ] || fail "workspace move --to top"
+ctl workspace move --to bottom --target "$pws"
+[ "$(wsorder | tail -1)" = "$pws" ] || fail "workspace move --to bottom"
+fws=$(ctl session get --target "$first" | awk '/^workspace /{print $2}')
+ctl session move --after "$first" --target "$routed"
+[ "$(rows "$fws" | grep -A1 -x "$first" | tail -1)" = "$routed" ] || fail "session move --after"
+ctl session move --to top --target "$routed"
+[ "$(rows "$fws" | head -1)" = "$routed" ] || fail "session move --to top"
+err=$(ctl session move --to up --after "$first" --target "$routed" 2>&1) && fail "session move --to with --after accepted"
+[[ $err == *'session.move takes --after/--before or --to, not both'* ]] || fail "session move conflict error ($err)"
+ctl session close --target "$routed" >/dev/null
+ctl workspace delete --target "$pws"
+ctl session select --target "$id"
 ctl workspace focus on --target agents
 ctl tree --json | grep -q '"workspaceFilter":true' || fail "workspace focus on"
 ctl workspace filter off
@@ -213,6 +247,13 @@ ctl restore capture | grep -q 'captured [1-9]' || fail "restore capture"
 w1=$(ctl window list | awk '$1=="*"{print $2}')
 w2=$(ctl window new second)
 [ "$(ctl window list | grep -c ' open$')" = 2 ] || fail "window new"
+front=$(ctl window list | awk '$1=="*"{print $2}'); other=$w1; [ "$front" = "$w1" ] && other=$w2
+mkdir -p "$ELIS_STATE_DIR/pin2/sub"
+pin2=$(ctl workspace new pinned2 --folder "$ELIS_STATE_DIR/pin2" --window "$other")
+pinned=$(ctl session new --name pinned2s --cwd "$ELIS_STATE_DIR/pin2/sub" --no-select)
+ctl tree --window "$other" | grep -q pinned2s || fail "a project folder in another window takes session new --cwd"
+ctl session close --target "$pinned" >/dev/null
+ctl workspace delete --target "$pin2"
 inw2=$(ctl session new --name inw2 --window "$w2" --no-select)
 ctl tree --window "$w2" | grep -q inw2 || fail "session in the second window"
 ctl tree --window "$w1" | grep -q inw2 && fail "windows share a tree"
@@ -229,6 +270,8 @@ ctl tree --window "$w2" 2>/dev/null && fail "a closed window answers tree"
 ctl window select "$w2"
 ctl tree --window "$w2" | grep -q inw2 || fail "a reopened window keeps its sessions"
 w3=$(ctl window new doomed)
+err=$(ctl workspace delete --window "$w3" 2>&1) && fail "deleted last workspace"
+[[ $err == *"cannot delete last workspace"* ]] || fail "last workspace delete error ($err)"
 ctl window delete "$w3"
 ctl window list | grep -q doomed && fail "window delete"
 ctl window go --to next >/dev/null || fail "window go"
@@ -281,6 +324,16 @@ ctl recent open "$b2" >/dev/null
 ctl tree | grep -q batch2 || fail "recent open by id"
 err=$(ctl zmx list 2>&1) && fail "zmx list answered"
 [[ $err == *'zmx.list is not supported on this platform'* ]] || fail "absent feature error"
+for ucmd in "session page" "session overlay follow" "session overlay search" "session overlay changes" "session overlay files" "session overlay wrap"; do
+  err=$(ctl $ucmd --target "$id" 2>&1) && fail "$ucmd answered"
+  [[ $err == *'is not supported on this platform'* ]] || fail "$ucmd absent feature error ($err)"
+done
+err=$(ctl session overlay copy --target "$id" 2>&1) && fail "overlay copy without overlay"
+[[ $err == *'no overlay'* ]] || fail "overlay copy error ($err)"
+ctl session overlay open 'sleep 30' --target "$id"
+err=$(ctl session overlay copy --target "$id" 2>&1) && fail "overlay copy with nothing selected"
+[[ $err == *'no selection'* ]] || fail "overlay copy reads the covering terminal ($err)"
+ctl session overlay close --target "$id"
 ctl notify 2>/dev/null && fail "notify without a body"
 # the phone relay: TLS pinned by the link's fingerprint, the token first, then elisctl requests answered under their id
 port=$(python3 -c 'import socket; s = socket.socket(); s.bind(("127.0.0.1", 0)); print(s.getsockname()[1])')

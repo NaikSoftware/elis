@@ -1406,7 +1406,8 @@ bool MainWindow::filePanel(const QString &mode, int width, QString *)
 QJsonObject MainWindow::chromeState() const
 {
     QJsonObject out{{"sidebarVisible", !m_sidebarPanel->isHidden()},
-                    {"filePanel", QJsonObject{{"visible", !m_filePanel->isHidden()}, {"width", m_filePanelWidth}}},
+                    {"filePanelVisible", !m_filePanel->isHidden()},
+                    {"filePanelWidth", m_filePanelWidth},
                     {"idleMs", m_idle.elapsed()}};
     if (const qint64 follow = autoFollowMs())
         out.insert("autoFollowMs", follow);

@@ -371,6 +371,27 @@ QJsonObject WindowLibrary::dispatch(const QJsonObject &request)
                 break;
             }
         }
+    } else if (cmd == QLatin1String("session.new") && args.value("workspace").toString().isEmpty() && args.value("workspaceName").toString().isEmpty()
+               && !args.contains("parent") && !args.contains("after") && !args.contains("before") && !args.value("cwd").toString().isEmpty()) {
+        QString cwd = args.value("cwd").toString();
+        if (cwd.startsWith(QLatin1Char('~')))
+            cwd = QDir::homePath() + cwd.mid(1);
+        if (QFileInfo(cwd).isDir()) {
+            const QString clean = QFileInfo(cwd).absoluteFilePath();
+            QList<Entry *> order{e};
+            for (Entry &x : m_entries)
+                if (x.open && x.window && &x != e)
+                    order << &x;
+            qsizetype bestLen = -1;
+            for (Entry *x : order) {
+                const QString wsId = x->store->workspaceOwning(clean);
+                if (!wsId.isEmpty()) {
+                    const qsizetype len = QDir::cleanPath(x->store->workspace(wsId)->projectFolder).size();
+                    if (len > bestLen)
+                        bestLen = len, e = x;
+                }
+            }
+        }
     }
     return ::dispatch(*e->store, *e->window, request);
 }

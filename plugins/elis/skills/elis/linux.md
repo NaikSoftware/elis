@@ -46,13 +46,14 @@ These answer `<cmd> is not supported on this platform (<reason>)`:
 - quick terminal (`quick …`) and scratch terminal (`session scratch`);
 - every `zmx …` command, remote sessions, `session lead` (a covered pane takes the lead with a key), `session restart`;
 - `session background`, `surface cursor`, `config reload`;
-- the built-in browser (`browser …`), page overlays (`session overlay open --html|--url`,
-  `overlay reload|navigate|submit|copy`) and page companions: they need Qt WebEngine.
+- `browser …`: there is no built-in browser, and links open in the system browser;
+- page sessions (`session page`, `session overlay open --page`), page overlays (`session overlay open --html|--url`,
+  `overlay reload|navigate|submit|follow|search|changes|files|wrap`) and page companions: they need Qt WebEngine.
   There is no inline image, rendered markdown or file-at-line view either: never pass `--image`, `--markdown` or
   `--text` to `overlay open` (`--markdown FILE` would run FILE as the command).
   Show a file by running a viewer as the overlay program (`less +N file`, `glow file`).
 
-Also absent from the CLI: `session wait` (use `events`), `clipboard set` (use `wl-copy`/`xclip`), `terminfo`, `overlay copy`,
+Also absent from the CLI: `session wait` (use `events`), `clipboard set` (use `wl-copy`/`xclip`), `terminfo`,
 per-call status colour, shape, sound and pane, and
 `session new --wait|--after|--before`.
 

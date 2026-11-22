@@ -216,44 +216,15 @@ public struct ControlDispatcher {
             return actions.revealSession(request.target, window: request.args?.window)
         case .sessionMove:
             let args = request.args
-            if args?.after != nil, args?.before != nil {
-                return ControlResponse(ok: false, error: "use either --after or --before, not both")
-            }
-            // Placement mode: the anchor sid self-identifies the destination workspace, so it's
-            // mutually exclusive with --to and with a workspace parameter.
-            if let anchor = args?.after ?? args?.before {
-                if args?.to != nil {
-                    return ControlResponse(ok: false, error: "session.move takes --after/--before or --to, not both")
-                }
-                if args?.workspace != nil {
-                    return ControlResponse(ok: false, error: "session.move takes --after/--before or a workspace, not both")
-                }
-                let move = ControlSessionMove.place(anchor: anchor, after: args?.after != nil)
+            switch Self.sessionMoveArguments(args) {
+            case .failure(let refusal):
+                return refusal
+            case .success(let move):
                 if let targets = args?.targets {
                     return dispatchSessionMove(targets: targets, window: args?.window, move: move)
                 }
                 return actions.moveSession(request.target, window: args?.window, move: move)
             }
-            if args?.to != nil && args?.workspace != nil {
-                return ControlResponse(ok: false, error: "session.move takes either --to or a workspace, not both")
-            }
-            if let to = args?.to {
-                guard let direction = ReorderDirection(rawValue: to) else {
-                    return ControlResponse(ok: false, error: "session.move --to must be up|down|top|bottom")
-                }
-                if args?.targets != nil {
-                    return ControlResponse(ok: false, error: "session.move --target can be repeated only with a workspace or --after/--before")
-                }
-                return actions.moveSession(request.target, window: args?.window, move: .reorder(direction))
-            }
-            guard let workspace = args?.workspace else {
-                return ControlResponse(ok: false, error: "session.move requires --to or a workspace")
-            }
-            let move = ControlSessionMove.workspace(workspace)
-            if let targets = args?.targets {
-                return dispatchSessionMove(targets: targets, window: args?.window, move: move)
-            }
-            return actions.moveSession(request.target, window: args?.window, move: move)
         case .sessionFlag:
             return dispatchSessionFlag(request)
         case .sessionContext:

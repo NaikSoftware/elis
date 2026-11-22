@@ -20,6 +20,14 @@ char *elis_tint_parse(const char *command, const char *argsJSON);
 // {"colors":[{"name","light","dark"}],"shownParts":[…]}: the palette in menu order as #rrggbb per appearance, and the
 // tree's tintOn.
 char *elis_tint_palette(void);
+// session.move's placement intent: {"ok":true} with "to", "workspace", or "anchor" and "after"; else the Mac's refusal.
+char *elis_session_move_arguments(const char *argsJSON);
+// Where session.move --after/--before lands by the Mac's drop math (bridge Sources/ElisBridge/Moves.swift has the shape).
+char *elis_session_placement(const char *json);
+// {"to","index","count"} -> {"ok":true,"destination"?}: a --to step, absent at that end.
+char *elis_reorder_destination(const char *json);
+// A project folder normalized, {"ok":true,"folder"}, or the Mac's refusal; existence is not checked.
+char *elis_project_folder(const char *path);
 // Each cwd's GitHub CI from gh, in order: [{"ci"?:{branch,sha,pr?,runs},"spans":[{text,bold,italic,code,dim,color?}]}],
 // "ci" absent for none. Input a JSON array of cwds. Blocks on gh, so call it off the GUI thread, one call at a time.
 char *elis_ci_statuses(const char *cwdsJSON);
