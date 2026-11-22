@@ -277,17 +277,20 @@ jobs:
       - name: Install OpenSSL, libsystemd and zlib
         # the Linux elisctl's relay links OpenSSL, sd-bus and zlib, and its tests make a certificate with the CLI
         run: apt-get update && apt-get install -y --no-install-recommends libssl-dev openssl libsystemd-dev zlib1g-dev
+      - name: Create the test user
+        # root passes the permission checks the relay suites rely on failing (an unreadable token); both builds run
+        # as it too, since SwiftPM's lock for this scratch path is a /tmp file the first build's user owns
+        run: |
+          useradd --create-home elis-test
+          chown -R elis-test "$GITHUB_WORKSPACE"
       - name: swift build
-        run: swift build -c release -Xswiftc -static-stdlib -Xlinker -soname=libElisBridge.so --product ElisBridge
+        run: >-
+          runuser --user elis-test -- env HOME=/home/elis-test
+          swift build -c release -Xswiftc -static-stdlib -Xlinker -soname=libElisBridge.so --product ElisBridge
       - name: no Swift runtime needed
         run: |
           ldd .build/release/libElisBridge.so
           ! ldd .build/release/libElisBridge.so | grep -i swift
-      - name: Create the test user
-        # root passes the permission checks the relay suites rely on failing (an unreadable token)
-        run: |
-          useradd --create-home elis-test
-          chown -R elis-test "$GITHUB_WORKSPACE"
       - name: swift test (the Linux relay's TLS listener and BlueZ pipe)
         run: runuser --user elis-test -- env HOME=/home/elis-test swift test
 
