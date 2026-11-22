@@ -1791,7 +1791,7 @@ private Q_SLOTS:
         QCOMPARE(store.session(a)->infoSpans.size(), 2);
     }
 
-    void aClickOnTheCiLineOpensItsPanelAndSelectsNothing()
+    void aClickOnTheShownSessionsCiLineOpensItsPanel()
     {
         Store store;
         const QString ws = store.addWorkspace("w");
@@ -1813,10 +1813,14 @@ private Q_SLOTS:
         QSignalSpy panel(&tree, &Sidebar::ciPanelRequested);
         const QRect rect = tree.visualItemRect(tree.topLevelItem(1)->child(0));
         const QRect title = tree.titleRect(tree.indexAt(rect.center()), rect);
-        QTest::mouseClick(tree.viewport(), Qt::LeftButton, {}, QPoint(rect.center().x(), title.bottom() - 4)); // the line's top edge
+        const QPoint edge(rect.center().x(), title.bottom() - 4); // the line's top edge
+        QTest::mouseClick(tree.viewport(), Qt::LeftButton, {}, edge);
+        QCOMPARE(panel.count(), 0);
+        QTRY_COMPARE(tree.selectedSessionIds(), QStringList{a});
+        QTest::mouseClick(tree.viewport(), Qt::LeftButton, {}, edge);
         QCOMPARE(panel.count(), 1);
         QCOMPARE(panel.at(0).at(0).toString(), a);
-        QCOMPARE(tree.selectedSessionIds(), QStringList{b});
+        QCOMPARE(tree.selectedSessionIds(), QStringList{a});
         QFrame *shown = nullptr;
         QTRY_VERIFY((shown = [] {
             for (QWidget *w : QApplication::topLevelWidgets())
@@ -1834,10 +1838,6 @@ private Q_SLOTS:
         const QPointer<QFrame> guard = shown;
         store.setCi(a, {}, {});
         QTRY_VERIFY(guard.isNull() || !guard->isVisible()); // the panel goes with its line
-
-        QTest::mouseClick(tree.viewport(), Qt::LeftButton, {}, QPoint(rect.center().x(), title.center().y()));
-        QCOMPARE(panel.count(), 1);
-        QTRY_COMPARE(tree.selectedSessionIds(), QStringList{a});
     }
 
     void foldingAWorkspaceByClickRefreshesItsBandPadding()
