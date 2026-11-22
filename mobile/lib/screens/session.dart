@@ -85,6 +85,7 @@ class _SessionScreenState extends State<SessionScreen> {
   late CellMetrics _cell; // the Term view's, as last laid out
   bool _scrolling = false;
   bool polling = false;
+  int _unread = 2; // the poll's reads still owed to the stream's last change
   TermSession? term; // a Live pane watched as a terminal; the text poll stops meanwhile
   TermSession? _claimed; // the term the lead was asked on: a replaced term (pause, pane, reconnect) is not claimed
   final _noClaim = <String>{}; // panes whose claim was refused on this visit: they type indirectly
@@ -128,7 +129,7 @@ class _SessionScreenState extends State<SessionScreen> {
     super.initState();
     WidgetsBinding.instance.addPostFrameCallback((_) => _load()); // _load asks the route, which initState may not
     // shortcut: polls the plain-text screen; a streamed, coloured terminal needs a pty tap in elis
-    poll = Timer.periodic(const Duration(milliseconds: 700), (_) => _load());
+    poll = Timer.periodic(const Duration(milliseconds: 700), (_) => _load(tick: true));
     m.addListener(_onModel);
     _lifecycle = AppLifecycleListener(onPause: () => _setForeground(false), onResume: () => _setForeground(true));
     _gate = WriteGate(
@@ -347,6 +348,7 @@ class _SessionScreenState extends State<SessionScreen> {
   void _onTerm() {
     final t = term;
     if (!mounted || t == null) return;
+    _unread = 2;
     _grids.value++;
     if (t.opened) _openedPanes.add(t.pane);
     if (t.ended case final reason?) {
@@ -535,13 +537,16 @@ class _SessionScreenState extends State<SessionScreen> {
     WidgetsBinding.instance.addPostFrameCallback((_) => _load());
   }
 
-  Future<void> _load() async {
+  /// [tick] is the poll's: an opened stream that changed nothing since the last two reads skips it, since each read
+  /// sends the whole history; two, as the computer's screen can lag the stream's bytes.
+  Future<void> _load({bool tick = false}) async {
     // a delayed read (after a fit, a key) can fire after the screen closed
     if (!mounted || polling || m.state != LinkState.connected || m.background || ModalRoute.of(context)?.isCurrent != true) return;
-    if (_inChat ? term != null : _termShown) {
+    if (_inChat ? term != null : _termShown || (tick && term?.opened == true && _unread == 0)) {
       if (s != null && s!.unseen > 0) unawaited(m.act('session.seen', target: widget.sessionId));
       return;
     }
+    if (_unread > 0) _unread--;
     polling = true;
     try {
       // fitted, the grid has more rows than the computer's view shows; reading the last ones gets all of them

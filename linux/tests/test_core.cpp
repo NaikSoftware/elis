@@ -1252,6 +1252,7 @@ private Q_SLOTS:
         QJsonObject r = call(s, t, "events.read", {}, {{"run", run}, {"after", QString::number(next)}, {"kinds", QJsonArray{"status"}}});
         QCOMPARE(std::as_const(r)["result"]["events"]["items"].toArray().size(), 1);
         QCOMPARE(std::as_const(r)["result"]["events"]["items"][0]["payload"]["status"].toString(), QStringLiteral("blocked"));
+        QVERIFY(call(s, t, "events.read", {}, {{"run", run.toUpper()}, {"after", QString::number(next)}})["ok"].toBool()); // Swift's uuidString
         r = call(s, t, "events.read", {}, {{"run", run}, {"after", QString::number(next)}, {"limit", 1}});
         QCOMPARE(std::as_const(r)["result"]["events"]["items"][0]["kind"].toString(), QStringLiteral("session.created"));
         QCOMPARE(std::as_const(r)["result"]["events"]["next"].toInteger(), std::as_const(r)["result"]["events"]["items"][0]["seq"].toInteger());

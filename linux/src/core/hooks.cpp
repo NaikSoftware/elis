@@ -137,7 +137,7 @@ QJsonObject EventSource::read(const QJsonObject &args, QString *error)
         }
     if (!hasRun)
         return anchor; // subscribe from now: no history is replayed
-    if (args.value("run").toString() != s_run)
+    if (QUuid::fromString(args.value("run").toString()) != QUuid::fromString(s_run)) // a UUID: the Swift client sends it upper case
         return *error = QStringLiteral("event run changed"), anchor;
     if (after > s_seq)
         return *error = QStringLiteral("event cursor is ahead of the current sequence"), anchor;

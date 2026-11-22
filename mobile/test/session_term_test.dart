@@ -569,6 +569,31 @@ void main() {
     await h.stop();
   });
 
+  testWidgets('anIdleStreamStopsTheHistoryPoll', (t) async {
+    final h = Harness(t, treeOf());
+    Future<void> wait(int seconds) async {
+      for (var i = 0; i < seconds * 5; i++) {
+        await t.pump(const Duration(milliseconds: 200));
+      }
+    }
+
+    await h.start();
+    await h.opened();
+    h.vts.single.alt = false;
+    h.r.send(frame(LinkKind.data, 2, utf8.encode('\$ ')));
+    await wait(3);
+    final idle = h.r.texts;
+    await wait(5);
+    expect(h.r.texts, idle);
+
+    h.r.send(frame(LinkKind.data, 2, utf8.encode('out')));
+    await wait(3);
+    expect(h.r.texts, idle + 2);
+    await wait(5);
+    expect(h.r.texts, idle + 2);
+    await h.stop();
+  });
+
   testWidgets('aFitSizesTheEmulatorBeforeTheRelayReportsIt', (t) async {
     final h = Harness(t, treeOf());
     await h.start();
@@ -1936,6 +1961,7 @@ void main() {
     expect(h.r.of(LinkKind.resize), isEmpty);
     expect(t.getRect(find.byKey(const Key('screen'))).bottom, lessThanOrEqualTo(t.getRect(find.byKey(const Key('answer-1'))).top));
     h.r.text = 'plain text';
+    h.r.send(frame(LinkKind.data, 2, utf8.encode('1'))); // the answer's output
     await t.pump(const Duration(seconds: 1));
     await t.pump(const Duration(seconds: 1));
     expect(find.byKey(const Key('answer-1')), findsNothing);
@@ -1989,20 +2015,19 @@ void main() {
     await _dirty(h);
     await t.pump(const Duration(seconds: 1));
     await _lead(h);
-    await t.pump(const Duration(seconds: 1));
-    final texts = h.r.texts;
-    while (h.r.texts == texts) {
-      await t.pump(const Duration(milliseconds: 10)); // a poll tick: the next is 700 ms away
+    Future<void> settle() async {
+      for (var i = 0; i < 30; i++) {
+        await t.pump(const Duration(milliseconds: 100)); // the poll's reads the last change owes
+      }
     }
+
+    await settle();
     for (final send in [() => _key(t, 'Up'), () => t.enterText(find.byKey(const Key('composer')), 'ls').then((_) => t.tap(find.byKey(const Key('send'))))]) {
       final before = h.r.texts;
       await send();
       await t.pump(const Duration(milliseconds: 200));
       expect(h.r.texts, before + 1);
-      await t.pump(const Duration(milliseconds: 500));
-      while (h.r.texts == before + 1) {
-        await t.pump(const Duration(milliseconds: 10));
-      }
+      await settle();
     }
     await h.stop();
   });
