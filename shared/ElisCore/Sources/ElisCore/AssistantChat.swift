@@ -41,6 +41,8 @@ public final class AssistantChat {
     private var pending = 0
     private var all: [AssistantEntry] = []
     private var fileLines = 0
+    /// tornTail is true while the file ends inside a line a crash cut short.
+    private var tornTail = false
     private let file: URL?
 
     public init(file: URL? = nil) {
@@ -49,6 +51,7 @@ public final class AssistantChat {
         if let text = try? String(contentsOf: file, encoding: .utf8) {
             let lines = text.split(separator: "\n", omittingEmptySubsequences: true)
             fileLines = lines.count
+            tornTail = !text.isEmpty && !text.hasSuffix("\n")
             let decoder = JSONDecoder()
             all = Array(lines.compactMap { try? decoder.decode(AssistantEntry.self, from: Data($0.utf8)) }.suffix(Self.limit))
         }
@@ -115,7 +118,7 @@ public final class AssistantChat {
             try? lines.joined().write(to: file, atomically: true, encoding: .utf8)
             fileLines = lines.count
         } else if let data = try? encoder.encode(entry) {
-            let line = data + Data("\n".utf8)
+            let line = (tornTail ? Data("\n".utf8) : Data()) + data + Data("\n".utf8)
             if let handle = try? FileHandle(forWritingTo: file) {
                 defer { try? handle.close() }
                 _ = try? handle.seekToEnd()
@@ -124,5 +127,6 @@ public final class AssistantChat {
                 try? line.write(to: file)
             }
         }
+        tornTail = false
     }
 }

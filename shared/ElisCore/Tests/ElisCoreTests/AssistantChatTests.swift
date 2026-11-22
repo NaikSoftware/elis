@@ -99,6 +99,18 @@ import Testing
         #expect(chat.entries(last: 2).map(\.text) == ["m649", "m650"])
     }
 
+    @Test func appendAfterATornLineStartsOnItsOwnLine() throws {
+        let (dir, file) = tempFile()
+        defer { try? FileManager.default.removeItem(at: dir) }
+        AssistantChat(file: file).append(.user, text: "a", now: 1)
+        let handle = try FileHandle(forWritingTo: file)
+        try handle.seekToEnd()
+        try handle.write(contentsOf: Data(#"{"id":"#.utf8))
+        try handle.close()
+        AssistantChat(file: file).append(.user, text: "b", now: 2)
+        #expect(AssistantChat(file: file).entries(last: nil).map(\.text) == ["a", "b"])
+    }
+
     @Test func undecodableLineIsSkipped() throws {
         let (dir, file) = tempFile()
         defer { try? FileManager.default.removeItem(at: dir) }

@@ -165,12 +165,12 @@ extension Assistant {
 
         static func output(_ reply: SocketReply, json: Bool) -> MessageOutput {
             guard reply.response.ok else { return Msg.refused(reply, json: json) }
-            if json { return MessageOutput(stdout: reply.line + "\n") }
             let delivered = reply.response.result?.assistant?.delivered ?? []
+            if json { return MessageOutput(stdout: reply.line + "\n", failed: delivered.isEmpty) }
             let skipped = reply.response.result?.assistant?.skipped ?? []
-            let stdout = delivered.isEmpty ? (skipped.isEmpty ? "ok\n" : "") : "delivered: \(delivered.joined(separator: ", "))\n"
             let stderr = skipped.map { "skipped \($0.handle): \($0.reason)\n" }.joined()
-            return MessageOutput(stdout: stdout, stderr: stderr)
+            guard !delivered.isEmpty else { return MessageOutput(stderr: stderr + "nothing was delivered\n", failed: true) }
+            return MessageOutput(stdout: "delivered: \(delivered.joined(separator: ", "))\n", stderr: stderr)
         }
     }
 

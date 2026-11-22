@@ -260,6 +260,16 @@ struct AssistantCommandsTests {
         ))
         #expect(Assistant.Send.output(sendReply, json: true) == MessageOutput(stdout: sendReply.line + "\n"))
 
+        let nobody = try reply(ControlResult(assistant: ControlAssistantResult(
+            delivered: [],
+            skipped: [AssistantSkip(handle: "codex-run", reason: "blocked")]
+        )))
+        #expect(Assistant.Send.output(nobody, json: false) == MessageOutput(
+            stderr: "skipped codex-run: blocked\nnothing was delivered\n",
+            failed: true
+        ))
+        #expect(Assistant.Send.output(nobody, json: true) == MessageOutput(stdout: nobody.line + "\n", failed: true))
+
         let providerReply = try reply(ControlResult(assistant: ControlAssistantResult(
             provider: "codex",
             providers: ["claude", "codex"]
@@ -301,6 +311,13 @@ struct AssistantCommandsTests {
         )
         #expect(EventFormatter.human(withSessionOnly, timeZone: tz)
             == "00:00:00 assistant.message kind=reply from=\(session) ok")
+
+        let multiline = ControlEvent(
+            seq: 4, ts: 0, kind: .assistantMessage,
+            payload: ControlEventPayload(kind: "assistant", text: "one\ntwo\r\n\tthree")
+        )
+        #expect(EventFormatter.human(multiline, timeZone: tz)
+            == "00:00:00 assistant.message kind=assistant from=- one two three")
 
         let noSender = ControlEvent(
             seq: 3, ts: 0, kind: .assistantMessage,
