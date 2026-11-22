@@ -1,4 +1,4 @@
-#if os(macOS)
+#if !canImport(Musl)
 import Foundation
 import ElisCore
 
@@ -36,7 +36,11 @@ final class PhoneLinkLineStream: @unchecked Sendable {
 
     // a started stream's reader closes the socket; one never started has nobody else to
     deinit {
+        #if canImport(Darwin)
         if !started, case .socket(let fd) = transport { Darwin.close(fd) }
+        #else
+        if !started, case .socket(let fd) = transport { Glibc.close(fd) }
+        #endif
     }
 
     /// Sends `request` on the app socket and waits for its ok reply (as `StreamBridge.open`), off `queue`.
@@ -45,7 +49,11 @@ final class PhoneLinkLineStream: @unchecked Sendable {
         do {
             try StreamBridge(socket: fd, input: -1, output: -1).open(request)
         } catch {
+            #if canImport(Darwin)
             Darwin.close(fd)
+            #else
+            Glibc.close(fd)
+            #endif
             throw error
         }
         return PhoneLinkLineStream(transport: .socket(fd), readFD: fd, writeFD: fd, queue: queue)
@@ -62,10 +70,14 @@ final class PhoneLinkLineStream: @unchecked Sendable {
         process.standardInput = input
         process.standardOutput = output
         process.standardError = FileHandle.nullDevice
-        try process.run()
+        try process.runWithSignals()
         let writeFD = input.fileHandleForWriting.fileDescriptor
         // a child that stopped reading fails the write instead of raising SIGPIPE in the relay
+        #if canImport(Darwin)
         _ = fcntl(writeFD, F_SETNOSIGPIPE, 1)
+        #else
+        signal(SIGPIPE, SIG_IGN) // a pipe has no such flag on Linux
+        #endif
         return PhoneLinkLineStream(transport: .process(process, input: input, output: output),
                                    readFD: output.fileHandleForReading.fileDescriptor, writeFD: writeFD, queue: queue)
     }
@@ -79,7 +91,11 @@ final class PhoneLinkLineStream: @unchecked Sendable {
             stop()
             writerDone.wait()
             // closed only now that neither thread can touch the descriptor again
+            #if canImport(Darwin)
             if case .socket(let fd) = transport { Darwin.close(fd) }
+            #else
+            if case .socket(let fd) = transport { Glibc.close(fd) }
+            #endif
             queue.async { [self] in
                 guard lock.withLock({ () -> Bool in defer { closed = true }; return !closed }) else { return }
                 onEnd()
@@ -115,7 +131,12 @@ final class PhoneLinkLineStream: @unchecked Sendable {
     private func stop() {
         guard lock.withLock({ () -> Bool in defer { stopping = true }; return !stopping }) else { return }
         switch transport {
-        case .socket(let fd): shutdown(fd, SHUT_RDWR)
+        case .socket(let fd):
+            #if canImport(Darwin)
+            shutdown(fd, SHUT_RDWR)
+            #else
+            shutdown(fd, Int32(SHUT_RDWR))
+            #endif
         // shortcut: only SIGTERM; a grandchild holding stdout would block the reader, upgrade by closing readFD here
         case .process(let process, _, _): if process.isRunning { process.terminate() }
         }
@@ -139,7 +160,11 @@ final class PhoneLinkLineStream: @unchecked Sendable {
                 }
             }
             guard buffer.count <= Self.maxLine else { return }
+            #if canImport(Darwin)
             let count = chunk.withUnsafeMutableBytes { Darwin.read(readFD, $0.baseAddress, $0.count) }
+            #else
+            let count = chunk.withUnsafeMutableBytes { Glibc.read(readFD, $0.baseAddress, $0.count) }
+            #endif
             if count < 0, errno == EINTR { continue }
             guard count > 0 else { return }
             buffer.append(contentsOf: chunk[0..<count])
@@ -150,8 +175,29 @@ final class PhoneLinkLineStream: @unchecked Sendable {
         while true {
             writable.wait()
             guard let line = lock.withLock({ stopping ? nil : outbox.removeFirst() }) else { return }
+            #if canImport(Darwin)
             guard StreamBridge.sendAll(writeFD, line) else { return stop() }
+            #else
+            // Linux's sendAll is send(2), which a pipe refuses
+            let sent: Bool
+            if case .socket = transport { sent = StreamBridge.sendAll(writeFD, line) } else { sent = StreamBridge.writeAll(writeFD, line) }
+            guard sent else { return stop() }
+            #endif
         }
+    }
+}
+
+extension Process {
+    /// `run()`, with the child's signal mask emptied on Linux: Foundation passes the child the spawning thread's mask,
+    /// and a Dispatch worker blocks every signal, which left children deaf to the SIGTERM that stops them.
+    func runWithSignals() throws {
+        #if canImport(Glibc)
+        var none = sigset_t(), saved = sigset_t()
+        sigemptyset(&none)
+        pthread_sigmask(SIG_SETMASK, &none, &saved)
+        defer { pthread_sigmask(SIG_SETMASK, &saved, nil) }
+        #endif
+        try run()
     }
 }
 #endif

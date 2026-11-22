@@ -72,6 +72,28 @@ extension ControlDispatcher {
     }
 
     /// CompanionMove is a validated `session.companion.move`: the new parent and the slot in its group, nil appending.
+    /// `session.move`'s one placement intent, refused before any target resolves; the Linux app calls it too.
+    nonisolated public static func sessionMoveArguments(_ args: ControlArgs?) -> Result<ControlSessionMove, ControlResponse> {
+        let refuse = { (error: String) in Result<ControlSessionMove, ControlResponse>.failure(ControlResponse(ok: false, error: error)) }
+        if args?.after != nil, args?.before != nil { return refuse("use either --after or --before, not both") }
+        // the anchor carries its own workspace, so it excludes --to and a workspace parameter
+        if let anchor = args?.after ?? args?.before {
+            if args?.to != nil { return refuse("session.move takes --after/--before or --to, not both") }
+            if args?.workspace != nil { return refuse("session.move takes --after/--before or a workspace, not both") }
+            return .success(.place(anchor: anchor, after: args?.after != nil))
+        }
+        if args?.to != nil, args?.workspace != nil { return refuse("session.move takes either --to or a workspace, not both") }
+        if let to = args?.to {
+            guard let direction = ReorderDirection(rawValue: to) else { return refuse("session.move --to must be up|down|top|bottom") }
+            if args?.targets != nil {
+                return refuse("session.move --target can be repeated only with a workspace or --after/--before")
+            }
+            return .success(.reorder(direction))
+        }
+        guard let workspace = args?.workspace else { return refuse("session.move requires --to or a workspace") }
+        return .success(.workspace(workspace))
+    }
+
     struct CompanionMove: Equatable {
         let parent: String
         let index: Int?

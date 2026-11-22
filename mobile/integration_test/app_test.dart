@@ -24,6 +24,7 @@ void main() {
   testWidgets('pair, open a session, type into it, start a new one', (t) async {
     expect(link, isNotEmpty, reason: 'pass --dart-define=PAIR_LINK=...');
     await PairingStore.save([]);
+    await ComposerPref.set(true);
     app.main();
     await pumpUntil(t, find.byKey(const Key('pairLink')));
 

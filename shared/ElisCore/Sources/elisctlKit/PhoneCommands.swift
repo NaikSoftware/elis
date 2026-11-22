@@ -1,4 +1,4 @@
-#if os(macOS)
+#if !canImport(Musl)
 import ArgumentParser
 import ElisCore
 import Foundation

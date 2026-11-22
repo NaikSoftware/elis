@@ -1,4 +1,4 @@
-#if os(macOS)
+#if !canImport(Musl)
 import Foundation
 import ElisCore
 @testable import elisctlKit

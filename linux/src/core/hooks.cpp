@@ -89,6 +89,13 @@ void EventSource::snapshot()
     m_selected = m_store.selected;
 }
 
+void EventSource::emitAppEvent(const QString &kind, const QJsonObject &payload)
+{
+    const QString own = std::exchange(window, QString());
+    emitEvent(kind, {}, {}, payload);
+    window = own;
+}
+
 void EventSource::emitEvent(const QString &kind, const QString &workspace, const QString &session, const QJsonObject &payload)
 {
     QJsonObject e{{"seq", qint64(++s_seq)}, {"ts", QDateTime::currentMSecsSinceEpoch() / 1000.0}, {"kind", kind}, {"payload", payload}};
@@ -104,8 +111,7 @@ void EventSource::emitEvent(const QString &kind, const QString &workspace, const
     Q_EMIT event(e);
 }
 
-const QStringList EventSource::kinds{"status", "notify", "session.created", "session.closed", "session.selected", "tree.changed", "pane.split",
-                                     "pane.scratch", "pane.focused", "remote.opened", "remote.closed", "app.launched", "message", "assistant.message"};
+const QStringList EventSource::kinds = eventKinds();
 
 QJsonObject EventSource::read(const QJsonObject &args, QString *error)
 {

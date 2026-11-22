@@ -1,8 +1,11 @@
 #include "paneleadcover.h"
 
+#include "elis_bridge.h"
 #include "zmx.h"
 
 #include <QIcon>
+#include <QJsonDocument>
+#include <QJsonObject>
 #include <QKeyEvent>
 #include <QLabel>
 #include <QPainter>
@@ -12,9 +15,10 @@
 // through the fresh attach
 static int s_takeoverKey = 0;
 
-PaneLeadCover::PaneLeadCover(QWidget *pane, QWidget *display, std::function<void()> takeOver, std::function<bool(QKeyEvent *)> ownShortcut)
+PaneLeadCover::PaneLeadCover(QWidget *pane, QWidget *display, const QString &paneId, std::function<void()> takeOver, std::function<bool(QKeyEvent *)> ownShortcut)
     : QWidget(pane)
     , m_display(display)
+    , m_paneId(paneId)
     , m_takeOver(std::move(takeOver))
     , m_ownShortcut(std::move(ownShortcut))
 {
@@ -27,6 +31,7 @@ PaneLeadCover::PaneLeadCover(QWidget *pane, QWidget *display, std::function<void
     icon->setAlignment(Qt::AlignCenter);
     box->addWidget(icon);
     m_title = new QLabel;
+    m_title->setObjectName(QStringLiteral("paneLeadTitle"));
     QFont f = m_title->font();
     f.setWeight(QFont::Medium);
     f.setPointSizeF(f.pointSizeF() * 1.15);
@@ -45,12 +50,24 @@ PaneLeadCover::PaneLeadCover(QWidget *pane, QWidget *display, std::function<void
     hide();
 }
 
-QString PaneLeadCover::title(const QString &role, bool reattaching)
+bool PaneLeadCover::phoneLeads(const QString &paneId)
+{
+    if (paneId.isEmpty())
+        return false;
+    char *reply = elis_phone_viewers(paneId.toUtf8().constData());
+    const bool lead = QJsonDocument::fromJson(reply).object().value(QLatin1String("lead")).toBool();
+    elis_free(reply);
+    return lead;
+}
+
+QString PaneLeadCover::title(const QString &role, bool reattaching, bool phone)
 {
     if (reattaching)
         return tr("Taking over…");
     if (role == QLatin1String("unowned"))
         return tr("Reconnecting…");
+    if (phone)
+        return tr("In use on your phone");
     return tr("In use from another terminal"); // the Mac's "In use from another Mac", for a lead on this machine
 }
 
@@ -58,7 +75,7 @@ void PaneLeadCover::apply(const Zmx::Lead &lead)
 {
     m_covered = lead.covered;
     m_reattaching = lead.reattaching;
-    m_title->setText(title(lead.role, lead.reattaching));
+    m_title->setText(title(lead.role, lead.reattaching, phoneLeads(m_paneId)));
     m_hint->setVisible(!lead.reattaching);
     setGeometry(parentWidget()->rect());
     setVisible(m_covered);

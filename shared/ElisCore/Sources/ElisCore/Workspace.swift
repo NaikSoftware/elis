@@ -44,7 +44,7 @@ public struct Workspace: Identifiable {
     /// `path` with `~` expanded and `.`/`..`/trailing slashes standardized, the one form a remembered folder
     /// is stored and compared in; nil when blank. No symlink resolution: OSC 7 reports the shell's logical
     /// path, and resolving would store a path the user never typed.
-    public static func normalizedFolder(_ path: String) -> String? {
+    nonisolated public static func normalizedFolder(_ path: String) -> String? {
         guard !path.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return nil }
         return URL(fileURLWithPath: (path as NSString).expandingTildeInPath).standardized.path
     }

@@ -75,6 +75,9 @@ QString scrollback(QObject *session, QWidget *display, bool *ok)
     if (!bar)
         return {};
     const int was = bar->value(), page = qMax(1, bar->pageStep());
+    // the range lags new output until Konsole's next update, and paging refreshes it: a view following the output
+    // goes back to the new bottom, or `was` would leave it pinned above it
+    const bool following = was == bar->maximum();
     QStringList out;
     for (int top = 0;; top = qMin(top + page, bar->maximum())) {
         bar->setValue(top);
@@ -87,7 +90,9 @@ QString scrollback(QObject *session, QWidget *display, bool *ok)
             break;
         }
     }
-    bar->setValue(was);
+    bar->setValue(following ? bar->maximum() : was);
+    // setValue is silent on an unchanged value, and paging can leave output tracking off; Konsole's handler resets it
+    QMetaObject::invokeMethod(bar, "scrollBarPositionChanged", Q_ARG(int, bar->value()));
     return out.join(QLatin1Char('\n'));
 }
 

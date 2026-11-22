@@ -1,5 +1,6 @@
 // Overlays (a program in a temporary terminal over a session or one pane) and the passive HUD.
 #include "mainwindow.h"
+#include "konsoleprivate.h"
 #include "store.h"
 #include "zmx.h"
 
@@ -359,6 +360,19 @@ bool MainWindow::overlayCommand(const QString &cmd, const QString &id, const QJs
                 all.removeLast();
             text = all.mid(qMax(0, int(all.size()) - lines)).join(QLatin1Char('\n'));
         }
+        result->insert("text", text);
+        return true;
+    }
+    if (cmd == QLatin1String("session.overlay.copy")) {
+        const Overlay ov = m_overlays.value(key);
+        if (!ov.part)
+            return *error = pane.isEmpty() && hud ? QStringLiteral("no overlay to read: the slot holds a hud") : QStringLiteral("no overlay"), false;
+        QObject *ks = sessionOf(ov.part);
+        if (!ks)
+            return *error = QStringLiteral("overlay not realized"), false;
+        const QString text = KonsolePrivate::selectedText(ks);
+        if (text.isEmpty())
+            return *error = QStringLiteral("no selection"), false;
         result->insert("text", text);
         return true;
     }

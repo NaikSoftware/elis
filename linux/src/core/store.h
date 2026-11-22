@@ -79,6 +79,7 @@ struct Workspace {
     QString folder; // last directory one of its sessions reported; where new sessions open
     QList<Session> sessions;
     Tint tint; // colours the workspace row and the band around its open sessions, and washes its terminals
+    QString projectFolder;
 };
 
 struct Settings {
@@ -135,6 +136,7 @@ public:
     // A tint request by ElisCore's parse: cmd session.tint/workspace.tint, else a new's optional tint. Sets *tint to the
     // normalized colour ("" = none) and returns "", or returns the refusal.
     static QString parseTint(const QString &cmd, const QJsonObject &args, QString *tint);
+    static QJsonObject bridge(char *(*call)(const char *), const QJsonObject &request); // an ElisBridge JSON call
 
     QList<Workspace> workspaces;
     QString selected;
@@ -173,6 +175,7 @@ public:
     // the workspace filter: a marked set, applied or suspended; never applied while empty
     QStringList focused;
     bool focusEnabled = false;
+    QString freshWorkspace; // an empty workspace just created or selected; active until a session is selected
 
     Session *session(const QString &id);
     Workspace *workspace(const QString &id);
@@ -186,10 +189,11 @@ public:
     // target: "" or "active" -> current; else exact id, unique id prefix, or unique exact name.
     QString resolveSession(const QString &target, QString *error);
     QString resolveWorkspace(const QString &target, QString *error);
+    QString workspaceOwning(const QString &folder) const;
     QString workspaceRemembering(const QString &folder) const;
     QString newSessionCwd(const QString &workspaceId, const QString &currentCwd) const;
 
-    QString addWorkspace(const QString &name);
+    QString addWorkspace(const QString &name, bool collapsed = false, const QString &projectFolder = {}, bool reveal = false);
     // index -1 follows settings.newSessionPlacement
     QString addSession(const QString &workspaceId, const QString &name, const QString &cwd, const QString &command = {}, int index = -1,
                        const QString &resume = {});
@@ -207,7 +211,14 @@ public:
     void renameSession(const QString &id, const QString &name); // "" reverts to the cwd-derived name
     void renameWorkspace(const QString &id, const QString &name);
     bool moveSession(const QString &id, const QString &workspaceId, int index); // index -1 = end
+    // session.move, as AppStore's: index counts the target without the moving rows, -1 appends; returns the rows moved
+    int moveSessions(const QStringList &ids, const QString &workspaceId, int index);
+    // where --after/--before anchorId lands ids; false when that changes nothing
+    bool placement(const QStringList &ids, const QString &anchorId, bool after, QString *workspaceId, int *index);
+    void reorderSession(const QString &id, const QString &direction); // up | down | top | bottom
     bool moveWorkspace(const QString &id, int index);
+    bool reorderWorkspace(const QString &id, const QString &direction);
+    bool selectWorkspace(const QString &id);
     void select(const QString &id);
     // ifIdle: applies only while the row is idle, else an ok no-op that leaves status and flags untouched (master's --if-idle)
     bool setStatus(const QString &id, const QString &status, bool autoReset = false, bool blink = false, bool ifIdle = false);
@@ -254,6 +265,9 @@ private:
     QString goTo(const QString &direction, QString *error);
     Tint *tintOf(const QString &id);
     int indexIn(const Workspace &w, const QString &sessionId) const;
+    QList<QStringList> sessionOrder() const;
+    void relocate(const QStringList &block, const QString &workspaceId, const QString &before);
+    bool moveCompanions(const QStringList &ids, int index);
     void commitFocus(QStringList ids, bool enabled);
     void reselect(const Workspace *w, int i); // after the selected session left w at row i; w null when w went too
     bool park(const PendingClose &close);

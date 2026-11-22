@@ -415,7 +415,8 @@ elis-server's own tree omits `phoneViewers`, an approved exception (2026-11-18):
 Debug builds are ad-hoc signed with a bare `cdhash` requirement,
 so each rebuild asks for Bluetooth again at the relay's first start.
 
-`mobile serve` also offers BLE (`MobileBluetooth.swift`, `#if os(macOS)`): an insecure L2CAP channel, with
+`mobile serve` also offers BLE (`MobileBluetooth.swift`; the radio and the byte pipe in `+CoreBluetooth` on the Mac,
+`+BlueZ` on Linux over the `CElisBlueZ` sd-bus shim): an insecure L2CAP channel, with
 Noise NNpsk0 keyed by the pairing token doing the authentication and encryption. Each line is chunked into
 1...4096-byte sealed frames; a replayed or tampered frame drops the link. The advertised service UUID is an HMAC
 of the token over a 900 s epoch, re-registered at each boundary, so a passive scanner cannot track the Mac.
@@ -425,6 +426,9 @@ counts authenticated phones only, so replayed handshakes cannot lock out a paire
 and the 10 s auth timeout cover the rest. elisctl embeds an Info.plist (`ua.naiksoftware.elis.elisctl`, usage string)
 via `-sectcreate` in project.yml's Bundle helper executables phase, so a hand-run serve prompts under a stable identity. The L2CAP streams run on
 their own `StreamThread`, never `RunLoop.main`. `commands.html#mobile` owns the user-visible values.
+On Linux the bus and the socket run on the relay queue. BlueZ reads the GATT application and the advertisement back
+before it answers `RegisterApplication`/`RegisterAdvertisement`, so both calls are asynchronous; a blocking call would
+wait out its timeout. The channel is `SOCK_SEQPACKET`: each send is one SDU, cut to the channel's `BT_SNDMTU`.
 
 A Bluetooth wrong-key handshake emits no `phone.refused`: a stranger in radio range could flood the event.
 `tree.phone.bluetooth` changes emit no event; it is poll-only.

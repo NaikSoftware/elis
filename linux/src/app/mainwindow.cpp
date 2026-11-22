@@ -555,6 +555,18 @@ MainWindow::MainWindow(Store &store, const QString &statePath)
         if (status == QLatin1String("blocked"))
             playSound(m_store.settings.blockedStatusSoundName);
     });
+    connect(PhoneRelay::instance(), &PhoneRelay::phoneEvent, this, [this](const QString &kind, const QJsonObject &payload) {
+        if (kind != QLatin1String("phone.claimed") && kind != QLatin1String("phone.released"))
+            return;
+        const QString paneId = payload.value(QLatin1String("paneID")).toString();
+        if (paneId.isEmpty())
+            return;
+        for (const Panes &p : std::as_const(m_panes))
+            for (KParts::ReadOnlyPart *part : {p.main, p.right})
+                if (part && part->property("elisPaneId").toString() == paneId)
+                    if (auto *cover = part->widget()->findChild<PaneLeadCover *>())
+                        cover->apply(Zmx::lead(part->property("elisZmx").toString()));
+    });
     for (auto it = m_actions.begin(); it != m_actions.end(); ++it) {
         QStringList keys;
         for (const QKeySequence &k : it.value()->shortcuts())
@@ -1046,7 +1058,7 @@ KParts::ReadOnlyPart *MainWindow::spawnPart(const QString &id, const QString &pa
             argv << it.key() + QLatin1Char('=') + it.value();
         argv << a.argv;
         part->setProperty("elisZmx", paneId);
-        auto *cover = new PaneLeadCover(part->widget(), terminalDisplay(part), [this, id, part] { takeOver(id, part, true); },
+        auto *cover = new PaneLeadCover(part->widget(), terminalDisplay(part), paneId, [this, id, part] { takeOver(id, part, true); },
                                         [this](QKeyEvent *e) { return isOwnShortcut(e); });
         cover->apply(Zmx::lead(paneId));
     } else {
@@ -1416,7 +1428,8 @@ bool MainWindow::filePanel(const QString &mode, int width, QString *)
 QJsonObject MainWindow::chromeState() const
 {
     QJsonObject out{{"sidebarVisible", !m_sidebarPanel->isHidden()},
-                    {"filePanel", QJsonObject{{"visible", !m_filePanel->isHidden()}, {"width", m_filePanelWidth}}},
+                    {"filePanelVisible", !m_filePanel->isHidden()},
+                    {"filePanelWidth", m_filePanelWidth},
                     {"idleMs", m_idle.elapsed()}};
     if (const qint64 follow = autoFollowMs())
         out.insert("autoFollowMs", follow);

@@ -1,5 +1,6 @@
 #pragma once
 
+#include <QString>
 #include <QWidget>
 
 #include <functional>
@@ -15,9 +16,10 @@ class PaneLeadCover : public QWidget
     Q_OBJECT
 public:
     // `takeOver` replaces the pane with a fresh attach that claims the lead; `ownShortcut` keeps the window's keys
-    PaneLeadCover(QWidget *pane, QWidget *display, std::function<void()> takeOver, std::function<bool(QKeyEvent *)> ownShortcut);
+    PaneLeadCover(QWidget *pane, QWidget *display, const QString &paneId, std::function<void()> takeOver, std::function<bool(QKeyEvent *)> ownShortcut);
     void apply(const Zmx::Lead &lead);
-    static QString title(const QString &role, bool reattaching);
+    static QString title(const QString &role, bool reattaching, bool phone = false);
+    static bool phoneLeads(const QString &paneId);
 
 protected:
     bool eventFilter(QObject *watched, QEvent *event) override;
@@ -26,6 +28,7 @@ protected:
 
 private:
     QWidget *m_display;
+    QString m_paneId;
     QLabel *m_title, *m_hint;
     bool m_covered = false, m_reattaching = false;
     std::function<void()> m_takeOver;

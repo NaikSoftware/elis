@@ -1,0 +1,7 @@
+// linked only where Swift imports the module, which the static musl build never does
+module CElisTLS {
+    header "elis_tls.h"
+    link "ssl"
+    link "crypto"
+    export *
+}

@@ -20,6 +20,14 @@ char *elis_tint_parse(const char *command, const char *argsJSON);
 // {"colors":[{"name","light","dark"}],"shownParts":[…]}: the palette in menu order as #rrggbb per appearance, and the
 // tree's tintOn.
 char *elis_tint_palette(void);
+// session.move's placement intent: {"ok":true} with "to", "workspace", or "anchor" and "after"; else the Mac's refusal.
+char *elis_session_move_arguments(const char *argsJSON);
+// Where session.move --after/--before lands by the Mac's drop math (bridge Sources/ElisBridge/Moves.swift has the shape).
+char *elis_session_placement(const char *json);
+// {"to","index","count"} -> {"ok":true,"destination"?}: a --to step, absent at that end.
+char *elis_reorder_destination(const char *json);
+// A project folder normalized, {"ok":true,"folder"}, or the Mac's refusal; existence is not checked.
+char *elis_project_folder(const char *path);
 // Each cwd's GitHub CI from gh, in order: [{"ci"?:{branch,sha,pr?,runs},"spans":[{text,bold,italic,code,dim,color?}]}],
 // "ci" absent for none. Input a JSON array of cwds. Blocks on gh, so call it off the GUI thread, one call at a time.
 char *elis_ci_statuses(const char *cwdsJSON);
@@ -74,6 +82,12 @@ char *elis_assistant_recap(void);
 // the conversation a launch of provider resumes, "" for none; forget drops it, so the next launch starts afresh
 char *elis_assistant_resume(const char *provider);
 void elis_assistant_forget_resume(const char *provider);
+// session.attach and the phone relay's lines (Sources/ElisBridge/Attach.swift)
+char *elis_zmx_build_cutoff(const char *json); // records this zmx build in the state dir; when it first ran there
+char *elis_session_attach(const char *json);   // a Live pane's viewer or claiming attach
+char *elis_phone_relay_line(const char *line); // one relay stderr line, viewer and lead lines counted
+char *elis_phone_viewers_reset(void);          // the relay stopped: what every count held
+char *elis_phone_viewers(const char *paneID);  // a pane's viewer count and lead
 
 #ifdef __cplusplus
 }

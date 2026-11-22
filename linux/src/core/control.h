@@ -47,6 +47,13 @@ public:
         *error = QStringLiteral("no terminals");
         return false;
     }
+    enum class Backing { None, Plain, Live }; // no terminal yet, a plain shell, a Live pane on zmx
+    virtual Backing backing(const QString &sessionId, const QString &pane) const // pane left | right
+    {
+        Q_UNUSED(sessionId);
+        Q_UNUSED(pane);
+        return Backing::None;
+    }
     // the live panes' ids (ELIS_PANE_ID) by role, left first; a respawned pane gets a new one
     virtual QStringList paneIds(const QString &sessionId) const
     {

@@ -142,6 +142,8 @@ public struct Elisctl: ParsableCommand {
 
     #if os(macOS)
     private static let hostSubcommands: [ParsableCommand.Type] = [Server.self, Mobile.self, Phone.self]
+    #elseif canImport(Glibc)
+    private static let hostSubcommands: [ParsableCommand.Type] = [Mobile.self, Phone.self]
     #else
     private static let hostSubcommands: [ParsableCommand.Type] = []
     #endif

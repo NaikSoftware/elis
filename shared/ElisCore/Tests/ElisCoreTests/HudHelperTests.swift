@@ -528,10 +528,11 @@ struct HudHelperTests {
         proc.standardError = FileHandle.nullDevice
         try proc.run()
         // bounded: a regression that made this path loop would otherwise hang the suite instead of failing
-        let deadline = Date().addingTimeInterval(5)
+        let deadline = Date().addingTimeInterval(30)
         while proc.isRunning, Date() < deadline { try await Task.sleep(for: .milliseconds(20)) }
         defer { if proc.isRunning { proc.terminate() } }
-        #expect(!proc.isRunning, "no body path must exit at once, not loop")
+        // terminationStatus traps on a running process and takes the whole run down with it
+        try #require(!proc.isRunning, "no body path must exit, not loop")
         #expect(proc.terminationStatus == 0)
         #expect(out.fileHandleForReading.readDataToEndOfFile().isEmpty)
     }

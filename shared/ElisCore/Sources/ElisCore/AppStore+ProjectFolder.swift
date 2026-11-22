@@ -14,8 +14,8 @@ public enum ProjectFolderRejection: Error, Equatable, Sendable {
 
 extension Workspace {
     /// `path` normalized, refused when blank, `/`, or `home`: those would own every session.
-    public static func validatedProjectFolder(_ path: String,
-                                              home: String = NSHomeDirectory()) -> Result<String, ProjectFolderRejection> {
+    nonisolated public static func validatedProjectFolder(_ path: String,
+                                                          home: String = NSHomeDirectory()) -> Result<String, ProjectFolderRejection> {
         guard let folder = normalizedFolder(path) else { return .failure(.blank) }
         if folder == "/" || folder == normalizedFolder(home) { return .failure(.rootOrHome) }
         return .success(folder)

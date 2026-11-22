@@ -130,6 +130,19 @@ void main() {
     expect([for (final r in chatRows([_tool('r1', 'Read'), ChatItem.fromJson({'kind': 'text', 'uuid': 'a1'}), _tool('e1', 'Edit')])) r.key], ['e1', 'a1', 'r1']);
   });
 
+  testWidgets('thinkingBetweenCallsJoinsTheRun', (t) async {
+    ChatItem thought(String uuid) => ChatItem.fromJson({'kind': 'thinking', 'uuid': uuid, 'durationMs': 1000});
+    final rows = chatRows([thought('k0'), _tool('r1', 'Read'), thought('k1'), _tool('e1', 'Edit'), thought('k2')]);
+    expect([for (final r in rows) r.key], ['k2', 'group-r1', 'k0']);
+    expect([for (final i in rows[1].group) i.uuid], ['r1', 'k1', 'e1']);
+    expect([for (final r in chatRows([_tool('r1', 'Read'), thought('k1'), ChatItem.fromJson({'kind': 'text', 'uuid': 'a1'})])) r.key], ['a1', 'k1', 'r1']);
+    await _pumpRow(t, rows[1]);
+    expect(find.text('Read, Edit'), findsOneWidget);
+    await t.tap(find.text('Read, Edit'));
+    await t.pumpAndSettle();
+    expect(find.text('Thought for 1s'), findsOneWidget);
+  });
+
   test('runLabelNamesThreeToolsAndCountsTheRest', () {
     final names = ['Read', 'Grep', 'mcp__docs__search', 'Read', 'Bash', 'Edit', 'Grep', 'Write'];
     final run = chatRows([for (final (n, name) in names.indexed) _tool('t$n', name)]).single.group;
@@ -351,6 +364,30 @@ void main() {
     await t.tap(find.byType(Image));
     await t.pumpAndSettle();
     expect(find.byType(InteractiveViewer), findsOneWidget);
+  });
+
+  testWidgets('readPictureOpensInThePageSheet', (t) async {
+    final opened = <String>[];
+    Future<String?> open(String path) async {
+      opened.add(path);
+      return path.endsWith('.PNG') ? 'page overlays need Qt WebEngine' : null;
+    }
+
+    final shot = _tool('r1', 'Read', {'arg': 'shot.PNG', 'file': '/w/shot.PNG', 'output': '', 'mark': 'ok'});
+    final code = _tool('r2', 'Read', {'arg': 'a.dart', 'file': '/w/a.dart', 'output': 'void main() {}', 'mark': 'ok'});
+    await t.pumpWidget(MaterialApp(
+        home: Scaffold(
+            body: Builder(
+                builder: (c) => Column(children: [
+                      for (final r in chatRows([shot, code]).single.group) chatRowWidget(c, ChatRow(r.uuid, item: r), fresh: false, openImage: open),
+                    ])))));
+    await t.tap(find.text('shot.PNG'));
+    await t.tap(find.text('a.dart'));
+    await t.pumpAndSettle();
+    expect(opened, ['/w/shot.PNG']);
+    expect(find.text('page overlays need Qt WebEngine'), findsOneWidget);
+    expect(find.text('void main() {}'), findsOneWidget);
+    await t.pump(const Duration(seconds: 5));
   });
 
   testWidgets('imageOverCapIsPlaceholder', (t) async {

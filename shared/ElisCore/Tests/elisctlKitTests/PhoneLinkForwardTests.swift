@@ -1,5 +1,9 @@
-#if os(macOS)
+#if !canImport(Musl)
+#if canImport(Darwin)
 import Darwin
+#else
+import Glibc
+#endif
 import Foundation
 import Testing
 import ElisCore
@@ -292,7 +296,11 @@ final class LoopbackServer: @unchecked Sendable {
     private var stopped = false
 
     init(port: UInt16 = 0) throws {
+        #if canImport(Darwin)
         let fd = socket(AF_INET, SOCK_STREAM, 0)
+        #else
+        let fd = socket(AF_INET, Int32(SOCK_STREAM.rawValue), 0)
+        #endif
         self.fd = fd
         var on: Int32 = 1
         setsockopt(fd, SOL_SOCKET, SO_REUSEADDR, &on, socklen_t(MemoryLayout<Int32>.size))
@@ -302,7 +310,11 @@ final class LoopbackServer: @unchecked Sendable {
             $0.withMemoryRebound(to: sockaddr.self, capacity: 1) { bind(fd, $0, length) == 0 && getsockname(fd, $0, &length) == 0 }
         }
         guard fd >= 0, bound, listen(fd, 64) == 0 else {
+            #if canImport(Darwin)
             if fd >= 0 { Darwin.close(fd) }
+            #else
+            if fd >= 0 { Glibc.close(fd) }
+            #endif
             throw CocoaError(.fileWriteUnknown)
         }
         self.port = UInt16(bigEndian: address.sin_port)
@@ -346,7 +358,11 @@ final class LoopbackServer: @unchecked Sendable {
 
     func stop() {
         let peers = lock.withLock {
+            #if canImport(Darwin)
             if !stopped { Darwin.close(fd) }
+            #else
+            if !stopped { Glibc.close(fd) }
+            #endif
             stopped = true
             return all
         }
@@ -368,12 +384,18 @@ final class LoopbackServer: @unchecked Sendable {
         private var eof = false
         private var closed = false
 
+        #if canImport(Darwin)
         deinit { Darwin.close(fd) }
+        #else
+        deinit { Glibc.close(fd) }
+        #endif
 
         init(_ fd: Int32) {
             self.fd = fd
+            #if canImport(Darwin)
             var on: Int32 = 1
             setsockopt(fd, SOL_SOCKET, SO_NOSIGPIPE, &on, socklen_t(MemoryLayout<Int32>.size))
+            #endif
             Thread { [self] in
                 var buffer = [UInt8](repeating: 0, count: 65536)
                 while true {
@@ -407,7 +429,11 @@ final class LoopbackServer: @unchecked Sendable {
             lock.withLock {
                 guard !closed else { return }
                 closed = true
+                #if canImport(Darwin)
                 Darwin.shutdown(fd, SHUT_RDWR)
+                #else
+                Glibc.shutdown(fd, Int32(SHUT_RDWR))
+            #endif
             }
         }
 

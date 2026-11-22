@@ -1,6 +1,7 @@
 #include "assistant.h"
 #include "ci.h"
 #include "control.h"
+#include "elis_bridge.h"
 #include "hooks.h"
 #include "installers.h"
 #include "keymap.h"
@@ -44,6 +45,8 @@ public:
     QString text(const QString &, const QString &pane, bool history, QString *) override { return lastPane = pane, history ? scrollback : screen; }
     QHash<QString, QStringList> panes; // session -> pane ids
     QStringList paneIds(const QString &id) const override { return panes.value(id); }
+    QHash<QString, Backing> backings; // "<session>:<pane>"
+    Backing backing(const QString &id, const QString &pane) const override { return backings.value(id + ':' + pane, Backing::None); }
     QList<QJsonObject> events;
     void emitEvent(const QString &kind, const QString &id, const QJsonObject &payload) override { events << QJsonObject{{"kind", kind}, {"session", id}, {"payload", payload}}; }
     QJsonObject info(const QString &) override { return {{"pid", 42}}; }
@@ -259,6 +262,9 @@ private Q_SLOTS:
         QVERIFY(d[3].message.contains("already defined"));
         QList<KeymapDiagnostic> none;
         QVERIFY(parseHooks(starterHooks(), &none).isEmpty() && none.isEmpty());
+        QCOMPARE(parseHooks("on phone.attached a\non phone.detached b\non phone.claimed c\non phone.released d\non phone.connected e\n"
+                            "on phone.disconnected f\non phone.refused g\n", &none).size(), 7);
+        QVERIFY(none.isEmpty() && EventSource::kinds.contains("phone.claimed"));
     }
 
     void hooksRunWithTheEventOnStdinAndReportFailures()
@@ -537,7 +543,7 @@ private Q_SLOTS:
         FakeTerminals t;
         const QString w1 = s.addWorkspace("a"), w2 = s.addWorkspace("b");
         const QString x = s.addSession(w1, {}, {}), y = s.addSession(w1, {}, {}), z = s.addSession(w2, {}, {});
-        QVERIFY(call(s, t, "session.move", y, {{"workspace", "b"}, {"index", 0}})["ok"].toBool());
+        QVERIFY(call(s, t, "session.move", y, {{"before", z}})["ok"].toBool());
         QCOMPARE(s.workspace(w2)->sessions.first().id, y);
         QVERIFY(call(s, t, "session.flag", x, {{"mode", "on"}})["ok"].toBool());
         QVERIFY(s.session(x)->flagged);
@@ -1047,6 +1053,96 @@ private Q_SLOTS:
                  (QJsonObject{{"id", "x"}, {"kind", "right"}, {"active", false}, {"visible", false}, {"backedByZmx", false}}));
     }
 
+    void sessionAttachRefusesInTheMacsOrder()
+    {
+        Store s;
+        FakeTerminals t;
+        const QString id = s.addSession(s.addWorkspace("w"), {}, QDir::homePath());
+        const auto error = [&](const QString &target, const QJsonObject &args) { return call(s, t, "session.attach", target, args).value("error").toString(); };
+        QCOMPARE(error("nope", {{"pane", "scratch"}}), QStringLiteral("invalid pane: scratch")); // the pane is parsed first
+        QVERIFY(error("nope", {}).contains(QLatin1String("nope")));
+        QCOMPARE(error(id, {}), QStringLiteral("session not realized")); // never shown: no pane id yet
+        s.session(id)->paneId = QUuid::createUuid().toString(QUuid::WithoutBraces);
+        QCOMPARE(error(id, {}), QStringLiteral("session not realized"));
+        QCOMPARE(error(id, {{"pane", "right"}}), QStringLiteral("session has no split pane"));
+        QCOMPARE(error(id, {{"paneID", "x"}}), QStringLiteral("unknown pane id: x"));
+        s.session(id)->splitPaneId = QStringLiteral("b"); // a closed split's id names nothing
+        QCOMPARE(error(id, {{"paneID", "b"}}), QStringLiteral("unknown pane id: b"));
+        t.backings.insert(id + ":left", Terminals::Backing::Plain);
+        QCOMPARE(error(id, {}), QStringLiteral("%1 is not a Live session").arg(id));
+        s.select(id);
+        QCOMPARE(error({}, {{"pane", "top"}}), QStringLiteral("active is not a Live session"));
+        s.session(id)->hasSplit = true; // --pane-id wins over --pane
+        QCOMPARE(error(id, {{"pane", "left"}, {"paneID", "b"}}), QStringLiteral("session not realized"));
+    }
+
+    void sessionAttachAnswersAViewerOrAClaimAndRefusesAnOutdatedDaemon()
+    {
+        ZmxNamespace ns;
+        qputenv("ELIS_STATE_DIR", ns.state.path().toUtf8());
+        Store s;
+        FakeTerminals t;
+        const QString id = s.addSession(s.addWorkspace("w"), {}, QDir::homePath()), pane = ns.pane();
+        s.session(id)->paneId = pane;
+        t.backings.insert(id + ":left", Terminals::Backing::Live);
+        const QJsonObject viewer = call(s, t, "session.attach", id).value("result").toObject().value("attach").toObject();
+        const QString daemon = Zmx::daemonName(ns.state.path(), pane);
+        QCOMPARE(viewer.value("paneID").toString(), pane);
+        QCOMPARE(viewer.value("remote").toBool(true), false);
+        QVERIFY(!viewer.contains("nonce") && !viewer.contains("origin"));
+        const QStringList argv = viewer.value("argv").toVariant().toStringList(), screen = viewer.value("screen").toVariant().toStringList();
+        QVERIFY2(argv.contains(Zmx::executable()) && argv.contains(daemon) && argv.contains("ZMX_MANAGED_FOLLOW=1"), qPrintable(argv.join(' ')));
+        QCOMPARE(screen.mid(screen.size() - 3), (QStringList{Zmx::executable(), "screen", daemon}));
+        const QJsonObject claim = call(s, t, "session.attach", id, {{"claim", true}}).value("result").toObject().value("attach").toObject();
+        const QString nonce = claim.value("nonce").toString();
+        QVERIFY(!nonce.isEmpty());
+        QVERIFY(claim.value("argv").toVariant().toStringList().contains("ZMX_MANAGED=" + nonce));
+        QVERIFY(claim.value("argv").toVariant().toStringList().contains("ZMX_MANAGED_CLAIM=1"));
+
+        QCOMPARE(createDetached(ns, pane, QStringLiteral("sleep 30")), daemon);
+        QTest::qWait(1100); // zmx dates a daemon in whole seconds
+        Zmx::recordBuild(ns.state.path()); // a first run of this build, after the daemon started
+        QVERIFY(QFile::exists(ns.state.filePath("zmx-build.json")));
+        QCOMPARE(call(s, t, "session.attach", id).value("error").toString(),
+                 QStringLiteral("session predates this version; restart it to watch it on the phone"));
+        QVERIFY(call(s, t, "session.attach", id, {{"pane", "split"}}).value("error").toString() == QStringLiteral("session has no split pane"));
+        qunsetenv("ELIS_STATE_DIR");
+    }
+
+    void phoneRelayLinesCountViewersAndLeads()
+    {
+        const auto line = [](const char *text) {
+            char *r = elis_phone_relay_line(text);
+            const QJsonObject o = QJsonDocument::fromJson(r).object();
+            elis_free(r);
+            return o;
+        };
+        const auto viewers = [](const QString &pane) {
+            char *r = elis_phone_viewers(pane.toUtf8().constData());
+            const QJsonObject o = QJsonDocument::fromJson(r).object();
+            elis_free(r);
+            return o;
+        };
+        QCOMPARE(line("elisctl: phone attached from 10.0.0.2 pane p1"),
+                 (QJsonObject{{"kind", "viewer"}, {"attached", true}, {"paneID", "p1"}, {"ip", "10.0.0.2"}, {"emit", true}}));
+        line("phone attached from - pane p1");
+        QCOMPARE(line("phone leads from - pane p1"), (QJsonObject{{"kind", "lead"}, {"leading", true}, {"paneID", "p1"}, {"emit", true}}));
+        QCOMPARE(viewers("p1"), (QJsonObject{{"viewers", 2}, {"lead", true}}));
+        QCOMPARE(Zmx::surface({{"id", "x"}, {"kind", "left"}, {"active", true}, {"visible", true}, {"backedByZmx", true}, {"paneID", "p1"}}),
+                 (QJsonObject{{"id", "x"}, {"kind", "left"}, {"active", true}, {"visible", true}, {"backedByZmx", true}, {"paneID", "p1"},
+                              {"phoneViewers", 2}, {"phoneLead", true}}));
+        QCOMPARE(line("phone detached from - pane p1").value("emit").toBool(), true);
+        QCOMPARE(line("phone released from 10.0.0.2 pane p2").value("emit").toBool(), false); // never counted
+        QCOMPARE(line("phone connected from 10.0.0.2").value("event").toString(), QStringLiteral("phone.connected"));
+        QCOMPARE(line("listening on 8765").value("kind").toString(), QStringLiteral("other"));
+        QCOMPARE(line("elisctl: bluetooth: off (powered off)"), (QJsonObject{{"kind", "bluetooth"}, {"value", "off"}, {"text", "Off: powered off"}}));
+        QCOMPARE(line("bluetooth: advertising").value("text").toString(), QStringLiteral("Advertising"));
+        char *r = elis_phone_viewers_reset();
+        QCOMPARE(QJsonDocument::fromJson(r).object(), (QJsonObject{{"detached", QJsonArray{"p1"}}, {"released", QJsonArray{"p1"}}}));
+        elis_free(r);
+        QCOMPARE(viewers("p1"), (QJsonObject{{"viewers", 0}, {"lead", false}}));
+    }
+
     void paneIdsPersistWithTheirSplit()
     {
         Store s;
@@ -1106,8 +1202,12 @@ private Q_SLOTS:
         QCOMPARE(tree[0]["sessions"][0]["name"].toString(), QStringLiteral("x"));
         QVERIFY(tree[0]["sessions"][0]["active"].toBool());
         QVERIFY(!call(s, t, "nope")["ok"].toBool());
+        QCOMPARE(call(s, t, "workspace.delete", "main")["error"].toString(), QStringLiteral("cannot delete last workspace"));
+        const QString w2 = call(s, t, "workspace.new", {}, {{"name", "other"}})["result"]["id"].toString();
         QVERIFY(call(s, t, "workspace.delete", "main")["ok"].toBool());
-        QVERIFY(s.workspaces.isEmpty() && s.selected.isEmpty());
+        QCOMPARE(s.workspaces.size(), 1);
+        QCOMPARE(s.workspaces.first().id, w2);
+        QVERIFY(s.selected.isEmpty());
     }
 
     void anEmptySelectionIsNoSessionSelectedEvent()
@@ -1804,8 +1904,11 @@ private Q_SLOTS:
         Store s;
         FakeTerminals t;
         const QString id = call(s, t, "session.new")["result"]["id"].toString();
-        for (const char *cmd : {"zmx.list", "browser.links", "quick.type", "session.scratch", "session.background", "surface.cursor", "config.reload", "session.restart"})
+        for (const char *cmd : {"zmx.list", "browser.links", "quick.type", "session.scratch", "session.background", "surface.cursor", "config.reload",
+                                "session.restart", "session.page", "session.overlay.follow", "session.overlay.search", "session.overlay.changes",
+                                "session.overlay.files", "session.overlay.wrap"})
             QVERIFY2(call(s, t, cmd, id)["error"].toString().startsWith(QLatin1String(cmd) + QStringLiteral(" is not supported on this platform (")), cmd);
+        QVERIFY(unsupportedReason(QStringLiteral("session.overlay.copy")).isEmpty());
         QVERIFY(call(s, t, "no.such")["error"].toString().startsWith(QStringLiteral("unknown command")));
         QCOMPARE(pickArgsError({}), QStringLiteral("pick.open requires items"));
         QCOMPARE(pickArgsError({{"items", QJsonArray{QJsonObject{{"id", "a"}, {"label", "A"}}, QJsonObject{{"id", "a"}, {"label", "B"}}}}}),
@@ -1823,6 +1926,195 @@ private Q_SLOTS:
         QCOMPARE(t.appCmd, QStringLiteral("ask.open"));
         QCOMPARE(call(s, t, "pick.result")["error"].toString(), QStringLiteral("pick.result requires a pick id"));
         QCOMPARE(call(s, t, "session.search", id, {{"to", "up"}})["error"].toString(), QStringLiteral("session.search --to must be next|prev|close"));
+    }
+
+    void workspaceNewCollapsedFolderAndFolderCommand()
+    {
+        QTemporaryDir tmp;
+        const QString proj = tmp.filePath("proj"), sub = tmp.filePath("proj/sub"), deep = tmp.filePath("proj/sub/leaf");
+        QVERIFY(QDir().mkpath(deep));
+
+        Store s;
+        FakeTerminals t;
+        const QString w1 = call(s, t, "workspace.new", {}, {{"name", "main"}})["result"]["id"].toString();
+        const QString s1 = s.addSession(w1, "s1", {});
+        s.select(s1);
+        s.focusWorkspace(w1, "on");
+        QVERIFY(s.focusEnabled);
+
+        // --folder validation on workspace.new refuses before creating anything
+        QCOMPARE(call(s, t, "workspace.new", {}, {{"name", "bad"}, {"folder", "   "}})["error"].toString(),
+                 QStringLiteral("project folder must not be blank"));
+        QCOMPARE(call(s, t, "workspace.new", {}, {{"name", "bad"}, {"folder", "/"}})["error"].toString(),
+                 QStringLiteral("project folder must not be / or the home folder"));
+        QCOMPARE(call(s, t, "workspace.new", {}, {{"name", "bad"}, {"folder", "~"}})["error"].toString(),
+                 QStringLiteral("project folder must not be / or the home folder"));
+        QCOMPARE(call(s, t, "workspace.new", {}, {{"name", "bad"}, {"folder", QDir::homePath()}})["error"].toString(),
+                 QStringLiteral("project folder must not be / or the home folder"));
+        QCOMPARE(call(s, t, "workspace.new", {}, {{"name", "bad"}, {"folder", tmp.filePath("missing")}})["error"].toString(),
+                 QStringLiteral("no such directory: %1").arg(QDir::cleanPath(tmp.filePath("missing"))));
+        QCOMPARE(s.workspaces.size(), 1);
+
+        // --collapsed creates folded, outside the active focus set, without stealing active workspace
+        const QString w2 = call(s, t, "workspace.new", {}, {{"name", "folded"}, {"collapsed", true}, {"folder", proj + "/"}})["result"]["id"].toString();
+        QVERIFY(s.collapsed.contains(w2));
+        QVERIFY(!s.focused.contains(w2));
+        QCOMPARE(s.workspace(w2)->projectFolder, QDir::cleanPath(proj));
+        const QJsonArray wsNodes = call(s, t, "tree")["result"]["tree"]["workspaces"].toArray();
+        QVERIFY(wsNodes[0]["active"].toBool());
+        QVERIFY(!wsNodes[1]["active"].toBool());
+        QVERIFY(wsNodes[1]["collapsed"].toBool());
+        QCOMPARE(wsNodes[1]["projectFolder"].toString(), QDir::cleanPath(proj));
+        QVERIFY(!wsNodes[0].toObject().contains("projectFolder"));
+
+        // workspace.folder set / clear and validation errors
+        QCOMPARE(call(s, t, "workspace.folder", w1, {{"mode", "bogus"}})["error"].toString(),
+                 QStringLiteral("invalid folder mode: bogus (set|clear)"));
+        QCOMPARE(call(s, t, "workspace.folder", w1, {{"mode", "set"}})["error"].toString(),
+                 QStringLiteral("workspace.folder set requires a folder"));
+        QCOMPARE(call(s, t, "workspace.folder", w1, {{"mode", "clear"}, {"folder", proj}})["error"].toString(),
+                 QStringLiteral("workspace.folder clear takes no folder"));
+        QCOMPARE(call(s, t, "workspace.folder", "no-such-ws", {{"mode", "set"}, {"folder", "/"}})["error"].toString(),
+                 QStringLiteral("project folder must not be / or the home folder"));
+        QVERIFY(call(s, t, "workspace.folder", w1, {{"mode", "set"}, {"folder", sub}})["ok"].toBool());
+        QCOMPARE(s.workspace(w1)->projectFolder, QDir::cleanPath(sub));
+
+        // deepest projectFolder wins for session.new --cwd, regardless of newSessionDirectory setting
+        s.settings.newSessionDirectory = "home";
+        const QString inSub = call(s, t, "session.new", {}, {{"cwd", deep}})["result"]["id"].toString();
+        QCOMPARE(s.workspaceOf(inSub)->id, w1);
+        const QString inProj = call(s, t, "session.new", {}, {{"cwd", proj}})["result"]["id"].toString();
+        QCOMPARE(s.workspaceOf(inProj)->id, w2);
+
+        // persistence round-trip preserves projectFolder
+        Store restored;
+        restored.fromJson(s.toJson());
+        QCOMPARE(restored.workspace(w1)->projectFolder, QDir::cleanPath(sub));
+        QCOMPARE(restored.workspace(w2)->projectFolder, QDir::cleanPath(proj));
+
+        // clear removes projectFolder
+        QVERIFY(call(s, t, "workspace.folder", w1, {{"mode", "clear"}})["ok"].toBool());
+        QVERIFY(s.workspace(w1)->projectFolder.isEmpty());
+        QVERIFY(!call(s, t, "tree")["result"]["tree"]["workspaces"].toArray()[0].toObject().contains("projectFolder"));
+    }
+
+    void workspaceSelectEmptyAndMove()
+    {
+        Store s;
+        FakeTerminals t;
+        const QString w1 = call(s, t, "workspace.new", {}, {{"name", "one"}})["result"]["id"].toString();
+        const QString a = s.addSession(w1, "a", {});
+        s.select(a);
+        const QString w2 = call(s, t, "workspace.new", {}, {{"name", "two"}, {"collapsed", true}})["result"]["id"].toString();
+        const QString w3 = call(s, t, "workspace.new", {}, {{"name", "three"}, {"collapsed", true}})["result"]["id"].toString();
+
+        // selecting an empty workspace succeeds and makes it active in tree
+        s.focusWorkspace(w1, "on");
+        QVERIFY(call(s, t, "workspace.select", w2)["ok"].toBool());
+        QVERIFY(s.focused.contains(w2)); // revealed in focus set
+        QString err;
+        QCOMPARE(s.resolveWorkspace({}, &err), w2);
+        const QJsonArray ws = call(s, t, "tree")["result"]["tree"]["workspaces"].toArray();
+        QVERIFY(!ws[0]["active"].toBool());
+        QVERIFY(ws[1]["active"].toBool());
+
+        // re-selecting the selected session changes nothing, so a sidebar rebuild cannot re-enter
+        QSignalSpy changes(&s, &Store::changed);
+        s.select(a);
+        QCOMPARE(changes.count(), 0);
+        QCOMPARE(s.resolveWorkspace({}, &err), w2);
+        // selecting w1 again restores w1 as active even though s.selected was still 'a'
+        QVERIFY(call(s, t, "workspace.select", w1)["ok"].toBool());
+        QCOMPARE(s.resolveWorkspace({}, &err), w1);
+
+        // workspace.move --to up|down|top|bottom and validation
+        QCOMPARE(call(s, t, "workspace.move", w1, {})["error"].toString(), QStringLiteral("workspace.move requires --to"));
+        QCOMPARE(call(s, t, "workspace.move", "no-such", {{"to", "sideways"}})["error"].toString(),
+                 QStringLiteral("workspace.move --to must be up|down|top|bottom"));
+        auto order = [&] {
+            QStringList ids;
+            for (const auto &w : s.workspaces)
+                ids << w.id;
+            return ids;
+        };
+        QCOMPARE(order(), (QStringList{w1, w2, w3}));
+        QVERIFY(call(s, t, "workspace.move", w1, {{"to", "up"}})["ok"].toBool()); // boundary no-op
+        QCOMPARE(order(), (QStringList{w1, w2, w3}));
+        QVERIFY(call(s, t, "workspace.move", w1, {{"to", "down"}})["ok"].toBool());
+        QCOMPARE(order(), (QStringList{w2, w1, w3}));
+        QVERIFY(call(s, t, "workspace.move", w3, {{"to", "top"}})["ok"].toBool());
+        QCOMPARE(order(), (QStringList{w3, w2, w1}));
+        QVERIFY(call(s, t, "workspace.move", w3, {{"to", "bottom"}})["ok"].toBool());
+        QCOMPARE(order(), (QStringList{w2, w1, w3}));
+    }
+
+    void sessionMoveDirectionsAnchorsAndCompanions()
+    {
+        Store s;
+        FakeTerminals t;
+        const QString w1 = s.addWorkspace("w1"), w2 = s.addWorkspace("w2");
+        const QString a = s.addSession(w1, "a", {}), b = s.addSession(w1, "b", {}), c = s.addSession(w1, "c", {});
+        const QString bComp1 = s.addCompanion(b, "bc1", {}), bComp2 = s.addCompanion(b, "bc2", {});
+        const QString d = s.addSession(w2, "d", {});
+
+        // argument conflict validation
+        QCOMPARE(call(s, t, "session.move", a, {{"after", b}, {"before", c}})["error"].toString(),
+                 QStringLiteral("use either --after or --before, not both"));
+        QCOMPARE(call(s, t, "session.move", a, {{"after", b}, {"to", "up"}})["error"].toString(),
+                 QStringLiteral("session.move takes --after/--before or --to, not both"));
+        QCOMPARE(call(s, t, "session.move", a, {{"before", b}, {"workspace", "w2"}})["error"].toString(),
+                 QStringLiteral("session.move takes --after/--before or a workspace, not both"));
+        QCOMPARE(call(s, t, "session.move", a, {{"to", "up"}, {"workspace", "w2"}})["error"].toString(),
+                 QStringLiteral("session.move takes either --to or a workspace, not both"));
+        QCOMPARE(call(s, t, "session.move", a, {{"to", "left"}})["error"].toString(),
+                 QStringLiteral("session.move --to must be up|down|top|bottom"));
+        QCOMPARE(call(s, t, "session.move", a, {{"to", "up"}, {"targets", QJsonArray{a, c}}})["error"].toString(),
+                 QStringLiteral("session.move --target can be repeated only with a workspace or --after/--before"));
+        QCOMPARE(call(s, t, "session.move", a, {})["error"].toString(),
+                 QStringLiteral("session.move requires --to or a workspace"));
+
+        auto idsIn = [&](const QString &ws) {
+            QStringList ids;
+            for (const auto &x : s.workspace(ws)->sessions)
+                ids << x.id;
+            return ids;
+        };
+        // --to on top-level session moves its companion group as a unit
+        QCOMPARE(idsIn(w1), (QStringList{a, b, bComp1, bComp2, c}));
+        QVERIFY(call(s, t, "session.move", b, {{"to", "up"}})["ok"].toBool());
+        QCOMPARE(idsIn(w1), (QStringList{b, bComp1, bComp2, a, c}));
+        QVERIFY(call(s, t, "session.move", b, {{"to", "bottom"}})["ok"].toBool());
+        QCOMPARE(idsIn(w1), (QStringList{a, c, b, bComp1, bComp2}));
+        QVERIFY(call(s, t, "session.move", b, {{"to", "top"}})["ok"].toBool());
+        QCOMPARE(idsIn(w1), (QStringList{b, bComp1, bComp2, a, c}));
+
+        // --to on a companion reorders among its siblings
+        QVERIFY(call(s, t, "session.move", bComp2, {{"to", "up"}})["ok"].toBool());
+        QCOMPARE(idsIn(w1), (QStringList{b, bComp2, bComp1, a, c}));
+        QVERIFY(call(s, t, "session.move", bComp2, {{"to", "down"}})["ok"].toBool());
+        QCOMPARE(idsIn(w1), (QStringList{b, bComp1, bComp2, a, c}));
+
+        // --after on a parent with companions places after its companion group
+        QVERIFY(call(s, t, "session.move", c, {{"after", b}})["ok"].toBool());
+        QCOMPARE(idsIn(w1), (QStringList{b, bComp1, bComp2, c, a}));
+
+        // companion move restrictions
+        static const QString compErr = QStringLiteral("a companion moves only among its siblings; use --parent to move it under another session");
+        QCOMPARE(call(s, t, "session.move", bComp1, {{"workspace", w2}})["error"].toString(), compErr);
+        QCOMPARE(call(s, t, "session.move", bComp1, {{"before", b}})["error"].toString(), compErr);
+        QCOMPARE(call(s, t, "session.move", bComp1, {{"after", d}})["error"].toString(), compErr);
+        QVERIFY(call(s, t, "session.move", bComp1, {{"after", bComp2}})["ok"].toBool());
+        QCOMPARE(idsIn(w1), (QStringList{b, bComp2, bComp1, c, a}));
+
+        // batch move with --before across workspaces
+        QCOMPARE(call(s, t, "session.move", {}, {{"targets", QJsonArray{c, a}}, {"before", d}})["result"]["affected"].toInt(), 2);
+        QCOMPARE(idsIn(w2), (QStringList{c, a, d}));
+        QCOMPARE(call(s, t, "session.move", {}, {{"targets", QJsonArray{c, a}}, {"before", d}})["result"]["affected"].toInt(), 0); // in place
+        QCOMPARE(call(s, t, "session.move", {}, {{"targets", QJsonArray{}}, {"workspace", w1}})["error"].toString(),
+                 QStringLiteral("session.move requires at least one --target"));
+        QCOMPARE(call(s, t, "session.move", {}, {{"targets", QJsonArray{c, a}}, {"workspace", w1}})["result"]["affected"].toInt(), 2);
+        QCOMPARE(idsIn(w1), (QStringList{b, bComp2, bComp1, c, a}));
+        QCOMPARE(call(s, t, "session.move", {}, {{"targets", QJsonArray{c, a}}, {"workspace", w1}})["result"]["affected"].toInt(), 0); // already there
     }
 
     static QString slurp(const QString &path)

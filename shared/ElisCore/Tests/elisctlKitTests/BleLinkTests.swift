@@ -1,5 +1,9 @@
+#if !canImport(Musl)
 #if os(macOS)
 import CryptoKit
+#else
+import Crypto
+#endif
 import Foundation
 @testable import elisctlKit
 import Testing

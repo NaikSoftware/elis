@@ -29,8 +29,8 @@ An elis-server host is not this app: SKILL.md's "Remote windows and elis-server"
 - `session overlay open` runs the program in a temporary Konsole terminal; `--background-color` tints only the
   floating frame.
 - Most mutations print nothing rather than `ok`; create commands still print the new id.
-- `tree`'s `surfaces[]` carries `id`, `kind`, `active`, `visible`, `backedByZmx`, `lead` and `paneID`, but no
-  per-pane status, `pendingMessages`, `phoneViewers` or `phoneLead`.
+- `tree`'s `surfaces[]` carries `id`, `kind`, `active`, `visible`, `backedByZmx`, `lead`, `paneID`, `phoneViewers`
+  and `phoneLead`, but no per-pane status or `pendingMessages`.
 - `msg send --all` reaches the addressed window only.
 - The Elis assistant (`assistant` and `reply`) is available in the Linux app now (macOS gets it later); see [reference.md](reference.md#assistant).
 - A terminal-style `ask` is a dialog over the window, not drawn in the pane; `pick` rows show no status glyph.
@@ -38,7 +38,10 @@ An elis-server host is not this app: SKILL.md's "Remote windows and elis-server"
 - `keymap.conf`: `--repeat` is accepted with a diagnostic and not honoured; `global-hotkey` is skipped.
 - On Wayland `window move` is refused and `window list` omits `x`/`y`.
 - The phone: Settings ▸ Connect a Phone…, or `elisctl mobile serve [--port N] [--bind ADDR] [--host NAME]`, which
-  runs the relay and prints the pairing QR code and link; `mobile reset` replaces the token. There is no `phone …` command.
+  runs the Mac's relay (Term, direct input, Fit to phone, Chat, Bluetooth through BlueZ; pages are refused) and prints
+  the pairing QR code and link; `mobile reset` replaces the token. `--no-bluetooth` turns Bluetooth off; stderr says
+  `bluetooth: advertising` or `off (<reason>)`, as Connect a Phone…'s Bluetooth row does. There is no `phone …`
+  command. `session attach [--pane left|right] [--claim] [--json]` attaches to a Live pane (no `origin`).
 
 ## Not supported
 
@@ -47,13 +50,14 @@ These answer `<cmd> is not supported on this platform (<reason>)`:
 - quick terminal (`quick …`) and scratch terminal (`session scratch`);
 - every `zmx …` command, remote sessions, `session lead` (a covered pane takes the lead with a key), `session restart`;
 - `session background`, `surface cursor`, `config reload`;
-- the built-in browser (`browser …`), page overlays (`session overlay open --html|--url`,
-  `overlay reload|navigate|submit|copy`) and page companions: they need Qt WebEngine.
+- `browser …`: there is no built-in browser, and links open in the system browser;
+- page sessions (`session page`, `session overlay open --page`), page overlays (`session overlay open --html|--url`,
+  `overlay reload|navigate|submit|follow|search|changes|files|wrap`) and page companions: they need Qt WebEngine.
   There is no inline image, rendered markdown or file-at-line view either: never pass `--image`, `--markdown` or
   `--text` to `overlay open` (`--markdown FILE` would run FILE as the command).
   Show a file by running a viewer as the overlay program (`less +N file`, `glow file`).
 
-Also absent from the CLI: `session wait` (use `events`), `clipboard set` (use `wl-copy`/`xclip`), `terminfo`, `overlay copy`,
+Also absent from the CLI: `session wait` (use `events`), `clipboard set` (use `wl-copy`/`xclip`), `terminfo`,
 per-call status colour, shape, sound and pane, and
 `session new --wait|--after|--before`.
 

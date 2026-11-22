@@ -1,8 +1,15 @@
-#if os(macOS)
+#if !canImport(Musl)
 import Foundation
 
+#if canImport(Darwin)
+// TIOCSWINSZ is _IOW('t', 103, struct winsize) and FIONREAD _IOR('f', 127, int), macros Swift does not import
+private let setWindowSize = UInt(0x8008_7467), unreadCount = UInt(0x4004_667f)
+#else
+private let setWindowSize = UInt(TIOCSWINSZ), unreadCount = UInt(FIONREAD)
+#endif
+
 /// PhoneLinkPty runs one phone pane's attach command on its own pty and reads the controller at full speed on a
-/// dedicated thread. macOS only: Swift's Glibc does not export posix_openpt, grantpt, unlockpt or ptsname.
+/// dedicated thread. Linux opens it with openpty: Swift's Glibc does not export posix_openpt, grantpt, unlockpt or ptsname.
 final class PhoneLinkPty: @unchecked Sendable {
     /// Failure reports the system call that kept the command from starting; `errno` is its code.
     struct Failure: Error, Equatable {
@@ -50,14 +57,24 @@ final class PhoneLinkPty: @unchecked Sendable {
                       onOutput: @escaping @Sendable (Data) -> Void,
                       onExit: @escaping @Sendable (Int32) -> Void) throws -> PhoneLinkPty {
         guard !argv.isEmpty else { throw Failure(operation: "spawn", errno: EINVAL) }
+        #if canImport(Darwin)
         let controller = posix_openpt(O_RDWR | O_NOCTTY)
         guard controller >= 0 else { throw Failure(operation: "posix_openpt", errno: errno) }
+        #else
+        var controller: Int32 = -1, terminal: Int32 = -1
+        guard openpty(&controller, &terminal, nil, nil, nil) == 0 else { throw Failure(operation: "openpty", errno: errno) }
+        defer { close(terminal) }
+        #endif
         do {
             guard fcntl(controller, F_SETFD, FD_CLOEXEC) == 0 else { throw Failure(operation: "fcntl", errno: errno) }
+            #if !canImport(Darwin)
+            guard fcntl(terminal, F_SETFD, FD_CLOEXEC) == 0 else { throw Failure(operation: "fcntl", errno: errno) }
+            #endif
             // a program that stops reading must not block the writer under the lock
             guard fcntl(controller, F_SETFL, fcntl(controller, F_GETFL) | O_NONBLOCK) == 0 else {
                 throw Failure(operation: "fcntl", errno: errno)
             }
+            #if canImport(Darwin)
             guard grantpt(controller) == 0 else { throw Failure(operation: "grantpt", errno: errno) }
             guard unlockpt(controller) == 0 else { throw Failure(operation: "unlockpt", errno: errno) }
             guard let name = ptsname(controller) else { throw Failure(operation: "ptsname", errno: errno) }
@@ -66,9 +83,15 @@ final class PhoneLinkPty: @unchecked Sendable {
             let terminal = open(path, O_RDWR | O_NOCTTY | O_CLOEXEC)
             guard terminal >= 0 else { throw Failure(operation: "open terminal", errno: errno) }
             defer { close(terminal) }
+            #else
+            // not ttyname, whose static buffer another pane's spawn can rewrite mid-read (posix_spawnp then failed EISDIR)
+            var name = [CChar](repeating: 0, count: 128)
+            let named = ttyname_r(terminal, &name, name.count)
+            guard named == 0 else { throw Failure(operation: "ttyname_r", errno: named) }
+            let path = String(decoding: name.prefix { $0 != 0 }.map { UInt8(bitPattern: $0) }, as: UTF8.self)
+            #endif
             var size = winsize(ws_row: rows, ws_col: cols, ws_xpixel: 0, ws_ypixel: 0)
-            // TIOCSWINSZ is _IOW('t', 103, struct winsize), a macro Swift does not import
-            guard ioctl(terminal, UInt(0x8008_7467), &size) == 0 else { throw Failure(operation: "TIOCSWINSZ", errno: errno) }
+            guard ioctl(terminal, setWindowSize, &size) == 0 else { throw Failure(operation: "TIOCSWINSZ", errno: errno) }
             let pid = try launch(argv, terminalPath: path)
             let pty = PhoneLinkPty(pid: pid, controller: controller, terminalPath: path, onOutput: onOutput)
             let reader = Thread { pty.readUntilEnd(onExit: onExit) }
@@ -128,7 +151,7 @@ final class PhoneLinkPty: @unchecked Sendable {
             let terminal = open(terminalPath, O_RDWR | O_NOCTTY | O_CLOEXEC | O_NONBLOCK)
             guard terminal >= 0 else { return }
             var size = winsize(ws_row: rows, ws_col: cols, ws_xpixel: 0, ws_ypixel: 0)
-            _ = ioctl(terminal, UInt(0x8008_7467), &size)
+            _ = ioctl(terminal, setWindowSize, &size)
             close(terminal)
             // the kernel signals only a controlling terminal's foreground group, and the spawned command has none
             kill(-pid, SIGWINCH)
@@ -170,8 +193,7 @@ final class PhoneLinkPty: @unchecked Sendable {
         guard terminal >= 0 else { return 0 }
         defer { close(terminal) }
         var count: Int32 = 0
-        // FIONREAD is _IOR('f', 127, int), a macro Swift does not import
-        return ioctl(terminal, UInt(0x4004_667f), &count) == 0 ? count : 0
+        return ioctl(terminal, unreadCount, &count) == 0 ? count : 0
     }
 
     private func endWrites() {
@@ -186,7 +208,11 @@ final class PhoneLinkPty: @unchecked Sendable {
         while offset < bytes.count {
             let result: (count: Int, errno: Int32)? = lock.withLock {
                 guard !stopping, !closed else { return nil }
+                #if canImport(Darwin)
                 let count = bytes.withUnsafeBytes { Darwin.write(controller, $0.baseAddress! + offset, bytes.count - offset) }
+                #else
+                let count = bytes.withUnsafeBytes { Glibc.write(controller, $0.baseAddress! + offset, bytes.count - offset) }
+                #endif
                 return (count, errno)
             }
             guard let result else { return 0 }
@@ -250,15 +276,27 @@ final class PhoneLinkPty: @unchecked Sendable {
     }
 
     private static func launch(_ argv: [String], terminalPath: String) throws -> pid_t {
+        #if canImport(Darwin)
         var actions: posix_spawn_file_actions_t?
+        #else
+        var actions = posix_spawn_file_actions_t()
+        #endif
         try check(posix_spawn_file_actions_init(&actions), "posix_spawn_file_actions_init")
         defer { posix_spawn_file_actions_destroy(&actions) }
         // macOS makes this no controlling terminal for the child, so `resize` signals its group itself
         try check(posix_spawn_file_actions_addopen(&actions, STDIN_FILENO, terminalPath, O_RDWR, 0), "posix_spawn_file_actions_addopen")
         try check(posix_spawn_file_actions_adddup2(&actions, STDIN_FILENO, STDOUT_FILENO), "posix_spawn_file_actions_adddup2")
         try check(posix_spawn_file_actions_adddup2(&actions, STDIN_FILENO, STDERR_FILENO), "posix_spawn_file_actions_adddup2")
+        #if !canImport(Darwin)
+        // in place of POSIX_SPAWN_CLOEXEC_DEFAULT below; Linux, unlike macOS, makes the terminal the controlling one
+        try check(posix_spawn_file_actions_addclosefrom_np(&actions, 3), "posix_spawn_file_actions_addclosefrom_np")
+        #endif
 
+        #if canImport(Darwin)
         var attributes: posix_spawnattr_t?
+        #else
+        var attributes = posix_spawnattr_t()
+        #endif
         try check(posix_spawnattr_init(&attributes), "posix_spawnattr_init")
         defer { posix_spawnattr_destroy(&attributes) }
         var noSignals = sigset_t()
@@ -268,7 +306,12 @@ final class PhoneLinkPty: @unchecked Sendable {
         try check(posix_spawnattr_setsigmask(&attributes, &noSignals), "posix_spawnattr_setsigmask")
         try check(posix_spawnattr_setsigdefault(&attributes, &allSignals), "posix_spawnattr_setsigdefault")
         // the child gets only stdin, stdout and stderr; a leaked terminal from another pane would block that pane's EOF
+        #if canImport(Darwin)
         let flags = POSIX_SPAWN_CLOEXEC_DEFAULT | POSIX_SPAWN_SETSID | POSIX_SPAWN_SETSIGMASK | POSIX_SPAWN_SETSIGDEF
+        #else
+        // 0x80 is glibc's POSIX_SPAWN_SETSID, which Swift's Glibc does not export
+        let flags = 0x80 | POSIX_SPAWN_SETSIGMASK | POSIX_SPAWN_SETSIGDEF
+        #endif
         try check(posix_spawnattr_setflags(&attributes, Int16(flags)), "posix_spawnattr_setflags")
 
         var environment = ProcessInfo.processInfo.environment
@@ -280,7 +323,7 @@ final class PhoneLinkPty: @unchecked Sendable {
         var pid: pid_t = 0
         let spawned = arguments.withUnsafeMutableBufferPointer { args in
             variables.withUnsafeMutableBufferPointer { vars in
-                posix_spawnp(&pid, argv[0], &actions, &attributes, args.baseAddress, vars.baseAddress)
+                posix_spawnp(&pid, argv[0], &actions, &attributes, args.baseAddress!, vars.baseAddress!)
             }
         }
         try check(spawned, "posix_spawnp")

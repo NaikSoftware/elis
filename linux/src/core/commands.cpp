@@ -4,8 +4,10 @@
 #include <QJsonDocument>
 #include "control.h"
 #include "hooks.h"
+#include "paths.h"
 #include "store.h"
 #include "transcript.h"
+#include "zmx.h"
 
 #include <QDateTime>
 #include <QDir>
@@ -30,13 +32,18 @@ QString unsupportedReason(const QString &cmd)
     static const QList<std::pair<QString, QString>> absent{
         {"zmx", "the zmx commands are not ported to Elis yet"},
         {"session.restart", "it is not ported to Elis's live sessions"},
-        {"session.lead", "pane leads belong to remote sessions, which Elis does not have"},
-        {"browser", "Elis has no built-in browser: page overlays need Qt WebEngine"},
+        {"session.lead", "it is not ported; a covered pane takes the lead with a key in it"},
+        {"browser", "Elis has no built-in browser: links open in the system browser"},
+        {"session.page", "page sessions need Qt WebEngine, which Elis does not have"},
         {"session.companion.page", "page companions need Qt WebEngine, which Elis does not have"},
         {"session.overlay.reload", "page overlays need Qt WebEngine, which Elis does not have"},
         {"session.overlay.navigate", "page overlays need Qt WebEngine, which Elis does not have"},
         {"session.overlay.submit", "page overlays need Qt WebEngine, which Elis does not have"},
-        {"session.overlay.copy", "page overlays need Qt WebEngine, which Elis does not have"},
+        {"session.overlay.follow", "it acts on a text page, a page overlay, which needs Qt WebEngine"},
+        {"session.overlay.search", "it acts on a text page, a page overlay, which needs Qt WebEngine"},
+        {"session.overlay.changes", "it acts on a text page, a page overlay, which needs Qt WebEngine"},
+        {"session.overlay.files", "it acts on a text page, a page overlay, which needs Qt WebEngine"},
+        {"session.overlay.wrap", "it acts on a text page, a page overlay, which needs Qt WebEngine"},
         {"session.overlay.job.run", "remote overlay jobs need a remote viewer, which Elis does not have"},
         {"session.overlay.page.serve", "page overlays need Qt WebEngine, which Elis does not have"},
         {"quick", "Elis has no quick terminal"},
@@ -91,7 +98,7 @@ static QJsonObject sessionTranscript(Store &store, Terminals &terminals, const Q
     return {{"deferred", true}};
 }
 
-// workspace.go: the visible workspaces in order, wrapping; lands on the workspace's first session
+// workspace.go: the visible workspaces in order, wrapping; lands on the workspace's first session (or selects the empty workspace)
 static QJsonObject workspaceGo(Store &store, const QJsonObject &args)
 {
     const QString to = args.value("to").toString();
@@ -100,13 +107,13 @@ static QJsonObject workspaceGo(Store &store, const QJsonObject &args)
     const QList<Workspace *> visible = store.visibleWorkspaces();
     if (store.flaggedView || visible.size() < 2)
         return fail(QStringLiteral("no other workspace to navigate to"));
-    const Workspace *cur = store.workspaceOf(store.selected);
+    QString ignored;
+    const Workspace *cur = store.workspace(store.resolveWorkspace({}, &ignored));
     const qsizetype at = cur ? visible.indexOf(cur) : -1;
     const qsizetype n = visible.size();
     const bool next = to == QLatin1String("next");
     Workspace *dest = at < 0 ? (next ? visible.first() : visible.last()) : visible[((at + (next ? 1 : -1)) % n + n) % n];
-    if (!dest->sessions.isEmpty())
-        store.select(dest->sessions.first().id);
+    store.selectWorkspace(dest->id);
     return ok({{"id", dest->id}});
 }
 
@@ -203,6 +210,38 @@ static QJsonObject sessionScroll(Store &store, Terminals &terminals, const QStri
         return fail(QStringLiteral("session.scroll: lines must be -1000...1000 and not 0"));
     QString error;
     return terminals.scroll(id, pane, lines, &error) ? ok({{"id", id}, {"pane", pane}, {"lines", lines}}) : fail(error);
+}
+
+// session.attach: the Mac's ControlServer+Attach, its refusals in its order; the pane is parsed before the target
+static QJsonObject sessionAttach(Store &store, Terminals &terminals, const QString &target, const QJsonObject &args)
+{
+    const QString raw = args.value("pane").toString(QStringLiteral("left"));
+    if (!leftPane.contains(raw) && !rightPane.contains(raw))
+        return fail(QStringLiteral("invalid pane: %1").arg(raw));
+    QString error;
+    const QString id = store.resolveSession(target, &error);
+    if (id.isEmpty())
+        return fail(error);
+    const Session *s = store.session(id);
+    bool right = rightPane.contains(raw);
+    if (const QString token = args.value("paneID").toString(); !token.isEmpty()) {
+        if (token != s->paneId && !(s->hasSplit && token == s->splitPaneId))
+            return fail(QStringLiteral("unknown pane id: %1").arg(token));
+        right = token != s->paneId;
+    }
+    if (right && !s->hasSplit)
+        return fail(QStringLiteral("session has no split pane"));
+    const QString paneId = right ? s->splitPaneId : s->paneId;
+    const Terminals::Backing backing = terminals.backing(id, right ? QStringLiteral("right") : QStringLiteral("left"));
+    if (paneId.isEmpty() || backing == Terminals::Backing::None) // a pane never shown since launch has no zmx client to read
+        return fail(QStringLiteral("session not realized"));
+    const QString refusal = QStringLiteral("%1 is not a Live session").arg(target.isEmpty() ? QStringLiteral("active") : target);
+    if (backing != Terminals::Backing::Live)
+        return fail(refusal);
+    const QJsonObject r = Zmx::phoneAttach(stateDir(), paneId, args.value("claim").toBool());
+    if (r.value("outdated").toBool()) // its own zmx would ignore the viewer's skip-scrollback flag and overflow the relay
+        return fail(QStringLiteral("session predates this version; restart it to watch it on the phone"));
+    return r.contains("attach") ? ok({{"attach", r.value("attach")}}) : fail(refusal);
 }
 
 static QJsonObject sessionText(Store &store, Terminals &terminals, const QString &id, const QJsonObject &args)
@@ -435,14 +474,59 @@ static QJsonObject messageCommand(Store &store, Terminals &terminals, const QStr
     return ok(result);
 }
 
-// session.close / session.move with repeated --target (args.targets); null when the request is a single target
-static std::optional<QJsonObject> batch(Store &store, const QString &cmd, const QJsonObject &args)
+// session.move for one target or a repeated --target: ControlDispatcher's parse and ServerActions+Moves.swift's dispatch
+static QJsonObject sessionMove(Store &store, const QString &target, const QJsonObject &args)
+{
+    QJsonObject request;
+    for (const char *key : {"to", "workspace", "after", "before", "targets"})
+        if (!args.value(QLatin1String(key)).isNull() && !args.value(QLatin1String(key)).isUndefined())
+            request.insert(QLatin1String(key), args.value(QLatin1String(key)));
+    const QJsonObject move = Store::bridge(elis_session_move_arguments, request);
+    if (!move.value("ok").toBool())
+        return fail(move.value("error").toString(QStringLiteral("the move check gave no answer")));
+    const QJsonArray raw = args.value("targets").toArray();
+    if (request.contains("targets") && raw.isEmpty())
+        return fail(QStringLiteral("session.move requires at least one --target"));
+    const bool single = raw.size() < 2; // a one-member batch is the single move
+    QStringList ids;
+    QString error;
+    for (const QJsonValue &v : raw.isEmpty() ? QJsonArray{target} : raw) {
+        const QString id = store.resolveSession(v.toString(), &error);
+        if (id.isEmpty())
+            return fail(error);
+        if (!ids.contains(id))
+            ids << id;
+    }
+    const auto done = [&](int affected) { return single ? ok({{"id", ids.first()}}) : ok({{"affected", affected}}); };
+    if (move.contains("to")) {
+        store.reorderSession(ids.first(), move.value("to").toString());
+        return done(0);
+    }
+    QString ws;
+    int index = -1;
+    if (move.contains("anchor")) {
+        const QString anchor = store.resolveSession(move.value("anchor").toString(), &error);
+        if (anchor.isEmpty())
+            return fail(error);
+        if (!store.placement(ids, anchor, move.value("after").toBool(), &ws, &index))
+            return done(0);
+    } else if (ws = store.resolveWorkspace(move.value("workspace").toString(), &error); ws.isEmpty()) {
+        return fail(error);
+    }
+    const int affected = store.moveSessions(ids, ws, index);
+    if (affected == 0 && std::all_of(ids.cbegin(), ids.cend(), [&](const QString &id) { return !store.session(id)->parentId.isEmpty(); }))
+        return fail(QStringLiteral("a companion moves only among its siblings; use --parent to move it under another session"));
+    return done(affected);
+}
+
+// session.close with repeated --target (args.targets); null when the request is a single target
+static std::optional<QJsonObject> batchClose(Store &store, const QJsonObject &args)
 {
     const QJsonArray raw = args.value("targets").toArray();
     if (!args.contains("targets") || raw.size() == 1)
         return std::nullopt;
     if (raw.isEmpty())
-        return fail(QStringLiteral("%1 requires at least one --target").arg(cmd));
+        return fail(QStringLiteral("session.close requires at least one --target"));
     QStringList ids;
     QString error;
     for (const auto &v : raw) {
@@ -452,29 +536,17 @@ static std::optional<QJsonObject> batch(Store &store, const QString &cmd, const 
         if (!ids.contains(id))
             ids << id;
     }
-    if (cmd == QLatin1String("session.close")) {
-        bool soft = false;
-        if (args.value("undoable").toBool() && store.settings.closeUndo)
-            soft = store.softClose(ids);
-        if (!soft)
-            for (const QString &id : ids)
-                if (store.session(id)) // an earlier close may have taken it with its parent
-                    store.removeSession(id);
-        QJsonObject r{{"affected", int(ids.size())}, {"closed", QJsonArray::fromStringList(ids)}};
-        if (args.contains("undoable"))
-            r.insert("undoable", soft);
-        return ok(r);
-    }
-    const QString ws = store.resolveWorkspace(args.value("workspace").toString(), &error);
-    if (ws.isEmpty())
-        return fail(error);
-    int index = args.contains("index") ? args.value("index").toInt() : -1, affected = 0;
-    for (const QString &id : ids) {
-        affected += store.moveSession(id, ws, index) ? 1 : 0;
-        if (index >= 0)
-            ++index;
-    }
-    return ok({{"affected", affected}});
+    bool soft = false;
+    if (args.value("undoable").toBool() && store.settings.closeUndo)
+        soft = store.softClose(ids);
+    if (!soft)
+        for (const QString &id : ids)
+            if (store.session(id)) // an earlier close may have taken it with its parent
+                store.removeSession(id);
+    QJsonObject r{{"affected", int(ids.size())}, {"closed", QJsonArray::fromStringList(ids)}};
+    if (args.contains("undoable"))
+        r.insert("undoable", soft);
+    return ok(r);
 }
 
 static bool hasControl(const QString &t, bool allowLines = false)
@@ -568,8 +640,10 @@ QString askArgsError(QJsonObject *a)
         if (!input && !choices)
             return QStringLiteral("ask.open requires buttons");
         args.insert("buttons", QJsonArray{QJsonObject{{"id", "ok"}, {"label", "OK"}}, QJsonObject{{"id", "cancel"}, {"label", "Cancel"}}});
-        args.insert("defaultButton", "ok");
-        args.insert("cancelButton", "cancel");
+        if (!args.contains("defaultButton"))
+            args.insert("defaultButton", "ok");
+        if (!args.contains("cancelButton"))
+            args.insert("cancelButton", "cancel");
     }
     const QJsonArray buttons = args.value("buttons").toArray();
     if (buttons.isEmpty())
@@ -634,8 +708,10 @@ QJsonObject moreCommands(Store &store, Terminals &terminals, const QString &cmd,
         return recentCommand(store, cmd, target);
     if (cmd.startsWith(QLatin1String("msg.")))
         return messageCommand(store, terminals, cmd, args);
-    if (cmd == QLatin1String("session.close") || cmd == QLatin1String("session.move"))
-        if (auto r = batch(store, cmd, args))
+    if (cmd == QLatin1String("session.move"))
+        return sessionMove(store, target, args);
+    if (cmd == QLatin1String("session.close"))
+        if (auto r = batchClose(store, args))
             return *r;
     if (cmd == QLatin1String("notify")) {
         const QString id = store.resolveSession(target, &error);
@@ -680,6 +756,8 @@ QJsonObject moreCommands(Store &store, Terminals &terminals, const QString &cmd,
     }
     if (cmd == QLatin1String("session.transcript"))
         return sessionTranscript(store, terminals, target, args);
+    if (cmd == QLatin1String("session.attach"))
+        return sessionAttach(store, terminals, target, args);
     static const QStringList sessionCmds{"session.context", "session.collapse", "session.expand", "session.resize", "session.grid", "session.scroll", "session.text", "session.focus",
                                          "session.copy", "session.paste", "session.selectall", "session.search", "session.reveal", "ask.open"};
     if (!sessionCmds.contains(cmd)) {

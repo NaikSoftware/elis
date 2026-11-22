@@ -219,10 +219,12 @@ QString Store::resolveSession(const QString &target, QString *error)
 QString Store::resolveWorkspace(const QString &target, QString *error)
 {
     if (target.isEmpty() || target == QLatin1String("active")) {
+        if (!freshWorkspace.isEmpty() && workspace(freshWorkspace))
+            return freshWorkspace;
         if (auto *w = workspaceOf(selected))
             return w->id;
         if (!workspaces.isEmpty())
-            return workspaces.first().id;
+            return workspaces.last().id; // AppStore.currentWorkspaceID
         *error = QStringLiteral("no workspaces");
         return {};
     }
@@ -230,6 +232,23 @@ QString Store::resolveWorkspace(const QString &target, QString *error)
     for (auto &w : workspaces)
         ws << &w;
     return resolve(ws, target, "workspace", [](Workspace *w) { return w->name; }, error);
+}
+
+QString Store::workspaceOwning(const QString &folder) const
+{
+    const QString f = QDir::cleanPath(folder);
+    QString bestId;
+    qsizetype bestLen = -1;
+    for (const auto &w : workspaces) {
+        if (w.projectFolder.isEmpty())
+            continue;
+        const QString pin = QDir::cleanPath(w.projectFolder);
+        if ((f == pin || f.startsWith(pin + QLatin1Char('/'))) && pin.size() > bestLen) {
+            bestLen = pin.size();
+            bestId = w.id;
+        }
+    }
+    return bestId;
 }
 
 QString Store::workspaceRemembering(const QString &folder) const
@@ -248,19 +267,27 @@ QString Store::newSessionCwd(const QString &workspaceId, const QString &currentC
         return QFileInfo(settings.newSessionCustomDirectory).isDir() ? settings.newSessionCustomDirectory : home;
     if (settings.newSessionDirectory == QLatin1String("workspace")) {
         for (const auto &w : workspaces)
-            if (w.id == workspaceId && QFileInfo(w.folder).isDir())
-                return w.folder; // a vanished folder is skipped, not cleared
+            if (w.id == workspaceId) {
+                if (!w.projectFolder.isEmpty() && QFileInfo(w.projectFolder).isDir())
+                    return w.projectFolder;
+                if (QFileInfo(w.folder).isDir())
+                    return w.folder; // a vanished folder is skipped, not cleared
+            }
         return currentCwd.isEmpty() ? home : currentCwd;
     }
     return home;
 }
 
-QString Store::addWorkspace(const QString &name)
+QString Store::addWorkspace(const QString &name, bool isCollapsed, const QString &projectFolder, bool reveal)
 {
-    Workspace w{newId(), name.isEmpty() ? QStringLiteral("workspace %1").arg(workspaces.size() + 1) : name, {}, {}};
+    Workspace w{newId(), name.isEmpty() ? QStringLiteral("workspace %1").arg(workspaces.size() + 1) : name, {}, {}, {}, projectFolder};
     workspaces << w;
-    if (focusEnabled)
+    if (isCollapsed)
+        collapsed.insert(w.id);
+    if (focusEnabled && !isCollapsed)
         focused << w.id; // a workspace created under the filter joins it rather than vanishing
+    if (reveal && !isCollapsed)
+        freshWorkspace = w.id;
     Q_EMIT changed();
     return w.id;
 }
@@ -422,6 +449,8 @@ bool Store::softRemoveWorkspace(const QString &id)
     close.focusMember = focused.contains(id);
     focused.removeAll(id);
     focusEnabled = focusEnabled && !focused.isEmpty();
+    if (freshWorkspace == id)
+        freshWorkspace.clear();
     const bool wasSelected = workspaceOf(selected) && workspaceOf(selected)->id == id;
     workspaces.removeAt(close.workspaceIndex);
     for (const auto &s : close.workspace.sessions)
@@ -505,6 +534,8 @@ void Store::removeWorkspace(const QString &id)
         return;
     focused.removeAll(id);
     focusEnabled = focusEnabled && !focused.isEmpty();
+    if (freshWorkspace == id)
+        freshWorkspace.clear();
     QStringList ids;
     for (const auto &s : w->sessions)
         ids << s.id;
@@ -563,8 +594,176 @@ bool Store::moveSession(const QString &id, const QString &workspaceId, int index
     int dest = index < 0 || index > to->sessions.size() ? int(to->sessions.size()) : index;
     for (const Session &s : block)
         to->sessions.insert(dest++, s);
+    if (focusEnabled && !flaggedView && !focused.contains(workspaceId))
+        for (const Session &s : block)
+            if (s.id == selected)
+                focusEnabled = false;
     Q_EMIT changed();
     return true;
+}
+
+QJsonObject Store::bridge(char *(*call)(const char *), const QJsonObject &request)
+{
+    char *raw = call(QJsonDocument(request).toJson(QJsonDocument::Compact).constData());
+    const QJsonObject reply = QJsonDocument::fromJson(raw ? QByteArray(raw) : QByteArray()).object();
+    elis_free(raw);
+    return reply;
+}
+
+// a --to step by ElisCore's ReorderDirection; -1 at that end
+static int reorderDestination(const QString &direction, int index, int count)
+{
+    return Store::bridge(elis_reorder_destination, {{"to", direction}, {"index", index}, {"count", count}}).value("destination").toInt(-1);
+}
+
+// The session moves are AppStore+SessionMoves.swift's over this store's rows; their index math comes from ElisCore.
+
+QList<QStringList> Store::sessionOrder() const
+{
+    QList<QStringList> order;
+    for (const auto &w : workspaces) {
+        order << QStringList{};
+        for (const auto &s : w.sessions)
+            order.last() << s.id;
+    }
+    return order;
+}
+
+// the first remaining top-level row from index on that is not in the moving block, "" for the end
+static QString insertionAnchor(const Workspace &to, const QStringList &moving, const QStringList &block, int index)
+{
+    if (index < 0)
+        return {};
+    QList<const Session *> remaining;
+    for (const Session &s : to.sessions)
+        if (!moving.contains(s.id))
+            remaining << &s;
+    for (qsizetype i = qBound(qsizetype(0), qsizetype(index), remaining.size()); i < remaining.size(); ++i)
+        if (!block.contains(remaining[i]->id) && remaining[i]->parentId.isEmpty())
+            return remaining[i]->id;
+    return {};
+}
+
+void Store::relocate(const QStringList &block, const QString &workspaceId, const QString &before)
+{
+    const QList<QStringList> was = sessionOrder();
+    QList<Session> moving;
+    for (const QString &id : block)
+        if (Workspace *w = workspaceOf(id))
+            moving << w->sessions.takeAt(indexIn(*w, id));
+    Workspace *to = workspace(workspaceId);
+    const int at = before.isEmpty() ? int(to->sessions.size()) : indexIn(*to, before);
+    for (int i = 0; i < moving.size(); ++i)
+        to->sessions.insert(at + i, moving[i]);
+    if (focusEnabled && !flaggedView && block.contains(selected) && !focused.contains(workspaceId))
+        focusEnabled = false; // the selection left the marked set
+    if (sessionOrder() != was)
+        Q_EMIT changed();
+}
+
+// siblings reorder within their group: index counts the workspace without them and falls from right after the parent to
+// the group's end; -1 appends to the group
+bool Store::moveCompanions(const QStringList &ids, int index)
+{
+    Workspace *w = workspaceOf(ids.value(0));
+    const QString parent = w ? session(ids.first())->parentId : QString();
+    if (parent.isEmpty())
+        return false;
+    QList<Session> moving, remaining;
+    for (const Session &s : std::as_const(w->sessions))
+        (ids.contains(s.id) ? moving : remaining) << s;
+    if (moving.size() != ids.size() || std::any_of(moving.cbegin(), moving.cend(), [&](const Session &s) { return s.parentId != parent; }))
+        return false;
+    const int at = int(std::find_if(remaining.cbegin(), remaining.cend(), [&](const Session &s) { return s.id == parent; }) - remaining.cbegin());
+    if (at == remaining.size())
+        return false;
+    int end = at + 1;
+    while (end < remaining.size() && !remaining[end].parentId.isEmpty())
+        ++end;
+    const int dest = index < 0 ? end : index;
+    if (dest <= at || dest > end)
+        return false;
+    for (int i = 0; i < moving.size(); ++i)
+        remaining.insert(dest + i, moving[i]);
+    const QList<QStringList> was = sessionOrder();
+    w->sessions = remaining;
+    if (sessionOrder() != was)
+        Q_EMIT changed();
+    return true;
+}
+
+int Store::moveSessions(const QStringList &ids, const QString &workspaceId, int index)
+{
+    Workspace *to = workspace(workspaceId);
+    QStringList ordered;
+    for (Session *s : allSessions())
+        if (ids.contains(s->id))
+            ordered << s->id;
+    if (!to || ordered.isEmpty())
+        return 0;
+    if (ordered.size() == 1 && session(ordered.first())->parentId.isEmpty()) {
+        const QStringList block = QStringList{ordered.first()} + companionsOf(ordered.first());
+        relocate(block, workspaceId, insertionAnchor(*to, ordered, block, index));
+        return int(block.size());
+    }
+    QStringList parents;
+    for (const QString &id : std::as_const(ordered))
+        if (session(id)->parentId.isEmpty())
+            parents << id;
+    if (parents.isEmpty())
+        return workspaceOf(ordered.first()) == to && moveCompanions(ordered, index) ? int(ordered.size()) : 0;
+    if (index < 0)
+        parents.removeIf([&](const QString &id) { return workspaceOf(id) == to; }); // groups already there stay
+    if (parents.isEmpty())
+        return 0;
+    QStringList block;
+    for (const QString &p : std::as_const(parents))
+        block << p << companionsOf(p);
+    relocate(block, workspaceId, insertionAnchor(*to, ordered, block, index));
+    return int(block.size());
+}
+
+bool Store::placement(const QStringList &ids, const QString &anchorId, bool after, QString *workspaceId, int *index)
+{
+    const auto place = [this](const QString &id) {
+        for (int w = 0; w < workspaces.size(); ++w)
+            if (const int i = indexIn(workspaces[w], id); i >= 0)
+                return QJsonObject{{"workspace", w}, {"index", i}, {"count", int(workspaces[w].sessions.size())}};
+        return QJsonObject{};
+    };
+    QJsonArray sources;
+    for (const QString &id : ids)
+        sources << place(id);
+    const QJsonObject landing = bridge(elis_session_placement, {{"sources", sources}, {"anchor", place(anchorId)}, {"after", after}});
+    if (!landing.contains("destination"))
+        return false;
+    *workspaceId = workspaces.value(landing.value("workspace").toInt()).id;
+    *index = landing.value("destination").toInt();
+    return true;
+}
+
+void Store::reorderSession(const QString &id, const QString &direction)
+{
+    Workspace *w = workspaceOf(id);
+    if (!w)
+        return;
+    const QList<Session> &ss = w->sessions;
+    const int at = indexIn(*w, id);
+    if (const QString parent = ss[at].parentId; !parent.isEmpty()) {
+        const int p = indexIn(*w, parent);
+        if (const int dest = p < 0 ? -1 : reorderDestination(direction, at - p - 1, int(companionsOf(parent).size())); dest >= 0)
+            moveSessions({id}, w->id, p + 1 + dest);
+        return;
+    }
+    QList<int> units; // the top-level rows
+    for (int i = 0; i < ss.size(); ++i)
+        if (ss[i].parentId.isEmpty())
+            units << i;
+    const int dest = reorderDestination(direction, int(units.indexOf(at)), int(units.size()));
+    if (dest < 0)
+        return;
+    units.removeAll(at);
+    moveSessions({id}, w->id, dest < units.size() ? units[dest] - (units[dest] > at ? 1 : 0) : int(ss.size()) - 1);
 }
 
 bool Store::moveWorkspace(const QString &id, int index)
@@ -581,11 +780,44 @@ bool Store::moveWorkspace(const QString &id, int index)
     return false;
 }
 
+bool Store::reorderWorkspace(const QString &id, const QString &direction)
+{
+    for (int i = 0; i < workspaces.size(); ++i)
+        if (workspaces[i].id == id) {
+            if (const int dest = reorderDestination(direction, i, int(workspaces.size())); dest >= 0) {
+                workspaces.move(i, dest);
+                Q_EMIT changed();
+            }
+            return true;
+        }
+    return false;
+}
+
+// AppStore.selectWorkspace: its first session, or the empty workspace itself as the current one
+bool Store::selectWorkspace(const QString &id)
+{
+    auto *w = workspace(id);
+    if (!w)
+        return false;
+    if (!w->sessions.isEmpty()) {
+        select(w->sessions.first().id);
+        if (!std::exchange(freshWorkspace, QString()).isEmpty()) // the first session may already be the selection
+            Q_EMIT changed();
+        return true;
+    }
+    if (focusEnabled && !focused.contains(id))
+        focused << id;
+    freshWorkspace = id;
+    Q_EMIT changed();
+    return true;
+}
+
 void Store::select(const QString &id)
 {
     auto *s = session(id);
     if (!s || selected == id)
         return;
+    freshWorkspace.clear(); // a selection change ends the fresh workspace; a same-value one keeps it, as on the Mac
     if (focusEnabled && !flaggedView && !focused.contains(workspaceOf(id)->id))
         focusEnabled = false; // selecting outside the set suspends the filter, keeping the set
     selected = id;
@@ -666,6 +898,8 @@ void Store::commitFocus(QStringList ids, bool enabled)
         return;
     focused = ids;
     focusEnabled = enabled;
+    if (!freshWorkspace.isEmpty() && focusEnabled && !focused.contains(freshWorkspace))
+        freshWorkspace.clear();
     // a narrowing that hid the active session moves to the most recent one still on screen
     const auto nav = navigableSessions();
     const bool hidden = !selected.isEmpty() && std::none_of(nav.begin(), nav.end(), [this](Session *s) { return s->id == selected; });
@@ -944,6 +1178,8 @@ QJsonObject Store::toJson() const
             ss << so;
         }
         QJsonObject wo{{"id", w.id}, {"name", w.name}, {"folder", w.folder}, {"sessions", ss}};
+        if (!w.projectFolder.isEmpty())
+            wo.insert("projectFolder", w.projectFolder);
         if (!w.tint.color.isEmpty())
             wo.insert("tint", tintJson(w.tint));
         ws << wo;
@@ -962,9 +1198,11 @@ void Store::fromJson(const QJsonObject &o)
 {
     const int version = o.value("version").toInt(1);
     workspaces.clear();
+    freshWorkspace.clear();
     for (const auto &wv : o.value("workspaces").toArray()) {
         const auto wo = wv.toObject();
-        Workspace w{wo.value("id").toString(), wo.value("name").toString(), wo.value("folder").toString(), {}, tintFromJson(wo.value("tint"))};
+        Workspace w{wo.value("id").toString(), wo.value("name").toString(), wo.value("folder").toString(), {}, tintFromJson(wo.value("tint")),
+                    wo.value("projectFolder").toString()};
         if (w.id.isEmpty())
             continue;
         for (const auto &sv : wo.value("sessions").toArray()) {

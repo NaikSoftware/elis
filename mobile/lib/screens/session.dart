@@ -842,7 +842,8 @@ class _SessionScreenState extends State<SessionScreen> {
             promptCard: promptCardBuilder(_prompts),
             prompts: _prompts,
             onKey: _press,
-            onAnswer: type));
+            onAnswer: type,
+            openImage: (path) => m.act('session.overlay.open', target: widget.sessionId, args: {'image': path})));
   }
 
   // a fixed line, never folded: nothing in Chat appears or leaves on scroll

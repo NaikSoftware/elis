@@ -24,6 +24,9 @@ SyntaxHighlighting, WindowSystem) and `konsole-kpart`. Install `wl-clipboard` (o
 Building also needs Swift 6.3 (the swift.org tarball or `swiftly`) on PATH, or `-DSWIFT=/path/to/swift`: `linux/bridge`
 builds the shared `ElisCore` (`shared/ElisCore`) into `libElisBridge.so` with the Swift runtime linked in, so running Elis needs no Swift.
 The first build of it takes a few minutes; it installs to `lib/elis` beside the binaries' `bin`.
+The Swift `elisctl` helper's phone relay links the system OpenSSL, libsystemd and zlib: building needs `libssl-dev`,
+`libsystemd-dev` and `zlib1g-dev`, running it `libssl3` and the `openssl` command, which makes the relay's certificate.
+Its Bluetooth link needs BlueZ (`bluetoothd`) and an adapter that can advertise.
 Live sessions run under the Mac's patched zmx, which the build makes from source with zig 0.16, git and `shasum`
 (`macos/scripts/setup.sh --zmx-only`, network on the first build) and installs it to `libexec/elis`, off PATH. Unpack
 [zig 0.16.0](https://ziglang.org/download/) into `~/.local/opt`, where configure finds it, or pass `-DZIG=/path/to/zig`;
@@ -31,6 +34,7 @@ the build patches that zig's `float.h` once, as the Mac build does.
 
 ```sh
 cd linux
+sudo apt install libssl-dev libsystemd-dev zlib1g-dev
 sudo apt install libkf6parts-dev   # or, without root: scripts/fetch-kparts-headers.sh
 cmake -S . -B build -DCMAKE_INSTALL_PREFIX=~/.local   # the menu entry gets an absolute Exec
 cmake --build build -j
@@ -41,8 +45,9 @@ cmake --install build && kbuildsycoca6 --noincremental
 
 ## What it does
 
-- Workspaces of sessions in a sidebar. A workspace remembers the folder its sessions last worked in, and new
-  sessions open there. Its "+" (on hover) starts Terminal, Claude Code, Codex, OpenCode or Antigravity (whichever
+- Workspaces of sessions in a sidebar. A workspace remembers the folder its sessions last worked in (or pins a project
+  folder with `workspace folder set DIR` / `workspace new --folder DIR` so `session new --cwd` under it routes there),
+  and new sessions open there. Its "+" (on hover) starts Terminal, Claude Code, Codex, OpenCode or Antigravity (whichever
   your login shell finds), and the button beside it repeats the last choice.
 - A session row shows the logo of the agent running in it, its status dot (active, blocked, completed), an unseen
   notification count, and a filled icon when flagged. Companions sit indented under their parent; Duplicate as
@@ -78,7 +83,7 @@ cmake --install build && kbuildsycoca6 --noincremental
 - Restore sessions (Settings ▸ General): fresh shells; re-run commands, which records what each pane runs at quit
   and types it into its new shell on the next launch (`restore-denylist.conf` lists programs to leave out); or live
   sessions, where each pane's shell keeps running in a zmx daemon and the next launch reattaches it. A live pane
-  another zmx client leads (later, the phone) is covered until a key takes it back.
+  led by another zmx client or the phone ("In use on your phone") is covered until a key takes it back.
 - Overlays: `elisctl session overlay open <command>` runs a program in a temporary terminal over a session (full,
   floating with `--size-percent`, or one split pane with `--pane`); it closes when the program exits and
   `overlay result` (or `--block`) returns the status. Ctrl+Alt+Shift+J hides and shows them. `session hud` puts a
@@ -150,8 +155,8 @@ and `ELISCTL`, so
 line) on `<state dir>/elis.sock`. The state dir is `~/.local/share/elis`, or `ELIS_STATE_DIR`.
 Beyond sessions and workspaces it streams events (`elisctl events`), shows pickers and questions (`pick`, `ask`),
 passes messages between panes (`msg`, addressed by `ELIS_PANE_ID`), drives the pinned Elis assistant chat and sends tagged messages to sessions (`assistant ask|send|read|provider|show`, and `reply` from inside a session), reads a pane's screen or scrollback
-(`session text --all`), types into either pane (`session type --pane right`), and zooms a pane's font
-(`font inc|dec|reset`), sets a pane's grid apart from its window (`session grid <cols>x<rows>`, `--reset`), and wheels a pane as a mouse
+(`session text --all`), types into either pane (`session type --pane right`), zooms a pane's font
+(`font inc|dec|reset`), attaches a terminal to a Live pane (`session attach [--claim]`), sets a pane's grid apart from its window (`session grid <cols>x<rows>`, `--reset`), and wheels a pane as a mouse
 would (`session scroll <lines>`). Commands for features Elis
 lacks answer "not supported on this platform".
 
@@ -176,9 +181,9 @@ on the computer that runs only while you want it.
 - **A session's screen.** A Live pane as a live terminal while a full-screen program runs, its history otherwise; a key
   bar (esc, tab, ⇧tab, ^C, arrows, paste, …) and a composer, hidden until the session's ⋯ menu shows it; both panes of a split. One finger
   scrolls the program, two fingers zoom and pan, a double tap resets the zoom.
-- **Direct input.** The phone takes a Live pane's lead when it opens, resumes or switches to it, and again at its next input after a Mac key took it back: the program runs at the
-  phone's size and takes the phone's keys, while the Mac shows the pane as in use on your phone. Leaving the screen
-  or a key on the Mac returns the lead. A pane that is not Live is typed into through the Mac.
+- **Direct input.** The phone takes a Live pane's lead when it opens, resumes or switches to it, and again at its next input after a key on the computer took it back: the program runs at the
+  phone's size and takes the phone's keys, while the computer shows the pane as in use on your phone. Leaving the screen
+  or a key on the computer returns the lead. A pane that is not Live is typed into through the computer.
 - **Fit to phone** is on while a session's screen is open: it gives the program the phone's own grid (`session grid`): as many columns and rows as the phone shows
   at a readable size, so it redraws for the phone and nothing wraps, while the computer's font stays as it was. While
   fitted, dragging the screen scrolls the program itself (wheel notches through `session scroll`), so Claude Code
@@ -191,11 +196,12 @@ on the computer that runs only while you want it.
 
 Settings ▸ Connect a Phone… switches it on: the window shows the QR code to scan in the app, the `elis://pair?…` link
 to copy, the address the code points the phone at (pick your LAN or VPN address, or type a name such as the machine's
-Tailscale name) and the port, and Revoke Paired Phones. While switched on, the relay starts with Elis and stops with
+Tailscale name) and the port, the Bluetooth state (Open Bluetooth Settings while the adapter is powered off), and
+Revoke Paired Phones. While switched on, the relay starts with Elis and stops with
 it. The same relay runs from a terminal too, while the command runs:
 
 ```sh
-elisctl mobile serve [--port 8765] [--bind ADDR] [--host NAME] [--no-qr]
+elisctl mobile serve [--port 8765] [--bind ADDR] [--host NAME] [--no-qr] [--no-bluetooth]
 ```
 
 It prints the QR code and the link; Ctrl+C stops it. Nothing listens unless one of the two runs.
@@ -207,8 +213,11 @@ It prints the QR code and the link; Ctrl+C stops it. Nothing listens unless one 
   one at once.
 - `serve` listens on all interfaces by default; `--bind` restricts it. It reaches the phone over your LAN or a VPN such
   as Tailscale; `--host` only sets the address written into the link (e.g. the machine's Tailscale name or IP).
+- The relay also offers Bluetooth, as the Mac does, so the phone works without Wi-Fi: BlueZ advertises a service UUID that rotates every 15 minutes and the phone opens an LE L2CAP channel,
+  encrypted with a key from the pairing token. Its stderr reports `bluetooth: advertising` or `bluetooth: off (<reason>)`;
+  `--no-bluetooth` turns it off. One relay per state directory advertises.
 - A pane running Claude Code opens in Chat, as on the Mac, read from its transcript (`session transcript`).
-  Any other pane shows a polled plain-text snapshot (`session text`), not a terminal emulator.
+  Pages on the phone are Mac-only for now (page overlays are not ported to Linux).
 
 ## Credits and license
 

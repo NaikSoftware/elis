@@ -151,16 +151,18 @@ public func elisZmxScreen(_ output: UnsafePointer<CChar>, _ lines: Int32) -> Uns
 }
 
 /// One tree `surfaces[]` entry, as the Mac encodes it: `{"id","kind","active","visible","backedByZmx","paneID"?}`
-/// in, with `lead` read from the pane's state.
+/// in, with `lead` read from the pane's state and `phoneViewers`/`phoneLead` from the relay's counts.
 @_cdecl("elis_zmx_surface")
 public func elisZmxSurface(_ json: UnsafePointer<CChar>) -> UnsafeMutablePointer<CChar>? {
     let args = object(json)
     let token = args["paneID"] as? String
     let lead = pane(token).flatMap { id in leads.withLock { $0[id]?.role } }
+    let (viewers, phoneLead) = token.map { token in phone.withLock { ($0.viewers.count(paneID: token), $0.leads.count(paneID: token) > 0) } } ?? (0, false)
     let node = ControlSurfaceNode(id: args["id"] as? String ?? "", kind: args["kind"] as? String ?? "",
                                   active: args["active"] as? Bool ?? false, visible: args["visible"] as? Bool ?? false,
                                   backedByZmx: args["backedByZmx"] as? Bool, lead: lead,
-                                  paneID: token?.isEmpty == false ? token : nil)
+                                  paneID: token?.isEmpty == false ? token : nil,
+                                  phoneViewers: viewers > 0 ? viewers : nil, phoneLead: phoneLead ? true : nil)
     let data = (try? JSONEncoder().encode(node)) ?? Data("{}".utf8)
     return strdup(String(decoding: data, as: UTF8.self))
 }

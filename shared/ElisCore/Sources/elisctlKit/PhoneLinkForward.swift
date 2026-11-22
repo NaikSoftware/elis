@@ -1,5 +1,9 @@
-#if os(macOS)
+#if !canImport(Musl)
+#if canImport(Darwin)
 import Darwin
+#else
+import Glibc
+#endif
 import Foundation
 import ElisCore
 
@@ -113,7 +117,11 @@ final class PhoneLinkForward: @unchecked Sendable {
             guard !stopped else { return }
             return refuse("could not connect: \(error.description)")
         case .success(let fd):
+            #if canImport(Darwin)
             guard !stopped else { _ = Darwin.close(fd); return }
+            #else
+            guard !stopped else { _ = Glibc.close(fd); return }
+            #endif
             socket = fd
         }
         lock.withLock { fd = socket }
@@ -143,7 +151,11 @@ final class PhoneLinkForward: @unchecked Sendable {
         }
         writes.async { [self] in
             lock.withLock {
+                #if canImport(Darwin)
                 Darwin.close(fd)
+                #else
+                Glibc.close(fd)
+                #endif
                 fd = -1
             }
         }
@@ -208,8 +220,16 @@ final class PhoneLinkForward: @unchecked Sendable {
 
     /// Tries each address `host` resolves to, so `localhost` reaches a server bound to only one of `::1` and `127.0.0.1`.
     static func connect(host: String, port: UInt16, timeout: TimeInterval) -> Result<Int32, SocketClientError> {
+        #if canImport(Darwin)
         var hints = addrinfo(ai_flags: AI_NUMERICSERV, ai_family: AF_UNSPEC, ai_socktype: SOCK_STREAM, ai_protocol: IPPROTO_TCP,
                              ai_addrlen: 0, ai_canonname: nil, ai_addr: nil, ai_next: nil)
+        #else
+        var hints = addrinfo()
+        hints.ai_flags = AI_NUMERICSERV
+        hints.ai_family = AF_UNSPEC
+        hints.ai_socktype = Int32(SOCK_STREAM.rawValue)
+        hints.ai_protocol = Int32(IPPROTO_TCP)
+        #endif
         var list: UnsafeMutablePointer<addrinfo>?
         let resolved = getaddrinfo(host, String(port), &hints, &list)
         guard resolved == 0 else { return .failure(SocketClientError(String(cString: gai_strerror(resolved)))) }
@@ -221,11 +241,17 @@ final class PhoneLinkForward: @unchecked Sendable {
             entry = info.ai_next
             let fd = socket(info.ai_family, info.ai_socktype, info.ai_protocol)
             guard fd >= 0 else { continue }
+            #if canImport(Darwin)
             var on: Int32 = 1
             setsockopt(fd, SOL_SOCKET, SO_NOSIGPIPE, &on, socklen_t(MemoryLayout<Int32>.size))
+            #endif
             _ = fcntl(fd, F_SETFD, FD_CLOEXEC)
             _ = fcntl(fd, F_SETFL, O_NONBLOCK)
+            #if canImport(Darwin)
             var error = Darwin.connect(fd, info.ai_addr, info.ai_addrlen) == 0 ? 0 : errno
+            #else
+            var error = Glibc.connect(fd, info.ai_addr, info.ai_addrlen) == 0 ? 0 : errno
+            #endif
             if error == EINPROGRESS {
                 var poller = pollfd(fd: fd, events: Int16(POLLOUT), revents: 0)
                 let wait = Int32(max(0, deadline.timeIntervalSinceNow) * 1000)
@@ -241,7 +267,11 @@ final class PhoneLinkForward: @unchecked Sendable {
                 return .success(fd)
             }
             failure = String(cString: strerror(error))
+            #if canImport(Darwin)
             Darwin.close(fd)
+            #else
+            Glibc.close(fd)
+            #endif
         }
         return .failure(SocketClientError(failure))
     }

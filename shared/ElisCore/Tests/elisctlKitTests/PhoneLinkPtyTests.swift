@@ -1,9 +1,8 @@
-#if os(macOS)
+#if !canImport(Musl)
 import Foundation
 @testable import elisctlKit
 import Testing
 
-// shortcut: macOS only, because Swift's Glibc does not export posix_openpt; port when the relay runs on Linux.
 struct PhoneLinkPtyTests {
     /// Recorder collects what a pty reports; `exited` signals once onExit fires.
     private final class Recorder: @unchecked Sendable {
@@ -68,7 +67,7 @@ struct PhoneLinkPtyTests {
         pty.terminate()
         // onExit fires after the reader thread leaves its loop, so it also proves the reader ended
         #expect(await recorder.waitExit())
-        #expect(await eventually { kill(grandchild, 0) == -1 && errno == ESRCH }, "pid \(grandchild) outlived terminate()")
+        #expect(await eventually { Self.ended(grandchild) }, "pid \(grandchild) outlived terminate()")
         kill(grandchild, SIGKILL)
     }
 
@@ -132,7 +131,12 @@ struct PhoneLinkPtyTests {
     // perl, unlike sh, never takes the terminal as its controlling one, and neither does the zmx attach
     @Test func resizeSignalsAProgramWithoutAControllingTerminal() async throws {
         let recorder = Recorder()
-        let script = "$| = 1; $SIG{WINCH} = sub { ioctl(STDIN, 0x40087468, my $size = \"\\0\" x 8); print join(\" \", unpack(\"S2\", $size)), \"\\n\"; exit 0 };"
+        #if canImport(Darwin)
+        let getWindowSize = "0x40087468"
+        #else
+        let getWindowSize = "0x5413"
+        #endif
+        let script = "$| = 1; $SIG{WINCH} = sub { ioctl(STDIN, \(getWindowSize), my $size = \"\\0\" x 8); print join(\" \", unpack(\"S2\", $size)), \"\\n\"; exit 0 };"
             + " print \"ready\\n\"; sleep 20 while 1"
         let pty = try recorder.spawn(["/usr/bin/perl", "-e", script])
         #expect(await eventually { recorder.output.contains("ready") })
@@ -213,6 +217,17 @@ struct PhoneLinkPtyTests {
         private var values: [Int] = []
         func add(_ count: Int) { lock.withLock { values.append(count) } }
         var counts: [Int] { lock.withLock { values } }
+    }
+
+    /// Gone, or on Linux a zombie: CI's container init never reaps the orphan the dead shell leaves.
+    private static func ended(_ pid: pid_t) -> Bool {
+        if kill(pid, 0) == -1 && errno == ESRCH { return true }
+        #if os(Linux)
+        let stat = (try? String(contentsOfFile: "/proc/\(pid)/stat", encoding: .utf8)) ?? ""
+        return stat.split(separator: ")").last?.split(separator: " ").first == "Z"
+        #else
+        return false
+        #endif
     }
 
     private func eventually(_ seconds: Double = 15, _ condition: () -> Bool) async -> Bool {
