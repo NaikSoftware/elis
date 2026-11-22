@@ -1,3 +1,4 @@
+#include "assistantrunner.h"
 #include "control.h"
 #include "help.h"
 #include "hooks.h"
@@ -163,6 +164,8 @@ int main(int argc, char **argv)
     ensureProfile();
     WindowLibrary library(dir);
     library.load(); // the windows open at the last quit, each with its saved frame
+    AssistantRunner assistant(library, dir);
+    library.assistantSink = &assistant;
     MainWindow &window = *library.active();
     // master's reap: Fresh shells and Re-run launches end every daemon a live run left, a live one those no pane claims
     for (const auto &e : library.entries())

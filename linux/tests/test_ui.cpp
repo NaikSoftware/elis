@@ -1,4 +1,5 @@
 #include "mainwindow.h"
+#include "assistantrunner.h"
 #include "cipanel.h"
 #include "help.h"
 #include "hooks.h"
@@ -25,6 +26,8 @@
 #include <QSet>
 #include <algorithm>
 #include <numeric>
+#include <memory>
+#include <signal.h>
 #include <QPointer>
 #include <QTemporaryDir>
 #include <QToolButton>
@@ -54,6 +57,47 @@ protected:
     void wheelEvent(QWheelEvent *e) override { deltas << e->angleDelta().y(); }
 };
 }
+
+// a library whose chat chose `choice`, run by `standIn` in place of its binary
+struct AssistantHost {
+    QTemporaryDir state;
+    std::unique_ptr<WindowLibrary> lib;
+    std::unique_ptr<AssistantRunner> runner;
+    explicit AssistantHost(const QByteArray &standIn, const QByteArray &choice = "claude")
+    {
+        QDir().mkpath(state.filePath("assistant"));
+        QFile file(state.filePath("assistant/chat.jsonl.provider"));
+        if (file.open(QIODevice::WriteOnly))
+            file.write(choice);
+        file.close();
+        qputenv("ELIS_ASSISTANT_PROVIDER_CMD", standIn);
+        lib = std::make_unique<WindowLibrary>(state.path());
+        lib->load();
+        runner = std::make_unique<AssistantRunner>(*lib, state.path());
+        lib->assistantSink = runner.get();
+    }
+    ~AssistantHost()
+    {
+        lib->assistantSink = nullptr;
+        runner.reset();
+        qunsetenv("ELIS_ASSISTANT_PROVIDER_CMD");
+    }
+    QJsonObject ask(const QString &text) { return lib->dispatch({{"cmd", "assistant.ask"}, {"args", QJsonObject{{"text", text}}}}); }
+    QStringList texts(const QString &kind)
+    {
+        QStringList out;
+        const QJsonObject read = lib->dispatch({{"cmd", "assistant.read"}});
+        for (const QJsonValue &e : read["result"]["assistant"]["entries"].toArray())
+            if (e["kind"].toString() == kind)
+                out << e["text"].toString();
+        return out;
+    }
+    bool running()
+    {
+        const QJsonObject tree = lib->dispatch({{"cmd", "tree"}});
+        return tree["result"]["tree"]["assistant"]["running"].toBool();
+    }
+};
 
 class TestUi : public QObject
 {
@@ -598,6 +642,71 @@ private Q_SLOTS:
         QVERIFY(!tree["workspaces"][0]["sessions"][0]["handle"].toString().isEmpty());
         const QJsonObject r = lib.dispatch({{"cmd", "assistant.send"}, {"args", QJsonObject{{"text", "hi there"}, {"recipients", QJsonArray{"@all"}}}}});
         QCOMPARE(r["result"]["assistant"]["deliveredIDs"].toArray(), QJsonArray{target});
+    }
+
+    void assistantProviderTakesOneInputPerTurnInOrder()
+    {
+        AssistantHost host("bash " ELIS_TEST_FIXTURES "/fake-provider.sh");
+        const QByteArray sessionVar = qgetenv("ELIS_SESSION_ID"), claudeVar = qgetenv("CLAUDECODE");
+        qputenv("ELIS_SESSION_ID", "leak");
+        qputenv("CLAUDECODE", "1");
+        auto restore = qScopeGuard([&] {
+            sessionVar.isNull() ? qunsetenv("ELIS_SESSION_ID") : qputenv("ELIS_SESSION_ID", sessionVar);
+            claudeVar.isNull() ? qunsetenv("CLAUDECODE") : qputenv("CLAUDECODE", claudeVar);
+        });
+        QSignalSpy events(host.lib->active()->events(), &EventSource::event);
+        const QString session = host.lib->entries()[0].store->allSessions().first()->id;
+        QVERIFY(host.ask("one")["ok"].toBool());
+        QVERIFY(host.ask("two")["ok"].toBool());
+        QVERIFY(host.lib->dispatch({{"cmd", "assistant.reply"}, {"target", session}, {"args", QJsonObject{{"text", "three"}}}})["ok"].toBool());
+        QVERIFY(host.running());
+        QTRY_COMPARE_WITH_TIMEOUT(host.texts("assistant").size(), 3, 10000);
+        const QStringList replies = host.texts("assistant");
+        QVERIFY2(replies[0].endsWith(": one") && replies[1].endsWith(": two"), qPrintable(replies.join(" | ")));
+        QVERIFY2(replies[2].endsWith(session + "] three"), qPrintable(replies[2])); // no " early": each input followed a result
+        QVERIFY(!host.running());
+        int answered = 0;
+        for (const QList<QVariant> &e : std::as_const(events))
+            answered += e.first().toJsonObject().value("payload")["kind"].toString() == QLatin1String("assistant");
+        QCOMPARE(answered, 3);
+    }
+
+    void assistantPerInputProviderRunsOnceForEachInput()
+    {
+        // cat returns at once only on /dev/null stdin
+        AssistantHost host("sh -c \"cat; head -n 5 " ELIS_TEST_ASSISTANT_FIXTURES "/codex.jsonl\"", "codex");
+        QVERIFY(host.ask("one")["ok"].toBool());
+        QVERIFY(host.ask("two")["ok"].toBool());
+        QTRY_COMPARE_WITH_TIMEOUT(host.texts("assistant"), QStringList({"pong", "pong"}), 5000);
+        QVERIFY(!host.running());
+    }
+
+    void assistantProviderThatCannotStartIsAnError()
+    {
+        AssistantHost host("/nonexistent/elis-fake-provider");
+        QVERIFY(host.ask("hi")["ok"].toBool());
+        QTRY_COMPARE_WITH_TIMEOUT(host.texts("error").size(), 1, 5000);
+        QVERIFY(!host.running());
+    }
+
+    void assistantProviderStopsOnSwitchAndWithTheApp()
+    {
+        AssistantHost host("bash " ELIS_TEST_FIXTURES "/fake-provider.sh");
+        auto pidOf = [](const QString &reply) { return reply.section(QLatin1Char(' '), 1, 1).chopped(1).toInt(); };
+        QVERIFY(host.ask("one")["ok"].toBool());
+        QTRY_COMPARE_WITH_TIMEOUT(host.texts("assistant").size(), 1, 5000);
+        const int first = pidOf(host.texts("assistant")[0]);
+        QVERIFY(first > 0 && ::kill(first, 0) == 0);
+        host.runner->providerChanged(QStringLiteral("claude"));
+        QCOMPARE(::kill(first, 0), -1);
+        QVERIFY(host.ask("two")["ok"].toBool());
+        QTRY_COMPARE_WITH_TIMEOUT(host.texts("assistant").size(), 2, 5000);
+        const QString second = host.texts("assistant")[1];
+        QVERIFY2(second.contains("Earlier messages in this chat") && second.endsWith("two"), qPrintable(second));
+        const int pid = pidOf(second);
+        QVERIFY(pid != first && ::kill(pid, 0) == 0);
+        host.runner.reset();
+        QCOMPARE(::kill(pid, 0), -1);
     }
 
     void typedTextGetsItsFinalReturnInItsOwnWrite()

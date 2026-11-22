@@ -326,6 +326,22 @@ bool WindowLibrary::saveIndex()
     return f.commit();
 }
 
+QList<Assistant::Window> WindowLibrary::assistantWindows() const
+{
+    QList<Assistant::Window> out;
+    for (const Entry &e : m_entries)
+        if (e.open && e.window)
+            out << Assistant::Window{e.id, e.store, e.window};
+    return out;
+}
+
+QStringList WindowLibrary::assistantProviders() const
+{
+    QStringList out = active() ? active()->availableLaunchers() : QStringList();
+    out.removeAll(QStringLiteral("terminal"));
+    return out;
+}
+
 QJsonObject WindowLibrary::dispatch(const QJsonObject &request)
 {
     const QString cmd = request.value("cmd").toString(), target = request.value("target").toString();
@@ -335,12 +351,8 @@ QJsonObject WindowLibrary::dispatch(const QJsonObject &request)
     const QList<MainWindow *> open = openWindows();
     if (open.isEmpty())
         return fail(QStringLiteral("no open window"));
-    QList<Assistant::Window> everyWindow;
-    for (const Entry &e : std::as_const(m_entries))
-        if (e.open && e.window)
-            everyWindow << Assistant::Window{e.id, e.store, e.window};
-    QStringList providers = active()->availableLaunchers(); // detected at launch, never probed per request
-    providers.removeAll(QStringLiteral("terminal"));
+    const QList<Assistant::Window> everyWindow = assistantWindows();
+    const QStringList providers = assistantProviders();
     if (cmd.startsWith(QLatin1String("assistant.")))
         return Assistant::dispatch(request, everyWindow, providers, assistantSink);
     // config the whole app shares, and the app-global restore commands, act on every open window
