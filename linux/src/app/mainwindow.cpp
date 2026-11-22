@@ -1353,9 +1353,9 @@ bool MainWindow::saveNow(QString *error)
 
 void MainWindow::swapPanes(const QString &id)
 {
+    if (!m_panes.value(id).right)
+        return; // and no empty entry for "" (nothing selected), whose null view prime() would read
     Panes &p = m_panes[id];
-    if (!p.right)
-        return;
     p.split->insertWidget(0, p.right->widget()); // physical positions and the primary role move together
     std::swap(p.main, p.right);
     if (Session *s = m_store.session(id)) { // each pane keeps its identity, and so its daemon, in its new role
@@ -1594,7 +1594,7 @@ void MainWindow::showSelected()
     m_tree->setAssistantSelected(m_assistantShown);
     if (m_assistantShown) {
         if (m_dashboard)
-            return closeDashboard(); // which shows the chat
+            return refreshDashboard(); // a grid opened over the chat stays until it closes, then the chat shows
         const bool entering = m_stack->currentWidget() != m_assistantView;
         m_stack->setCurrentWidget(m_assistantView);
         static_cast<TintWash *>(m_wash)->setColor({});
@@ -1650,6 +1650,8 @@ void MainWindow::showSelected()
 
 void MainWindow::showAssistant()
 {
+    if (m_dashboard)
+        closeDashboard(); // the chat replaces the grid as it replaces a session
     if (!m_assistantShown) {
         m_assistantShown = true;
         if (m_store.selected.isEmpty()) {

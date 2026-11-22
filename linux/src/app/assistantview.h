@@ -36,6 +36,7 @@ protected:
 
 private:
     void refresh();
+    void loadDirectory(); // the sessions change without an assistant.message: tags read it fresh
     void append(const QJsonObject &entry);
     void rebuildRail();
     void rebuildProviders();

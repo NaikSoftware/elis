@@ -67,6 +67,7 @@ QLabel *text(const QString &s, const QColor &color, Qt::TextFormat format = Qt::
     l->setTextFormat(format);
     l->setWordWrap(true);
     l->setTextInteractionFlags(Qt::TextSelectableByMouse | Qt::LinksAccessibleByMouse);
+    l->setFocusPolicy(Qt::NoFocus); // a click to select text leaves the keys with the composer
     l->setOpenExternalLinks(true);
     l->setStyleSheet(QStringLiteral("color:%1;").arg(css(color)));
     return l;
@@ -135,6 +136,32 @@ protected:
     {
         if (removed)
             removed();
+    }
+};
+
+// The message box's keys live here, not in an event filter: QCompleter passes its popup's keys to the widget's event()
+// directly, and takes Return, Tab and Escape itself only when the widget leaves them unaccepted.
+class ComposerEdit : public QPlainTextEdit
+{
+public:
+    std::function<void()> send;
+    std::function<bool()> untag; // Backspace at the start: true when it took the last tag
+    QCompleter *completer = nullptr;
+
+protected:
+    void keyPressEvent(QKeyEvent *key) override
+    {
+        const bool enter = key->key() == Qt::Key_Return || key->key() == Qt::Key_Enter;
+        if (completer && completer->popup()->isVisible()
+            && (enter || key->key() == Qt::Key_Escape || key->key() == Qt::Key_Tab || key->key() == Qt::Key_Backtab))
+            return key->ignore();
+        if (enter && key->modifiers() & Qt::ShiftModifier)
+            return insertPlainText(QStringLiteral("\n"));
+        if (enter && !(key->modifiers() & ~Qt::KeypadModifier))
+            return send();
+        if (key->key() == Qt::Key_Backspace && textCursor().position() == 0 && !textCursor().hasSelection() && untag())
+            return;
+        QPlainTextEdit::keyPressEvent(key);
     }
 };
 
@@ -221,6 +248,7 @@ AssistantView::AssistantView(MainWindow &window, Store &store)
     m_scroll = new QScrollArea;
     m_scroll->setWidgetResizable(true);
     m_scroll->setFrameShape(QFrame::NoFrame);
+    m_scroll->setFocusPolicy(Qt::NoFocus);
     m_scroll->setHorizontalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
     m_scroll->setWidget(centred(content));
     m_scroll->viewport()->setAutoFillBackground(false);
@@ -253,15 +281,24 @@ AssistantView::AssistantView(MainWindow &window, Store &store)
     chips->setSpacing(6);
     m_chips->hide();
     top->addWidget(m_chips, 0, Qt::AlignTop);
-    m_editor = new QPlainTextEdit;
+    auto *editor = new ComposerEdit;
+    editor->send = [this] { send(); };
+    editor->untag = [this] {
+        if (m_tags.isEmpty())
+            return false;
+        for (QObject *o : m_chips->children())
+            if (auto *c = dynamic_cast<Chip *>(o); c && c->text().startsWith(m_tags.last() + QLatin1Char(' ')))
+                c->removed();
+        return true;
+    };
+    m_editor = editor;
     m_editor->setObjectName(QStringLiteral("assistantComposer"));
     m_editor->setPlaceholderText(tr("Message Elis…  @ to tag, or drag a row from the sidebar"));
     m_editor->setFrameShape(QFrame::NoFrame);
     m_editor->setStyleSheet(QStringLiteral("QPlainTextEdit{background:transparent;}"));
     m_editor->setTabChangesFocus(true);
     m_editor->document()->setDocumentMargin(1);
-    m_editor->installEventFilter(this);
-    m_editor->viewport()->installEventFilter(this);
+    m_editor->viewport()->installEventFilter(this); // drops land on the viewport
     auto fit = [this] {
         const int lines = qBound(1, int(m_editor->document()->documentLayout()->documentSize().height()), 8);
         m_editor->setFixedHeight(lines * m_editor->fontMetrics().lineSpacing() + 6);
@@ -323,6 +360,7 @@ AssistantView::AssistantView(MainWindow &window, Store &store)
     m_completer->setCaseSensitivity(Qt::CaseInsensitive);
     m_completer->setCompletionRole(Qt::UserRole);
     m_completer->popup()->setObjectName(QStringLiteral("assistantCompletion"));
+    editor->completer = m_completer;
     connect(m_completer, qOverload<const QModelIndex &>(&QCompleter::activated), this, [this](const QModelIndex &index) {
         QTextCursor c = m_editor->textCursor();
         c.movePosition(QTextCursor::Left, QTextCursor::KeepAnchor, int(m_completer->completionPrefix().size()));
@@ -375,7 +413,7 @@ void AssistantView::focusComposer()
     m_editor->setFocus();
 }
 
-void AssistantView::refresh()
+void AssistantView::loadDirectory()
 {
     m_directory = Assistant::directory(m_window.assistantWindows(), m_window.assistantProviders());
     m_sessions.clear();
@@ -388,6 +426,11 @@ void AssistantView::refresh()
             m_sessions.insert(s["id"].toString(), session);
         }
     }
+}
+
+void AssistantView::refresh()
+{
+    loadDirectory();
     const QJsonObject read = m_window.assistantRequest({{"cmd", "assistant.read"}});
     const QJsonArray entries = read["result"]["assistant"]["entries"].toArray();
     // the transcript grows at its end until its cap trims the start, which redraws the column
@@ -459,6 +502,7 @@ void AssistantView::addTag(const QString &tag)
     if (tag.isEmpty() || m_tags.contains(tag))
         return;
     m_tags << tag;
+    loadDirectory(); // the chip's colour
     m_chips->layout()->addWidget(chip(tag, true));
     m_chips->show();
     Q_EMIT m_editor->textChanged();
@@ -606,6 +650,7 @@ void AssistantView::complete()
     const QRegularExpressionMatch m = token.match(cursor.block().text().left(cursor.positionInBlock()));
     if (!m.hasMatch())
         return m_completer->popup()->hide();
+    loadDirectory();
     m_candidates->clear();
     auto add = [this](const QString &tag, const QString &detail, const QIcon &icon) {
         auto *item = new QStandardItem(icon, detail.isEmpty() ? tag : tag + QStringLiteral("   ") + detail);
@@ -649,6 +694,7 @@ void AssistantView::send()
 
 bool AssistantView::dropTags(const QMimeData *mime)
 {
+    loadDirectory();
     if (mime->hasFormat(SidebarMime::sessions)) {
         for (const QString &id : QString::fromUtf8(mime->data(SidebarMime::sessions)).split(QLatin1Char(',')))
             if (m_sessions.contains(id))
@@ -671,45 +717,16 @@ bool AssistantView::eventFilter(QObject *watched, QEvent *event)
         auto *drag = static_cast<QDragMoveEvent *>(event);
         if (!drag->mimeData()->hasFormat(SidebarMime::sessions) && !drag->mimeData()->hasFormat(SidebarMime::workspace))
             return false; // text and files drop into the message as usual
-        drag->setDropAction(Qt::CopyAction);
-        drag->accept();
+        drag->acceptProposedAction(); // the sidebar offers a move and removes nothing after it, as onto a terminal
         return true;
     }
     case QEvent::Drop: {
         auto *drop = static_cast<QDropEvent *>(event);
         if (!dropTags(drop->mimeData()))
             return false;
-        drop->setDropAction(Qt::CopyAction); // a copy: the sidebar keeps its row
-        drop->accept();
+        drop->acceptProposedAction();
         m_editor->setFocus();
         return true;
-    }
-    case QEvent::KeyPress: {
-        if (watched != m_editor)
-            break;
-        auto *key = static_cast<QKeyEvent *>(event);
-        const bool enter = key->key() == Qt::Key_Return || key->key() == Qt::Key_Enter;
-        if (m_completer->popup()->isVisible()
-            && (enter || key->key() == Qt::Key_Escape || key->key() == Qt::Key_Tab || key->key() == Qt::Key_Backtab)) {
-            key->ignore(); // the completer's popup takes them
-            return true;
-        }
-        if (enter && key->modifiers() & Qt::ShiftModifier) {
-            m_editor->insertPlainText(QStringLiteral("\n"));
-            return true;
-        }
-        if (enter && !(key->modifiers() & ~Qt::KeypadModifier)) {
-            send();
-            return true;
-        }
-        if (key->key() == Qt::Key_Backspace && !m_tags.isEmpty() && m_editor->textCursor().position() == 0 && !m_editor->textCursor().hasSelection()) {
-            const QString last = m_tags.last();
-            for (QObject *o : m_chips->children())
-                if (auto *c = dynamic_cast<Chip *>(o); c && c->text().startsWith(last + QLatin1Char(' ')))
-                    c->removed();
-            return true;
-        }
-        break;
     }
     default:
         break;
