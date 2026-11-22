@@ -1,23 +1,33 @@
-#if os(macOS)
-import CoreBluetooth
+#if !canImport(Musl)
 import Foundation
+#if canImport(Glibc)
+import Glibc
+#endif
+
+/// The platform's BLE peripheral under `MobileBluetooth`: Core Bluetooth on the Mac, BlueZ on Linux.
+/// Every call, and every call it makes back, is on `relay.queue`.
+protocol BleRadio: AnyObject {
+    /// Serves `psm` in the PSM characteristic under `service` and advertises that UUID, replacing the last one.
+    func advertise(service: UUID, psm: UInt16)
+    /// Ends the L2CAP channel `psm` and what advertised it; open channels are not touched.
+    func unpublish(_ psm: UInt16)
+}
 
 /// The relay's Bluetooth transport: a BLE peripheral advertising the token's rotating service UUID, whose L2CAP
-/// channels become phones of the relay. Every mutable property is touched on `relay.queue`, which is also
-/// CoreBluetooth's.
-final class MobileBluetooth: NSObject, CBPeripheralManagerDelegate, @unchecked Sendable {
-    private let relay: MobileRelay
+/// channels become phones of the relay. Every mutable property is touched on `relay.queue`.
+final class MobileBluetooth: @unchecked Sendable {
+    let relay: MobileRelay
     private let token: String
     /// Authenticated Bluetooth phones at once; a handshake past it gets the busy frame. Links that passed the
     /// handshake but never authenticate (a replayed message 1) are the relay's unauthenticated cap's to evict.
     private let maxPhones: Int
-    private let limits: BlePhoneLink.Limits
+    let limits: BlePhoneLink.Limits
     private let status: @Sendable (String) -> Void
     private var shown: String?
     private var links: [ObjectIdentifier: BlePhoneLink] = [:]
-    private var manager: CBPeripheralManager?
-    private var psm: CBL2CAPPSM?
-    private var service: CBMutableService?
+    private var radio: (any BleRadio)?
+    /// The published L2CAP channel, nil while the radio is off.
+    private(set) var psm: UInt16?
     private var rotation: (any DispatchSourceTimer)?
     private var lock: Int32 = -1
 
@@ -49,15 +59,14 @@ final class MobileBluetooth: NSObject, CBPeripheralManagerDelegate, @unchecked S
         }
         relay.queue.sync {
             lock = fd
-            manager = CBPeripheralManager(delegate: self, queue: relay.queue)
+            radio = makeRadio()
         }
         return true
     }
 
-    /// Serves one L2CAP channel's streams; `channel` is kept alive with them. Call on `relay.queue`.
-    func accept(input: InputStream, output: OutputStream, holding channel: AnyObject?) {
-        let link = BlePhoneLink(input: input, output: output, holding: channel, queue: relay.queue,
-                                mobileDir: relay.settings.mobileDir, limits: limits) { [weak self] in
+    /// Serves one L2CAP channel. Call on `relay.queue`.
+    func accept(_ pipe: any BlePipe) {
+        let link = BlePhoneLink(pipe: pipe, queue: relay.queue, mobileDir: relay.settings.mobileDir) { [weak self] in
             guard let self else { return false }
             return relay.authenticatedPhones { $0 is BlePhoneLink } < maxPhones
         }
@@ -73,9 +82,8 @@ final class MobileBluetooth: NSObject, CBPeripheralManagerDelegate, @unchecked S
         report("off (\(reason))")
         rotation?.cancel()
         rotation = nil
-        if let psm { manager?.unpublishL2CAPChannel(psm) }
+        if let psm { radio?.unpublish(psm) }
         psm = nil
-        service = nil
         links.values.forEach { $0.drop() }
     }
 
@@ -85,7 +93,8 @@ final class MobileBluetooth: NSObject, CBPeripheralManagerDelegate, @unchecked S
         status(state)
     }
 
-    private func failed(_ step: String, _ error: any Error) {
+    /// Publishing the channel failed: the radio is off for this relay. Call on `relay.queue`.
+    func failed(_ step: String, _ error: any Error) {
         relay.settings.log("bluetooth \(step) failed: \(error.localizedDescription)")
         off("unsupported")
     }
@@ -97,6 +106,15 @@ final class MobileBluetooth: NSObject, CBPeripheralManagerDelegate, @unchecked S
         report("off (unsupported)")
         schedule(after: 30)
     }
+
+    /// The radio published its L2CAP channel. Call on `relay.queue`.
+    func published(_ psm: UInt16) {
+        self.psm = psm
+        advertise()
+    }
+
+    /// The radio advertises the last service. Call on `relay.queue`.
+    func advertised() { report("advertising") }
 
     private func schedule(after delay: TimeInterval) {
         let rotation = DispatchSource.makeTimerSource(queue: relay.queue)
@@ -110,68 +128,34 @@ final class MobileBluetooth: NSObject, CBPeripheralManagerDelegate, @unchecked S
     /// Registers the PSM characteristic under this epoch's UUID and advertises it, then again at the next boundary.
     /// Open channels are not touched.
     private func advertise() {
-        guard let manager, let psm else { return }
-        manager.stopAdvertising()
-        if let service { manager.remove(service) }
+        guard let radio, let psm else { return }
         let now = Date()
         let epoch = BleIDs.epoch(at: now)
-        let value = withUnsafeBytes(of: psm.littleEndian) { Data($0) }
-        let characteristic = CBMutableCharacteristic(type: CBUUID(nsuuid: BleIDs.psmCharacteristic), properties: .read,
-                                                     value: value, permissions: .readable)
-        let service = CBMutableService(type: CBUUID(nsuuid: BleIDs.serviceUUID(token: token, epoch: epoch)), primary: true)
-        service.characteristics = [characteristic]
-        self.service = service
-        manager.add(service)
+        radio.advertise(service: BleIDs.serviceUUID(token: token, epoch: epoch), psm: psm)
         schedule(after: Double(epoch + 1) * BleIDs.epochSeconds - now.timeIntervalSince1970)
-    }
-
-    func peripheralManagerDidUpdateState(_ peripheral: CBPeripheralManager) {
-        switch peripheral.state {
-        case .poweredOn:
-            // a repeated poweredOn with a channel still published would publish a second PSM and leak the first
-            guard psm == nil else { break }
-            // the radio coming back finds the old channel and service gone; unverified on hardware, see Task 8
-            peripheral.removeAllServices()
-            peripheral.publishL2CAPChannel(withEncryption: false)
-        case .poweredOff, .resetting: off("powered off")
-        case .unauthorized: off("unauthorized")
-        case .unsupported: off("unsupported")
-        default: break
-        }
-    }
-
-    func peripheralManager(_ peripheral: CBPeripheralManager, didPublishL2CAPChannel PSM: CBL2CAPPSM, error: (any Error)?) {
-        if let error { return failed("publish", error) }
-        psm = PSM
-        advertise()
-    }
-
-    func peripheralManager(_ peripheral: CBPeripheralManager, didAdd service: CBService, error: (any Error)?) {
-        if let error { return advertisingFailed("service", error) }
-        // the service UUID only: a local name would expose the Mac's name
-        peripheral.startAdvertising([CBAdvertisementDataServiceUUIDsKey: [service.uuid]])
-    }
-
-    func peripheralManagerDidStartAdvertising(_ peripheral: CBPeripheralManager, error: (any Error)?) {
-        if let error { return advertisingFailed("advertising", error) }
-        report("advertising")
-    }
-
-    func peripheralManager(_ peripheral: CBPeripheralManager, didOpen channel: CBL2CAPChannel?, error: (any Error)?) {
-        guard let channel, let input = channel.inputStream, let output = channel.outputStream else { return }
-        accept(input: input, output: output, holding: channel)
     }
 }
 
+/// The bytes under a `BlePhoneLink`: Core Bluetooth's streams on the Mac, an L2CAP socket on Linux.
+protocol BlePipe: AnyObject {
+    /// Starts reading. Both run on the relay queue; `failed` once the peer is gone or stopped reading.
+    func start(received: @escaping @Sendable (Data) -> Void, failed: @escaping @Sendable () -> Void)
+    /// `completion` runs on the relay queue once the bytes are written, or the pipe has shut.
+    func write(_ bytes: Data, completion: @escaping () -> Void)
+    /// Shuts once queued output drains, or after `Limits.flushTimeout`.
+    func close()
+}
+
 /// One L2CAP channel as a relay phone: the Noise handshake, then sealed frames of the line stream.
-/// Protocol state lives on `queue`; the streams live on `StreamThread`.
-final class BlePhoneLink: NSObject, PhoneTransportConnection, StreamDelegate, @unchecked Sendable {
+/// Protocol state lives on `queue`; the bytes go through `pipe`.
+final class BlePhoneLink: PhoneTransportConnection, @unchecked Sendable {
     struct Limits: Sendable {
         /// Output not yet written; past it the phone is not reading and is dropped.
         var maxPending = 8 << 20
         /// How long a close waits for queued output to drain.
         var flushTimeout: TimeInterval = 5
-        /// The spike saw an L2CAP stream stop reporting space mid-transfer, so pending output is also retried on a timer.
+        /// The spike saw an L2CAP stream stop reporting space mid-transfer, so pending output is also retried on a
+        /// timer (the Mac's streams only).
         var pumpInterval: TimeInterval = 0.02
     }
 
@@ -179,52 +163,31 @@ final class BlePhoneLink: NSObject, PhoneTransportConnection, StreamDelegate, @u
     var onReceive: ((Data) -> Void)?
     var onClose: (() -> Void)?
     var onEnd: ((BlePhoneLink) -> Void)?
+    private let pipe: any BlePipe
     private let queue: DispatchQueue
     private let mobileDir: String
-    private let limits: Limits
     private let admit: () -> Bool
     private var framer = BleFramer()
     private var keys: BleTransportKeys?
     private var ended = false
 
-    // stream thread only
-    private let input: InputStream
-    private let output: OutputStream
-    /// The channel, and this link itself while its streams are open: a stream's delegate is not retained.
-    private var held: [AnyObject] = []
-    private var pending = Data()
-    private var flushed = 0
-    private var sends: [(end: Int, completion: () -> Void)] = []
-    private var closing = false
-    private var pumpTimer: Timer?
-
     /// `admit` says whether one more phone may pass the handshake.
-    init(input: InputStream, output: OutputStream, holding channel: AnyObject?, queue: DispatchQueue, mobileDir: String,
-         limits: Limits, admit: @escaping () -> Bool) {
-        self.input = input
-        self.output = output
+    init(pipe: any BlePipe, queue: DispatchQueue, mobileDir: String, admit: @escaping () -> Bool) {
+        self.pipe = pipe
         self.queue = queue
         self.mobileDir = mobileDir
-        self.limits = limits
         self.admit = admit
-        super.init()
-        held = [channel, self].compactMap { $0 }
     }
 
     func start() {
-        StreamThread.shared.perform { [self] in
-            for stream in [input, output] as [Stream] {
-                stream.delegate = self
-                stream.schedule(in: .current, forMode: .default)
-                stream.open()
-            }
-        }
+        // weak: the pipe keeps itself while it is open, and the relay keeps the link
+        pipe.start(received: { [weak self] in self?.received($0) }, failed: { [weak self] in self?.drop() })
     }
 
     // MARK: relay queue
 
     func send(_ data: Data, completion: @escaping () -> Void) {
-        guard !ended, var sealing = keys else { return queue.async(execute: completion) }
+        guard !ended, var sealing = keys else { return later(completion) }
         var wire = Data()
         do {
             // seal in call order on this queue: the nonce order is the wire order
@@ -233,29 +196,29 @@ final class BlePhoneLink: NSObject, PhoneTransportConnection, StreamDelegate, @u
                 wire += BleFramer.frame(try sealing.seal(Data(data[start..<min(start + BleTransportKeys.maxChunk, data.endIndex)])))
             }
         } catch {
-            queue.async(execute: completion)
+            later(completion)
             return drop()
         }
         keys = sealing
-        write(wire, completion)
+        pipe.write(wire, completion: completion)
     }
 
     func close() {
         guard !ended else { return }
         ended = true
         onEnd?(self)
-        StreamThread.shared.perform { [self] in
-            closing = true
-            guard !pending.isEmpty, !held.isEmpty else { return shut() }
-            // a phone that stops reading cannot hold the channel open
-            DispatchQueue.global().asyncAfter(deadline: .now() + limits.flushTimeout) { StreamThread.shared.perform { self.shut() } }
-        }
+        pipe.close()
     }
 
     /// The peer is gone or broke the link: closes after any reject frame drains, and tells the session.
     func drop() {
         close()
         onClose?()
+    }
+
+    private func later(_ completion: @escaping () -> Void) {
+        nonisolated(unsafe) let work = completion // called on `queue` only; Linux's Dispatch takes @Sendable blocks
+        queue.async { work() }
     }
 
     private func received(_ data: Data) {
@@ -280,113 +243,12 @@ final class BlePhoneLink: NSObject, PhoneTransportConnection, StreamDelegate, @u
               let accepted = try? BleResponder(psk: BleIDs.psk(token: token)).readInitiator(message) else { return reject(0x01) }
         guard admit() else { return reject(0x02) }
         keys = accepted.transport
-        write(BleFramer.frame(accepted.reply)) {}
+        pipe.write(BleFramer.frame(accepted.reply)) {}
     }
 
     private func reject(_ code: UInt8) {
-        write(BleFramer.frame(Data([code]))) {}
+        pipe.write(BleFramer.frame(Data([code]))) {}
         drop()
-    }
-
-    private func write(_ bytes: Data, _ completion: @escaping () -> Void) {
-        StreamThread.shared.perform { [self] in
-            guard !held.isEmpty else { return queue.async(execute: completion) }
-            pending += bytes
-            sends.append((flushed + pending.count, completion))
-            guard pending.count <= limits.maxPending else {
-                shut()
-                return queue.async { self.drop() }
-            }
-            pump()
-        }
-    }
-
-    // MARK: stream thread
-
-    func stream(_ stream: Stream, handle event: Stream.Event) {
-        switch event {
-        case .hasBytesAvailable: read()
-        case .hasSpaceAvailable: pump()
-        case .errorOccurred, .endEncountered:
-            shut()
-            queue.async { self.drop() }
-        default: break
-        }
-    }
-
-    private func read() {
-        var bytes = [UInt8](repeating: 0, count: 16384)
-        var data = Data()
-        while input.hasBytesAvailable {
-            let count = input.read(&bytes, maxLength: bytes.count)
-            guard count > 0 else { break }
-            data.append(bytes, count: count)
-        }
-        if !data.isEmpty { queue.async { self.received(data) } }
-    }
-
-    private func pump() {
-        while !pending.isEmpty, output.hasSpaceAvailable {
-            let count = pending.withUnsafeBytes { output.write($0.bindMemory(to: UInt8.self).baseAddress!, maxLength: $0.count) }
-            guard count > 0 else { break } // a failure arrives as an event
-            pending.removeFirst(count)
-            flushed += count
-        }
-        let done = sends.prefix { $0.end <= flushed }
-        sends.removeFirst(done.count)
-        done.forEach { queue.async(execute: $0.completion) }
-        if closing, pending.isEmpty { return shut() }
-        if pending.isEmpty {
-            pumpTimer?.invalidate()
-            pumpTimer = nil
-        } else if pumpTimer == nil {
-            let timer = Timer(timeInterval: limits.pumpInterval, repeats: true) { [weak self] _ in self?.pump() }
-            RunLoop.current.add(timer, forMode: .default)
-            pumpTimer = timer
-        }
-    }
-
-    /// Closes the streams; every send still waiting completes, as the session's contract needs.
-    private func shut() {
-        guard !held.isEmpty else { return }
-        pumpTimer?.invalidate()
-        pumpTimer = nil
-        for stream in [input, output] as [Stream] {
-            stream.delegate = nil
-            stream.close()
-            stream.remove(from: .current, forMode: .default)
-        }
-        sends.forEach { queue.async(execute: $0.completion) }
-        sends = []
-        pending = Data()
-        held = []
-    }
-}
-
-/// NSStream events need a run loop, and serve parks the main thread in `dispatchMain`: one thread runs the run
-/// loop every Bluetooth link's streams are scheduled on.
-private final class StreamThread: @unchecked Sendable {
-    static let shared = StreamThread()
-    private var loop: CFRunLoop?
-
-    private init() {
-        let started = DispatchSemaphore(value: 0)
-        let thread = Thread { [self] in
-            loop = CFRunLoopGetCurrent()
-            RunLoop.current.add(Port(), forMode: .default) // a run loop without a source returns at once
-            started.signal()
-            while true { RunLoop.current.run() }
-        }
-        thread.name = "elisctl.mobile.bluetooth"
-        thread.start()
-        started.wait()
-    }
-
-    /// Blocks run in order on the stream thread, which is what serializes the stream-side state.
-    func perform(_ block: @escaping () -> Void) {
-        nonisolated(unsafe) let work = block
-        CFRunLoopPerformBlock(loop, CFRunLoopMode.defaultMode.rawValue) { work() }
-        CFRunLoopWakeUp(loop)
     }
 }
 #endif

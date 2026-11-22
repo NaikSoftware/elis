@@ -167,8 +167,14 @@ Legend: [x] done · [ ] todo · (fork) = fork-only feature, not in upstream docs
 - [x] Phone relay (Elis only): Settings ▸ Connect a Phone… or `elisctl mobile serve|reset` (the Swift `elisctl` in
   `libexec/elis`) runs master's Swift relay for the Elis Mobile app (`mobile/`): the control protocol, terminal stream,
   direct input, Fit to phone and Chat over TLS, pinned by the certificate's SHA-256 and gated by a 256-bit token, paired
-  by QR code or `elis://pair` link; `session type --pane` types into either pane. Not ported: Bluetooth and pages on the
-  phone (refused with "Elis is too old to show pages")
+  by QR code or `elis://pair` link; `session type --pane` types into either pane. Not ported: pages on the phone
+  (refused with "Elis is too old to show pages")
+- [x] The phone's Bluetooth link in the Swift relay (`mobile serve [--no-bluetooth]`): BlueZ over D-Bus advertises the
+  token's rotating service UUID and serves the PSM characteristic, the phone opens an unencrypted LE L2CAP channel that
+  Noise keyed by the token secures; the Mac's wire, `bluetooth.lock` and busy cap; a powered-off adapter drops the
+  Bluetooth phones and advertises again when it powers on
+- [ ] Connect a Phone…'s Bluetooth row (Starting…, Advertising, Off with a reason): the relay prints the state, the
+  dialog does not show it
 - [x] `session attach [--pane left|right] [--claim] [--json]` and `phone.*` events: attaches this terminal to a Live
   pane as a passive zmx viewer (skipping scrollback) or claiming lead (`--claim`), or prints
   `{argv, paneID, screen, remote, nonce?}` with `--json` (no `origin`; C++ `elisctl` runs the Swift `elisctl`

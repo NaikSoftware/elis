@@ -308,7 +308,6 @@ struct MobileCommandsTests {
     }
 }
 
-#if os(macOS)
 struct MobileBluetoothTests {
     @Test func pairLinkOffersBluetoothAndOmitsAMissingHost() {
         let link = MobilePairing.pairLink(host: "10.0.0.2", port: 8765, token: "T", fingerprint: "ab", name: "Mac", bluetooth: true)
@@ -418,6 +417,7 @@ struct MobileBluetoothTests {
         #expect(late.readFrame() == Data([0x02]))
     }
 
+    #if os(macOS)
     @Test func outputDrainsWhenTheStreamStopsReportingSpace() throws {
         let fixture = try MobileFixture()
         defer { fixture.stop() }
@@ -426,6 +426,7 @@ struct MobileBluetoothTests {
         phone.send(#"{"auth":"\#(fixture.token)","id":1}"#)
         #expect(phone.readJSON()?["ok"] as? Bool == true)
     }
+    #endif
 
     @Test func aPhoneThatStopsReadingIsDropped() throws {
         let fixture = try MobileFixture()
@@ -477,6 +478,31 @@ struct MobileBluetoothTests {
         #expect(fixture.logged().contains { $0.hasPrefix("bluetooth service failed: ") })
     }
 
+    #if os(Linux)
+    @Test func aCloseStopsWaitingForAPhoneThatStopsReading() throws {
+        let fixture = try MobileFixture()
+        defer { fixture.stop() }
+        let radio = MobileBluetooth(relay: fixture.relay, token: fixture.token, limits: .init(flushTimeout: 0.3), status: { _ in })
+        let phone = try BlePhone(fixture, radio)
+        try phone.handshake(token: fixture.token)
+        phone.send(#"{"auth":"\#(fixture.token)","id":1}"#)
+        #expect(phone.readJSON()?["ok"] as? Bool == true)
+        let before = fixture.server.requests().count
+        let alphabet = Array("abcdefghijklmnopqrstuvwxyz0123456789")
+        for id in 2..<5 {
+            let cmd = String((0..<20000).map { _ in alphabet.randomElement() ?? "a" })
+            phone.send(#"{"cmd":"\#(cmd)","id":\#(id)}"#)
+        }
+        let deadline = Date().addingTimeInterval(30)
+        while fixture.server.requests().count < before + 3, Date() < deadline { usleep(20_000) }
+        usleep(300_000) // the unread answers back up behind the small socket buffer
+        try #require(!phone.peerClosed())
+        fixture.relay.queue.sync { radio.off("powered off") }
+        let closing = Date().addingTimeInterval(10)
+        while !phone.peerClosed(), Date() < closing { usleep(20_000) }
+        #expect(phone.peerClosed())
+    }
+    #else
     @Test func aCloseStopsWaitingForAPhoneThatStopsReading() throws {
         let fixture = try MobileFixture()
         defer { fixture.stop() }
@@ -490,6 +516,7 @@ struct MobileBluetoothTests {
         fixture.relay.queue.sync { radio.off("powered off") }
         #expect(output.waitClosed())
     }
+    #endif
 
     @Test func anUnopenableLockIsNotReportedAsBusy() throws {
         let fixture = try MobileFixture()
@@ -516,7 +543,8 @@ struct MobileBluetoothTests {
 
 // MARK: - fixtures
 
-/// The phone's end of an L2CAP channel: a socket pair whose other end the relay reads as streams.
+/// The phone's end of an L2CAP channel: a socket pair whose other end the relay reads as streams on the Mac, and as
+/// an L2CAP socket's SDUs on Linux.
 private final class BlePhone: @unchecked Sendable {
     private(set) var message1 = Data()
     private(set) var framesOpened = 0
@@ -527,6 +555,30 @@ private final class BlePhone: @unchecked Sendable {
     private var lines = Data()
     private var closed = false
     private let radio: MobileBluetooth
+
+    #if os(Linux)
+    init(_ fixture: MobileFixture, _ radio: MobileBluetooth? = nil) throws {
+        let radio = radio ?? MobileBluetooth(relay: fixture.relay, token: fixture.token, status: { _ in })
+        self.radio = radio
+        var fds: [Int32] = [0, 0]
+        try #require(socketpair(AF_UNIX, Int32(SOCK_SEQPACKET.rawValue), 0, &fds) == 0)
+        fd = fds[1]
+        var timeout = timeval(tv_sec: 30, tv_usec: 0)
+        setsockopt(fd, SOL_SOCKET, SO_RCVTIMEO, &timeout, socklen_t(MemoryLayout<timeval>.size))
+        // a small buffer, so output a phone does not read backs up in the relay as on a real channel
+        var buffer: Int32 = 16384
+        setsockopt(fds[0], SOL_SOCKET, SO_SNDBUF, &buffer, socklen_t(MemoryLayout<Int32>.size))
+        _ = fcntl(fds[0], F_SETFL, fcntl(fds[0], F_GETFL) | O_NONBLOCK)
+        // SDUs shorter than a frame, so frames cross SDUs
+        fixture.relay.queue.sync { radio.accept(socket: fds[0], mtu: 1000) }
+    }
+
+    /// True once the relay has closed its end, read or not.
+    func peerClosed() -> Bool {
+        var entry = pollfd(fd: fd, events: 0, revents: 0)
+        return poll(&entry, 1, 0) == 1 && entry.revents & Int16(POLLHUP) != 0
+    }
+    #else
     private let fake: FakeOutput?
 
     /// With `output`, the relay writes into that fake instead of the socket.
@@ -547,6 +599,7 @@ private final class BlePhone: @unchecked Sendable {
         CFReadStreamSetProperty(read, CFStreamPropertyKey(kCFStreamPropertyShouldCloseNativeSocket), kCFBooleanTrue)
         fixture.relay.queue.sync { radio.accept(input: read as InputStream, output: fake ?? write as OutputStream, holding: nil) }
     }
+    #endif
 
     var label: String { "bt:" + message1.prefix(2).map { String(format: "%02x", $0) }.joined() }
 
@@ -585,11 +638,13 @@ private final class BlePhone: @unchecked Sendable {
     func readFrame() -> Data? {
         var bytes = [UInt8](repeating: 0, count: 4096)
         while frames.isEmpty {
+            #if os(macOS)
             if let fake {
                 guard let data = fake.next() else { return nil }
                 frames += framer.push(data)
                 continue
             }
+            #endif
             let count = read(fd, &bytes, bytes.count)
             guard count > 0 else { return nil }
             frames += framer.push(Data(bytes[..<count]))
@@ -619,12 +674,17 @@ private final class BlePhone: @unchecked Sendable {
     func close() {
         guard !closed else { return }
         closed = true
+        #if os(macOS)
         Darwin.close(fd)
+        #else
+        Glibc.close(fd)
+        #endif
     }
 
     deinit { close() }
 }
 
+#if os(macOS)
 /// An output stream that never reports events, so only the relay's own retries move bytes: it takes `chunk` bytes
 /// per write and reports no space right after one, and none at all once stalled.
 private final class FakeOutput: OutputStream, @unchecked Sendable {

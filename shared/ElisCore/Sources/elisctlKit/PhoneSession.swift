@@ -151,11 +151,7 @@ final class PhoneSession: @unchecked Sendable {
                 guard !closing else { return }
                 connection.send(PhoneLinkUpgrade.answer) { [self] in
                     guard !closing else { return }
-                    #if os(macOS)
                     let window: UInt32 = connection is BlePhoneLink ? 16384 : 262_144
-                    #else
-                    let window: UInt32 = 262_144 // no Bluetooth on Linux yet
-                    #endif
                     let link = PhoneLinkSession(
                         send: { [weak self] bytes, done in
                             guard let self, !closing else { return done() }

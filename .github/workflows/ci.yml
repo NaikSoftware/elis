@@ -193,13 +193,14 @@ jobs:
         working-directory: macos
     steps:
       - uses: actions/checkout@v7
-      - name: Install jq, zsh, fish, tcsh and OpenSSL
+      - name: Install jq, zsh, fish, tcsh, OpenSSL, libsystemd and zlib
         # jq: the codex status hook reads its JSON with it where plutil does not exist; the shells: tests run
         # scripts under each login shell the remote commands must survive, and server panes run zsh, fish and bash;
-        # libssl-dev and openssl: the phone relay's TLS listener links OpenSSL and makes its certificate with the CLI
+        # libssl-dev and openssl: the phone relay's TLS listener links OpenSSL and makes its certificate with the CLI;
+        # libsystemd-dev and zlib1g-dev: its Bluetooth link talks to BlueZ over sd-bus and deflates with zlib
         run: >-
           apt-get update && apt-get install -y --no-install-recommends jq zsh fish tcsh xz-utils curl ca-certificates
-          libssl-dev openssl
+          libssl-dev openssl libsystemd-dev zlib1g-dev
       - name: Read the pinned zmx and ghostty revisions
         id: zmx
         run: |
