@@ -49,6 +49,9 @@ cat >"$ELIS_STATE_DIR/config/hooks.conf" <<EOF
 on app.launched touch "$ELIS_STATE_DIR/launched"
 on session.created cat >> "$ELIS_STATE_DIR/created"
 EOF
+mkdir -p "$ELIS_STATE_DIR/assistant"
+printf 'codex' >"$ELIS_STATE_DIR/assistant/chat.jsonl.provider"
+export ELIS_ASSISTANT_PROVIDER_CMD="bash $root/tests/fixtures/fake-provider.sh"
 start
 ctl version
 for _ in $(seq 20); do [ -f "$ELIS_STATE_DIR/launched" ] && break; sleep 0.1; done
@@ -282,6 +285,41 @@ ctl tree | grep -q batch2 || fail "recent open by id"
 err=$(ctl zmx list 2>&1) && fail "zmx list answered"
 [[ $err == *'zmx.list is not supported on this platform'* ]] || fail "absent feature error"
 ctl notify 2>/dev/null && fail "notify without a body"
+# assistant: ask --wait, read, reply, send, provider, show, and assistant.message events
+[ "$(ctl assistant provider | head -1)" = "current: codex" ] || fail "assistant provider read-back"
+ctl assistant show | grep -qx ok || fail "assistant show"
+ctl tree --json | grep -q '"assistantShown":true' || fail "assistant show read-back"
+"$bin/elisctl" events --kind assistant.message >"$ELIS_STATE_DIR/assistant-events.log" &
+aevpid=$!
+sleep 0.5
+asst=$(ctl session new --name asst --no-select)
+sleep 1
+ahandle=$(ctl tree --json | python3 -I -c 'import json,sys
+d=json.load(sys.stdin); d=d.get("result",d); d=d.get("tree",d)
+print([s["handle"] for w in d["workspaces"] for s in w["sessions"] if s["id"]==sys.argv[1]][0])' "$asst")
+out=$(ctl assistant ask hello --wait --timeout 20)
+grep -qE '^[0-9]{2}:[0-9]{2} assistant: pid [0-9]+:' <<<"$out" && grep -qx 'hello' <<<"$out" || fail "assistant ask --wait ($out)"
+read_out=$(ctl assistant read)
+grep -qE '^[0-9]{2}:[0-9]{2} user: hello$' <<<"$read_out" || fail "assistant read user ($read_out)"
+grep -qE '^[0-9]{2}:[0-9]{2} assistant: pid [0-9]+:' <<<"$read_out" || fail "assistant read assistant ($read_out)"
+rc=0; out=$(ctl reply done 2>&1) || rc=$?
+[ "$rc" -ne 0 ] && [ "$out" = "elisctl reply runs inside an Elis session" ] || fail "reply outside session ($rc: $out)"
+[ "$(ELIS_SESSION_ID=$asst ctl reply done)" = "ok" ] || fail "reply inside session"
+for _ in $(seq 30); do ctl tree --json | grep -q '"assistant":{[^}]*"running":false' && break; sleep 0.2; done
+ctl assistant read --last 5 | grep -qE "^[0-9]{2}:[0-9]{2} reply @$asst: done$" || fail "assistant read reply"
+ctl assistant send --to "@$ahandle" "hi from assistant" | grep -q "delivered: $ahandle" || fail "assistant send"
+for _ in $(seq 20); do ctl session text --target "$asst" | grep -q '\[Elis\] hi from assistant' && break; sleep 0.2; done
+ctl session text --target "$asst" | grep -q '\[Elis\] hi from assistant' || fail "assistant send typed line"
+ctl session status blocked --target "$asst"
+rc=0; out=$(ctl assistant send --to "@$ahandle" "blocked msg" 2>&1) || rc=$?
+[ "$rc" -ne 0 ] && grep -q "skipped $ahandle: blocked" <<<"$out" && grep -q "nothing was delivered" <<<"$out" || fail "assistant send blocked ($rc: $out)"
+for _ in $(seq 25); do grep -q 'assistant.message kind=sent' "$ELIS_STATE_DIR/assistant-events.log" && break; sleep 0.2; done
+kill "$aevpid" 2>/dev/null || true; wait "$aevpid" 2>/dev/null || true
+grep -q 'assistant.message kind=user from=- hello' "$ELIS_STATE_DIR/assistant-events.log" || fail "assistant.message user event"
+grep -q 'assistant.message kind=assistant from=- ' "$ELIS_STATE_DIR/assistant-events.log" || fail "assistant.message assistant event"
+grep -q "assistant.message kind=reply from=$ahandle done" "$ELIS_STATE_DIR/assistant-events.log" || fail "assistant.message reply event"
+grep -q 'assistant.message kind=sent from=- hi from assistant' "$ELIS_STATE_DIR/assistant-events.log" || fail "assistant.message sent event"
+ctl session close --target "$asst" >/dev/null
 # the phone relay: TLS pinned by the link's fingerprint, the token first, then elisctl requests answered under their id
 port=$(python3 -c 'import socket; s = socket.socket(); s.bind(("127.0.0.1", 0)); print(s.getsockname()[1])')
 "$bin/elisctl" mobile serve --no-qr --port "$port" --bind 127.0.0.1 --host 127.0.0.1 >"$ELIS_STATE_DIR/relay.log" 2>&1 &
