@@ -14,7 +14,7 @@
 #include <QVBoxLayout>
 
 CiLine::CiLine(Store &store, Sidebar *sidebar, QObject *parent)
-    : QObject(parent), m_store(store)
+    : QObject(parent), m_store(store), m_sidebar(sidebar)
 {
     m_timer.setInterval(5000);
     connect(&m_timer, &QTimer::timeout, this, &CiLine::poll);
@@ -83,7 +83,7 @@ void CiLine::showPanel(const QString &sessionId, const QPoint &globalPos)
         return;
     if (m_panel)
         m_panel->close();
-    auto *panel = new QFrame(nullptr, Qt::Popup);
+    auto *panel = new QFrame(m_sidebar, Qt::Popup); // Wayland shows no popup without a transient parent
     panel->setAttribute(Qt::WA_DeleteOnClose);
     panel->setFrameShape(QFrame::StyledPanel);
     auto *box = new QVBoxLayout(panel);

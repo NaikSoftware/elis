@@ -21,6 +21,7 @@ private:
     void closeStalePanel();
 
     Store &m_store;
+    Sidebar *m_sidebar;
     QTimer m_timer;
     bool m_polling = false; // one tracker call at a time: an overlap would fetch a due repository twice
     QPointer<QFrame> m_panel;
