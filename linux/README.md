@@ -206,6 +206,8 @@ elisctl mobile serve [--port 8765] [--bind ADDR] [--host NAME] [--no-qr] [--no-b
 
 It prints the QR code and the link; Ctrl+C stops it. Nothing listens unless one of the two runs.
 
+`elisctl phone status|on|off|toggle|port|host|revoke|link [--qr]` drives the window's relay from a script, as on the Mac; `tree` reports it as `phone`.
+
 - The connection is TLS with a self-signed certificate (made with the `openssl` CLI on the first run, kept in
   `<state dir>/mobile/`); the phone pins its SHA-256 fingerprint from the link, so no CA is involved.
 - Each connection must first present the link's 256-bit token (`<state dir>/mobile/token`, mode 0600). Anyone with

@@ -405,6 +405,19 @@ for _ in $(seq 50); do grep -q 'elis://' "$ELIS_STATE_DIR/relay.log" && break; s
 grep -q '"error":"unauthorized"' <<<"$(phone "{\"auth\":\"$tok\"}")" || fail "mobile reset revokes the old token"
 grep -q '"ok":true' <<<"$(phone "{\"auth\":\"$(cat "$ELIS_STATE_DIR/mobile/token")\"}")" || fail "the new token after reset"
 kill "$mpid"; wait "$mpid" 2>/dev/null || true
+# the app's relay over phone.*: off until switched on, its port first so nothing binds 8765, the link only in status
+port=$(python3 -c 'import socket; s = socket.socket(); s.bind(("127.0.0.1", 0)); print(s.getsockname()[1])')
+out=$(ctl phone port "$port" --json) || fail "phone port ($out)"
+grep -q "\"port\":$port" <<<"$out" || fail "phone port answers its port ($out)"
+ctl phone port 80 2>/dev/null && fail "phone port below 1024"
+out=$(ctl phone on --json) || fail "phone on ($out)"
+grep -q '"listening":true' <<<"$out" || fail "phone on answers once listening ($out)"
+grep -q '"link"' <<<"$out" && fail "phone on leaves the link out ($out)"
+link=$(ctl phone link) || fail "phone link"
+[[ $link == elis://pair\?*"&p=$port&"* ]] || fail "phone link names the port ($link)"
+ctl tree --json | grep -q "\"phone\":{[^}]*\"listening\":true" || fail "tree.phone reads the relay back"
+ctl phone off >/dev/null || fail "phone off"
+ctl phone status --json | grep -q '"on":false' || fail "phone status after off"
 fit=$(ctl session new --name fitme --no-select)
 sleep 1
 # session grid: the phone's Fit to phone; the program sees the phone's grid, all of it readable, until --reset
