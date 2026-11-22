@@ -1,5 +1,4 @@
 // elisctl: drive a running elis over its control socket.
-#include "mobile.h"
 #include "paths.h"
 
 #include <QCoreApplication>
@@ -272,8 +271,9 @@ static QString callerPath(const QString &path)
 int main(int argc, char **argv)
 {
     QCoreApplication app(argc, argv);
-    if (argc >= 3 && std::strcmp(argv[1], "session") == 0 && std::strcmp(argv[2], "attach") == 0) {
-        // the Swift relay owns attach; both sides get the state dir explicitly
+    const bool attach = argc >= 3 && std::strcmp(argv[1], "session") == 0 && std::strcmp(argv[2], "attach") == 0;
+    if (attach || (argc >= 2 && std::strcmp(argv[1], "mobile") == 0)) {
+        // the Swift relay owns attach and mobile; both sides get the state dir explicitly (paths.h and ControlResolve differ)
         const QString dir = QCoreApplication::applicationDirPath();
         const QString buildHelper = dir + QStringLiteral("/helper/elisctl");
         const QString helper = QFileInfo(buildHelper).isExecutable()
@@ -281,20 +281,10 @@ int main(int argc, char **argv)
             : QDir::cleanPath(dir + QStringLiteral("/" ELIS_LIBEXEC_FROM_BIN "/elisctl"));
         const QByteArray helperPath = QFile::encodeName(helper);
         const QByteArray state = QFile::encodeName(stateDir());
-        const QByteArray sock = QFile::encodeName(socketPath());
+        // Swift derives the same <state>/elis.sock from it; a --socket argument passes through
         ::setenv("ELIS_STATE_DIR", state.constData(), 1);
-        bool hasSocket = false;
-        std::vector<char *> execArgs;
-        execArgs.push_back(const_cast<char *>(helperPath.constData()));
-        for (int i = 1; i < argc; ++i) {
-            if (std::strcmp(argv[i], "--socket") == 0 || std::strncmp(argv[i], "--socket=", 9) == 0)
-                hasSocket = true;
-            execArgs.push_back(argv[i]);
-        }
-        if (!hasSocket) {
-            execArgs.push_back(const_cast<char *>("--socket"));
-            execArgs.push_back(const_cast<char *>(sock.constData()));
-        }
+        std::vector<char *> execArgs{const_cast<char *>(helperPath.constData())};
+        execArgs.insert(execArgs.end(), argv + 1, argv + argc);
         execArgs.push_back(nullptr);
         ::execv(helperPath.constData(), execArgs.data());
         fprintf(stderr, "elisctl: cannot run %s: %s\n", helperPath.constData(), std::strerror(errno));
@@ -302,7 +292,7 @@ int main(int argc, char **argv)
     }
     const QStringList flags{"json", "stdin", "all", "no-select", "create-workspace", "auto-reset", "blink", "if-idle", "undoable", "companion",
                             "wait", "block", "follow", "full", "markdown", "sticky", "no-frame", "spinner", "none", "clear", "mru", "auto-size", "close", "minimized",
-                            "next", "prev", "allow-custom", "no-block", "multiple", "ack", "no-qr", "reset", "collapsed", "page"};
+                            "next", "prev", "allow-custom", "no-block", "multiple", "ack", "reset", "collapsed", "page"};
     QStringList pos;
     QHash<QString, QString> opt;
     QHash<QString, QStringList> multi; // every value of a repeatable option, in order
@@ -326,8 +316,6 @@ int main(int argc, char **argv)
         return fputs(usage, stderr), 1;
 
     QString cmd = pos.takeFirst();
-    if (cmd == QLatin1String("mobile"))
-        return mobileCommand(pos.value(0), opt.value(QStringLiteral("socket"), socketPath()), opt);
     if (QStringList{"workspace", "session", "recent", "font", "keymap", "hooks", "theme", "restore", "window", "surface", "config", "msg", "zmx", "browser", "quick"}
             .contains(cmd)
         && !pos.isEmpty())

@@ -41,6 +41,7 @@
 #include <QWheelEvent>
 #include "smoothwheel.h"
 #include "phone.h"
+#include <QTcpServer>
 #include "paneleadcover.h"
 #include "elis_bridge.h"
 #include "zmx.h"
@@ -79,6 +80,28 @@ private Q_SLOTS:
         QVERIFY(code.width() >= 21 + 8);                       // the smallest QR plus a four-module quiet zone
         QCOMPARE(code.pixel(0, 0), qRgb(255, 255, 255));        // light border on any theme
         QCOMPARE(code.pixel(4, 4), qRgb(0, 0, 0));              // the top-left finder starts inside it
+    }
+
+    void connectAPhoneShowsTheRelaysLink()
+    {
+        if (qEnvironmentVariableIsEmpty("ELIS_STATE_DIR"))
+            QSKIP("writes <state>/mobile: run it through ctest, which sets a throwaway ELIS_STATE_DIR");
+        QTcpServer probe;
+        QVERIFY(probe.listen(QHostAddress::LocalHost));
+        const quint16 port = probe.serverPort();
+        probe.close();
+        PhoneRelay *relay = PhoneRelay::instance();
+        relay->setPort(port);
+        relay->setEnabled(true);
+        auto off = qScopeGuard([relay] { relay->setEnabled(false); });
+        QWidget window;
+        showPhoneDialog(&window);
+        auto *link = window.findChild<QLineEdit *>(QStringLiteral("phoneLink"));
+        QVERIFY(link);
+        QTRY_VERIFY_WITH_TIMEOUT(link->text().startsWith(QStringLiteral("elis://pair?")), 15000);
+        QVERIFY(link->text().contains(QStringLiteral("&p=%1&").arg(port)));
+        QVERIFY(!window.findChild<QLabel *>(QStringLiteral("phoneCode"))->pixmap().isNull());
+        QVERIFY2(relay->error().isEmpty(), qPrintable(relay->error()));
     }
 
     void paneLeadCoverNamesPhoneWhenPhoneLeads()

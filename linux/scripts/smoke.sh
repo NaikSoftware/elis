@@ -347,12 +347,18 @@ pin=$(openssl s_client -connect "127.0.0.1:$port" </dev/null 2>/dev/null | opens
 [[ $link == *"&f=$pin&"* ]] || fail "the link pins the served certificate ($pin)"
 phone() { { printf '%s\n' "$@"; sleep 1; } | timeout 5 openssl s_client -quiet -no_ign_eof -connect "127.0.0.1:$port" 2>/dev/null || true; }
 out=$(phone "{\"auth\":\"$tok\",\"id\":0}" '{"id":1,"cmd":"tree"}')
-grep -q '^{"id":0,"ok":true,"result":{"host"' <<<"$out" || fail "relay auth ($out)"
-grep -q '^{"id":1,"ok":true,"result":{"tree"' <<<"$out" || fail "relay forwards tree under its id ($out)"
+grep '"id":0,' <<<"$out" | grep '"ok":true' | grep -q '"host":' || fail "relay auth ($out)"
+grep '"id":1,' <<<"$out" | grep '"ok":true' | grep -q '"tree":' || fail "relay forwards tree under its id ($out)"
 out=$(phone '{"auth":"wrong","id":0}' '{"id":1,"cmd":"tree"}')
 grep -q '"error":"unauthorized"' <<<"$out" || fail "relay refuses a wrong token ($out)"
 grep -q '"id":1,' <<<"$out" && fail "relay answered after a wrong token"
 ctl mobile reset >/dev/null
+for _ in $(seq 50); do kill -0 "$mpid" 2>/dev/null || break; sleep 0.1; done
+kill -0 "$mpid" 2>/dev/null && fail "serve outlived mobile reset"
+grep -q 'the pairing was reset' "$ELIS_STATE_DIR/relay.log" || fail "serve says why it stopped: $(cat "$ELIS_STATE_DIR/relay.log")"
+"$bin/elisctl" mobile serve --no-qr --port "$port" --bind 127.0.0.1 --host 127.0.0.1 >"$ELIS_STATE_DIR/relay.log" 2>&1 &
+mpid=$!
+for _ in $(seq 50); do grep -q 'elis://' "$ELIS_STATE_DIR/relay.log" && break; sleep 0.1; done
 grep -q '"error":"unauthorized"' <<<"$(phone "{\"auth\":\"$tok\"}")" || fail "mobile reset revokes the old token"
 grep -q '"ok":true' <<<"$(phone "{\"auth\":\"$(cat "$ELIS_STATE_DIR/mobile/token")\"}")" || fail "the new token after reset"
 kill "$mpid"; wait "$mpid" 2>/dev/null || true
@@ -383,7 +389,7 @@ stop
 
 start
 for _ in $(seq 50); do grep -q '"ok":true' <<<"$(phone "{\"auth\":\"$(cat "$ELIS_STATE_DIR/mobile/token")\"}")" && break; sleep 0.2; done
-grep -q '"id":1,"ok":true,"result":{"tree"' <<<"$(phone "{\"auth\":\"$(cat "$ELIS_STATE_DIR/mobile/token")\"}" '{"id":1,"cmd":"tree"}')" \
+grep '"id":1,' <<<"$(phone "{\"auth\":\"$(cat "$ELIS_STATE_DIR/mobile/token")\"}" '{"id":1,"cmd":"tree"}')" | grep -q '"tree":' \
   || fail "the app starts the relay it was switched on with"
 printf '{"on":false,"port":%s}\n' "$port" >"$ELIS_STATE_DIR/mobile/desktop.json"
 ctl tree | grep -q 'renamed' || fail "session not restored"
