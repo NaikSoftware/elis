@@ -283,8 +283,13 @@ jobs:
         run: |
           ldd .build/release/libElisBridge.so
           ! ldd .build/release/libElisBridge.so | grep -i swift
+      - name: Create the test user
+        # root passes the permission checks the relay suites rely on failing (an unreadable token)
+        run: |
+          useradd --create-home elis-test
+          chown -R elis-test "$GITHUB_WORKSPACE"
       - name: swift test (the Linux relay's TLS listener and BlueZ pipe)
-        run: swift test
+        run: runuser --user elis-test -- env HOME=/home/elis-test swift test
 
   build:
     name: Build app
