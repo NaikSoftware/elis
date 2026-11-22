@@ -24,6 +24,8 @@ SyntaxHighlighting, WindowSystem) and `konsole-kpart`. Install `wl-clipboard` (o
 Building also needs Swift 6.3 (the swift.org tarball or `swiftly`) on PATH, or `-DSWIFT=/path/to/swift`: `linux/bridge`
 builds the shared `ElisCore` (`shared/ElisCore`) into `libElisBridge.so` with the Swift runtime linked in, so running Elis needs no Swift.
 The first build of it takes a few minutes; it installs to `lib/elis` beside the binaries' `bin`.
+The Swift `elisctl` helper's phone relay links the system OpenSSL: building needs `libssl-dev`, running it `libssl3`
+and the `openssl` command, which makes the relay's certificate.
 Live sessions run under the Mac's patched zmx, which the build makes from source with zig 0.16, git and `shasum`
 (`macos/scripts/setup.sh --zmx-only`, network on the first build) and installs it to `libexec/elis`, off PATH. Unpack
 [zig 0.16.0](https://ziglang.org/download/) into `~/.local/opt`, where configure finds it, or pass `-DZIG=/path/to/zig`;
@@ -31,6 +33,7 @@ the build patches that zig's `float.h` once, as the Mac build does.
 
 ```sh
 cd linux
+sudo apt install libssl-dev
 sudo apt install libkf6parts-dev   # or, without root: scripts/fetch-kparts-headers.sh
 cmake -S . -B build -DCMAKE_INSTALL_PREFIX=~/.local   # the menu entry gets an absolute Exec
 cmake --build build -j

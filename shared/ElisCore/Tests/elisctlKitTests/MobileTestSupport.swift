@@ -1,10 +1,16 @@
+#if !canImport(Musl)
 #if os(macOS)
 import CoreImage
 import CryptoKit
 import Darwin
-import Foundation
 import Network
 import Security
+#else
+import CElisTLS
+import Crypto
+import Glibc
+#endif
+import Foundation
 import ElisCore
 @testable import elisctlKit
 
@@ -13,7 +19,7 @@ import ElisCore
 final class MobileFixture: @unchecked Sendable {
     let mobileDir: String
     let token: String
-    let identity: SecIdentity
+    let identity: PhoneTLSIdentity
     let fingerprint: String
     let server = RawStubServer()
     let relay: MobileRelay
@@ -60,6 +66,7 @@ final class MobileFixture: @unchecked Sendable {
         return dir
     }
 
+    #if os(macOS)
     /// Reads the matrix back through CoreImage's own QR detector, at 8 pixels a module with a 4-module quiet zone.
     static func decodeQR(_ matrix: [[Bool]]) -> String? {
         let scale = 8, side = (matrix.count + 8) * scale
@@ -74,6 +81,7 @@ final class MobileFixture: @unchecked Sendable {
         let detector = CIDetector(ofType: CIDetectorTypeQRCode, context: nil, options: nil)
         return (detector?.features(in: image).first as? CIQRCodeFeature)?.messageString
     }
+    #endif
 
     static func mode(_ path: String) -> Int {
         ((try? FileManager.default.attributesOfItem(atPath: path)[.posixPermissions]) as? Int ?? -1) & 0o777
@@ -131,6 +139,7 @@ final class MuxReader {
     }
 }
 
+#if os(macOS)
 /// A blocking line client over TLS that trusts any certificate and records the one it saw.
 final class TLSLineClient: @unchecked Sendable {
     private let connection: NWConnection
@@ -214,6 +223,149 @@ final class TLSLineClient: @unchecked Sendable {
         return true
     }
 }
+#else
+/// A blocking line client over TLS that trusts any certificate and records the one it saw.
+final class TLSLineClient: @unchecked Sendable {
+    private let fd: Int32
+    private let context: OpaquePointer
+    private let tls: OpaquePointer
+    /// OpenSSL takes one call at a time on a connection; reads poll outside it.
+    private let io = NSLock()
+    private let lock = NSLock()
+    private let changed = DispatchSemaphore(value: 0)
+    private var buffer = Data()
+    private var closed = false
+    private(set) var peerFingerprint: String?
+
+    /// `reading: false` leaves every byte in the socket until `startReading()`.
+    init(port: UInt16, reading: Bool = true) throws {
+        let fd = socket(AF_INET, Int32(SOCK_STREAM.rawValue), 0)
+        self.fd = fd
+        var address = sockaddr_in()
+        address.sin_family = sa_family_t(AF_INET)
+        address.sin_port = port.bigEndian
+        inet_pton(AF_INET, "127.0.0.1", &address.sin_addr)
+        let connected = withUnsafePointer(to: &address) {
+            $0.withMemoryRebound(to: sockaddr.self, capacity: 1) { Glibc.connect(fd, $0, socklen_t(MemoryLayout<sockaddr_in>.size)) }
+        }
+        _ = fcntl(fd, F_SETFL, fcntl(fd, F_GETFL) | O_NONBLOCK)
+        guard connected == 0, let context = elis_tls_client_context() else {
+            Glibc.close(fd)
+            throw CocoaError(.fileReadUnknown)
+        }
+        self.context = context
+        guard let tls = elis_tls_new(context, fd, 0) else {
+            elis_tls_context_free(context)
+            Glibc.close(fd)
+            throw CocoaError(.fileReadUnknown)
+        }
+        self.tls = tls
+        let deadline = Date().addingTimeInterval(30)
+        while true {
+            let step = elis_tls_handshake(tls)
+            if step == 1 { break }
+            guard step != ELIS_TLS_FAILED, Date() < deadline else { throw CocoaError(.fileReadUnknown) }
+            wait(for: step == ELIS_TLS_WANT_WRITE ? POLLOUT : POLLIN)
+        }
+        var der = [UInt8](repeating: 0, count: 16384)
+        let length = elis_tls_peer_certificate(tls, &der, der.count)
+        if length > 0, length <= der.count {
+            peerFingerprint = SHA256.hash(data: der[0..<length]).map { String(format: "%02x", $0) }.joined()
+        }
+        if reading { startReading() }
+    }
+
+    func startReading() {
+        Thread { [weak self] in
+            while let self, self.readOnce() {}
+        }.start()
+    }
+
+    /// The first `count` bytes, or nil once closed or past the timeout.
+    func waitBytes(_ count: Int, timeout: TimeInterval = 30) -> Data? {
+        let deadline = Date().addingTimeInterval(timeout)
+        while true {
+            if let bytes: Data = lock.withLock({ buffer.count >= count ? Data(buffer.prefix(count)) : nil }) { return bytes }
+            if lock.withLock({ closed }) || changed.wait(timeout: .now() + deadline.timeIntervalSinceNow) == .timedOut { return nil }
+        }
+    }
+
+    deinit {
+        elis_tls_free(tls)
+        elis_tls_context_free(context)
+        Glibc.close(fd)
+    }
+
+    func close() {
+        io.withLock { elis_tls_shutdown(tls) }
+        Glibc.shutdown(fd, Int32(SHUT_RDWR))
+        markClosed()
+    }
+
+    private func wait(for events: Int32) {
+        var poller = pollfd(fd: fd, events: Int16(events), revents: 0)
+        _ = poll(&poller, 1, 50)
+    }
+
+    private func readOnce() -> Bool {
+        if lock.withLock({ closed }) { return false }
+        var chunk = [UInt8](repeating: 0, count: 65536)
+        let count = io.withLock { elis_tls_read(tls, &chunk, chunk.count) }
+        if count > 0 {
+            lock.withLock { buffer.append(contentsOf: chunk[0..<count]) }
+            changed.signal()
+        } else if count == Int(ELIS_TLS_WANT_READ) || count == Int(ELIS_TLS_WANT_WRITE) {
+            wait(for: POLLIN)
+        } else {
+            markClosed()
+            return false
+        }
+        return true
+    }
+
+    private func markClosed() {
+        lock.withLock { closed = true }
+        changed.signal()
+    }
+
+    func send(_ text: String, newline: Bool = true) {
+        let bytes = Array((newline ? text + "\n" : text).utf8)
+        var sent = 0
+        while sent < bytes.count, !lock.withLock({ closed }) {
+            let count = bytes.withUnsafeBytes { raw in io.withLock { elis_tls_write(tls, raw.baseAddress! + sent, bytes.count - sent) } }
+            if count > 0 {
+                sent += count
+            } else if count == Int(ELIS_TLS_WANT_WRITE) || count == Int(ELIS_TLS_WANT_READ) {
+                wait(for: POLLOUT)
+            } else {
+                return
+            }
+        }
+    }
+
+    func readJSON(timeout: TimeInterval = 30) -> [String: Any]? {
+        let deadline = Date().addingTimeInterval(timeout)
+        while true {
+            let line: Data? = lock.withLock {
+                guard let newline = buffer.firstIndex(of: 0x0A) else { return nil }
+                let line = buffer[buffer.startIndex..<newline]
+                buffer = Data(buffer[buffer.index(after: newline)...])
+                return Data(line)
+            }
+            if let line { return (try? JSONSerialization.jsonObject(with: line)) as? [String: Any] }
+            if lock.withLock({ closed }) || changed.wait(timeout: .now() + deadline.timeIntervalSinceNow) == .timedOut { return nil }
+        }
+    }
+
+    func waitClosed(timeout: TimeInterval = 30) -> Bool {
+        let deadline = Date().addingTimeInterval(timeout)
+        while !lock.withLock({ closed }) {
+            if changed.wait(timeout: .now() + deadline.timeIntervalSinceNow) == .timedOut { return false }
+        }
+        return true
+    }
+}
+#endif
 
 /// A phone connection with no transport: the test feeds bytes in on the relay queue and reads the lines sent back.
 final class MemoryPhone: PhoneTransportConnection, @unchecked Sendable {
@@ -238,7 +390,13 @@ final class MemoryPhone: PhoneTransportConnection, @unchecked Sendable {
     func hold() { lock.withLock { held = [] } }
     func release() {
         let completions = lock.withLock { defer { held = nil }; return held ?? [] }
-        completions.forEach { queue.async(execute: $0) }
+        completions.forEach(later)
+    }
+
+    /// On the relay queue, as a real transport completes; Linux's Dispatch takes only @Sendable blocks.
+    private func later(_ completion: @escaping () -> Void) {
+        nonisolated(unsafe) let completion = completion
+        queue.async { completion() }
     }
 
     func send(_ data: Data, completion: @escaping () -> Void) {
@@ -248,7 +406,7 @@ final class MemoryPhone: PhoneTransportConnection, @unchecked Sendable {
             return held != nil
         }
         changed.signal()
-        if !holding { queue.async(execute: completion) } // later, as a real transport does
+        if !holding { later(completion) }
     }
 
     func close() { lock.withLock { isClosed = true } }
@@ -390,7 +548,11 @@ final class RawStubServer: @unchecked Sendable {
 
     func start() throws {
         unlink(path)
+        #if os(macOS)
         let fd = socket(AF_UNIX, SOCK_STREAM, 0)
+        #else
+        let fd = socket(AF_UNIX, Int32(SOCK_STREAM.rawValue), 0)
+        #endif
         var addr = sockaddr_un()
         addr.sun_family = sa_family_t(AF_UNIX)
         withUnsafeMutableBytes(of: &addr.sun_path) { raw in
@@ -410,8 +572,10 @@ final class RawStubServer: @unchecked Sendable {
                     return
                 }
                 // a client that gave up on a held answer is gone by the reply: EPIPE, not a SIGPIPE that kills the run
+                #if os(macOS)
                 var noSigPipe: Int32 = 1
                 setsockopt(conn, SOL_SOCKET, SO_NOSIGPIPE, &noSigPipe, socklen_t(MemoryLayout<Int32>.size))
+                #endif
                 if !serve(conn) { close(conn) }
             }
         }

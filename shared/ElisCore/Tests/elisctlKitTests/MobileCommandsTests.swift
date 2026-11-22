@@ -1,10 +1,14 @@
+#if !canImport(Musl)
 #if os(macOS)
 import CoreImage
 import CryptoKit
 import Darwin
-import Foundation
 import Network
 import Security
+#else
+import Glibc
+#endif
+import Foundation
 import Testing
 import ElisCore
 @testable import elisctlKit
@@ -58,7 +62,9 @@ struct MobileCommandsTests {
         let finderRow = { (row: Int, from: Int) in (from..<from + 7).allSatisfy { matrix[row][$0] } }
         #expect(finderRow(0, 0) && finderRow(0, size - 7) && finderRow(size - 1, 0))
         #expect(!finderRow(size - 1, size - 7))
+        #if os(macOS)
         #expect(MobileFixture.decodeQR(matrix) == "elis://pair?h=10.0.0.1&p=8765")
+        #endif
         let rows = MobilePairing.qrRows(matrix)
         #expect(rows.count == (size + 4 + 1) / 2)
         #expect(rows[0].hasPrefix("\u{1b}[97;107m▀"))
@@ -229,7 +235,11 @@ struct MobileCommandsTests {
         try server.start()
         defer { server.stop() }
         // the products directory holds the test bundle and the built elisctl
+        #if os(macOS)
         let tool = Bundle(for: MobileFixture.self).bundleURL.deletingLastPathComponent().appendingPathComponent("elisctl")
+        #else
+        let tool = Bundle.main.bundleURL.appendingPathComponent("elisctl") // the test executable's own directory
+        #endif
         try #require(FileManager.default.isExecutableFile(atPath: tool.path), "\(tool.path)")
         var process = Process(), printed = LogLines(), err = Pipe()
         // below the ephemeral range the in-process fixtures bind through port 0; a taken port gets another try
@@ -298,6 +308,7 @@ struct MobileCommandsTests {
     }
 }
 
+#if os(macOS)
 struct MobileBluetoothTests {
     @Test func pairLinkOffersBluetoothAndOmitsAMissingHost() {
         let link = MobilePairing.pairLink(host: "10.0.0.2", port: 8765, token: "T", fingerprint: "ab", name: "Mac", bluetooth: true)
@@ -690,4 +701,5 @@ private final class FakeOutput: OutputStream, @unchecked Sendable {
         return true
     }
 }
+#endif
 #endif
