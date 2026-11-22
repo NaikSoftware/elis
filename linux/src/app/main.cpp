@@ -183,7 +183,7 @@ int main(int argc, char **argv)
     serve(server, library);
     PhoneRelay::instance(); // phone access switched on in Connect a Phone comes back with the app
     // app-wide events, as the Mac's emitAppEvent; the window holding the pane rereads its tree's phoneViewers/phoneLead
-    QObject::connect(PhoneRelay::instance(), &PhoneRelay::paneEvent, &library, [&library](const QString &kind, const QJsonObject &payload) {
+    QObject::connect(PhoneRelay::instance(), &PhoneRelay::phoneEvent, &library, [&library](const QString &kind, const QJsonObject &payload) {
         MainWindow *holder = nullptr;
         for (MainWindow *w : library.openWindows())
             if (w->holdsPane(payload.value("paneID").toString()))

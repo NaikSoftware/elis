@@ -35,9 +35,9 @@ public:
 
 Q_SIGNALS:
     void changed();
-    // phone.attached | detached | claimed | released, payload {paneID, ip?}: the relay's viewer and lead lines, and a
-    // detach and release for each one still counted when it stops
-    void paneEvent(const QString &kind, const QJsonObject &payload);
+    // phone.connected | disconnected | refused {ip}, and phone.attached | detached | claimed | released {paneID, ip?}: the
+    // relay's lines, and a detach and release for each viewer and lead still counted when it stops
+    void phoneEvent(const QString &kind, const QJsonObject &payload);
 
 private:
     PhoneRelay();

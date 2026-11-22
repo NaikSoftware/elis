@@ -548,7 +548,7 @@ MainWindow::MainWindow(Store &store, const QString &statePath)
         if (status == QLatin1String("blocked"))
             playSound(m_store.settings.blockedStatusSoundName);
     });
-    connect(PhoneRelay::instance(), &PhoneRelay::paneEvent, this, [this](const QString &kind, const QJsonObject &payload) {
+    connect(PhoneRelay::instance(), &PhoneRelay::phoneEvent, this, [this](const QString &kind, const QJsonObject &payload) {
         if (kind != QLatin1String("phone.claimed") && kind != QLatin1String("phone.released"))
             return;
         const QString paneId = payload.value(QLatin1String("paneID")).toString();

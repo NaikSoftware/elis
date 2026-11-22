@@ -244,7 +244,8 @@ private Q_SLOTS:
         QVERIFY(d[3].message.contains("already defined"));
         QList<KeymapDiagnostic> none;
         QVERIFY(parseHooks(starterHooks(), &none).isEmpty() && none.isEmpty());
-        QCOMPARE(parseHooks("on phone.attached a\non phone.detached b\non phone.claimed c\non phone.released d\n", &none).size(), 4);
+        QCOMPARE(parseHooks("on phone.attached a\non phone.detached b\non phone.claimed c\non phone.released d\non phone.connected e\n"
+                            "on phone.disconnected f\non phone.refused g\n", &none).size(), 7);
         QVERIFY(none.isEmpty() && EventSource::kinds.contains("phone.claimed"));
     }
 

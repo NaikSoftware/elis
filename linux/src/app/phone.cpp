@@ -154,10 +154,12 @@ void PhoneRelay::start()
             } else if (kind == QLatin1String("event")) {
                 lastError->clear(); // an exit after an event says only that the relay stopped
                 m_event = line.value("text").toString(), Q_EMIT changed();
+                if (line.contains("event"))
+                    Q_EMIT phoneEvent(line.value("event").toString(), {{"ip", line.value("ip")}});
             } else if ((kind == QLatin1String("viewer") || kind == QLatin1String("lead")) && line.take("emit").toBool()) {
                 const bool on = line.take(kind == QLatin1String("viewer") ? "attached" : "leading").toBool();
                 line.remove("kind");
-                Q_EMIT paneEvent(kind == QLatin1String("viewer") ? (on ? "phone.attached" : "phone.detached") : (on ? "phone.claimed" : "phone.released"), line);
+                Q_EMIT phoneEvent(kind == QLatin1String("viewer") ? (on ? "phone.attached" : "phone.detached") : (on ? "phone.claimed" : "phone.released"), line);
             }
         }
     });
@@ -197,7 +199,7 @@ void PhoneRelay::releaseViewers()
     elis_free(reply);
     for (const auto &[key, kind] : {std::pair{"detached", "phone.detached"}, std::pair{"released", "phone.released"}})
         for (const QJsonValue &pane : held.value(QLatin1String(key)).toArray())
-            Q_EMIT paneEvent(QLatin1String(kind), {{"paneID", pane}});
+            Q_EMIT phoneEvent(QLatin1String(kind), {{"paneID", pane}});
 }
 
 QStringList PhoneRelay::hosts() const
