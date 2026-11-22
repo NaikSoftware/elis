@@ -27,6 +27,7 @@
 #include <QSaveFile>
 #include <QSignalBlocker>
 #include <QSpinBox>
+#include <QStandardPaths>
 #include <QTimer>
 #include <QUrl>
 #include <QUrlQuery>
@@ -122,6 +123,7 @@ void PhoneRelay::start()
     m_links.clear();
     m_error.clear();
     m_event.clear();
+    m_bluetooth.clear();
     auto *p = new QProcess(this);
     m_proc = p;
     p->setChildProcessModifier([] { ::prctl(PR_SET_PDEATHSIG, SIGTERM); }); // a crashed app must not leave the port bound
@@ -158,6 +160,8 @@ void PhoneRelay::start()
                 m_event = line.value("text").toString(), Q_EMIT changed();
                 if (line.contains("event"))
                     Q_EMIT phoneEvent(line.value("event").toString(), {{"ip", line.value("ip")}});
+            } else if (kind == QLatin1String("bluetooth")) {
+                m_bluetooth = line.value("value").toString(), m_bluetoothText = line.value("text").toString(), Q_EMIT changed();
             } else if ((kind == QLatin1String("viewer") || kind == QLatin1String("lead")) && line.take("emit").toBool()) {
                 const bool on = line.take(kind == QLatin1String("viewer") ? "attached" : "leading").toBool();
                 line.remove("kind");
@@ -173,6 +177,7 @@ void PhoneRelay::start()
         if (m_error.isEmpty())
             m_error = lastError->isEmpty() ? tr("The relay stopped.") : *lastError;
         m_links.clear();
+        m_bluetooth.clear();
         p->deleteLater();
         releaseViewers();
         Q_EMIT changed();
@@ -200,6 +205,7 @@ void PhoneRelay::stop()
     p->waitForFinished(2000); // the port is free before a restart binds it again
     delete p;
     m_links.clear();
+    m_bluetooth.clear();
     releaseViewers();
 }
 
@@ -211,6 +217,13 @@ void PhoneRelay::releaseViewers()
     for (const auto &[key, kind] : {std::pair{"detached", "phone.detached"}, std::pair{"released", "phone.released"}})
         for (const QJsonValue &pane : held.value(QLatin1String(key)).toArray())
             Q_EMIT phoneEvent(QLatin1String(kind), {{"paneID", pane}});
+}
+
+QString PhoneRelay::bluetoothText() const
+{
+    if (!m_bluetooth.isEmpty())
+        return m_bluetoothText;
+    return m_on && m_error.isEmpty() ? tr("Starting…") : tr("Off");
 }
 
 QStringList PhoneRelay::hosts() const
@@ -307,6 +320,14 @@ void showPhoneDialog(QWidget *parent)
     link->setObjectName(QStringLiteral("phoneLink"));
     link->setReadOnly(true);
     auto *copy = new QPushButton(QIcon::fromTheme(QStringLiteral("edit-copy")), QObject::tr("Copy"));
+    auto *bluetooth = new QLabel;
+    bluetooth->setObjectName(QStringLiteral("phoneBluetooth"));
+    bluetooth->setTextInteractionFlags(Qt::TextSelectableByMouse);
+    // BlueZ reports no permission state, so a powered-off adapter is the one the settings fix
+    auto *bluetoothSettings = new QPushButton(QIcon::fromTheme(QStringLiteral("preferences-system-bluetooth")),
+                                              QObject::tr("Open Bluetooth Settings"));
+    bluetoothSettings->setObjectName(QStringLiteral("phoneBluetoothSettings"));
+    bluetoothSettings->setEnabled(!QStandardPaths::findExecutable(QStringLiteral("systemsettings")).isEmpty());
     auto *status = new QLabel;
     status->setObjectName(QStringLiteral("phoneStatus"));
     status->setWordWrap(true);
@@ -323,6 +344,10 @@ void showPhoneDialog(QWidget *parent)
     form->addRow(QObject::tr("Address:"), hosts);
     form->addRow(QObject::tr("Port:"), port);
     form->addRow(QObject::tr("Link:"), linkRow);
+    auto *bluetoothRow = new QHBoxLayout;
+    bluetoothRow->addWidget(bluetooth, 1);
+    bluetoothRow->addWidget(bluetoothSettings);
+    form->addRow(QObject::tr("Bluetooth:"), bluetoothRow);
     auto *buttons = new QDialogButtonBox(QDialogButtonBox::Close);
     buttons->addButton(revoke, QDialogButtonBox::ResetRole);
     auto *layout = new QVBoxLayout(dlg);
@@ -357,6 +382,8 @@ void showPhoneDialog(QWidget *parent)
             code->setPixmap({});
             code->setText(!relay->enabled() ? QObject::tr("Phone access is off.") : relay->error().isEmpty() ? QObject::tr("Starting…") : QString());
         }
+        bluetooth->setText(relay->bluetoothText());
+        bluetoothSettings->setVisible(relay->bluetooth() == QLatin1String("off"));
         for (QWidget *w : std::initializer_list<QWidget *>{hosts, link, copy})
             w->setEnabled(!l.isEmpty());
         if (!relay->error().isEmpty())
@@ -366,12 +393,18 @@ void showPhoneDialog(QWidget *parent)
                             + (relay->lastEvent().isEmpty() ? QString() : QStringLiteral(" ") + relay->lastEvent().toHtmlEscaped() + QLatin1Char('.')));
         else
             status->clear();
+        // word-wrapped labels give the window no minimum height, so a status line arriving later squeezed the code
+        if (dlg->isVisible() && dlg->height() < dlg->sizeHint().height())
+            dlg->resize(dlg->width(), dlg->sizeHint().height());
     };
     QObject::connect(relay, &PhoneRelay::changed, dlg, refresh);
     QObject::connect(on, &QCheckBox::toggled, relay, &PhoneRelay::setEnabled);
     QObject::connect(hosts, &QComboBox::currentTextChanged, relay, &PhoneRelay::setHost);
     QObject::connect(port, &QSpinBox::editingFinished, relay, [relay, port] { relay->setPort(quint16(port->value())); });
     QObject::connect(copy, &QPushButton::clicked, dlg, [link] { QGuiApplication::clipboard()->setText(link->text()); });
+    QObject::connect(bluetoothSettings, &QPushButton::clicked, dlg, [] {
+        QProcess::startDetached(QStringLiteral("systemsettings"), {QStringLiteral("kcm_bluetooth")});
+    });
     QObject::connect(buttons, &QDialogButtonBox::rejected, dlg, &QDialog::close);
     QObject::connect(revoke, &QPushButton::clicked, dlg, [dlg, relay] {
         if (QMessageBox::question(dlg, QObject::tr("Revoke Paired Phones"),

@@ -1,6 +1,7 @@
 # Linux (Qt) app: migration to today's Elis — roadmap
 
-Status: draft for the owner's review, 2026-11-21.
+Status: complete, 2026-11-22 (phases 1–7 merged), except `phone.*` and `tree.phone`, which Linux does not have yet
+(PARITY).
 This is a roadmap of sub-projects, not a task plan: each phase below gets its own spec and plan
 (`superpowers:writing-plans`) when it starts, because each one ships and tests on its own.
 
@@ -133,7 +134,8 @@ of running `elis-session-host` daemons (2026-11-21): the host is simply deleted.
 - Spike: BlueZ over D-Bus (`LEAdvertisingManager1` and `GattManager1`) with an LE L2CAP CoC socket on a dynamic
   PSM, on this machine's adapter and a Pixel; if a route is refused (user permissions, bluetoothd policy, adapter
   limits), the spike finds the setup that makes it work and the install documents it.
-  Measure connect time and throughput against the Mac's numbers.
+  Measure connect time and throughput against the Mac's numbers
+  ([results](2026-11-22-linux-phase-6-bluetooth.md#measured-2026-11-22)).
 - Then:
   - Noise `NNpsk0` (OpenSSL 3: X25519, ChaCha20-Poly1305, HKDF) with raw-DEFLATE frames: ctest against
     `ble-vectors.json`.

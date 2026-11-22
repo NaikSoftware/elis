@@ -35,6 +35,20 @@ characteristic (2 bytes little-endian), an unencrypted LE L2CAP CoC channel, Noi
 
 Every task also runs `swift build`, the relay tests, `cmake --build build`, `ctest --test-dir build` and `scripts/smoke.sh`.
 
-Out of scope: the Qt Connect a Phone dialog's Bluetooth row, which follows Phase 5b's exec of the Swift relay.
-
 Done when the Pixel's installed app opens a session on a Linux relay with no Wi-Fi route to it.
+
+## Measured (2026-11-22)
+
+Pixel 10 Pro XL against this machine's Intel AX201, which also serves a Bluetooth mouse and keyboard; a host-less `b=1`
+link, so Bluetooth only. The Mac's numbers are the spike's in the spec, a raw L2CAP echo with no Noise, DEFLATE or relay.
+
+- Connect, 8 cold launches: app launch to the relay's `phone connected from bt:` 5.0–7.7 s. From `connectGatt`: LE link
+  +2.6 s every time, GATT discovery +1.3 s, L2CAP open +0.1 s, handshake and auth +0.14 s, so about 4 s to L2CAP open
+  against the Mac's 1.3–1.45 s from scan start. The steady 2.6 s to the LE link is the gap to look at (BlueZ's default
+  advertising interval is the first suspect). Serve reports `advertising` 10 ms after it starts.
+- Throughput: the relay's sends saturate the socket (`EAGAIN`) at 16–20 KB/s of sealed, compressed frames, against the
+  Mac's 62–65 KB/s raw. End to end, 40 KB of base64 text printed in a Live pane open in Term view reached the phone's
+  screen in 18.5–18.8 s, 2.2 KB/s.
+- Open: while the phone shows an idle Live pane in Term view the relay keeps sending about 16 KB/s (0.7 KB/s on the
+  session list), so the link is full before any output; the pane's daemon sends a passive viewer nothing meanwhile and
+  the relay's attaches stay up. Not yet compared with a Mac relay.

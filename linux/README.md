@@ -196,7 +196,8 @@ on the computer that runs only while you want it.
 
 Settings ▸ Connect a Phone… switches it on: the window shows the QR code to scan in the app, the `elis://pair?…` link
 to copy, the address the code points the phone at (pick your LAN or VPN address, or type a name such as the machine's
-Tailscale name) and the port, and Revoke Paired Phones. While switched on, the relay starts with Elis and stops with
+Tailscale name) and the port, the Bluetooth state (Open Bluetooth Settings while the adapter is powered off), and
+Revoke Paired Phones. While switched on, the relay starts with Elis and stops with
 it. The same relay runs from a terminal too, while the command runs:
 
 ```sh
@@ -214,9 +215,7 @@ It prints the QR code and the link; Ctrl+C stops it. Nothing listens unless one 
   as Tailscale; `--host` only sets the address written into the link (e.g. the machine's Tailscale name or IP).
 - The relay also offers Bluetooth, as the Mac does, so the phone works without Wi-Fi: BlueZ advertises a service UUID that rotates every 15 minutes and the phone opens an LE L2CAP channel,
   encrypted with a key from the pairing token. Its stderr reports `bluetooth: advertising` or `bluetooth: off (<reason>)`;
-  `--no-bluetooth` turns it off. One relay per state directory advertises. BlueZ advertises from the adapter's fixed
-  address unless `/etc/bluetooth/main.conf` sets `Privacy = device`, so without it the rotating UUID does not stop a
-  nearby scanner from recognising the computer.
+  `--no-bluetooth` turns it off. One relay per state directory advertises.
 - A pane running Claude Code opens in Chat, as on the Mac, read from its transcript (`session transcript`).
   Pages on the phone are Mac-only for now (page overlays are not ported to Linux).
 
