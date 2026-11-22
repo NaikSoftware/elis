@@ -96,10 +96,14 @@ public struct AssistantCommands {
                 tree.workspaces[w].sessions[s].assistantMark = chat.marks[id]?.rawValue
             }
         }
-        tree.assistant = ControlAssistantNode(provider: chat.provider?.rawValue,
-                                              providers: AssistantProvider.choices(providers ?? []).map(\.rawValue),
-                                              running: chat.running, unread: chat.unread)
+        tree.assistant = node(providers: providers)
         return tree
+    }
+
+    /// node is the tree's top-level `assistant`, for a host that stamps a tree of its own shape.
+    public func node(providers: [SessionLauncher]?) -> ControlAssistantNode {
+        ControlAssistantNode(provider: chat.provider?.rawValue, providers: AssistantProvider.choices(providers ?? []).map(\.rawValue),
+                             running: chat.running, unread: chat.unread)
     }
 
     private func ask(_ args: ControlArgs) -> AssistantStep {

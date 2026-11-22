@@ -81,7 +81,7 @@ add_custom_command(OUTPUT ${ELIS_ZMX}
   COMMENT "Building the patched zmx" USES_TERMINAL VERBATIM)
 add_custom_target(elis-zmx ALL DEPENDS ${ELIS_ZMX}) # not `zmx`, the output's own name
 
-add_library(elis-core STATIC src/core/store.cpp src/core/control.cpp src/core/launcher.cpp src/core/keymap.cpp src/core/hooks.cpp src/core/restore.cpp src/core/commands.cpp src/core/installers.cpp src/core/zmx.cpp src/core/transcript.cpp src/core/ci.cpp)
+add_library(elis-core STATIC src/core/store.cpp src/core/control.cpp src/core/launcher.cpp src/core/keymap.cpp src/core/hooks.cpp src/core/restore.cpp src/core/commands.cpp src/core/installers.cpp src/core/zmx.cpp src/core/transcript.cpp src/core/ci.cpp src/core/assistant.cpp)
 target_include_directories(elis-core PUBLIC src/core)
 target_link_libraries(elis-core PUBLIC Qt6::Core ElisBridge PRIVATE Qt6::Sql)
 
@@ -109,7 +109,7 @@ set(ELIS_SKILL ${CMAKE_SOURCE_DIR}/../plugins/elis/skills/elis)
 enable_testing()
 add_executable(test_core tests/test_core.cpp)
 target_link_libraries(test_core PRIVATE elis-core Qt6::Sql Qt6::Test)
-target_compile_definitions(test_core PRIVATE ELIS_SOURCE_AGENT_STATUS="${ELIS_AGENT_STATUS}")
+target_compile_definitions(test_core PRIVATE ELIS_SOURCE_AGENT_STATUS="${ELIS_AGENT_STATUS}" ELIS_SOURCE_ASSISTANT_FIXTURES="${CMAKE_SOURCE_DIR}/../shared/fixtures/assistant")
 add_dependencies(test_core elis-zmx) # Zmx::executable() is beside the binary
 add_test(NAME core COMMAND test_core)
 add_executable(test_ui tests/test_ui.cpp)
