@@ -23,6 +23,7 @@ paths:
   both compiles on the critical path.
 - `test` runs `swift test --enable-code-coverage` in `shared/ElisCore`, exports lcov, and uploads it,
   then plain `swift test` in `macos/ElisMac` and `server`, each built in a step of its own first.
+  Those steps run `if: !cancelled()`, so an ElisCore failure does not hide theirs; `linux` does the same for `server`.
   The lcov covers only the ElisCore package's own suites.
   It installs fish with Homebrew and sets `ELIS_REQUIRE_FISH=1`, so a fish test fails rather than skips
   when fish is missing.

@@ -102,9 +102,12 @@ jobs:
       # ElisMac (the session host, the Mac relay's Network listener and Core Bluetooth pipe) and the server each
       # compile ElisCore again, so they build outside the watchdog too
       - name: swift build tests (ElisMac)
+        # still runs when an earlier package's tests fail, so each suite reports
+        if: ${{ !cancelled() }}
         working-directory: macos/ElisMac
         run: swift build --build-tests
       - name: swift test (ElisMac)
+        if: ${{ !cancelled() }}
         working-directory: macos/ElisMac
         run: ../scripts/watchdog.sh swift test --skip-build
         env:
@@ -112,9 +115,11 @@ jobs:
           WATCHDOG_SECONDS: "600"
           DIAG_DIR: ${{ github.workspace }}/test-hang
       - name: swift build tests (server)
+        if: ${{ !cancelled() }}
         working-directory: server
         run: swift build --build-tests
       - name: swift test (server)
+        if: ${{ !cancelled() }}
         working-directory: server
         run: ../macos/scripts/watchdog.sh swift test --skip-build
         env:
@@ -279,9 +284,12 @@ jobs:
           # relative: in a container job github.workspace names the host path, not the mounted one
           DIAG_DIR: ../../test-hang
       - name: swift build (server)
+        # still runs when an earlier package's tests fail, so each suite reports
+        if: ${{ !cancelled() }}
         working-directory: server
         run: runuser --user elis-test -- env HOME=/home/elis-test swift build --build-tests
       - name: swift test (server)
+        if: ${{ !cancelled() }}
         working-directory: server
         run: >-
           ../macos/scripts/watchdog.sh runuser --user elis-test --
