@@ -7,10 +7,8 @@ import Glibc
 /// The platform's BLE peripheral under `MobileBluetooth`: Core Bluetooth on the Mac, BlueZ on Linux.
 /// Every call, and every call it makes back, is on `relay.queue`.
 public protocol BleRadio: AnyObject {
-    #if !os(macOS)
     /// Reports to `owner`, on `queue`, once the radio is on, as Core Bluetooth reports after the manager exists.
     init(owner: MobileBluetooth, queue: DispatchQueue)
-    #endif
     /// Serves `psm` in the PSM characteristic under `service` and advertises that UUID, replacing the last one.
     func advertise(service: UUID, psm: UInt16)
     /// Ends the L2CAP channel `psm` and what advertised it; open channels are not touched.
@@ -69,9 +67,7 @@ public final class MobileBluetooth: @unchecked Sendable {
         return true
     }
 
-    #if !os(macOS)
     private func makeRadio() -> (any BleRadio)? { MobileTransports.radio?.init(owner: self, queue: relay.queue) }
-    #endif
 
     /// Serves one L2CAP channel. Call on `relay.queue`.
     public func accept(_ pipe: any BlePipe) {

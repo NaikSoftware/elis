@@ -9,16 +9,18 @@ import Security
 import Crypto
 import Glibc
 #endif
-#if ELIS_PLATFORM_ADAPTERS
+#if ELIS_PLATFORM_ADAPTERS && os(macOS)
+@testable import ElisMacRelay
+#elseif ELIS_PLATFORM_ADAPTERS
 @testable import ElisLinuxRelay
 #endif
 import Foundation
 import ElisCore
 @testable import elisctlKit
 
-// Fixtures shared by the relay suites; linux/bridge's tests build this file too, with the platform's transports.
+// Fixtures shared by the relay suites; the platform packages' tests build this file too, with their transports.
 
-#if !os(macOS) && !ELIS_PLATFORM_ADAPTERS
+#if !ELIS_PLATFORM_ADAPTERS
 /// The shared suites' TLS listener, which never listens: their phones come in through `relay.accept`.
 private final class StubTLSIdentity: PhoneTLSIdentity, PhoneTLSListener, @unchecked Sendable {
     let port: UInt16 = 0
@@ -33,9 +35,11 @@ private final class StubTLSIdentity: PhoneTLSIdentity, PhoneTLSListener, @unchec
 
 final class MobileFixture: @unchecked Sendable {
     private static let transports: Void = {
-        #if ELIS_PLATFORM_ADAPTERS
+        #if ELIS_PLATFORM_ADAPTERS && os(macOS)
+        MacTransports.register()
+        #elseif ELIS_PLATFORM_ADAPTERS
         LinuxTransports.register()
-        #elseif !os(macOS)
+        #else
         MobileTransports.tls = StubTLSIdentity.self
         #endif
     }()

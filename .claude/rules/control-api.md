@@ -415,7 +415,7 @@ elis-server's own tree omits `phoneViewers`, an approved exception (2026-11-18):
 Debug builds are ad-hoc signed with a bare `cdhash` requirement,
 so each rebuild asks for Bluetooth again at the relay's first start.
 
-`mobile serve` also offers BLE (`MobileBluetooth.swift`; the radio and the byte pipe in `+CoreBluetooth` on the Mac,
+`mobile serve` also offers BLE (`MobileBluetooth.swift`; the radio and the byte pipe in `+CoreBluetooth` on the Mac, in macos/ElisMac's `ElisMacRelay`,
 `+BlueZ` on Linux, in linux/bridge's `ElisLinuxRelay` over the `CElisBlueZ` sd-bus shim): an insecure L2CAP channel, with
 Noise NNpsk0 keyed by the pairing token doing the authentication and encryption. Each line is chunked into
 1...4096-byte sealed frames; a replayed or tampered frame drops the link. The advertised service UUID is an HMAC

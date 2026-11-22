@@ -126,7 +126,7 @@ except the repository-root `README.md`, `CONTRIBUTING.md`, `CLAUDE.md`, `.claude
   via `-only-testing:<Target>/<Class>/<test>`. Never re-run a whole XCUITest suite to verify a narrow
   change; `ElisUITests/ControlAPIUITests` alone is 82 methods and about 7.5 minutes, and tells you
   nothing the targeted run did not.
-- The app build's Bundle helper executables phase runs `swift build` on `shared/ElisCore/.build`, so any SwiftPM
+- The app build's Bundle helper executables phase runs `swift build` on `macos/ElisMac/.build` and `shared/ElisCore/.build`, so any SwiftPM
   process holding that directory (a hung `swift test` included) stalls `xcodebuild` there with no output;
   check `ps` for one before reading a quiet build as compiling.
 - An XCUITest or hosted test run that times out at runner init (`Timed out while enabling automation mode`)

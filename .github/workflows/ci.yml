@@ -100,6 +100,12 @@ jobs:
           ELIS_SHELL_INTEGRATION: ${{ github.workspace }}/macos/build/linux/ghostty/shell-integration
           WATCHDOG_SECONDS: "600"
           DIAG_DIR: ${{ github.workspace }}/test-hang
+      - name: swift test (the Mac relay's Network listener and Core Bluetooth pipe)
+        working-directory: macos/ElisMac
+        run: ../scripts/watchdog.sh swift test
+        env:
+          WATCHDOG_SECONDS: "600"
+          DIAG_DIR: ${{ github.workspace }}/test-hang
       # the server logs why it closed each presentation stream only to the unified log
       - name: save the elis log
         if: failure()

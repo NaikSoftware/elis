@@ -26,9 +26,8 @@ let package = Package(
                 .product(name: "ArgumentParser", package: "swift-argument-parser"),
             ]
         ),
-        // Info.plist is linked in by the app's Bundle helper executables phase (project.yml), not here:
-        // unsafeFlags would make SwiftPM refuse this package as a dependency
-        .executableTarget(name: "elisctl", dependencies: ["elisctlKit"], exclude: ["Info.plist"]),
+        // the platform-neutral CLI elis-server ships; the Mac's and Linux's register their relay transports
+        .executableTarget(name: "elisctl", dependencies: ["elisctlKit"]),
         // debug-only fixture: it imports elisctlKit @testable, and release builds name their products.
         .executableTarget(name: "session-wait-watchdog-probe", dependencies: ["elisctlKit"]),
         .testTarget(
