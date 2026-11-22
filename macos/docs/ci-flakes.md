@@ -241,6 +241,10 @@ Each entry separates a demonstrated cause from one that is only consistent with 
 - **Linux job 130225880873** (run 42929932710, branch `subagent-status-owner`) failed to compile
   `ClaudeStatusHookTests.swift` (`posix_openpt` not in scope). The branch fixed it before #959 merged; its final
   run 42940587374 passed the Linux job.
+- **`HudHelperTests.exitsQuietlyWithoutABodyPath` crashed the Linux job** (run 44966398405, master `cb005f69`):
+  the helper was still running at the 5 s bound under the pool stall, and the next `terminationStatus` read
+  trapped (`Illegal instruction`), ending the whole `swift test` process. The bound is now 30 s and a
+  `#require` stops the test before that read.
 
 ## App-hosted tests (`ElisTests`)
 
