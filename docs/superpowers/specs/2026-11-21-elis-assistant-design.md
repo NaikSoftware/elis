@@ -147,8 +147,21 @@ replied, or not delivered. The dots clear when that next message is sent, so non
 - `assistant.read [--last N]` — the transcript.
 - `assistant.provider [NAME]` — read or set the provider.
 - `assistant.show` — select the Elis row.
-- Tree top level: `assistant {provider, providers, running, unread}`; nodes: `handle`.
+- Tree top level: `assistant {provider, providers, running, unread}`; nodes: `handle`, sessions also
+  `assistantMark`; the dispatcher stamps them, never the host. A tag may also be an exact session id.
+- `send` answers `delivered` (handles), `deliveredIDs`, `skipped` and `cut`; it fails when nothing is delivered.
 - Events: `assistant.message` with kind and sender, in `EventFormatter.human`.
+
+### Host requirements (from the core's review)
+
+- Write one input per provider turn and queue the rest host-side: `AssistantChat` counts one `turnEnded` per
+  `inputQueued`, so a provider folding queued inputs into one turn would leave `running` stuck.
+- Call `turnEnded()` per finished turn and `providerFailed(_:now:)` when no provider can start or it dies.
+- `assistantProviders()` and `assistantPeers()` run on every `tree` request: cache the detected providers.
+- `AssistantPeer.sessionID` is byte-identical to the tree node's `id` (handles and marks are exact lookups).
+- Strip inherited `ELIS_*` and `CLAUDE*` from the provider's environment; per-input providers get `/dev/null` stdin.
+- Linux `session.type` must send the final Return in its own write, as the Mac's submit gap does: Claude Code takes
+  a long line and its Return in one burst as a paste and does not submit.
 
 ### Remote and phone
 
