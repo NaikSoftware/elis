@@ -33,7 +33,7 @@ After that:
 | command | what it does |
 |---|---|
 | `make build` | Debug build, no launch |
-| `make test` | host-free `ElisCore` unit tests through `swift test` |
+| `make test` | host-free `swift test` in `ElisCore`, `ElisMac` and `server` |
 | `make test-app` | application-hosted AppKit unit tests |
 | `make lint` | `swiftlint lint --strict` over the tree |
 
