@@ -19,6 +19,8 @@
 #include <QSvgRenderer>
 #include <QtMath>
 
+#include <algorithm>
+
 using namespace SidebarRole;
 
 QColor statusColor(const Settings &settings, const QString &status)
@@ -136,6 +138,37 @@ QColor tintColor(const QString &name)
     return {};
 }
 
+namespace {
+// `layer` painted over an opaque `under`
+QColor over(const QColor &under, const QColor &layer)
+{
+    const qreal a = layer.alphaF();
+    return QColor::fromRgbF(under.redF() * (1 - a) + layer.redF() * a, under.greenF() * (1 - a) + layer.greenF() * a,
+                            under.blueF() * (1 - a) + layer.blueF() * a);
+}
+
+qreal luminance(const QColor &c) // WCAG relative luminance
+{
+    const auto linear = [](qreal v) { return v <= 0.04045 ? v / 12.92 : std::pow((v + 0.055) / 1.055, 2.4); };
+    return 0.2126 * linear(c.redF()) + 0.7152 * linear(c.greenF()) + 0.0722 * linear(c.blueF());
+}
+}
+
+QColor legibleOn(const QColor &color, const QList<QColor> &under, const QColor &text)
+{
+    for (int step = 0; step <= 20; ++step) {
+        const qreal t = step / 20.0;
+        QColor c = QColor::fromRgbF(color.redF() + (text.redF() - color.redF()) * t, color.greenF() + (text.greenF() - color.greenF()) * t,
+                                    color.blueF() + (text.blueF() - color.blueF()) * t, color.alphaF());
+        if (std::all_of(under.begin(), under.end(), [&](const QColor &bg) {
+                const qreal a = luminance(over(bg, c)), b = luminance(bg); // not std::minmax: it binds references to these temporaries
+                return (std::max(a, b) + 0.05) / (std::min(a, b) + 0.05) >= 4.5;
+            }))
+            return c;
+    }
+    return text;
+}
+
 QIcon launcherIcon(const QString &launcherId, const QColor &color)
 {
     QPixmap pm(QSize(32, 32));
@@ -247,8 +280,10 @@ qreal infoLift(const Settings &st)
 }
 
 // one line of styled spans from the top of `at`, the last one that does not fit elided. A colour stays on a
-// selected row, as a row tint does; plain text follows the row's text colour.
-void drawInfo(QPainter *p, const QList<InfoSpan> &spans, const QRectF &at, const QFont &rowFont, const QColor &text, bool selected)
+// selected row, as a row tint does, eased toward the text colour where the row's fills under it would swallow it;
+// plain text follows the row's text colour.
+void drawInfo(QPainter *p, const QList<InfoSpan> &spans, const QRectF &at, const QFont &rowFont, const QColor &text, bool selected,
+              const QList<QColor> &under)
 {
     const QFont base = Sidebar::infoFont(rowFont);
     const qreal height = QFontMetricsF(base).height();
@@ -265,6 +300,8 @@ void drawInfo(QPainter *p, const QList<InfoSpan> &spans, const QRectF &at, const
         const QString shown = fm.elidedText(span.text, Qt::ElideRight, room);
         QColor c = span.color.isEmpty() ? text : tintColor(span.color);
         c.setAlphaF(!span.color.isEmpty() ? (span.dim ? 0.55 : 1) : selected ? (span.dim ? 0.6 : 0.85) : span.dim ? 0.38 : span.bold ? 1 : 0.58);
+        if (!span.color.isEmpty())
+            c = legibleOn(c, under, text);
         p->setFont(f);
         p->setPen(c);
         p->drawText(QRectF(x, at.top(), room, height), Qt::AlignVCenter | Qt::AlignLeft, shown);
@@ -298,7 +335,9 @@ void SidebarDelegate::paint(QPainter *p, const QStyleOptionViewItem &opt, const 
     const QColor iconColor = tint.isValid() ? tint : faded(text, selected ? 0.85 : 0.58);
     const QColor nameColor = tint.isValid() ? tint : text;
 
+    QColor under = pal.color(QPalette::Window); // what the info line sits on, fill by fill below
     if (band.isValid()) {
+        under = over(under, faded(band, 0.10));
         // one rounded outline across the group: each row's piece runs past the edges the group continues over, clipped to the row
         const QRectF row(opt.rect);
         const qreal top = edge == Sidebar::First || edge == Sidebar::Single ? row.top() + Sidebar::groupGap : row.top() - 13;
@@ -328,6 +367,7 @@ void SidebarDelegate::paint(QPainter *p, const QStyleOptionViewItem &opt, const 
     if (session && tint.isValid()) {
         p->setBrush(faded(tint, 0.09));
         p->drawPath(shape(r, 8));
+        under = over(under, faded(tint, 0.09));
     }
     // Elis stands alone at a group card's size, so its edges and the gap under it match the cards below
     const qreal pad = assistant ? Sidebar::groupPadding : 0;
@@ -338,12 +378,15 @@ void SidebarDelegate::paint(QPainter *p, const QStyleOptionViewItem &opt, const 
         const bool key = m_sidebar->isActiveWindow();
         p->setPen(QPen(faded(c, key ? 0.55 : 0.35), 1));
         p->setBrush(faded(c, key ? 0.20 : 0.12));
+        under = over(under, faded(c, key ? 0.20 : 0.12));
         p->drawPath(shape(fill.adjusted(0.5, 0.5, -0.5, -0.5), assistant ? 10.5 : 7.5));
     } else if (opt.state & QStyle::State_MouseOver) {
         p->setBrush(faded(text, 0.07));
+        under = over(under, faded(text, 0.07));
         p->drawPath(shape(fill, assistant ? 10.5 : 8));
     }
 
+    QList<QColor> unders{under};
     if (session && index.data(Status).toString() == QLatin1String("active")) {
         // in progress: the row's tint (else the active colour) drifts across it with a second hue, one period every two row widths
         const QColor active = statusColor(m_sidebar->settings(), QStringLiteral("active"));
@@ -359,6 +402,7 @@ void SidebarDelegate::paint(QPainter *p, const QStyleOptionViewItem &opt, const 
         p->setPen(Qt::NoPen);
         p->setBrush(g);
         p->drawPath(shape(r, 8));
+        unders = {over(under, alpha(base, 51)), over(under, alpha(second, 41))}; // its strongest stops: the line holds still as it drifts
     }
 
     qreal x = r.left() + chevronX;
@@ -496,7 +540,7 @@ void SidebarDelegate::paint(QPainter *p, const QStyleOptionViewItem &opt, const 
         drawGlyph(p, QRectF(end + 6, cy - 5.5, 11, 11), QStringLiteral("flag-lucide"), QColor(dark ? 0x5E5CE6 : 0x5856D6)); // systemIndigo
     }
     if (const QList<InfoSpan> *spans = m_sidebar->shownInfo(index))
-        drawInfo(p, *spans, QRectF(x, title.bottom() + 1 - infoLift(m_sidebar->settings()), r.right() - 8 - x, 0), opt.font, text, selected);
+        drawInfo(p, *spans, QRectF(x, title.bottom() + 1 - infoLift(m_sidebar->settings()), r.right() - 8 - x, 0), opt.font, text, selected, unders);
     p->restore();
 }
 
