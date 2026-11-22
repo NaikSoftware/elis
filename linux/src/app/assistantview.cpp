@@ -20,6 +20,7 @@
 #include <QLabel>
 #include <QMenu>
 #include <QMimeData>
+#include <QPaintEvent>
 #include <QPainter>
 #include <QPlainTextEdit>
 #include <QRegularExpression>
@@ -246,7 +247,7 @@ AssistantView::AssistantView(MainWindow &window, Store &store)
     auto *composer = new QFrame;
     composer->setObjectName(QStringLiteral("composer"));
     composer->setStyleSheet(QStringLiteral("QFrame#composer{border:1px solid %1;border-radius:14px;background:%2;}")
-                                .arg(css(ink(0.22)), css(QApplication::palette().color(QPalette::Base))));
+                                .arg(css(ink(0.22)), css(QApplication::palette().color(QPalette::Window))));
     composer->setAcceptDrops(true);
     composer->installEventFilter(this);
     auto *box = new QVBoxLayout(composer);
@@ -553,14 +554,12 @@ void AssistantView::rebuildProviders()
     for (const QJsonValue &v : providers) {
         const QString id = v.toString();
         const Launcher *l = launcher(id);
-        QAction *a = menu->addAction(l ? l->title : id, this, [this, id] {
+        menu->addAction(l ? l->title : id, this, [this, id] {
             const QJsonObject r = m_window.assistantRequest({{"cmd", "assistant.provider"}, {"args", QJsonObject{{"provider", id}}}});
             if (!r["ok"].toBool())
                 m_window.statusBar()->showMessage(r["error"].toString(), 4000);
             refreshAll();
         });
-        a->setCheckable(true);
-        a->setChecked(id == current);
     }
 }
 
@@ -600,7 +599,11 @@ void AssistantView::complete()
     QRect at = m_editor->cursorRect();
     at.setWidth(qMin(460, 28 + column + 200 + 32)); // icon, handle column, a name, margins
     m_completer->complete(at);
-    m_completer->popup()->setCurrentIndex(m_completer->completionModel()->index(0, 0));
+    // QCompleter flips the popup above the cursor line, which still lies inside the composer; lift it clear of the box
+    QAbstractItemView *popup = m_completer->popup();
+    const QWidget *box = findChild<QFrame *>(QStringLiteral("composer"));
+    popup->move(popup->x(), box->mapToGlobal(QPoint(0, 0)).y() - popup->height() - 6);
+    popup->setCurrentIndex(m_completer->completionModel()->index(0, 0));
 }
 
 void AssistantView::send()
@@ -637,6 +640,16 @@ bool AssistantView::dropTags(const QMimeData *mime)
         return true;
     }
     return false;
+}
+
+void AssistantView::paintEvent(QPaintEvent *event)
+{
+    // the content surface, as a terminal is, so the chat does not merge into the toolbar's Window colour
+    QPainter p(this);
+    p.setCompositionMode(QPainter::CompositionMode_Source);
+    QColor surface = palette().color(QPalette::Base);
+    surface.setAlphaF(1 - qBound(0.0, m_store.settings.windowTransparency, 90.0) / 100);
+    p.fillRect(event->rect(), surface);
 }
 
 bool AssistantView::eventFilter(QObject *watched, QEvent *event)
