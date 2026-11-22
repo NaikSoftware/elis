@@ -12,7 +12,9 @@
 #include <QCheckBox>
 #include <QDir>
 #include <QFile>
+#include <KActionCollection>
 #include <KPageDialog>
+#include <KParts/ReadOnlyPart>
 #include <QLineEdit>
 #include <QListWidget>
 #include <QDialog>
@@ -394,17 +396,25 @@ private Q_SLOTS:
             const bool ok = w.appCommand(cmd, id, args, &result, &error);
             return ok ? result : QJsonObject{{"error", error}};
         };
-        QVERIFY(!run("session.overlay.open", {{"command", "sleep 30; exit 3"}, {"sizePercent", 50}}).contains("error"));
+        QVERIFY(!run("session.overlay.open", {{"command", "printf 'OV_COPY_TOKEN\\n'; sleep 30; exit 3"}, {"sizePercent", 50}}).contains("error"));
         QCOMPARE(run("session.overlay.open", {{"command", "true"}})["error"].toString(), QStringLiteral("overlay already open"));
         QTRY_VERIFY(QApplication::focusWidget() && QApplication::focusWidget() != term); // the cover owns the keyboard
         QCOMPARE(w.sessionExtras(id)["overlaySizePercent"].toInt(), 50);
         QCOMPARE(run("session.overlay.result")["error"].toString(), QStringLiteral("overlay still running"));
+        QCOMPARE(run("session.overlay.copy")["error"].toString(), QStringLiteral("no selection"));
+        QTRY_VERIFY_WITH_TIMEOUT(run("session.overlay.text")["text"].toString().contains("OV_COPY_TOKEN"), 5000);
+        for (KActionCollection *col : KActionCollection::allCollections())
+            if (QAction *a = col->action(QStringLiteral("select-all")))
+                a->trigger();
+        QTRY_VERIFY2(run("session.overlay.copy")["text"].toString().contains("OV_COPY_TOKEN"),
+                     qPrintable(QJsonDocument(run("session.overlay.copy")).toJson()));
         QCOMPARE(run("session.overlay.toggle")["text"].toString(), QStringLiteral("hidden"));
         QCOMPARE(w.sessionExtras(id)["hiddenOverlays"].toArray().first().toString(), QStringLiteral("session"));
         QTRY_COMPARE(QApplication::focusWidget(), term);
         QCOMPARE(w.namedAction("toggle_overlay")->text(), QStringLiteral("Show Overlays"));
         QVERIFY(!run("session.overlay.close").contains("error"));
         QVERIFY(!w.sessionExtras(id)["overlay"].toBool());
+        QCOMPARE(run("session.overlay.copy")["error"].toString(), QStringLiteral("no overlay"));
 
         QVERIFY(!run("session.overlay.open", {{"command", "exit 3"}}).contains("error"));
         QTRY_VERIFY_WITH_TIMEOUT(!w.sessionExtras(id)["overlay"].toBool(), 5000);
@@ -414,6 +424,7 @@ private Q_SLOTS:
         // the HUD takes no input: typing still reaches the terminal under it
         QVERIFY(!run("session.hud.open", {{"message", "building"}, {"spinner", "dot"}, {"hideAfter", 1}}).contains("error"));
         QCOMPARE(w.sessionExtras(id)["hud"].toObject()["message"].toString(), QStringLiteral("building"));
+        QCOMPARE(run("session.overlay.copy")["error"].toString(), QStringLiteral("no overlay to read: the slot holds a hud"));
         QCOMPARE(QApplication::focusWidget(), term);
         QTRY_VERIFY_WITH_TIMEOUT(!w.sessionExtras(id).contains("hud"), 3000); // --hide-after clears it
         QCOMPARE(run("session.hud.close")["error"].toString(), QStringLiteral("no hud"));
@@ -480,7 +491,7 @@ private Q_SLOTS:
         QVERIFY2(w.appCommand("dashboard", {}, {{"cells", QJsonArray{a + ":left", b + ":left"}}, {"fontMode", "untouched"}}, &result, &error), qPrintable(error));
         QCOMPARE(w.chromeState()["dashboardMembers"].toArray().size(), 2);
         QVERIFY(!w.chromeState()["sidebarVisible"].toBool()); // the grid takes the whole window
-        QVERIFY(!w.chromeState()["filePanel"].toObject()["visible"].toBool());
+        QVERIFY(!w.chromeState()["filePanelVisible"].toBool());
         QWidget *grid = QApplication::focusWidget();
         QVERIFY(grid && grid->isAncestorOf(termA)); // the live terminal, not a copy
         QCOMPARE(w.windowTitle(), QStringLiteral("Dashboard"));
@@ -493,7 +504,7 @@ private Q_SLOTS:
         QCOMPARE(store.selected, b);
         QVERIFY(!w.chromeState().contains("dashboardMembers"));
         QVERIFY(w.chromeState()["sidebarVisible"].toBool()); // both panels come back
-        QVERIFY(w.chromeState()["filePanel"].toObject()["visible"].toBool());
+        QVERIFY(w.chromeState()["filePanelVisible"].toBool());
         for (QWidget *up = termA; up; up = up->parentWidget())
             QVERIFY(up->objectName() != QLatin1String("dashCell")); // back in its own splitter
 
@@ -1338,6 +1349,13 @@ private Q_SLOTS:
         QVERIFY(call("sidebar", {}, {{"mode", "show"}})["ok"].toBool());
         QCOMPARE(call("sidebar.width", {}, {{"sidebarWidth", 300}})["result"]["sidebarWidth"].toDouble(), 300.0);
         QCOMPARE(call("sidebar.width", {}, {})["error"].toString(), QStringLiteral("sidebar.width requires a width in points"));
+        QVERIFY(call("filepanel", {}, {{"mode", "show"}})["ok"].toBool());
+        QVERIFY(call("tree")["result"]["tree"]["filePanelVisible"].toBool());
+        QCOMPARE(call("filepanel.width", {}, {{"filePanelWidth", 280}})["result"]["filePanelWidth"].toInt(), 280);
+        QCOMPARE(call("tree")["result"]["tree"]["filePanelWidth"].toInt(), 280);
+        QCOMPARE(call("filepanel.width", {}, {})["error"].toString(), QStringLiteral("filepanel.width requires a width in points"));
+        QVERIFY(call("filepanel", {}, {{"mode", "hide"}})["ok"].toBool());
+        QVERIFY(!call("tree")["result"]["tree"]["filePanelVisible"].toBool());
         QCOMPARE(call("session.focus", id)["error"].toString(), QStringLiteral("session has no split"));
         QVERIFY(call("surface.zoom", {}, {{"mode", "show"}})["ok"].toBool());
         QCOMPARE(call("tree")["result"]["tree"]["zoomedSurface"].toString(), QStringLiteral("surface:%1:left").arg(id));
@@ -1372,6 +1390,19 @@ private Q_SLOTS:
         const QJsonObject answer = call("ask.result", ask)["result"]["ask"].toObject();
         QCOMPARE(answer["result"].toString(), QStringLiteral("answered"));
         QCOMPARE(answer["id"].toString(), QStringLiteral("yes"));
+        // clicking an explicit --cancel button or a generated Cancel resolves as {"result":"escaped"}
+        QJsonObject askWithCancel = askArgs;
+        askWithCancel.insert("cancelButton", "no");
+        const QString askEsc = call("ask.open", id, askWithCancel)["result"]["id"].toString();
+        for (QPushButton *b : w.findChild<QDialog *>("ask")->findChildren<QPushButton *>())
+            if (b->text().remove(QLatin1Char('&')) == QLatin1String("No"))
+                b->click();
+        QCOMPARE(call("ask.result", askEsc)["result"]["ask"].toObject(), (QJsonObject{{"result", "escaped"}}));
+        const QString formEsc = call("ask.open", id, {{"title", "Name?"}, {"input", "line"}, {"value", "x"}})["result"]["id"].toString();
+        for (QPushButton *b : w.findChild<QDialog *>("ask")->findChildren<QPushButton *>())
+            if (b->text().remove(QLatin1Char('&')) == QLatin1String("Cancel"))
+                b->click();
+        QCOMPARE(call("ask.result", formEsc)["result"]["ask"].toObject(), (QJsonObject{{"result", "escaped"}}));
         const QString form = call("ask.open", id, {{"title", "Name?"}, {"input", "line"}, {"value", "x"}})["result"]["id"].toString();
         QVERIFY(call("ask.cancel", form)["ok"].toBool());
         QCOMPARE(call("ask.result", form)["result"]["ask"]["result"].toString(), QStringLiteral("cancelled"));

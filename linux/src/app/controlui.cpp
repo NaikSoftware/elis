@@ -258,8 +258,11 @@ void MainWindow::finishAsk(const QString &id, const QJsonObject &outcome)
 {
     const Ask ask = m_asks.take(id);
     retain(s_asks, s_askOrder, id, outcome, 32);
-    if (ask.dialog)
+    if (ask.dialog) {
+        ask.dialog->setObjectName({});
+        ask.dialog->hide();
         ask.dialog->deleteLater();
+    }
     syncChrome();
 }
 
@@ -361,6 +364,8 @@ bool MainWindow::askCommand(const QString &cmd, const QString &id, const QJsonOb
         if (b.value("id") == args.value("destructiveButton"))
             button->setStyleSheet(QStringLiteral("color: palette(link-visited)"));
         connect(button, &QPushButton::clicked, this, [=, this] {
+            if (b.value("id") == args.value("cancelButton"))
+                return finishAsk(askId, {{"result", "escaped"}});
             QJsonObject outcome{{"result", "answered"}, {"id", b.value("id")}, {"label", b.value("label")}, {"index", i}};
             if (line || multi)
                 outcome.insert("text", line ? line->text() : multi->toPlainText());
