@@ -1492,7 +1492,10 @@ private Q_SLOTS:
         QCOMPARE(t.events[0]["kind"].toString(), QStringLiteral("assistant.message"));
         QCOMPARE(t.events[0]["payload"].toObject(), (QJsonObject{{"kind", "user"}, {"text", "hi"}}));
         QVERIFY(Assistant::dispatch({{"cmd", "assistant.ask"}, {"args", QJsonObject{{"text", "no sink"}}}}, one(s, t), {}, nullptr)["ok"].toBool());
-        QCOMPARE(t.events.size(), 2);
+        QCOMPARE(t.events.size(), 3);
+        QCOMPARE(t.events[1].value("payload")["text"].toString(), QStringLiteral("no sink"));
+        QCOMPARE(t.events[2]["payload"].toObject(), (QJsonObject{{"kind", "error"}, {"text", "no assistant provider is running"}}));
+        QVERIFY(!Assistant::stamp(call(s, t, "tree"), one(s, t), {}).value("result")["tree"]["assistant"]["running"].toBool());
     }
 
     void assistantSendTypesIntoAgentSessionsOnly()
@@ -1584,6 +1587,8 @@ private Q_SLOTS:
         QCOMPARE(Assistant::stamp(call(s, t, "tree"), windows, {}).value("result")["tree"]["workspaces"][0]["handle"].toString(), QStringLiteral("mihr-linux"));
         const QJsonObject failed{{"ok", false}, {"error", "x"}};
         QCOMPARE(Assistant::stamp(failed, windows, {}), failed);
+        const QJsonObject unencodable{{"ok", true}, {"result", QJsonObject{{"tree", QJsonObject{{"bad", QString(QChar(0xD800))}}}}}};
+        QCOMPARE(Assistant::stamp(unencodable, windows, {}), unencodable); // a stamp error keeps the tree
         Q_UNUSED(a);
     }
 

@@ -53,10 +53,8 @@ static void serve(QLocalServer &server, WindowLibrary &library)
                     to->disconnectFromServer();
                 };
                 const std::function<QJsonObject()> job = takeDeferred();
-                if (const qint64 wait = MainWindow::returnPending.remainingTime(); wait > 0 && !job)
-                    return void(QTimer::singleShot(wait + 1, socket, [send, socket, response] { send(socket, response); }));
                 if (!response.value("deferred").toBool() || !job)
-                    return send(socket, response);
+                    return MainWindow::whenTyped(socket, [send, socket, response] { send(socket, response); });
                 QThreadPool::globalInstance()->start([job, send, to = QPointer<QLocalSocket>(socket)] {
                     const QJsonObject reply = job();
                     QMetaObject::invokeMethod(qApp, [send, to, reply] {

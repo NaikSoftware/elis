@@ -148,10 +148,12 @@ QJsonObject dispatch(const QJsonObject &request, const QList<Window> &windows, c
     for (const QJsonValue &v : step.value("effects").toArray()) {
         const QJsonObject effect = v.toObject();
         const QString type = effect.value("type").toString();
-        if (type == QLatin1String("input") && sink)
-            sink->enqueue(effect.value("streamText").toString());
         if (type == QLatin1String("input") || type == QLatin1String("sent"))
             emitMessage(effect.value("entry").toObject(), windows);
+        if (type == QLatin1String("input") && sink)
+            sink->enqueue(effect.value("streamText").toString());
+        else if (type == QLatin1String("input")) // the input has no turn to end, so the failure clears running
+            emitMessage(AssistantBridge::providerFailed(QStringLiteral("no assistant provider is running")), windows);
         else if (type == QLatin1String("providerChanged") && sink)
             sink->providerChanged(effect.value("provider").toString());
         else if (type == QLatin1String("show"))
@@ -166,7 +168,7 @@ QJsonObject stamp(const QJsonObject &treeReply, const QList<Window> &windows, co
         return treeReply;
     const QJsonObject tree = AssistantBridge::stamp(treeReply["result"]["tree"].toObject(), peers(windows), QJsonArray::fromStringList(providers));
     if (tree.contains("error"))
-        return {{"ok", false}, {"error", tree.value("error")}};
+        return treeReply; // the tree without handles beats no tree
     return {{"ok", true}, {"result", QJsonObject{{"tree", tree}}}};
 }
 

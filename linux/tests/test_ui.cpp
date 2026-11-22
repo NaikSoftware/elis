@@ -613,11 +613,20 @@ private Q_SLOTS:
         QString error;
         QTRY_VERIFY_WITH_TIMEOUT(!w.text(id, "left", false, &error).trimmed().isEmpty(), 5000); // the prompt
         auto type = [&](const QString &text) { return dispatch(store, w, {{"cmd", "session.type"}, {"target", id}, {"args", QJsonObject{{"text", text}}}}); };
-        QVERIFY(type("stty raw -echo; dd bs=4096 count=1 2>/dev/null | od -An -tx1; stty sane\n")["ok"].toBool());
+        // each dd is one read; head then takes the next ten bytes whatever the reads
+        const QString read = QStringLiteral("dd bs=4096 count=1 2>/dev/null | od -An -tx1; ");
+        QVERIFY(type("stty raw -echo; " + read + read + "head -c 10 | od -An -tx1; stty sane\n")["ok"].toBool());
         QTRY_COMPARE_WITH_TIMEOUT(w.foregroundArgv(id, "main").value(0), QStringLiteral("dd"), 5000);
         QVERIFY(type("hello\n")["ok"].toBool());
-        QTRY_VERIFY_WITH_TIMEOUT(w.text(id, "left", false, &error).contains("6c 6c 6f"), 5000);
-        QVERIFY2(!w.text(id, "left", false, &error).contains("6f 0"), qPrintable(w.text(id, "left", false, &error))); // dd's one read held no Return
+        bool replied = false;
+        MainWindow::whenTyped(&w, [&] { replied = true; });
+        QVERIFY(!replied); // a control reply waits for the Return
+        QTRY_VERIFY(replied);
+        const QRegularExpression twoReads(QStringLiteral("68 65 6c 6c 6f\\n *0d\\b")); // raw mode: no carriage return before a line
+        QTRY_VERIFY2_WITH_TIMEOUT(twoReads.match(w.text(id, "left", false, &error)).hasMatch(), qPrintable(w.text(id, "left", false, &error)), 5000);
+        QVERIFY(type("msg1\n")["ok"].toBool());
+        QVERIFY(type("msg2\n")["ok"].toBool()); // still behind msg1's Return
+        QTRY_VERIFY2_WITH_TIMEOUT(w.text(id, "left", false, &error).contains("6d 73 67 31 0d 6d 73 67 32 0d"), qPrintable(w.text(id, "left", false, &error)), 5000);
     }
 
     void selectingASessionUpdatesTheSidebarInPlace()

@@ -1513,21 +1513,53 @@ bool MainWindow::type(const QString &sessionId, const QString &pane, const QStri
     if (const QString zmx = part->property("elisZmx").toString(); !zmx.isEmpty() && !Zmx::lead(zmx).role.isEmpty()) {
         if (!Zmx::type(stateDir(), zmx, text, error))
             return false;
+    } else if (auto queued = m_typed.find(part); queued != m_typed.end()) {
+        queued->append(text); // behind the Return still to come
     } else {
-        QString head;
-        const int gap = Zmx::pacedReturn(text, &head);
-        t->sendInput(head);
-        // Konsole's pty queues writes until the event loop runs, so a sleep here would still send one burst; the control
-        // server holds the reply until returnPending expires, as zmx's blocking Return does.
-        // shortcut: a second type into this pane within one request lands before the first's Return; queue per pane if that bites
-        if (gap > 0) {
-            QTimer::singleShot(gap, part, [t] { t->sendInput(QStringLiteral("\r")); });
-            returnPending = QDeadlineTimer(gap, Qt::PreciseTimer);
-        }
+        writeTyped(part, text);
     }
     if (text.contains(QLatin1Char('\n')) || text.contains(QLatin1Char('\r')))
         m_store.keyPressed(sessionId, Store::Key::Submit); // injected text carrying a newline is a submit
     return true;
+}
+
+// Konsole's pty queues writes until the event loop runs, so a sleep between head and Return would still send one burst:
+// the gap is a timer started once the head has had a turn to reach the pty, and the pane's later texts wait behind it
+void MainWindow::writeTyped(KParts::ReadOnlyPart *part, const QString &text)
+{
+    QString head;
+    const int gap = Zmx::pacedReturn(text, &head);
+    qobject_cast<TerminalInterface *>(part)->sendInput(head);
+    if (gap <= 0)
+        return;
+    m_typed.insert(part, {});
+    ++s_returnsPending;
+    QObject *key = part;
+    QTimer::singleShot(0, qApp, [self = QPointer(this), pane = QPointer(part), key, gap] {
+        QTimer::singleShot(gap, qApp, [self, pane, key] {
+            --s_returnsPending; // also for a pane or window gone meanwhile, or every later reply would wait forever
+            if (!self)
+                return;
+            QStringList waiting = self->m_typed.take(key);
+            if (!pane)
+                return;
+            qobject_cast<TerminalInterface *>(pane.data())->sendInput(QStringLiteral("\r"));
+            while (!waiting.isEmpty()) {
+                self->writeTyped(pane, waiting.takeFirst());
+                if (self->m_typed.contains(key)) {
+                    self->m_typed[key] = waiting;
+                    break;
+                }
+            }
+        });
+    });
+}
+
+void MainWindow::whenTyped(QObject *context, const std::function<void()> &then)
+{
+    if (s_returnsPending == 0)
+        return then();
+    QTimer::singleShot(1, context, [context, then] { whenTyped(context, then); });
 }
 
 QJsonObject MainWindow::info(const QString &sessionId)

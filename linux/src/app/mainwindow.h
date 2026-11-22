@@ -4,7 +4,6 @@
 #include "keymap.h"
 
 #include <QDateTime>
-#include <QDeadlineTimer>
 #include <QElapsedTimer>
 #include <QSet>
 #include <QHash>
@@ -43,7 +42,8 @@ public:
     QString windowId;
 
     bool type(const QString &sessionId, const QString &pane, const QString &text, QString *error) override;
-    static inline QDeadlineTimer returnPending; // until a typed text's paced Return has gone, the control reply waits
+    // runs then once no plain pane has a paced Return still to send, so a control reply follows the Return as zmx's does
+    static void whenTyped(QObject *context, const std::function<void()> &then);
     QString text(const QString &sessionId, const QString &pane, bool scrollback, QString *error) override;
     QSize gridSize(const QString &sessionId, const QString &pane) override;
     bool setGrid(const QString &sessionId, const QString &pane, const QSize &grid, QString *error) override;
@@ -98,6 +98,9 @@ protected:
     bool eventFilter(QObject *watched, QEvent *event) override;
 
 private:
+    void writeTyped(KParts::ReadOnlyPart *part, const QString &text);
+    QHash<QObject *, QStringList> m_typed; // a plain pane with a paced Return pending -> the texts typed behind it, in order
+    static inline int s_returnsPending = 0;
     QAction *action(const QString &name, const QString &text, const QString &icon, const QKeySequence &key, std::function<void()> slot);
     void createMenus();
     void createTerminal(const QString &id);
