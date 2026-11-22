@@ -48,6 +48,13 @@ public:
             p->setPen(Qt::NoPen);
             p->setBrush(sel);
             p->drawRoundedRect(r, 6, 6);
+        } else if (opt.state & QStyle::State_MouseOver && index.flags() & Qt::ItemIsEnabled) {
+            // a neutral wash, not a weaker accent, so hover never reads as a second selection (elis's palette)
+            QColor hover = text;
+            hover.setAlphaF(0.07);
+            p->setPen(Qt::NoPen);
+            p->setBrush(hover);
+            p->drawRoundedRect(r, 6, 6);
         }
         if (!(index.flags() & Qt::ItemIsEnabled))
             text.setAlpha(110);
@@ -164,6 +171,7 @@ Palette::Palette(QWidget *window)
     m_list = new QListWidget;
     m_list->setItemDelegate(new RowDelegate(this, m_list));
     m_list->setFocusPolicy(Qt::NoFocus);
+    m_list->viewport()->setAttribute(Qt::WA_Hover);
     m_list->setVerticalScrollMode(QAbstractItemView::ScrollPerPixel);
     auto *col = new QVBoxLayout(this);
     col->setContentsMargins(4, 4, 4, 6);
