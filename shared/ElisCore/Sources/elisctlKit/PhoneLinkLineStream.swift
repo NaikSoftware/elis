@@ -70,7 +70,7 @@ final class PhoneLinkLineStream: @unchecked Sendable {
         process.standardInput = input
         process.standardOutput = output
         process.standardError = FileHandle.nullDevice
-        try process.run()
+        try process.runWithSignals()
         let writeFD = input.fileHandleForWriting.fileDescriptor
         // a child that stopped reading fails the write instead of raising SIGPIPE in the relay
         #if canImport(Darwin)
@@ -184,6 +184,20 @@ final class PhoneLinkLineStream: @unchecked Sendable {
             guard sent else { return stop() }
             #endif
         }
+    }
+}
+
+extension Process {
+    /// `run()`, with the child's signal mask emptied on Linux: Foundation passes the child the spawning thread's mask,
+    /// and a Dispatch worker blocks every signal, which left children deaf to the SIGTERM that stops them.
+    func runWithSignals() throws {
+        #if canImport(Glibc)
+        var none = sigset_t(), saved = sigset_t()
+        sigemptyset(&none)
+        pthread_sigmask(SIG_SETMASK, &none, &saved)
+        defer { pthread_sigmask(SIG_SETMASK, &saved, nil) }
+        #endif
+        try run()
     }
 }
 #endif

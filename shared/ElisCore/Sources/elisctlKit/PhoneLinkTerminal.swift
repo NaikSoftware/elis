@@ -307,7 +307,7 @@ final class PhoneLinkTerminal: @unchecked Sendable {
         process.standardError = FileHandle.nullDevice
         process.standardInput = FileHandle.nullDevice
         // started here, so `stop()` on this queue always sees the process it must kill
-        guard (try? process.run()) != nil else { return done(nil) }
+        guard (try? process.runWithSignals()) != nil else { return done(nil) }
         screenProcess = process
         DispatchQueue.global().asyncAfter(deadline: .now() + Self.screenTimeout) { [process] in
             if process.isRunning { process.terminate() }

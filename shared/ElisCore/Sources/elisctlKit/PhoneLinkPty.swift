@@ -84,8 +84,11 @@ final class PhoneLinkPty: @unchecked Sendable {
             guard terminal >= 0 else { throw Failure(operation: "open terminal", errno: errno) }
             defer { close(terminal) }
             #else
-            guard let name = ttyname(terminal) else { throw Failure(operation: "ttyname", errno: errno) }
-            let path = String(cString: name)
+            // not ttyname, whose static buffer another pane's spawn can rewrite mid-read (posix_spawnp then failed EISDIR)
+            var name = [CChar](repeating: 0, count: 128)
+            let named = ttyname_r(terminal, &name, name.count)
+            guard named == 0 else { throw Failure(operation: "ttyname_r", errno: named) }
+            let path = String(decoding: name.prefix { $0 != 0 }.map { UInt8(bitPattern: $0) }, as: UTF8.self)
             #endif
             var size = winsize(ws_row: rows, ws_col: cols, ws_xpixel: 0, ws_ypixel: 0)
             guard ioctl(terminal, setWindowSize, &size) == 0 else { throw Failure(operation: "TIOCSWINSZ", errno: errno) }
