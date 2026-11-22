@@ -38,7 +38,8 @@ if(NOT SWIFT)
   message(FATAL_ERROR "swift not found: install Swift 6.3 (the swift.org tarball or swiftly) and put it on PATH, or pass -DSWIFT=/path/to/swift")
 endif()
 set(ELIS_BRIDGE ${CMAKE_BINARY_DIR}/swift/release/libElisBridge.so)
-file(GLOB_RECURSE ELIS_BRIDGE_SOURCES CONFIGURE_DEPENDS ${CMAKE_SOURCE_DIR}/bridge/Sources/*.swift ${CMAKE_SOURCE_DIR}/../shared/ElisCore/Sources/*.swift)
+file(GLOB_RECURSE ELIS_BRIDGE_SOURCES CONFIGURE_DEPENDS ${CMAKE_SOURCE_DIR}/bridge/Sources/*.swift ${CMAKE_SOURCE_DIR}/../shared/ElisCore/Sources/*.swift
+  ${CMAKE_SOURCE_DIR}/../shared/ElisCore/Sources/*.[ch] ${CMAKE_SOURCE_DIR}/../shared/ElisCore/Sources/*.modulemap)
 add_custom_command(OUTPUT ${ELIS_BRIDGE}
   # a soname, so what links it records the name and finds it on the rpath, not this build path
   COMMAND ${SWIFT} build -c release -Xswiftc -static-stdlib -Xlinker -soname=libElisBridge.so -Xlinker --strip-all --package-path ${CMAKE_SOURCE_DIR}/bridge --scratch-path ${CMAKE_BINARY_DIR}/swift

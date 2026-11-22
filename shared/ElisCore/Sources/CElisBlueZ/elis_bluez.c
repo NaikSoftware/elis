@@ -47,7 +47,7 @@ struct elis_bluez {
     int powered;
     char uuid[37];
     uint16_t psm;
-    int registered;     // the application, then the advertisement, are BlueZ's until withdrawn
+    int attempted;      // a registration was sent since the last withdraw
     sd_bus_slot *pending;
 };
 
@@ -209,7 +209,6 @@ static int owner_changed(sd_bus_message *m, void *userdata, sd_bus_error *error)
     elis_bluez *b = userdata;
     const char *name = NULL, *old = NULL, *now = NULL;
     if (sd_bus_message_read(m, "sss", &name, &old, &now) < 0) return 0;
-    b->registered = 0;
     b->pending = sd_bus_slot_unref(b->pending);
     if (b->powered) {
         b->powered = 0;
@@ -295,7 +294,6 @@ static int advertisement_registered(sd_bus_message *reply, void *userdata, sd_bu
     b->pending = sd_bus_slot_unref(b->pending);
     const sd_bus_error *e = sd_bus_message_get_error(reply);
     if (e) return failed(b, "advertising", e), 0;
-    b->registered = 2;
     emit(b, ELIS_BLUEZ_ADVERTISING, NULL);
     return 0;
 }
@@ -305,7 +303,6 @@ static int application_registered(sd_bus_message *reply, void *userdata, sd_bus_
     b->pending = sd_bus_slot_unref(b->pending);
     const sd_bus_error *e = sd_bus_message_get_error(reply);
     if (e) return failed(b, "service", e), 0;
-    b->registered = 1;
     // BlueZ reads the advertisement back before it replies, so neither call can be a blocking one
     int r = sd_bus_call_method_async(b->bus, &b->pending, "org.bluez", b->adapter, "org.bluez.LEAdvertisingManager1",
                                      "RegisterAdvertisement", advertisement_registered, b, "oa{sv}", ADVERTISEMENT, 0);
@@ -314,21 +311,23 @@ static int application_registered(sd_bus_message *reply, void *userdata, sd_bus_
 }
 
 void elis_bluez_withdraw(elis_bluez *b) {
-    // a registration still in flight finishes in BlueZ; its reply must not report the old UUID as live
+    // a registration still in flight may finish in BlueZ after this; its reply must not report the old UUID as live
     b->pending = sd_bus_slot_unref(b->pending);
-    if (b->registered >= 2)
+    // both, whatever answered: one that finished unseen would hold the paths and refuse every later registration
+    if (b->attempted) {
         sd_bus_call_method_async(b->bus, NULL, "org.bluez", b->adapter, "org.bluez.LEAdvertisingManager1",
                                  "UnregisterAdvertisement", NULL, NULL, "o", ADVERTISEMENT);
-    if (b->registered >= 1)
         sd_bus_call_method_async(b->bus, NULL, "org.bluez", b->adapter, "org.bluez.GattManager1", "UnregisterApplication",
                                  NULL, NULL, "o", ROOT);
-    b->registered = 0;
+    }
+    b->attempted = 0;
 }
 
 void elis_bluez_advertise(elis_bluez *b, const char *service_uuid, uint16_t psm) {
     elis_bluez_withdraw(b);
     snprintf(b->uuid, sizeof b->uuid, "%s", service_uuid);
     b->psm = psm;
+    b->attempted = 1;
     int r = sd_bus_call_method_async(b->bus, &b->pending, "org.bluez", b->adapter, "org.bluez.GattManager1",
                                      "RegisterApplication", application_registered, b, "oa{sv}", ROOT, 0);
     if (r < 0) failed(b, "service", NULL);
