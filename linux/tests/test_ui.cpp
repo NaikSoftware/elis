@@ -1791,6 +1791,41 @@ private Q_SLOTS:
         QCOMPARE(store.session(a)->infoSpans.size(), 2);
     }
 
+    void ciColoursReadOnEveryTintedRow()
+    {
+        const auto luminance = [](const QColor &c) {
+            const auto linear = [](qreal v) { return v <= 0.04045 ? v / 12.92 : std::pow((v + 0.055) / 1.055, 2.4); };
+            return 0.2126 * linear(c.redF()) + 0.7152 * linear(c.greenF()) + 0.0722 * linear(c.blueF());
+        };
+        const auto over = [](const QColor &under, const QColor &layer, qreal a) {
+            return QColor::fromRgbF(under.redF() * (1 - a) + layer.redF() * a, under.greenF() * (1 - a) + layer.greenF() * a,
+                                    under.blueF() * (1 - a) + layer.blueF() * a);
+        };
+        for (const bool dark : {true, false}) {
+            const QColor window(dark ? 0x202326 : 0xEFF0F1), text(dark ? 0xFCFCFC : 0x232629);
+            const auto swatch = [&](const QString &name) {
+                for (const TintSwatch &s : Store::tintPalette())
+                    if (s.name == name)
+                        return QColor(dark ? s.dark : s.light);
+                return QColor();
+            };
+            const QColor active = statusColor(Settings{}, QStringLiteral("active"));
+            for (const TintSwatch &t : Store::tintPalette()) {
+                const QColor tint(dark ? t.dark : t.light), band = over(window, tint, 0.10);
+                // the info line's backgrounds: banded, row-tinted, hovered, selected, and both drifting active stops
+                const QList<QColor> unders{band, over(band, tint, 0.09), over(band, text, 0.07), over(over(band, tint, 0.09), tint, 0.20),
+                                           over(band, tint, 0.20), over(band, active, 0.20), over(band, tint, 41 / 255.0)};
+                for (const QString &ci : {QStringLiteral("red"), QStringLiteral("yellow"), QStringLiteral("green")})
+                    for (const QColor &bg : unders) {
+                        const QColor c = legibleOn(swatch(ci), {bg}, text);
+                        const qreal a = luminance(c), b = luminance(bg);
+                        QVERIFY2((std::max(a, b) + 0.05) / (std::min(a, b) + 0.05) >= 4.5, qPrintable(QStringLiteral("%1 on %2 %3").arg(ci, t.name, dark ? "dark" : "light")));
+                    }
+            }
+        }
+        QCOMPARE(legibleOn(QColor(0x30D158), {QColor(0x202326)}, QColor(0xFCFCFC)).rgba(), QColor(0x30D158).rgba()); // already legible: untouched
+    }
+
     void aClickOnTheShownSessionsCiLineOpensItsPanel()
     {
         Store store;

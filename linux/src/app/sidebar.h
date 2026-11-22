@@ -23,6 +23,8 @@ void drawStatusGlyph(QPainter *p, const QPointF &center, qreal radius, const QSt
 void paintStatus(QPainter *p, const Settings &settings, const QString &status, bool blink, int blinkAlpha, QPointF centre);
 // a tint name as the macOS system colour of that name, light or dark by the current palette, or a #rrggbb; invalid for ""
 QColor tintColor(const QString &name);
+// `color` (its alpha kept) mixed toward `text` only as far as it takes to read at 4.5:1 over every one of `under`
+QColor legibleOn(const QColor &color, const QList<QColor> &under, const QColor &text);
 
 namespace SidebarRole {
 enum { Id = Qt::UserRole, Kind, Status, Blink, Agent, Flagged, Expanded, Unseen, Busy, Companion, HasCompanions, FoldedAttention, TintColor, Focused, WorkspaceLabel, Split, Info };
