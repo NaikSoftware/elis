@@ -464,7 +464,7 @@ AssistantView::AssistantView(MainWindow &window, Store &store)
     list->setFrameShape(QFrame::NoFrame);
     list->viewport()->setAutoFillBackground(false);
     list->installEventFilter(this);
-    list->setStyleSheet(QStringLiteral("QListView{background:transparent;border:0;}"
+    list->setStyleSheet(QStringLiteral("QListView{background:transparent;border:0;padding-top:5px;}"
                                        "QScrollBar:vertical{background:transparent;width:10px;margin:8px 3px 8px 0;}"
                                        "QScrollBar::handle:vertical{background:%1;border-radius:3px;min-height:24px;}"
                                        "QScrollBar::add-line:vertical,QScrollBar::sub-line:vertical{height:0;}"
@@ -744,7 +744,8 @@ void AssistantView::complete()
     // QCompleter flips the popup above the cursor line, which still lies inside the composer; lift it clear of the box
     QAbstractItemView *popup = m_completer->popup();
     const QWidget *box = findChild<QFrame *>(QStringLiteral("composer"));
-    popup->move(popup->x(), box->mapToGlobal(QPoint(0, 0)).y() - popup->height() - 6);
+    popup->resize(popup->width(), popup->height() + 5); // the list's 5 px top padding, so the last row keeps its room
+    popup->move(box->mapToGlobal(QPoint(0, 0)).x(), box->mapToGlobal(QPoint(0, 0)).y() - popup->height() - 6);
     popup->setCurrentIndex(m_completer->completionModel()->index(0, 0));
 }
 
