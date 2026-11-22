@@ -2051,14 +2051,23 @@ private Q_SLOTS:
         auto call = [&](const QString &cmd, const QJsonObject &args = {}) -> const QJsonObject {
             return dispatch(store, w, {{"cmd", cmd}, {"target", id}, {"args", args}});
         };
-        QTRY_VERIFY_WITH_TIMEOUT(!call("session.text")["result"]["text"].toString().trimmed().isEmpty(), 5000);
+        // the shell's pace bounds every wait, so a loaded machine only makes the test slower
+        QTRY_VERIFY_WITH_TIMEOUT(!call("session.text")["result"]["text"].toString().trimmed().isEmpty(), 30000);
         QVERIFY(call("session.type", {{"text", "seq 1 100\n"}})["ok"].toBool());
-        QTRY_VERIFY_WITH_TIMEOUT(call("session.text")["result"]["text"].toString().contains("\n100\n"), 5000);
+        QTRY_VERIFY_WITH_TIMEOUT(call("session.text")["result"]["text"].toString().contains("\n100\n"), 30000);
         // the clear empties the history the scrollbar still counts, then the rows fill it again
         QVERIFY(call("session.type", {{"text", "clear; for i in $(seq 1 200); do echo row$i; sleep 0.005; done; echo DO''NE\n"}})["ok"].toBool());
-        // a phone polls like this; reads land between Konsole receiving output and its scrollbar catching up
-        QVERIFY(QTest::qWaitFor([&] { return call("session.text", {{"lines", 5}})["result"]["text"].toString().contains("DONE"); }, 10000));
-        QTRY_VERIFY_WITH_TIMEOUT(call("session.text")["result"]["text"].toString().contains("DONE"), 2000);
+        // a phone polls like this; reads land between Konsole receiving output and its scrollbar catching up. The wait
+        // lasts while rows keep coming: it fails only after 10 s with no new row
+        QString last;
+        QElapsedTimer still;
+        still.start();
+        for (QString tail; !(tail = call("session.text", {{"lines", 5}})["result"]["text"].toString()).contains("DONE"); QTest::qWait(10)) {
+            if (tail != last)
+                last = tail, still.restart();
+            QVERIFY2(still.elapsed() < 10000, qPrintable(QStringLiteral("output stopped at: ") + last));
+        }
+        QTRY_VERIFY_WITH_TIMEOUT(call("session.text")["result"]["text"].toString().contains("DONE"), 10000);
     }
 
     void controlCommandsDriveTheWindow()

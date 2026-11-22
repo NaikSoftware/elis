@@ -93,6 +93,10 @@ QString scrollback(QObject *session, QWidget *display, bool *ok)
     bar->setValue(following ? bar->maximum() : was);
     // setValue is silent on an unchanged value, and paging can leave output tracking off; Konsole's handler resets it
     QMetaObject::invokeMethod(bar, "scrollBarPositionChanged", Q_ARG(int, bar->value()));
+    // the handler's update can grow the range under the view it just placed at the old bottom, and the next read would
+    // then take it for a view scrolled up; each setValue runs the handler again
+    for (int i = 0; following && i < 3 && bar->value() != bar->maximum(); ++i)
+        bar->setValue(bar->maximum());
     return out.join(QLatin1Char('\n'));
 }
 
