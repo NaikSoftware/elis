@@ -1,0 +1,6 @@
+// linked only where Swift imports the module, which the static musl build never does
+module CElisBlueZ {
+    header "elis_bluez.h"
+    link "systemd"
+    export *
+}

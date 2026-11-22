@@ -1,0 +1,6 @@
+// Compression's raw DEFLATE, for the Linux Bluetooth link
+module CZlib [system] {
+    header "shim.h"
+    link "z"
+    export *
+}

@@ -72,16 +72,9 @@ struct Mobile: ParsableCommand {
                 throw ExitCode.failure
             }
 
-            #if os(macOS)
             let radio = bluetooth ? MobileBluetooth(relay: relay, token: token, status: Self.bluetoothStatus) : nil
             if radio == nil { Self.bluetoothStatus("off (disabled)") }
             let offered = radio?.start() ?? false
-            #else
-            // shortcut: Linux offers no Bluetooth until it has a BlueZ radio
-            let radio: AnyObject? = nil
-            Self.bluetoothStatus(bluetooth ? "off (unsupported)" : "off (disabled)")
-            let offered = false
-            #endif
             var lan: [String?] = host.map { [$0] } ?? MobilePairing.lanAddresses()
             if lan.isEmpty {
                 // a Bluetooth phone needs no host; without Bluetooth only this Mac can use the link

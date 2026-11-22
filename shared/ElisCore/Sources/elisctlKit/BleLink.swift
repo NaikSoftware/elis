@@ -1,6 +1,11 @@
+#if !canImport(Musl)
 #if os(macOS)
 import Compression
 import CryptoKit
+#else
+import Crypto
+import CZlib
+#endif
 import Foundation
 
 // The phone relay's Bluetooth link: Noise NNpsk0 over u16-length frames, raw DEFLATE inside.
@@ -239,8 +244,12 @@ public struct BleTransportKeys: Sendable {
         var out = Data(count: capacity)
         let written = out.withUnsafeMutableBytes { dst in
             chunk.withUnsafeBytes { src in
+                #if os(macOS)
                 compression_encode_buffer(dst.bindMemory(to: UInt8.self).baseAddress!, capacity,
                                           src.bindMemory(to: UInt8.self).baseAddress!, chunk.count, nil, COMPRESSION_ZLIB)
+                #else
+                zlib(deflating: true, src, into: dst)
+                #endif
             }
         }
         guard written > 0 else { throw BleLinkError.badFrame }
@@ -253,13 +262,38 @@ public struct BleTransportKeys: Sendable {
         var out = Data(count: capacity)
         let written = out.withUnsafeMutableBytes { dst in
             deflated.withUnsafeBytes { src in
+                #if os(macOS)
                 compression_decode_buffer(dst.bindMemory(to: UInt8.self).baseAddress!, capacity,
                                           src.bindMemory(to: UInt8.self).baseAddress!, deflated.count, nil, COMPRESSION_ZLIB)
+                #else
+                zlib(deflating: false, src, into: dst)
+                #endif
             }
         }
         guard (1...maxChunk).contains(written) else { throw BleLinkError.badFrame }
         return out.prefix(written)
     }
+
+    #if !os(macOS)
+    /// One-shot raw DEFLATE, as COMPRESSION_ZLIB: the bytes written, or 0 when the stream does not end inside
+    /// `output`, so an overflowing or unterminated chunk fails as it does on the Mac.
+    private static func zlib(deflating: Bool, _ input: UnsafeRawBufferPointer, into output: UnsafeMutableRawBufferPointer) -> Int {
+        var stream = z_stream()
+        let size = Int32(MemoryLayout<z_stream>.size)
+        let started = deflating
+            ? deflateInit2_(&stream, Z_DEFAULT_COMPRESSION, Z_DEFLATED, -15, 8, Z_DEFAULT_STRATEGY, zlibVersion(), size)
+            : inflateInit2_(&stream, -15, zlibVersion(), size)
+        guard started == Z_OK else { return 0 }
+        stream.next_in = UnsafeMutablePointer(mutating: input.bindMemory(to: Bytef.self).baseAddress)
+        stream.avail_in = uInt(input.count)
+        stream.next_out = output.bindMemory(to: Bytef.self).baseAddress
+        stream.avail_out = uInt(output.count)
+        let result = deflating ? CZlib.deflate(&stream, Z_FINISH) : CZlib.inflate(&stream, Z_FINISH)
+        let written = Int(stream.total_out)
+        _ = deflating ? deflateEnd(&stream) : inflateEnd(&stream)
+        return result == Z_STREAM_END ? written : 0
+    }
+    #endif
 }
 
 /// `u16 big-endian length ‖ body` stream framing, used for every message on the L2CAP stream.
