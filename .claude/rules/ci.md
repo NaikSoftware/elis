@@ -12,7 +12,7 @@ paths:
 - Every job carries its own `timeout-minutes`, with generous headroom over observed runtime. A job without
   one inherits GitHub's 360-minute default, so a wedge can hold its check pending for six hours. Give a new
   job a cap in the commit that adds it.
-- The `dorny/paths-filter` Swift set includes `**/*.swift`, `macos/**`, `shared/**`, `plugins/**`,
+- The `dorny/paths-filter` Swift set includes `**/*.swift`, `macos/**`, `shared/**`, `server/**`, `plugins/**`,
   `.claude-plugin/**`, `.agents/**`, and `ci.yml`.
   The macOS-tree jobs default to `working-directory: macos`; cache, `hashFiles` and artifact paths stay
   workspace-relative and carry the `macos/` prefix.
@@ -21,11 +21,13 @@ paths:
   must run the five Swift jobs.
 - `test`, `build` and `hosted` run in parallel and are each mostly compilation; merging any two puts
   both compiles on the critical path.
-- `test` runs `swift test --enable-code-coverage` in `shared/ElisCore`, exports lcov, and uploads it.
+- `test` runs `swift test --enable-code-coverage` in `shared/ElisCore`, exports lcov, and uploads it,
+  then plain `swift test` in `macos/ElisMac` and `server`, each built in a step of its own first.
+  The lcov covers only the ElisCore package's own suites.
   It installs fish with Homebrew and sets `ELIS_REQUIRE_FISH=1`, so a fish test fails rather than skips
   when fish is missing.
   It restores the zmx cache and runs `scripts/setup.sh --zmx-only`, which builds zmx on a miss without
-  touching libghostty, so `SessionHostServerTests` attach to a real daemon in the same `swift test`.
+  touching libghostty, so `SessionHostServerTests` attach to a real daemon in ElisMac's `swift test`.
   `ELIS_REQUIRE_ZMX=1` fails `requiredFixturePrerequisitesArePresent` when zmx or the responsibility SPI
   is missing, since the fixtures themselves skip silently.
   It stages the shell integration with `scripts/setup-zmx-linux.sh --shell-integration`, cached by `GHOSTTY_REV`,
@@ -38,10 +40,11 @@ paths:
   120s, into that artifact: the server's presentation streams log their close reasons only there.
   A prior `swift build --build-tests --enable-code-coverage` step compiles outside it, so compile time on a
   slow runner does not count against the 600s; `swift test` with the same flag reuses that build. The
-  35-minute job cap leaves room for a slow build plus the watchdog's 600s and 120s.
+  60-minute job cap leaves room for three slow builds plus the watchdog's 600s and 120s.
   `coverage` downloads it for best-effort Coveralls.
-  `lint` installs SwiftLint and runs `swiftlint lint --strict` in `macos` and in `shared/ElisCore`; every warning fails.
-- `linux` builds and tests `ElisCore` in the `swift:6.3.2-noble` container on ubuntu-24.04, the
+  `lint` installs SwiftLint and runs `swiftlint lint --strict` in `macos`, `shared/ElisCore` and `server`;
+  every warning fails.
+- `linux` builds and tests `ElisCore`, then `server`, in the `swift:6.3.2-noble` container on ubuntu-24.04, the
   toolchain elis-server ships on, under the Swift filter. It installs jq, which the Codex status hook reads
   JSON with where `/usr/bin/plutil` is absent, and runs as an unprivileged user because root passes the
   permission checks several tests expect to fail.
@@ -51,9 +54,10 @@ paths:
   `ELIS_REQUIRE_ZMX=1 ELIS_REQUIRE_FISH=1` so `ServerLifecycleTests` drive real zsh, fish and bash panes rather
   than skip.
   Its `swift test` runs under `scripts/watchdog.sh` as container root, with only the test command under
-  `runuser`: past 600s the watchdog takes lldb stacks of `ElisCorePackageTests.xctest` first, within 300s,
-  and the `test-hang-linux` artifact carries them. lldb needs the container's `--cap-add=SYS_PTRACE` to attach
-  to another user's process. The 45-minute cap covers the build plus both watchdog budgets.
+  `runuser`: past 600s the watchdog takes lldb stacks of `ElisCorePackageTests.xctest` (or
+  `ElisServerPackageTests.xctest`) first, within 300s, and the `test-hang-linux` artifact carries them.
+  lldb needs the container's `--cap-add=SYS_PTRACE` to attach to another user's process.
+  The 75-minute cap covers both builds plus their watchdog budgets.
   Darwin-only behavior keeps its tests behind
   `#if canImport(Darwin)` beside the code; everything else runs on both platforms.
 - `bridge` builds `linux/bridge` (ElisBridge, the Qt app's link to `ElisCore`) in the same container under the

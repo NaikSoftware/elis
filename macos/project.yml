@@ -38,6 +38,8 @@ settings:
 packages:
   ElisCore:
     path: ../shared/ElisCore
+  ElisMac:
+    path: ElisMac
 
 targets:
   Elis:
@@ -151,14 +153,13 @@ targets:
           # placeholder grid (so it must not win over the compiled icon), and its source xattrs would
           # otherwise trip the re-seal below.
           rm -rf "$CODESIGNING_FOLDER_PATH/Contents/Resources/AppIcon.icon"
-          core="$SRCROOT/../shared/ElisCore"
           mac="$SRCROOT/ElisMac"
           # the embedded Info.plist gives a hand-run elisctl its own TCC identity and Bluetooth usage string
           swift build --package-path "$mac" -c release --product elisctl-mac \
             -Xlinker -sectcreate -Xlinker __TEXT -Xlinker __info_plist -Xlinker "$mac/Sources/elisctl-mac/Info.plist"
-          swift build --package-path "$core" -c release --product elis-session-host
+          swift build --package-path "$mac" -c release --product elis-session-host
           src="$(swift build --package-path "$mac" -c release --product elisctl-mac --show-bin-path)/elisctl-mac"
-          host_src="$(swift build --package-path "$core" -c release --product elis-session-host --show-bin-path)/elis-session-host"
+          host_src="$(dirname "$src")/elis-session-host"
           cli_dest="$CODESIGNING_FOLDER_PATH/Contents/MacOS/elisctl"
           host_dest="$CODESIGNING_FOLDER_PATH/Contents/MacOS/elis-session-host"
           zmx_src="$SRCROOT/Elis/Resources/zmx/zmx"
@@ -195,7 +196,7 @@ targets:
       - framework: GhosttyKit.xcframework
         embed: false
       - package: ElisCore
-      - package: ElisCore
+      - package: ElisMac
         product: ElisResponsibility
       - sdk: AppKit.framework
       # libghostty calls Text Input Source Services (TISCopyCurrentKeyboard…)
