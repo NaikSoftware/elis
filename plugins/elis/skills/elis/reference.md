@@ -2134,8 +2134,8 @@ a server pane cannot message each other yet: a Mac send to a server row is rejec
 
 App-wide system chat pinned above the workspaces in the sidebar (dog icon, row named **Elis**, unread count of replies).
 Available in the Linux app now; the macOS app gets it later. Everything in the chat runs through the chosen provider
-(`claude`, `codex`, `antigravity`, `opencode`, whichever are installed) as one long-lived process so other sessions'
-replies reach Elis while it works. **Note:** providers run in their full-auto permission mode so no confirmation
+(`claude`, `codex`, `antigravity`, `opencode`, whichever are installed) and keeps one conversation across messages; other sessions'
+replies reach Elis in order, each after its current turn. **Note:** providers run in their full-auto permission mode so no confirmation
 prompt stalls the stream.
 
 - `elisctl assistant ask TEXT [--wait [--timeout N]]` (`assistant.ask`) posts a user message to the Elis assistant

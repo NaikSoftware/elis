@@ -75,8 +75,8 @@ The exact shortening rule is the builder's within these limits.
 `@handle` → that session; `@ws:handle` → its sessions with a detected agent; `@all` → every session with a
 detected agent. Unknown tags are errors naming the tag. Duplicates collapse.
 A session whose status is `blocked` is never typed into (owner's choice): Enter could answer its permission
-prompt or picker. Groups skip it, an explicit tag to it fails, and the reply lists it under `skipped`, which
-the chat shows as "not delivered: waiting for your approval". Nothing is queued for later.
+prompt or picker. Groups skip it, an explicit tag to it fails, and the reply lists it under `skipped`
+(the model reports it in its answer; the sent card lists only delivered sessions). Nothing is queued for later.
 
 ### Message line
 
@@ -126,8 +126,8 @@ closed and session search; the palette gets one "Show Elis" action. Tree carries
 ### Replies
 
 `assistant.reply` accepts any session's `ELIS_SESSION_ID`, asked or not; each reply is a card and a stream
-input. A sent-to session shows a dot until the user's next message starts a new exchange: waiting, then
-replied, or not delivered. The dots clear when that next message is sent, so none outlives its exchange.
+input. A sent-to session carries `assistantMark` in the tree until the user's next message starts a new exchange:
+waiting, then replied, or not delivered. The UI shows no mark (owner); the marks clear with that next message.
 
 ### UI (both platforms)
 
@@ -143,7 +143,7 @@ replied, or not delivered. The dots clear when that next message is sent, so non
 
 - `assistant.ask TEXT` — post a user message into the stream, as the composer does; `--wait` blocks until
   the turn it starts ends.
-- `assistant.send --to TAG… TEXT` — type the message line into the resolved sessions; replies `affected` ids.
+- `assistant.send --to TAG… TEXT` — type the message line into the resolved sessions.
 - `assistant.reply TEXT` — from a session (`ELIS_SESSION_ID`); appends a reply card. CLI: `elisctl reply`.
 - `assistant.read [--last N]` — the transcript.
 - `assistant.provider [NAME]` — read or set the provider.
@@ -173,7 +173,8 @@ replied, or not delivered. The dots clear when that next message is sent, so non
 A remote row is a target like any other: `assistant.send` types through the row's existing remote typing path.
 Its agent's `elisctl reply` reaches the origin's socket (another Mac, or an elis-server host), not the viewing app,
 so the origin forwards the reply to the app that sent the message; that route belongs to the shared reply contract,
-built with the first platform that shows remote rows, not deferred to the Mac UI.
+built with the first platform that shows remote rows. The owner approved shipping Linux without it (2026-11-22):
+`macos/docs/backlog/assistant-remote-reply-route.md`.
 The phone shows the Elis row and chat in a later phase.
 
 ### Delivery order
