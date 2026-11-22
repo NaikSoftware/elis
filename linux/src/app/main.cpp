@@ -170,6 +170,7 @@ int main(int argc, char **argv)
             Zmx::reap(dir, e.store->restoreModeAtLaunch, library.paneIds());
             break;
         }
+    Zmx::recordBuild(dir);
 
     QLocalServer server;
     QLocalServer::removeServer(socketPath()); // safe: the lock says no live instance owns it

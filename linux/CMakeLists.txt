@@ -72,11 +72,13 @@ if(NOT ZIG OR NOT ELIS_ZIG_VERSION MATCHES "^0\\.16\\." OR NOT GIT OR NOT SHASUM
 endif()
 set(ELIS_ZMX ${CMAKE_BINARY_DIR}/zmx)
 file(GLOB ELIS_ZMX_PATCHES CONFIGURE_DEPENDS ${CMAKE_SOURCE_DIR}/../macos/scripts/zmx-patches/*.patch ${CMAKE_SOURCE_DIR}/../macos/scripts/zmx-patches/ghostty/*.patch)
-add_custom_command(OUTPUT ${ELIS_ZMX}
+# zmx.BUILD is that stamp: a Live daemon created before this state dir first ran the build predates it (session.attach)
+add_custom_command(OUTPUT ${ELIS_ZMX} ${ELIS_ZMX}.BUILD
   COMMAND ${CMAKE_COMMAND} -E env ELIS_ZMX_ZIG=${ZIG} ELIS_ZMX_TARGET=${ELIS_ZMX_ARCH}-linux-musl
     ELIS_ZMX_STAGE_DIR=${CMAKE_BINARY_DIR}/zmx-stage ELIS_ZMX_STAMP_FILE=${CMAKE_BINARY_DIR}/zmx-stage.stamp
     bash ${CMAKE_SOURCE_DIR}/../macos/scripts/setup.sh --zmx-only
   COMMAND ${CMAKE_COMMAND} -E copy ${CMAKE_BINARY_DIR}/zmx-stage/zmx ${ELIS_ZMX}
+  COMMAND ${CMAKE_COMMAND} -E copy ${CMAKE_BINARY_DIR}/zmx-stage.stamp ${ELIS_ZMX}.BUILD
   DEPENDS ${CMAKE_SOURCE_DIR}/../macos/scripts/setup.sh ${ELIS_ZMX_PATCHES}
   COMMENT "Building the patched zmx" USES_TERMINAL VERBATIM)
 add_custom_target(elis-zmx ALL DEPENDS ${ELIS_ZMX}) # not `zmx`, the output's own name
@@ -127,6 +129,7 @@ set_tests_properties(filepanel PROPERTIES ENVIRONMENT "QT_QPA_PLATFORM=offscreen
 include(GNUInstallDirs)
 install(TARGETS elis elisctl RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR})
 install(PROGRAMS ${ELIS_ZMX} DESTINATION ${CMAKE_INSTALL_LIBEXECDIR}/elis) # off PATH, as the Mac's bundle keeps it
+install(FILES ${ELIS_ZMX}.BUILD DESTINATION ${CMAKE_INSTALL_LIBEXECDIR}/elis)
 file(RELATIVE_PATH ELIS_ZMX_FROM_BIN ${CMAKE_INSTALL_PREFIX}/${CMAKE_INSTALL_BINDIR} ${CMAKE_INSTALL_PREFIX}/${CMAKE_INSTALL_LIBEXECDIR}/elis)
 target_compile_definitions(elis-core PRIVATE ELIS_ZMX_FROM_BIN="${ELIS_ZMX_FROM_BIN}")
 install(FILES ${CMAKE_BINARY_DIR}/zmx-stage/LICENSE DESTINATION ${CMAKE_INSTALL_DOCDIR} RENAME zmx-LICENSE)

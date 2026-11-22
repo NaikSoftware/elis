@@ -53,6 +53,12 @@ KParts::ReadOnlyPart *MainWindow::panePart(const QString &id, const QString &pan
     return pane == QLatin1String("right") ? p.right : p.main;
 }
 
+Terminals::Backing MainWindow::backing(const QString &sessionId, const QString &pane) const
+{
+    const KParts::ReadOnlyPart *part = panePart(sessionId, pane);
+    return !part ? Backing::None : part->property("elisZmx").toString().isEmpty() ? Backing::Plain : Backing::Live;
+}
+
 QStringList MainWindow::paneIds(const QString &sessionId) const
 {
     QStringList out;

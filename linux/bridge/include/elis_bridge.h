@@ -45,6 +45,13 @@ char *elis_zmx_surface(const char *json);     // one tree surfaces[] entry
 char *elis_zmx_type_bytes(const char *text);  // session.type text as zmx type input, its final Return paced
 char *elis_zmx_screen(const char *output, int lines); // zmx screen's reply as text; lines > 0 keeps the last ones
 
+// session.attach and the phone relay's lines (Sources/ElisBridge/Attach.swift)
+char *elis_zmx_build_cutoff(const char *json); // records this zmx build in the state dir; when it first ran there
+char *elis_session_attach(const char *json);   // a Live pane's viewer or claiming attach
+char *elis_phone_relay_line(const char *line); // one relay stderr line, viewer and lead lines counted
+char *elis_phone_viewers_reset(void);          // the relay stopped: what every count held
+char *elis_phone_viewers(const char *paneID);  // a pane's viewer count and lead
+
 #ifdef __cplusplus
 }
 #endif

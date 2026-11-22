@@ -46,5 +46,10 @@ Lead report(const QString &paneId, const QString &title); // report false: an or
 Lead lead(const QString &paneId);
 void forget(const QString &paneId);
 QJsonObject surface(const QJsonObject &fields); // a tree surfaces[] entry, encoded as the Mac's
+
+// at launch: when this state dir first ran the zmx build beside elis (its zmx.BUILD stamp); an older daemon is outdated
+void recordBuild(const QString &stateDir);
+// a Live pane's phone attach: {"attach": ControlAttach} | {"outdated": true} | {"invalid": true}
+QJsonObject phoneAttach(const QString &stateDir, const QString &paneId, bool claim);
 }
 
