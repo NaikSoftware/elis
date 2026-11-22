@@ -1,6 +1,6 @@
 ---
 worth: maybe
-where: scripts/zmx-patches/, shared/ElisCore/Sources/SessionHostRuntime/
+where: scripts/zmx-patches/, macos/ElisMac/Sources/SessionHostRuntime/
 added: 2026-11-12
 ---
 # per-daemon disclaim instead of a long-lived session host

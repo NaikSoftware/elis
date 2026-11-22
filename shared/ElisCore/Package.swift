@@ -6,10 +6,8 @@ let package = Package(
     platforms: [.macOS(.v14)],
     products: [
         .library(name: "ElisCore", targets: ["ElisCore"]),
-        .library(name: "ElisResponsibility", targets: ["ElisResponsibility"]),
         .library(name: "elisctlKit", targets: ["elisctlKit"]),
         .executable(name: "elisctl", targets: ["elisctl"]),
-        .executable(name: "elis-server", targets: ["elis-server"]),
     ],
     dependencies: [
         .package(url: "https://github.com/apple/swift-argument-parser", from: "1.3.0"),
@@ -17,7 +15,6 @@ let package = Package(
     ],
     targets: [
         .target(name: "ElisCore", dependencies: [.product(name: "TOMLDecoder", package: "TOMLDecoder")]),
-        .target(name: "ElisResponsibility"),
         .testTarget(name: "ElisCoreTests", dependencies: ["ElisCore"]),
         .target(
             name: "elisctlKit",
@@ -34,12 +31,6 @@ let package = Package(
             name: "elisctlKitTests",
             dependencies: ["elisctlKit", "elisctl", "session-wait-watchdog-probe"]
         ),
-        .target(name: "ElisServerKit", dependencies: ["ElisCore"]),
-        .executableTarget(
-            name: "elis-server",
-            dependencies: ["ElisServerKit", "ElisCore", .product(name: "ArgumentParser", package: "swift-argument-parser")]
-        ),
-        .testTarget(name: "ElisServerTests", dependencies: ["ElisServerKit", "elis-server"]),
     ],
     swiftLanguageModes: [.v6]
 )
@@ -57,20 +48,4 @@ for target in package.targets where target.name == "elisctlKit" {
     target.dependencies += [crypto, "CQRCode", "CZlib"]
 }
 for target in package.targets where target.name == "elisctlKitTests" { target.dependencies += [crypto] }
-#endif
-
-#if os(macOS)
-package.products.append(.executable(name: "elis-session-host", targets: ["elis-session-host"]))
-package.targets += [
-    .target(name: "SessionHostTrampoline"),
-    .target(name: "SessionHostRuntime", dependencies: ["SessionHostTrampoline", "ElisResponsibility", "ElisCore"]),
-    .executableTarget(name: "elis-session-host", dependencies: ["SessionHostRuntime"]),
-    // The fixtures need a socket client they can copy into a test bundle, which /usr/bin/nc
-    // cannot be (see the target's own comment).
-    .executableTarget(name: "session-host-test-client"),
-    .executableTarget(name: "session-host-pty-probe"),
-    .testTarget(name: "SessionHostRuntimeTests",
-                dependencies: ["SessionHostRuntime", "elis-session-host", "session-host-test-client",
-                               "session-host-pty-probe"]),
-]
 #endif

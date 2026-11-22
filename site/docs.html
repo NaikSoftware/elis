@@ -422,7 +422,7 @@
 <pre class="bash"><code>cd macos
 scripts/setup.sh              # build libghostty and stage resources (safe to rerun)
 scripts/run.sh                # generate the Xcode project, build Debug, launch
-cd ../shared/ElisCore &amp;&amp; swift test   # unit tests, no Xcode needed</code></pre>
+scripts/test.sh               # unit tests, no Xcode needed</code></pre>
 <p>The app bundles the CLI, but <code>elisctl</code> also builds on its own from the <code>ElisCore</code> Swift package, without Xcode or libghostty:</p>
 <pre class="bash"><code>cd ../shared/ElisCore &amp;&amp; swift build -c release   # binary at shared/ElisCore/.build/release/elisctl</code></pre>
 </section>
