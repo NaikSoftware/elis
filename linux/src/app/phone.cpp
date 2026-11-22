@@ -152,6 +152,7 @@ void PhoneRelay::start()
             if (kind == QLatin1String("other")) {
                 *lastError = line.value("text").toString();
             } else if (kind == QLatin1String("event")) {
+                lastError->clear(); // an exit after an event says only that the relay stopped
                 m_event = line.value("text").toString(), Q_EMIT changed();
             } else if ((kind == QLatin1String("viewer") || kind == QLatin1String("lead")) && line.take("emit").toBool()) {
                 const bool on = line.take(kind == QLatin1String("viewer") ? "attached" : "leading").toBool();

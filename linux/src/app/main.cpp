@@ -161,6 +161,7 @@ int main(int argc, char **argv)
     }
 
     ensureProfile();
+    Zmx::recordBuild(dir); // before any pane starts a daemon, which would otherwise date before the cutoff
     WindowLibrary library(dir);
     library.load(); // the windows open at the last quit, each with its saved frame
     MainWindow &window = *library.active();
@@ -170,7 +171,6 @@ int main(int argc, char **argv)
             Zmx::reap(dir, e.store->restoreModeAtLaunch, library.paneIds());
             break;
         }
-    Zmx::recordBuild(dir);
 
     QLocalServer server;
     QLocalServer::removeServer(socketPath()); // safe: the lock says no live instance owns it
