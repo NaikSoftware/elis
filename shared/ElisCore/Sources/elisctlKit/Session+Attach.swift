@@ -2,6 +2,13 @@ import ArgumentParser
 import Foundation
 import ElisCore
 
+/// What help and messages call the machine Elis runs on.
+#if os(macOS)
+let hostComputer = "Mac"
+#else
+let hostComputer = "computer"
+#endif
+
 extension Session {
     struct Attach: RequestCommand {
         static let configuration = CommandConfiguration(
@@ -10,10 +17,10 @@ extension Session {
             Replaces this process with the viewer command, on your stdio. With --json it prints the response and does not attach. \
             The viewer ends when its process is killed or the pane's session ends; keys typed into it are dropped, the detach key too. \
             With --claim the command takes the pane's lead: the program runs at this terminal's size and takes its keys, \
-            and the pane on the Mac is covered until the command ends or a key there takes the lead back.
+            and the pane on the \(hostComputer) is covered until the command ends or a key there takes the lead back.
             """)
         @Option(name: .long, help: "Which pane: primary/left/top or split/right/bottom. Defaults to primary.") var pane: String?
-        @Flag(name: .long, help: "Take the pane's lead; the pane on the Mac is covered until the command ends.") var claim = false
+        @Flag(name: .long, help: "Take the pane's lead; the pane on the \(hostComputer) is covered until the command ends.") var claim = false
         @OptionGroup var target: TargetOptions
         @OptionGroup var options: ClientOptions
 
