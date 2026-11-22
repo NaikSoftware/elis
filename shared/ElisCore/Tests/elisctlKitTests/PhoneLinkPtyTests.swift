@@ -1,9 +1,8 @@
-#if os(macOS)
+#if !canImport(Musl)
 import Foundation
 @testable import elisctlKit
 import Testing
 
-// shortcut: macOS only, because Swift's Glibc does not export posix_openpt; port when the relay runs on Linux.
 struct PhoneLinkPtyTests {
     /// Recorder collects what a pty reports; `exited` signals once onExit fires.
     private final class Recorder: @unchecked Sendable {
@@ -132,7 +131,12 @@ struct PhoneLinkPtyTests {
     // perl, unlike sh, never takes the terminal as its controlling one, and neither does the zmx attach
     @Test func resizeSignalsAProgramWithoutAControllingTerminal() async throws {
         let recorder = Recorder()
-        let script = "$| = 1; $SIG{WINCH} = sub { ioctl(STDIN, 0x40087468, my $size = \"\\0\" x 8); print join(\" \", unpack(\"S2\", $size)), \"\\n\"; exit 0 };"
+        #if canImport(Darwin)
+        let getWindowSize = "0x40087468"
+        #else
+        let getWindowSize = "0x5413"
+        #endif
+        let script = "$| = 1; $SIG{WINCH} = sub { ioctl(STDIN, \(getWindowSize), my $size = \"\\0\" x 8); print join(\" \", unpack(\"S2\", $size)), \"\\n\"; exit 0 };"
             + " print \"ready\\n\"; sleep 20 while 1"
         let pty = try recorder.spawn(["/usr/bin/perl", "-e", script])
         #expect(await eventually { recorder.output.contains("ready") })
