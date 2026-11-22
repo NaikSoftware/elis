@@ -15,7 +15,7 @@ start() {
   echo "socket never came up"; cat "$ELIS_STATE_DIR/app.log"; exit 1
 }
 stop() { kill "$pid"; wait "$pid" 2>/dev/null || true; }
-fail() { echo "FAIL: $*"; ctl tree || true; stop; exit 1; }
+fail() { echo "FAIL: $*"; ctl tree || true; tail -20 "$ELIS_STATE_DIR/app.log" || true; stop; exit 1; }
 fail0() { echo "FAIL: $*"; exit 1; } # before the app runs
 # this state dir's zmx namespace (ZmxSupport.socketDirectory: FNV-1a 64 of the resolved path)
 zdir=${XDG_RUNTIME_DIR:-/tmp}/elis-zmx-$(python3 -I -c 'import os,sys
@@ -51,6 +51,11 @@ on session.created cat >> "$ELIS_STATE_DIR/created"
 EOF
 mkdir -p "$ELIS_STATE_DIR/assistant"
 printf 'codex' >"$ELIS_STATE_DIR/assistant/chat.jsonl.provider"
+# codex "installed" on the app's PATH on any machine; the fake runs in its place
+mkdir -p "$ELIS_STATE_DIR/bin"
+printf '#!/bin/sh\nexit 0\n' >"$ELIS_STATE_DIR/bin/codex"
+chmod +x "$ELIS_STATE_DIR/bin/codex"
+export PATH="$ELIS_STATE_DIR/bin:$PATH"
 export ELIS_ASSISTANT_PROVIDER_CMD="bash $root/tests/fixtures/fake-provider.sh"
 start
 ctl version
@@ -298,8 +303,7 @@ ahandle=$(ctl tree --json | python3 -I -c 'import json,sys
 d=json.load(sys.stdin); d=d.get("result",d); d=d.get("tree",d)
 print([s["handle"] for w in d["workspaces"] for s in w["sessions"] if s["id"]==sys.argv[1]][0])' "$asst")
 out=$(ctl assistant ask hello --wait --timeout 20)
-# the saved codex runs only where codex is installed, else the first agent found; the fake answers either way
-grep -qE '^[0-9]{2}:[0-9]{2} assistant: pid [0-9]+:' <<<"$out" && grep -qE '(^|: )hello$' <<<"$out" || fail "assistant ask --wait ($out)"
+grep -qE '^[0-9]{2}:[0-9]{2} assistant: pid [0-9]+:' <<<"$out" && grep -qx 'hello' <<<"$out" || fail "assistant ask --wait ($out)"
 read_out=$(ctl assistant read)
 grep -qE '^[0-9]{2}:[0-9]{2} user: hello$' <<<"$read_out" || fail "assistant read user ($read_out)"
 grep -qE '^[0-9]{2}:[0-9]{2} assistant: pid [0-9]+:' <<<"$read_out" || fail "assistant read assistant ($read_out)"
