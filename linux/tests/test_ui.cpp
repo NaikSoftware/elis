@@ -1318,6 +1318,28 @@ private Q_SLOTS:
         QCOMPARE(w.autoFollowTick(6000), a);
     }
 
+    void scrollbackReadsWhileOutputStreamsKeepTheViewFollowing()
+    {
+        Store store;
+        MainWindow w(store, dir.filePath("follow.json"));
+        w.restore({});
+        const QString id = store.addSession(store.addWorkspace("w"), {}, {});
+        store.select(id);
+        w.show();
+        QVERIFY(QTest::qWaitForWindowExposed(&w));
+        auto call = [&](const QString &cmd, const QJsonObject &args = {}) -> const QJsonObject {
+            return dispatch(store, w, {{"cmd", cmd}, {"target", id}, {"args", args}});
+        };
+        QTRY_VERIFY_WITH_TIMEOUT(!call("session.text")["result"]["text"].toString().trimmed().isEmpty(), 5000);
+        QVERIFY(call("session.type", {{"text", "seq 1 100\n"}})["ok"].toBool());
+        QTRY_VERIFY_WITH_TIMEOUT(call("session.text")["result"]["text"].toString().contains("\n100\n"), 5000);
+        // the clear empties the history the scrollbar still counts, then the rows fill it again
+        QVERIFY(call("session.type", {{"text", "clear; for i in $(seq 1 200); do echo row$i; sleep 0.005; done; echo DO''NE\n"}})["ok"].toBool());
+        // a phone polls like this; reads land between Konsole receiving output and its scrollbar catching up
+        QVERIFY(QTest::qWaitFor([&] { return call("session.text", {{"lines", 5}})["result"]["text"].toString().contains("DONE"); }, 10000));
+        QTRY_VERIFY_WITH_TIMEOUT(call("session.text")["result"]["text"].toString().contains("DONE"), 2000);
+    }
+
     void controlCommandsDriveTheWindow()
     {
         Store store;
