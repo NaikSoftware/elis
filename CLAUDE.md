@@ -9,7 +9,7 @@ except the repository-root `README.md`, `CONTRIBUTING.md`, `CLAUDE.md`, `.claude
 `.claude-plugin/`, `.agents/`, `plugins/`, `cookbook/`, `site/`, `tools/`, `shared/`, `server/`, `docs/screenshots/` and `docs/superpowers/`.
 `linux/` holds the Qt6/KDE app and `mobile/` the Flutter Android app; each has its own README.
 `shared/` holds what they share: the `ElisCore` package, the agent-status scripts and the phone link golden vectors.
-`server/` is the elis-server package; `macos/ElisMac` holds the Mac-only SwiftPM targets (the session host).
+`server/` is the elis-server package; `macos/ElisMac` holds the Mac-only SwiftPM targets (the session host, the Mac elisctl).
 
 ## Working norms
 

@@ -23,7 +23,7 @@
 
 ### ElisMac (Swift package)
 
-`macos/ElisMac/` holds the SwiftPM targets only the Mac builds, on top of `ElisCore`: `ElisResponsibility` (the responsibility SPI), `SessionHostTrampoline`, `SessionHostRuntime` and the bundled `elis-session-host`, with their test fixtures and `SessionHostRuntimeTests`.
+`macos/ElisMac/` holds the SwiftPM targets only the Mac builds, on top of `ElisCore`: the bundled `elisctl-mac` with `ElisMacRelay`, `ElisResponsibility` (the responsibility SPI), `SessionHostTrampoline`, `SessionHostRuntime` and the bundled `elis-session-host`, with their tests and fixtures.
 
 ### App target (XcodeGen project)
 
