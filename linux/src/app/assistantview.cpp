@@ -25,6 +25,7 @@
 #include <QPlainTextEdit>
 #include <QRegularExpression>
 #include <QScrollArea>
+#include <QScreen>
 #include <QScrollBar>
 #include <QStandardItemModel>
 #include <QStatusBar>
@@ -256,6 +257,16 @@ protected:
         m_hover = -1;
         update();
     }
+    void mousePressEvent(QMouseEvent *e) override
+    {
+        if (rect().contains(e->position().toPoint()))
+            return;
+        // a press outside closes the panel and is replayed to what it hit, except on the picker that opened it, as QMenu
+        // does: replayed there it would open the panel again
+        if (const QWidget *picker = parentWidget(); picker && picker->rect().contains(picker->mapFromGlobal(e->globalPosition().toPoint())))
+            setAttribute(Qt::WA_NoMouseReplay);
+        close();
+    }
     void mouseReleaseEvent(QMouseEvent *e) override
     {
         if (const int r = rowAt(e->position().toPoint()); r >= 0)
@@ -446,8 +457,7 @@ AssistantView::AssistantView(MainWindow &window, Store &store)
     under->setContentsMargins(0, 14, 0, 16);
     under->addWidget(composer);
     main->addWidget(centred(composerColumn));
-    auto syncSend = [this] { m_send->setEnabled(!m_tags.isEmpty() || !m_editor->toPlainText().trimmed().isEmpty()); };
-    connect(m_editor, &QPlainTextEdit::textChanged, this, syncSend);
+    connect(m_editor, &QPlainTextEdit::textChanged, this, &AssistantView::syncSend);
     syncSend();
 
     m_candidates = new QStandardItemModel(this);
@@ -482,6 +492,7 @@ AssistantView::AssistantView(MainWindow &window, Store &store)
     connect(m_editor, &QPlainTextEdit::textChanged, this, &AssistantView::complete);
 
     setFocusProxy(m_editor);
+    window.installEventFilter(this); // its activation shows the chat's replies to you
 }
 
 AssistantView::~AssistantView()
@@ -495,8 +506,10 @@ void AssistantView::refreshAll()
         return;
     QTimer::singleShot(0, qApp, [] {
         s_refreshQueued = false;
-        if (std::any_of(s_views.cbegin(), s_views.cend(), [](AssistantView *v) { return v->isVisible(); }))
-            AssistantBridge::markSeen(); // a reply already on screen is not unread
+        if (std::any_of(s_views.cbegin(), s_views.cend(), [](AssistantView *v) {
+                return v->isVisible() && v->window()->isActiveWindow() && !v->window()->isMinimized();
+            }))
+            AssistantBridge::markSeen(); // a reply in front of you is not unread
         for (AssistantView *v : std::as_const(s_views)) {
             if (v->isVisible())
                 v->refresh();
@@ -530,13 +543,15 @@ void AssistantView::refresh()
     loadDirectory();
     const QJsonObject read = m_window.assistantRequest({{"cmd", "assistant.read"}});
     const QJsonArray entries = read["result"]["assistant"]["entries"].toArray();
-    // the transcript grows at its end until its cap trims the start, which redraws the column
-    if (!m_shown.isEmpty() && (entries.isEmpty() || entries.first()["id"].toString() != m_shown.first())) {
-        while (QLayoutItem *item = m_column->takeAt(0)) {
-            delete item->widget();
-            delete item;
-        }
-        m_shown.clear();
+    // the transcript grows at its end until its cap trims the start: the entries that left go, the rest stay
+    QSet<QString> ids;
+    for (const QJsonValue &e : entries)
+        ids.insert(e["id"].toString());
+    while (!m_shown.isEmpty() && !ids.contains(m_shown.first())) {
+        QLayoutItem *item = m_column->takeAt(0);
+        delete item->widget();
+        delete item;
+        m_shown.removeFirst();
     }
     for (const QJsonValue &e : entries)
         if (!m_shown.contains(e["id"].toString()))
@@ -587,7 +602,7 @@ QWidget *AssistantView::chip(const QString &tag, bool removable)
                 if (auto *l = qobject_cast<QLabel *>(o); l && l->text().startsWith(tag + QLatin1Char(' ')))
                     l->deleteLater();
             m_chips->setVisible(!m_tags.isEmpty());
-            Q_EMIT m_editor->textChanged(); // the send button follows the tags too
+            syncSend();
         };
     }
     return c;
@@ -601,7 +616,12 @@ void AssistantView::addTag(const QString &tag)
     loadDirectory(); // the chip's colour
     m_chips->layout()->addWidget(chip(tag, true));
     m_chips->show();
-    Q_EMIT m_editor->textChanged();
+    syncSend();
+}
+
+void AssistantView::syncSend()
+{
+    m_send->setEnabled(!m_tags.isEmpty() || !m_editor->toPlainText().trimmed().isEmpty());
 }
 
 void AssistantView::append(const QJsonObject &e)
@@ -701,8 +721,18 @@ void AssistantView::openProviders()
     // the panel's left edge on the button's, its bottom 6 px above the composer box
     const QPoint button = m_provider->mapToGlobal(QPoint(0, 0));
     const int boxTop = findChild<QFrame *>(QStringLiteral("composer"))->mapToGlobal(QPoint(0, 0)).y();
-    popup->move(button.x() - ProviderPopup::Shadow, boxTop - 6 - popup->height() + ProviderPopup::Shadow);
+    popup->move(onScreen(QPoint(button.x() - ProviderPopup::Shadow, boxTop - 6 - popup->height() + ProviderPopup::Shadow), popup->size()));
     popup->show();
+}
+
+QPoint AssistantView::onScreen(QPoint at, const QSize &size) const
+{
+    if (const QScreen *screen = window()->screen()) {
+        const QRect room = screen->availableGeometry();
+        at.setX(qBound(room.left(), at.x(), qMax(room.left(), room.right() - size.width() + 1)));
+        at.setY(qBound(room.top(), at.y(), qMax(room.top(), room.bottom() - size.height() + 1)));
+    }
+    return at;
 }
 
 void AssistantView::complete()
@@ -741,11 +771,14 @@ void AssistantView::complete()
     QRect at = m_editor->cursorRect();
     at.setWidth(qMin(460, 28 + column + 200 + 32)); // icon, handle column, a name, margins
     m_completer->complete(at);
-    // QCompleter flips the popup above the cursor line, which still lies inside the composer; lift it clear of the box
+    // QCompleter flips the popup above the cursor line, which still lies inside the composer; lift it clear of the box.
+    // It is unmapped first: a Wayland compositor may not move an xdg_popup already shown.
     QAbstractItemView *popup = m_completer->popup();
     const QWidget *box = findChild<QFrame *>(QStringLiteral("composer"));
+    popup->hide();
     popup->resize(popup->width(), popup->height() + 5); // the list's 5 px top padding, so the last row keeps its room
-    popup->move(box->mapToGlobal(QPoint(0, 0)).x(), box->mapToGlobal(QPoint(0, 0)).y() - popup->height() - 6);
+    popup->move(onScreen(QPoint(box->mapToGlobal(QPoint(0, 0)).x(), box->mapToGlobal(QPoint(0, 0)).y() - popup->height() - 6), popup->size()));
+    popup->show();
     popup->setCurrentIndex(m_completer->completionModel()->index(0, 0));
 }
 
@@ -766,6 +799,7 @@ void AssistantView::send()
         if (o->isWidgetType())
             o->deleteLater();
     m_chips->hide();
+    syncSend(); // the cleared message ran it while the tags were still there
 }
 
 bool AssistantView::dropTags(const QMimeData *mime)
@@ -798,6 +832,10 @@ void AssistantView::paintEvent(QPaintEvent *event)
 bool AssistantView::eventFilter(QObject *watched, QEvent *event)
 {
     switch (event->type()) {
+    case QEvent::WindowActivate:
+        if (watched == &m_window && isVisible())
+            refreshAll();
+        return false;
     case QEvent::Paint:
         if (watched == m_completer->popup()) { // the provider panel's rounded surface under a transparent list
             auto *popup = static_cast<QWidget *>(watched);

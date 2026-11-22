@@ -1110,6 +1110,34 @@ private Q_SLOTS:
         QVERIFY(s.workspaces.isEmpty() && s.selected.isEmpty());
     }
 
+    void anEmptySelectionIsNoSessionSelectedEvent()
+    {
+        Store s;
+        const QString ws = s.addWorkspace("w");
+        const QString a = s.addSession(ws, "a", {}), b = s.addSession(ws, "b", {});
+        s.select(a);
+        EventSource events(s);
+        QSignalSpy spy(&events, &EventSource::event);
+        auto selected = [&] {
+            QList<QJsonObject> out;
+            for (const QList<QVariant> &e : std::as_const(spy))
+                if (e.first().toJsonObject()["kind"].toString() == QLatin1String("session.selected"))
+                    out << e.first().toJsonObject();
+            return out;
+        };
+        s.selected.clear(); // as the Elis chat shows
+        Q_EMIT s.selectionChanged({});
+        QVERIFY(selected().isEmpty());
+        s.select(a);
+        QCOMPARE(selected().size(), 1);
+        QCOMPARE(selected()[0]["session"].toString(), a);
+        QVERIFY(!selected()[0]["payload"].toObject().contains("previous"));
+        s.selected.clear();
+        Q_EMIT s.selectionChanged({});
+        s.select(b);
+        QCOMPARE(selected().last().value("payload")["previous"].toString(), a);
+    }
+
     void eventsReadWalksTheRing()
     {
         Store s;

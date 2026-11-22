@@ -745,11 +745,92 @@ private Q_SLOTS:
         QCOMPARE(unread(), 1);
         QVERIFY(lib.dispatch({{"cmd", "assistant.show"}})["ok"].toBool());
         QVERIFY(w->assistantShown());
+        QVERIFY(s->selected.isEmpty());
         QTRY_COMPARE(unread(), 0);
         QVERIFY(lib.dispatch({{"cmd", "tree"}}).value("result")["tree"]["assistantShown"].toBool());
         QVERIFY(lib.dispatch({{"cmd", "assistant.reply"}, {"target", id}, {"args", QJsonObject{{"text", "again"}}}})["ok"].toBool());
         QTest::qWait(100);
         QCOMPARE(unread(), 0); // a reply arriving on the shown chat is already seen
+        const QString second = lib.newWindow("second");
+        lib.close(second);
+        QTRY_VERIFY(!lib.entries()[1].open);
+        const QJsonObject closed = lib.dispatch({{"cmd", "assistant.show"}, {"args", QJsonObject{{"window", second}}}});
+        QCOMPARE(closed["error"].toString(), QStringLiteral("window not open — window.select it first"));
+    }
+
+    void aReplyBehindAnotherWindowStaysUnreadUntilTheChatIsInFront()
+    {
+        QTemporaryDir state;
+        WindowLibrary lib(state.path());
+        lib.load();
+        MainWindow *w = lib.entries()[0].window;
+        const QString id = lib.entries()[0].store->allSessions().first()->id;
+        w->show();
+        QWidget other;
+        other.show();
+        other.activateWindow();
+        QVERIFY(QTest::qWaitForWindowActive(&other));
+        QVERIFY(lib.dispatch({{"cmd", "assistant.show"}, {"args", QJsonObject{{"window", w->windowId}}}})["ok"].toBool());
+        QVERIFY(w->assistantShown());
+        auto *tree = w->findChild<Sidebar *>();
+        auto unread = [&] { return tree->topLevelItem(0)->data(0, SidebarRole::Unseen).toInt(); };
+        QVERIFY(lib.dispatch({{"cmd", "assistant.reply"}, {"target", id}, {"args", QJsonObject{{"text", "done"}}}})["ok"].toBool());
+        QTRY_COMPARE(unread(), 1);
+        QTest::qWait(100);
+        QCOMPARE(unread(), 1); // shown behind another window is not seen
+        w->activateWindow();
+        QVERIFY(QTest::qWaitForWindowActive(w));
+        QTRY_COMPARE(unread(), 0);
+        QCOMPARE(QApplication::focusWidget(), w->findChild<QPlainTextEdit *>("assistantComposer")); // .show in the background
+    }
+
+    void ctrlTabFromTheChatReturnsToTheSessionItReplaced()
+    {
+        Store store;
+        MainWindow w(store, dir.filePath("elis-mru.json"));
+        w.restore({});
+        const QString ws = store.addWorkspace("w");
+        const QString a = store.addSession(ws, "a", {}), b = store.addSession(ws, "b", {});
+        store.select(b);
+        store.select(a);
+        w.show();
+        w.activateWindow();
+        QVERIFY(QTest::qWaitForWindowActive(&w));
+        w.showAssistant();
+        w.namedAction("mru_switcher")->trigger();
+        QKeyEvent release(QEvent::KeyRelease, Qt::Key_Control, Qt::NoModifier);
+        QApplication::sendEvent(QApplication::focusWidget() ? QApplication::focusWidget() : &w, &release);
+        QCOMPARE(store.selected, a);
+        QVERIFY(!w.assistantShown());
+    }
+
+    void providerPickerClickWhileOpenClosesIt()
+    {
+        DetectedLaunchers launchers;
+        launchers.found({"terminal", "claude", "codex"}, qEnvironmentVariable("PATH"));
+        QTemporaryDir state;
+        WindowLibrary lib(state.path());
+        lib.launchers = &launchers;
+        lib.load();
+        MainWindow *w = lib.entries()[0].window;
+        w->show();
+        w->activateWindow();
+        QVERIFY(QTest::qWaitForWindowActive(w));
+        w->showAssistant();
+        auto *picker = w->findChild<QToolButton *>("assistantProvider");
+        QTRY_VERIFY(picker->isEnabled());
+        // the platform hands a press outside a popup to the popup, then replays it unless WA_NoMouseReplay
+        auto pressOutside = [&](const QPoint &global) {
+            picker->click();
+            QPointer<QWidget> popup = QApplication::activePopupWidget();
+            if (!popup)
+                return -1;
+            QTest::mousePress(popup, Qt::LeftButton, {}, popup->mapFromGlobal(global));
+            return int(popup->isVisible()) * 2 + int(popup->testAttribute(Qt::WA_NoMouseReplay));
+        };
+        QCOMPARE(pressOutside(picker->mapToGlobal(picker->rect().center())), 1); // closed, the picker not pressed again
+        QTRY_VERIFY(!QApplication::activePopupWidget());
+        QCOMPARE(pressOutside(w->mapToGlobal(QPoint(5, w->height() - 5))), 0); // closed, the press reaches what it hit
     }
 
     void sidebarRowsDropIntoTheComposerAsTags()

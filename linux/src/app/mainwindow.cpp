@@ -879,12 +879,14 @@ void MainWindow::createMenus()
     nav->addAction(action(QStringLiteral("custom_command_palette"), tr("Custom Commands…"), QStringLiteral("system-run"), QKeySequence(QStringLiteral("Ctrl+Alt+O")),
                           [this] { customCommandPalette(); }));
     nav->addAction(action(QStringLiteral("mru_switcher"), tr("Switch to Recent Session"), {}, QKeySequence(QStringLiteral("Ctrl+Tab")), [this, sessionItems] {
-        m_palette->switching() ? m_palette->step(1) : m_palette->open({}, sessionItems(true), true);
+        // the switcher's first row is the shown session, so a tap flips to the next; with none shown (the Elis chat) the
+        // first row is the session it replaced, and a tap returns there
+        m_palette->switching() ? m_palette->step(1) : m_palette->open({}, sessionItems(true), true, {}, m_store.selected.isEmpty() ? 0 : -1);
     }));
     nav->addAction(action(QStringLiteral("mru_switcher_back"), tr("Switch to Recent Session (Reverse)"), {}, QKeySequence(QStringLiteral("Ctrl+Shift+Backtab")),
                           [this, sessionItems] {
                               if (!m_palette->switching())
-                                  m_palette->open({}, sessionItems(true), true);
+                                  m_palette->open({}, sessionItems(true), true, {}, m_store.selected.isEmpty() ? 0 : -1);
                               m_palette->step(-1);
                           }));
     nav->addAction(action(QStringLiteral("dashboard"), tr("Dashboard"), QStringLiteral("view-grid"), QKeySequence(QStringLiteral("Ctrl+Alt+Shift+G")),
@@ -1600,8 +1602,8 @@ void MainWindow::showSelected()
         static_cast<TintWash *>(m_wash)->setColor({});
         if (entering)
             AssistantView::refreshAll(); // not on showEvent: a window being destroyed shows the page while its stack empties
-        if (entering && isActiveWindow() && !m_tree->editing())
-            m_assistantView->focusComposer();
+        if (entering && !m_tree->editing())
+            m_assistantView->focusComposer(); // a background window gives it the keys when next activated
         m_shownId.clear(); // the session picked next takes the focus back
         m_title->setText(QStringLiteral("Elis"));
         m_context->clear();
