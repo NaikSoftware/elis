@@ -60,7 +60,9 @@ named `phone-target` open on the computer:
 flutter test integration_test/app_test.dart -d emulator-5554 --dart-define=PAIR_LINK='elis://pair?…'
 ```
 
-It uninstalls the app when it finishes.
+It uninstalls the app when it finishes. `integration_test/term_relay_test.dart` runs the same way against a Live
+`phone-target` and a relay the app runs (Connect a Phone), so the tree reports `phoneLead`; its header says when the
+computer must take the lead back.
 
 Fonts: Inter, JetBrains Mono and Noto Sans Symbols 2 (the fallback for agent glyphs JetBrains Mono lacks), SIL Open Font
 License 1.1 (`assets/fonts/OFL-*.txt`).
