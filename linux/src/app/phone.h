@@ -27,6 +27,8 @@ public:
     QString link() const;        // the pairing link for host(); empty until serve is listening
     QString error() const { return m_error; }
     QString lastEvent() const { return m_event; }
+    QString bluetooth() const { return m_bluetooth; } // serve's `phone.status` value, empty until it reports one
+    QString bluetoothText() const;
 
     void setEnabled(bool on);
     void setPort(quint16 port);
@@ -51,7 +53,7 @@ private:
     quint16 m_port = 8765;
     QString m_host;
     QStringList m_links;
-    QString m_error, m_event;
+    QString m_error, m_event, m_bluetooth, m_bluetoothText;
 };
 
 QString pairLinkWithHost(const QString &link, const QString &host);

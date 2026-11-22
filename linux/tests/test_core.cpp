@@ -1117,6 +1117,8 @@ private Q_SLOTS:
         QCOMPARE(line("phone released from 10.0.0.2 pane p2").value("emit").toBool(), false); // never counted
         QCOMPARE(line("phone connected from 10.0.0.2").value("event").toString(), QStringLiteral("phone.connected"));
         QCOMPARE(line("listening on 8765").value("kind").toString(), QStringLiteral("other"));
+        QCOMPARE(line("elisctl: bluetooth: off (powered off)"), (QJsonObject{{"kind", "bluetooth"}, {"value", "off"}, {"text", "Off: powered off"}}));
+        QCOMPARE(line("bluetooth: advertising").value("text").toString(), QStringLiteral("Advertising"));
         char *r = elis_phone_viewers_reset();
         QCOMPARE(QJsonDocument::fromJson(r).object(), (QJsonObject{{"detached", QJsonArray{"p1"}}, {"released", QJsonArray{"p1"}}}));
         elis_free(r);

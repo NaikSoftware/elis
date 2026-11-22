@@ -102,6 +102,18 @@ private Q_SLOTS:
         QVERIFY(link->text().contains(QStringLiteral("&p=%1&").arg(port)));
         QVERIFY(!window.findChild<QLabel *>(QStringLiteral("phoneCode"))->pixmap().isNull());
         QVERIFY2(relay->error().isEmpty(), qPrintable(relay->error()));
+        auto *bluetooth = window.findChild<QLabel *>(QStringLiteral("phoneBluetooth"));
+        auto *settings = window.findChild<QPushButton *>(QStringLiteral("phoneBluetoothSettings"));
+        QVERIFY(bluetooth && settings);
+        QTRY_VERIFY_WITH_TIMEOUT(!relay->bluetooth().isEmpty(), 15000);
+        QVERIFY2(bluetooth->text() == QStringLiteral("Advertising") || bluetooth->text().startsWith(QStringLiteral("Off: ")),
+                 qPrintable(bluetooth->text()));
+        QCOMPARE(!settings->isHidden(), relay->bluetooth() == QStringLiteral("off"));
+        auto *dlg = window.findChild<QDialog *>(QStringLiteral("phoneDialog"));
+        QVERIFY(dlg->height() >= dlg->sizeHint().height()); // the code was squeezed under the address row
+        relay->setEnabled(false);
+        QCOMPARE(bluetooth->text(), QStringLiteral("Off"));
+        QVERIFY(settings->isHidden());
     }
 
     void paneLeadCoverNamesPhoneWhenPhoneLeads()

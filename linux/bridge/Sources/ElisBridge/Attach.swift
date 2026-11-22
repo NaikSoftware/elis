@@ -62,7 +62,7 @@ private func count(_ viewers: inout PhoneViewers, opened: Bool, paneID: String) 
 }
 
 /// One `elisctl mobile serve` stderr line -> `{"kind": "event"|"other"|"bluetooth"|"viewer"|"lead", ...}`, `{}` for a
-/// blank one: an event's `text`, and its `event` and `ip` when it is a control event. A viewer (`attached`) or lead
+/// blank one: an event's `text`, and its `event` and `ip` when it is a control event; a bluetooth line's `value` and `text`. A viewer (`attached`) or lead
 /// (`leading`) line, with `paneID` and `ip` (absent for the relay's `-`), is counted; `emit` is false for the end of one
 /// never counted.
 @_cdecl("elis_phone_relay_line")
@@ -74,7 +74,7 @@ public func elisPhoneRelayLine(_ line: UnsafePointer<CChar>) -> UnsafeMutablePoi
         out = ["kind": "event", "text": text]
         if let event = PhoneRelayLine.controlEvent(text) { out["event"] = event.kind.rawValue; out["ip"] = event.ip }
     case .other(let text): out = ["kind": "other", "text": text]
-    case .bluetooth(let value): out = ["kind": "bluetooth", "value": value]
+    case .bluetooth(let value): out = ["kind": "bluetooth", "value": value, "text": PhoneRelayLine.bluetoothText(value)]
     case let .viewer(attached, ip, paneID):
         let emit = phone.withLock { counts in count(&counts.viewers, opened: attached, paneID: paneID) }
         out = ["kind": "viewer", "attached": attached, "paneID": paneID, "emit": emit]
