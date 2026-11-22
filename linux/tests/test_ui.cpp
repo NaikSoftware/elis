@@ -832,6 +832,42 @@ private Q_SLOTS:
         QVERIFY(view->tags().isEmpty());
     }
 
+    void providerPickerSitsAboveTheComposerAndPicksWithKeys()
+    {
+        struct Quiet : AssistantSink {
+            void enqueue(const QString &) override { }
+            void providerChanged(const QString &) override { }
+        } sink;
+        QTemporaryDir state;
+        DetectedLaunchers launchers;
+        launchers.found({"terminal", "claude", "codex"}, qEnvironmentVariable("PATH"));
+        WindowLibrary lib(state.path());
+        lib.launchers = &launchers;
+        lib.assistantSink = &sink;
+        lib.load();
+        MainWindow *w = lib.entries()[0].window;
+        w->show();
+        w->activateWindow();
+        QVERIFY(QTest::qWaitForWindowActive(w));
+        w->showAssistant();
+        auto provider = [&] {
+            const QJsonObject tree = lib.dispatch({{"cmd", "tree"}});
+            return tree["result"]["tree"]["assistant"]["provider"].toString();
+        };
+        QVERIFY(lib.dispatch({{"cmd", "assistant.provider"}, {"args", QJsonObject{{"provider", "claude"}}}})["ok"].toBool());
+        auto *picker = w->findChild<QToolButton *>("assistantProvider");
+        QTRY_COMPARE(picker->text(), QStringLiteral("Claude Code"));
+        picker->click();
+        QWidget *popup = QApplication::activePopupWidget();
+        QVERIFY(popup && popup->objectName() == QLatin1String("assistantProviderPopup"));
+        const QWidget *box = w->findChild<QFrame *>("composer");
+        QVERIFY(popup->geometry().bottom() - 14 < box->mapToGlobal(QPoint(0, 0)).y()); // the panel, not its shadow, clears the box
+        QTest::keyClick(popup, Qt::Key_Down);
+        QTest::keyClick(popup, Qt::Key_Return);
+        QTRY_VERIFY(!QApplication::activePopupWidget());
+        QCOMPARE(provider(), QStringLiteral("codex"));
+    }
+
     void assistantProviderTakesOneInputPerTurnInOrder()
     {
         AssistantHost host("bash " ELIS_TEST_FIXTURES "/fake-provider.sh");

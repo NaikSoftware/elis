@@ -40,6 +40,7 @@ private:
     void loadDirectory(); // the sessions change without an assistant.message: tags read it fresh
     void append(const QJsonObject &entry);
     void rebuildProviders();
+    void openProviders();
     void complete();
     void send();
     bool dropTags(const class QMimeData *mime);
@@ -62,4 +63,6 @@ private:
     QCompleter *m_completer;
     QStandardItemModel *m_candidates;
     QToolButton *m_provider, *m_send;
+    QList<QPair<QString, QString>> m_providerRows; // provider id, title
+    QString m_currentProvider;
 };

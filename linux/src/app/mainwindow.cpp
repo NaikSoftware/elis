@@ -351,7 +351,7 @@ MainWindow::MainWindow(Store &store, const QString &statePath)
 
     m_sidebarPanel = new QWidget;
     auto *side = new QVBoxLayout(m_sidebarPanel);
-    side->setContentsMargins(0, 6, 0, 0);
+    side->setContentsMargins(0, 0, 0, 0); // flush with the content beside it, or its top edge steps
     side->setSpacing(0);
     side->addWidget(m_tree, 1);
     auto *hairline = new QFrame; // elis's footer rule: the text colour at 10%

@@ -18,7 +18,7 @@
 #include <QJsonArray>
 #include <QKeyEvent>
 #include <QLabel>
-#include <QMenu>
+#include <QMouseEvent>
 #include <QMimeData>
 #include <QPaintEvent>
 #include <QPainter>
@@ -34,6 +34,7 @@
 #include <QVBoxLayout>
 
 #include <array>
+#include <functional>
 
 namespace {
 QList<AssistantView *> s_views;
@@ -173,6 +174,138 @@ QWidget *centred(QWidget *column)
     row->addStretch(0);
     return outer;
 }
+
+// The provider picker: a rounded panel with its own soft shadow, a small header and padded rows,
+// the current provider tinted with the accent. A QMenu cannot: Breeze fixes its indent, radius and section rule.
+class ProviderPopup : public QWidget
+{
+public:
+    static constexpr int Shadow = 14, Inset = 6, Radius = 10;
+
+    ProviderPopup(QWidget *anchor, QList<QPair<QString, QString>> rows, const QString &current, std::function<void(const QString &)> pick)
+        : QWidget(anchor, Qt::Popup | Qt::FramelessWindowHint | Qt::NoDropShadowWindowHint)
+        , m_rows(std::move(rows))
+        , m_pick(std::move(pick))
+    {
+        setObjectName(QStringLiteral("assistantProviderPopup"));
+        setAttribute(Qt::WA_TranslucentBackground);
+        setAttribute(Qt::WA_DeleteOnClose);
+        setMouseTracking(true);
+        for (int r = 0; r < m_rows.size(); ++r)
+            if (m_rows[r].first == current)
+                m_current = m_hover = r;
+        m_header = font();
+        m_header.setPointSizeF(m_header.pointSizeF() * 0.78);
+        m_header.setWeight(QFont::DemiBold);
+        m_header.setCapitalization(QFont::AllUppercase);
+        m_header.setLetterSpacing(QFont::AbsoluteSpacing, 0.8);
+        const QFontMetrics fm(font()), hm(m_header);
+        int wide = hm.horizontalAdvance(title());
+        for (const auto &r : std::as_const(m_rows))
+            wide = qMax(wide, fm.horizontalAdvance(r.second));
+        m_rowHeight = fm.height() + 12;
+        m_headerHeight = hm.height() + 18;
+        setFixedSize(2 * Shadow + qMax(200, wide + 2 * (Inset + 12)), 2 * Shadow + m_headerHeight + int(m_rows.size()) * m_rowHeight + Inset);
+    }
+    static QString title() { return AssistantView::tr("Found on this system"); }
+
+protected:
+    QRect panel() const { return rect().adjusted(Shadow, Shadow, -Shadow, -Shadow); }
+    QRect row(int r) const
+    {
+        const QRect p = panel();
+        return {p.left() + Inset, p.top() + m_headerHeight + r * m_rowHeight, p.width() - 2 * Inset, m_rowHeight};
+    }
+    int rowAt(const QPoint &pos) const
+    {
+        for (int r = 0; r < m_rows.size(); ++r)
+            if (row(r).contains(pos))
+                return r;
+        return -1;
+    }
+    void paintEvent(QPaintEvent *) override
+    {
+        QPainter p(this);
+        p.setRenderHint(QPainter::Antialiasing);
+        p.setPen(Qt::NoPen);
+        const bool dark = palette().color(QPalette::Window).lightness() < 128;
+        for (int i = Shadow; i > 0; --i) { // a soft drop shadow, densest at the panel's edge and a little below it
+            const qreal t = 1 - qreal(i) / Shadow;
+            p.setBrush(QColor(0, 0, 0, int((dark ? 40 : 18) * t * t)));
+            p.drawRoundedRect(QRectF(panel()).adjusted(-i, -i + 4, i, i + 4), Radius + i, Radius + i);
+        }
+        p.setBrush(palette().color(QPalette::Window));
+        p.setPen(QPen(ink(dark ? 0.14 : 0.12), 1));
+        p.drawRoundedRect(QRectF(panel()).adjusted(0.5, 0.5, -0.5, -0.5), Radius, Radius);
+        p.setPen(ink(0.5));
+        p.setFont(m_header);
+        const QRect head(panel().left() + Inset + 12, panel().top() + 4, panel().width(), m_headerHeight - 4);
+        p.drawText(head, Qt::AlignLeft | Qt::AlignVCenter, title());
+        p.setFont(font());
+        for (int r = 0; r < m_rows.size(); ++r) {
+            const QRect at = row(r);
+            const QColor fill = r == m_current ? accent(0.16) : r == m_hover ? ink(0.07) : QColor(Qt::transparent);
+            p.setPen(Qt::NoPen);
+            p.setBrush(fill);
+            p.drawRoundedRect(QRectF(at), 6, 6);
+            p.setPen(ink());
+            p.drawText(at.adjusted(12, 0, -12, 0), Qt::AlignLeft | Qt::AlignVCenter, m_rows[r].second);
+        }
+    }
+    void mouseMoveEvent(QMouseEvent *e) override
+    {
+        if (const int r = rowAt(e->position().toPoint()); r != m_hover) {
+            m_hover = r;
+            update();
+        }
+    }
+    void leaveEvent(QEvent *) override
+    {
+        m_hover = -1;
+        update();
+    }
+    void mouseReleaseEvent(QMouseEvent *e) override
+    {
+        if (const int r = rowAt(e->position().toPoint()); r >= 0)
+            choose(r);
+    }
+    void keyPressEvent(QKeyEvent *e) override
+    {
+        const int n = int(m_rows.size());
+        switch (e->key()) {
+        case Qt::Key_Up:
+            m_hover = m_hover <= 0 ? n - 1 : m_hover - 1;
+            return update();
+        case Qt::Key_Down:
+            m_hover = (m_hover + 1) % qMax(1, n);
+            return update();
+        case Qt::Key_Return:
+        case Qt::Key_Enter:
+            if (m_hover >= 0)
+                choose(m_hover);
+            return;
+        case Qt::Key_Escape:
+            close();
+            return;
+        default:
+            QWidget::keyPressEvent(e);
+        }
+    }
+
+private:
+    void choose(int r)
+    {
+        const QString id = m_rows[r].first;
+        auto pick = m_pick;
+        close();
+        pick(id);
+    }
+
+    QList<QPair<QString, QString>> m_rows; // provider id, title
+    std::function<void(const QString &)> m_pick;
+    QFont m_header;
+    int m_current = -1, m_hover = -1, m_rowHeight = 0, m_headerHeight = 0;
+};
 }
 
 AssistantView::AssistantView(MainWindow &window, Store &store)
@@ -292,11 +425,9 @@ AssistantView::AssistantView(MainWindow &window, Store &store)
     bottom->setSpacing(8);
     m_provider = new QToolButton;
     m_provider->setObjectName(QStringLiteral("assistantProvider"));
-    m_provider->setPopupMode(QToolButton::InstantPopup);
-    m_provider->setMenu(new QMenu(m_provider));
+    connect(m_provider, &QToolButton::clicked, this, &AssistantView::openProviders);
     m_provider->setFocusPolicy(Qt::NoFocus);
-    m_provider->setStyleSheet(QStringLiteral("QToolButton{border:1px solid %1;border-radius:7px;padding:3px 10px;background:%2;}"
-                                             "QToolButton::menu-indicator{image:none;width:0;}")
+    m_provider->setStyleSheet(QStringLiteral("QToolButton{border:1px solid %1;border-radius:7px;padding:3px 10px;background:%2;}")
                                   .arg(css(accent()), css(accent(0.10))));
     bottom->addWidget(m_provider);
     auto *note = new QLabel(tr("applies from the next message"));
@@ -548,19 +679,27 @@ void AssistantView::rebuildProviders()
     const Launcher *shown = launcher(current);
     m_provider->setText(shown ? shown->title : tr("No agent found"));
     m_provider->setEnabled(!providers.isEmpty());
-    QMenu *menu = m_provider->menu();
-    menu->clear();
-    menu->addSection(tr("Found on this system"));
+    m_providerRows.clear();
     for (const QJsonValue &v : providers) {
-        const QString id = v.toString();
-        const Launcher *l = launcher(id);
-        menu->addAction(l ? l->title : id, this, [this, id] {
-            const QJsonObject r = m_window.assistantRequest({{"cmd", "assistant.provider"}, {"args", QJsonObject{{"provider", id}}}});
-            if (!r["ok"].toBool())
-                m_window.statusBar()->showMessage(r["error"].toString(), 4000);
-            refreshAll();
-        });
+        const Launcher *l = launcher(v.toString());
+        m_providerRows.append({v.toString(), l ? l->title : v.toString()});
     }
+    m_currentProvider = current;
+}
+
+void AssistantView::openProviders()
+{
+    auto *popup = new ProviderPopup(m_provider, m_providerRows, m_currentProvider, [this](const QString &id) {
+        const QJsonObject r = m_window.assistantRequest({{"cmd", "assistant.provider"}, {"args", QJsonObject{{"provider", id}}}});
+        if (!r["ok"].toBool())
+            m_window.statusBar()->showMessage(r["error"].toString(), 4000);
+        refreshAll();
+    });
+    // the panel's left edge on the button's, its bottom 6 px above the composer box
+    const QPoint button = m_provider->mapToGlobal(QPoint(0, 0));
+    const int boxTop = findChild<QFrame *>(QStringLiteral("composer"))->mapToGlobal(QPoint(0, 0)).y();
+    popup->move(button.x() - ProviderPopup::Shadow, boxTop - 6 - popup->height() + ProviderPopup::Shadow);
+    popup->show();
 }
 
 void AssistantView::complete()
