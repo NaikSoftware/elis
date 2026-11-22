@@ -1,5 +1,5 @@
 #if !canImport(Musl)
-#if os(macOS) || ELIS_PLATFORM_ADAPTERS
+#if ELIS_PLATFORM_ADAPTERS
 #if os(macOS)
 import CoreImage
 import CryptoKit
@@ -15,7 +15,9 @@ import Foundation
 import Testing
 import ElisCore
 @testable import elisctlKit
-#if ELIS_PLATFORM_ADAPTERS
+#if os(macOS)
+@testable import ElisMacRelay
+#else
 @testable import ElisLinuxRelay
 #endif
 
@@ -174,8 +176,8 @@ struct MobileRelayTransportTests {
         defer { server.stop() }
         // the products directory holds the test bundle and the built elisctl
         #if os(macOS)
-        let tool = Bundle(for: MobileFixture.self).bundleURL.deletingLastPathComponent().appendingPathComponent("elisctl")
-        #elseif ELIS_PLATFORM_ADAPTERS
+        let tool = Bundle(for: MobileFixture.self).bundleURL.deletingLastPathComponent().appendingPathComponent("elisctl-mac")
+        #else
         let tool = Bundle.main.bundleURL.appendingPathComponent("elisctl-linux") // the test executable's own directory
         #endif
         try #require(FileManager.default.isExecutableFile(atPath: tool.path), "\(tool.path)")

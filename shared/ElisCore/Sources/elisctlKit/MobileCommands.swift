@@ -1,9 +1,7 @@
 #if !canImport(Musl)
 import ArgumentParser
 import Foundation
-#if os(macOS)
-import Network
-#else
+#if !os(macOS)
 import Glibc
 #endif
 import ElisCore
@@ -41,11 +39,7 @@ struct Mobile: ParsableCommand {
 
         func validate() throws {
             if !PhoneDesktopState.portRange.contains(Int(port)) { throw ValidationError(PhoneDesktopState.portError) }
-            #if os(macOS)
-            if let bind, IPv4Address(bind) == nil, IPv6Address(bind) == nil { throw ValidationError("--bind takes an IP address") }
-            #else
             if let bind, !(MobileTransports.tls?.isAddress(bind) ?? true) { throw ValidationError("--bind takes an IP address") }
-            #endif
         }
 
         func run() throws {

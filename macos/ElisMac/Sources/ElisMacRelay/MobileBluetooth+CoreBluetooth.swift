@@ -1,10 +1,9 @@
 #if os(macOS)
 import CoreBluetooth
+import elisctlKit
 import Foundation
 
 extension MobileBluetooth {
-    func makeRadio() -> any BleRadio { CoreBluetoothRadio(owner: self, queue: relay.queue) }
-
     /// Serves one L2CAP channel's streams; `channel` is kept alive with them. Call on `relay.queue`.
     func accept(input: InputStream, output: OutputStream, holding channel: AnyObject?) {
         accept(StreamPipe(input: input, output: output, holding: channel, queue: relay.queue, limits: limits))
@@ -12,7 +11,7 @@ extension MobileBluetooth {
 }
 
 /// The Mac's peripheral. CoreBluetooth calls back on `relay.queue`, which is the queue it was created on.
-private final class CoreBluetoothRadio: NSObject, CBPeripheralManagerDelegate, BleRadio, @unchecked Sendable {
+final class CoreBluetoothRadio: NSObject, CBPeripheralManagerDelegate, BleRadio, @unchecked Sendable {
     private weak var owner: MobileBluetooth?
     private var manager: CBPeripheralManager?
     private var service: CBMutableService?

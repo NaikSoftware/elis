@@ -7,6 +7,7 @@
 excluded:
   - build                       # xcodebuild DerivedData
   - .build                      # SwiftPM build (root)
+  - ElisMac/.build                # the ElisMac package's SwiftPM build
   - .claude/worktrees           # concurrent git worktrees (gitignored) carry their own .build/checkouts
   - GhosttyKit.xcframework
   - Elis/Resources

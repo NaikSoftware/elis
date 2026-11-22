@@ -5,10 +5,11 @@ cd "$(dirname "$0")/.."
 mkdir -p build
 log=build/helper-prebuild.log
 core="$(cd ../shared/ElisCore && pwd)"
+mac="$(cd ElisMac && pwd)"
 
 # keep the two helper commands in their own process group
 set -m
-(swift build --package-path "$core" -c release --product elisctl &&
+(swift build --package-path "$mac" -c release --product elisctl-mac &&
   swift build --package-path "$core" -c release --product elis-session-host) >"$log" 2>&1 &
 helpers=$!
 set +m
@@ -22,6 +23,7 @@ stop_helpers() {
   fi
   # swift build starts each compiler job in a group of its own and leaves it running when signalled
   pkill -f -- "$core/.build/" 2>/dev/null || true
+  pkill -f -- "$mac/.build/" 2>/dev/null || true
 }
 trap stop_helpers EXIT
 trap 'exit 143' TERM

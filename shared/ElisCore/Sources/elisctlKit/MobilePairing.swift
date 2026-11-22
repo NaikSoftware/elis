@@ -111,23 +111,6 @@ enum MobilePairing {
         }
     }
 
-    #if os(macOS)
-    /// The in-memory TLS identity and the lowercase hex SHA-256 of the certificate DER. Never touches the keychain.
-    static func identity(in dir: String) throws -> (SecIdentity, String) {
-        let unreadable = MobileError("the certificate in \(dir) is unreadable; delete cert.pem and key.pem to make a new one")
-        guard let keyPEM = try? String(contentsOfFile: dir + "/key.pem", encoding: .utf8),
-              let certPEM = try? String(contentsOfFile: dir + "/cert.pem", encoding: .utf8),
-              let x963 = try? P256.Signing.PrivateKey(pemRepresentation: keyPEM).x963Representation else { throw unreadable }
-        let attributes: [CFString: Any] = [kSecAttrKeyType: kSecAttrKeyTypeECSECPrimeRandom, kSecAttrKeyClass: kSecAttrKeyClassPrivate]
-        let base64 = certPEM.split(separator: "\n").filter { !$0.hasPrefix("-----") }.joined()
-        guard let key = SecKeyCreateWithData(x963 as CFData, attributes as CFDictionary, nil),
-              let der = Data(base64Encoded: base64), let cert = SecCertificateCreateWithData(nil, der as CFData),
-              // an explicit-parameter cert has no key here, and SecIdentityCreate raises an uncatchable exception on it
-              SecCertificateCopyKey(cert) != nil,
-              let identity = SecIdentityCreate(nil, cert, key) else { throw unreadable }
-        return (identity, SHA256.hash(data: der).map { String(format: "%02x", $0) }.joined())
-    }
-    #else
     /// The registered listener's identity for the certificate and key, and the lowercase hex SHA-256 of the certificate DER.
     static func identity(in dir: String) throws -> (any PhoneTLSIdentity, String) {
         guard let tls = MobileTransports.tls else { throw MobileError("this elisctl has no TLS listener") }
@@ -138,7 +121,6 @@ enum MobilePairing {
               let identity = tls.init(certificate: dir + "/cert.pem", key: dir + "/key.pem") else { throw unreadable }
         return (identity, SHA256.hash(data: der).map { String(format: "%02x", $0) }.joined())
     }
-    #endif
 
     static func sameSecret(_ a: String, _ b: String) -> Bool {
         let a = Array(a.utf8), b = Array(b.utf8)
