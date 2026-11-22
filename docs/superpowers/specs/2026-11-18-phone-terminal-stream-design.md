@@ -22,8 +22,8 @@ Claude Code, codex and agy correctly, with native UI around it.
 - Native ask/pick sheets on the phone (needs a presenter routing rule; own design later).
   HTML overlay pages are not a non-goal: `2026-11-20-phone-pages-design.md` shows them on the phone.
 - A terminal for non-Live panes: they keep the text view, improved in M1.
-- iOS. The Linux (`linux/`) relay: phones paired with it keep the text view; a C++ port later reuses the golden vectors (user decision).
-  Chat (not the terminal stream) works there since 2026-11-21: the Qt app links `ElisCore` through `linux/shared`.
+- iOS.
+  The Linux app runs this relay too (`docs/superpowers/plans/2026-11-22-linux-phase-4-5-attach-relay.md`), without Bluetooth and pages.
 
 ## Anti-goals
 
@@ -184,7 +184,7 @@ its Text mode is no longer planned.
   ever needed, improves the history view instead. Also rejected: a separate Blocks mode and an agent-only
   graphic UI (sessions are any program).
 
-. Linux elis relay: text fallback now, port later.
+1. Linux elis relay: text fallback now, port later. (Superseded 2026-11-22: the Linux app runs this Swift relay.)
 2. First-burst trim: a small zmx patch (attach flag), not a byte-pattern cut.
 3. Scope: terminal-output streaming is approved; `control-api.md:23` changes with M3.
 4. Take over stays, beside Fit to phone. (Superseded by the M5b plan: direct input replaces the button.)

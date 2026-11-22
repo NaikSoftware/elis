@@ -4,7 +4,7 @@ import 'package:flutter_test/flutter_test.dart';
 
 // Keys client.dart and model.dart send or parse, by the Swift file that owns them.
 const wire = {
-  'elisctlKit/MobileCommands.swift': ['h', 'p', 't', 'f', 'n', 'b'],
+  'elisctlKit/MobilePairing.swift': ['h', 'p', 't', 'f', 'n', 'b'],
   'elisctlKit/PhoneSession.swift': ['auth', 'id', 'ok', 'result'],
   'ElisCore/ControlResponse.swift': ['ok', 'result', 'error'],
   'ElisCore/ControlProtocol.swift': ['cmd', 'target', 'args', 'window', 'run', 'after', 'limit', 'events', 'tree', 'windows'],

@@ -111,7 +111,7 @@ target_link_libraries(elis PRIVATE elis-ui Qt6::Network KF6::ConfigCore)
 
 add_dependencies(elis elis-zmx) # spawned from the app's own directory
 
-add_executable(elisctl src/ctl/elisctl.cpp src/ctl/mobile.cpp src/ctl/qrcodegen/qrcodegen.cpp)
+add_executable(elisctl src/ctl/elisctl.cpp)
 target_link_libraries(elisctl PRIVATE elis-core Qt6::Network)
 add_dependencies(elisctl elis-swift-ctl)
 
@@ -126,7 +126,7 @@ target_compile_definitions(test_core PRIVATE ELIS_SOURCE_AGENT_STATUS="${ELIS_AG
 add_dependencies(test_core elis-zmx) # Zmx::executable() is beside the binary
 add_test(NAME core COMMAND test_core)
 add_executable(test_ui tests/test_ui.cpp)
-target_link_libraries(test_ui PRIVATE elis-ui Qt6::Test)
+target_link_libraries(test_ui PRIVATE elis-ui Qt6::Network Qt6::Test)
 add_test(NAME ui COMMAND test_ui)
 set_tests_properties(ui PROPERTIES ENVIRONMENT "QT_QPA_PLATFORM=offscreen;ELIS_STATE_DIR=/tmp/elis-test-ui")
 

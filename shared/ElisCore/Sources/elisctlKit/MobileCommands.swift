@@ -14,7 +14,7 @@ import ElisCore
 /// elisctl sends, plus an `id` echoed on the answer; each line is forwarded to the control socket.
 struct Mobile: ParsableCommand {
     static let configuration = CommandConfiguration(
-        abstract: "Let Elis Mobile drive this Mac over the network or Bluetooth.",
+        abstract: "Let Elis Mobile drive this \(hostComputer) over the network or Bluetooth.",
         subcommands: [Serve.self, Reset.self]
     )
 
@@ -30,7 +30,7 @@ struct Mobile: ParsableCommand {
         var port: UInt16 = 8765
         @Option(name: .long, help: "IP address to listen on (default: all interfaces).")
         var bind: String?
-        @Option(name: .long, help: "Host name or address the phone should dial (default: this Mac's LAN addresses).")
+        @Option(name: .long, help: "Host name or address the phone should dial (default: this \(hostComputer)'s LAN addresses).")
         var host: String?
         @Flag(name: .customLong("no-qr"), help: "Print the links without the QR code.")
         var noQR = false
@@ -85,7 +85,7 @@ struct Mobile: ParsableCommand {
             var lan: [String?] = host.map { [$0] } ?? MobilePairing.lanAddresses()
             if lan.isEmpty {
                 // a Bluetooth phone needs no host; without Bluetooth only this Mac can use the link
-                if !offered { FileHandle.standardError.write(Data("elisctl: no LAN address; the link works on this Mac only\n".utf8)) }
+                if !offered { FileHandle.standardError.write(Data("elisctl: no LAN address; the link works on this \(hostComputer) only\n".utf8)) }
                 lan = [offered ? nil : "127.0.0.1"]
             }
             let name = MobilePairing.hostName()

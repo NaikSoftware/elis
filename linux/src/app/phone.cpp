@@ -1,4 +1,4 @@
-// Connect a Phone: the elis Mobile relay switched on from the GUI. The relay itself stays in elisctl (src/ctl/mobile.cpp);
+// Connect a Phone: the elis Mobile relay switched on from the GUI. The relay is the Swift elisctl's `mobile serve`;
 // this runs it as a child and shows its pairing link as a QR code.
 #include "phone.h"
 
@@ -13,6 +13,7 @@
 #include <QDialog>
 #include <QDialogButtonBox>
 #include <QDir>
+#include <QEventLoop>
 #include <QFile>
 #include <QFormLayout>
 #include <QJsonArray>
@@ -26,6 +27,7 @@
 #include <QSaveFile>
 #include <QSignalBlocker>
 #include <QSpinBox>
+#include <QTimer>
 #include <QUrl>
 #include <QUrlQuery>
 #include <QVBoxLayout>
@@ -184,10 +186,19 @@ void PhoneRelay::stop()
 {
     if (!m_proc)
         return;
-    m_proc->disconnect(this);
-    m_proc->kill();
-    m_proc->waitForFinished(2000); // the port is free before a restart binds it again
-    delete m_proc;
+    QProcess *p = m_proc; // taken first: a start or stop re-entered from the loop below finds no child
+    m_proc = nullptr;
+    p->disconnect(this);
+    // SIGTERM makes serve give the phone's grids back over the control socket, so the loop keeps it answering
+    p->terminate();
+    QEventLoop wait;
+    connect(p, &QProcess::finished, &wait, &QEventLoop::quit);
+    QTimer::singleShot(5000, &wait, &QEventLoop::quit);
+    if (p->state() != QProcess::NotRunning)
+        wait.exec(QEventLoop::ExcludeUserInputEvents);
+    p->kill();
+    p->waitForFinished(2000); // the port is free before a restart binds it again
+    delete p;
     m_links.clear();
     releaseViewers();
 }
