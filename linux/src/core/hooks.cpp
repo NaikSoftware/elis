@@ -99,7 +99,7 @@ void EventSource::emitEvent(const QString &kind, const QString &workspace, const
 }
 
 const QStringList EventSource::kinds{"status", "notify", "session.created", "session.closed", "session.selected", "tree.changed", "pane.split",
-                                     "pane.scratch", "pane.focused", "remote.opened", "remote.closed", "app.launched", "message"};
+                                     "pane.scratch", "pane.focused", "remote.opened", "remote.closed", "app.launched", "message", "assistant.message"};
 
 QJsonObject EventSource::read(const QJsonObject &args, QString *error)
 {

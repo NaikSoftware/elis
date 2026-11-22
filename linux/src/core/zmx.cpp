@@ -220,6 +220,16 @@ bool type(const QString &stateDir, const QString &paneId, const QString &text, Q
     return true;
 }
 
+int pacedReturn(const QString &text, QString *head)
+{
+    const QJsonObject paced = taken(elis_zmx_type_bytes(text.toUtf8().constData()));
+    *head = text;
+    if (!paced.value("pacedReturn").toBool())
+        return 0;
+    head->chop(text.endsWith(QLatin1String("\r\n")) ? 2 : 1);
+    return paced.value("gapMs").toInt();
+}
+
 std::optional<QString> screen(const QString &stateDir, const QString &paneId, bool all, int lines)
 {
     QStringList args{QStringLiteral("screen"), daemonName(stateDir, paneId)};

@@ -4,6 +4,7 @@
 #include "keymap.h"
 
 #include <QDateTime>
+#include <QDeadlineTimer>
 #include <QElapsedTimer>
 #include <QSet>
 #include <QHash>
@@ -42,6 +43,7 @@ public:
     QString windowId;
 
     bool type(const QString &sessionId, const QString &pane, const QString &text, QString *error) override;
+    static inline QDeadlineTimer returnPending; // until a typed text's paced Return has gone, the control reply waits
     QString text(const QString &sessionId, const QString &pane, bool scrollback, QString *error) override;
     QSize gridSize(const QString &sessionId, const QString &pane) override;
     bool setGrid(const QString &sessionId, const QString &pane, const QSize &grid, QString *error) override;

@@ -1,6 +1,8 @@
 #include "assistant.h"
 
+#include "control.h"
 #include "elis_bridge.h"
+#include "store.h"
 
 #include <QJsonDocument>
 
@@ -97,6 +99,95 @@ QJsonValue decode(const QString &provider, const QString &line)
 QString recap()
 {
     return QString::fromUtf8(taken(elis_assistant_recap()));
+}
+
+}
+
+namespace Assistant {
+
+QJsonArray peers(const QList<Window> &windows)
+{
+    QJsonArray out;
+    for (const Window &w : windows)
+        for (const Workspace &ws : std::as_const(w.store->workspaces))
+            for (const Session &s : ws.sessions) {
+                QJsonObject peer{{"sessionID", s.id}, {"window", w.id}, {"workspaceID", ws.id}, {"workspaceName", ws.name}, {"name", s.displayName()},
+                                 {"status", s.status}};
+                if (!s.agent.isEmpty()) // the core counts any agent, "" too, as one
+                    peer.insert("agent", s.agent);
+                out << peer;
+            }
+    return out;
+}
+
+static QString typeInto(const QJsonObject &peer, const QString &text, const QList<Window> &windows)
+{
+    const QString id = peer.value("sessionID").toString();
+    for (const Window &w : windows)
+        if (w.id == peer.value("window").toString()) {
+            QJsonObject args{{"text", text}};
+            if (const Session *s = w.store->session(id); s && !s->agentPane.isEmpty())
+                args.insert("pane", s->agentPane);
+            const QJsonObject r = ::dispatch(*w.store, *w.terminals, {{"cmd", "session.type"}, {"target", id}, {"args", args}});
+            return r.value("ok").toBool() ? QString() : r.value("error").toString();
+        }
+    return QStringLiteral("window not open");
+}
+
+QJsonObject dispatch(const QJsonObject &request, const QList<Window> &windows, const QStringList &providers, AssistantSink *sink)
+{
+    QJsonObject step = AssistantBridge::run(request, peers(windows), QJsonArray::fromStringList(providers));
+    if (step.contains("plan")) {
+        const QJsonObject plan = step.value("plan").toObject();
+        QJsonObject failures;
+        for (const QJsonValue &target : plan.value("targets").toArray())
+            if (const QString error = typeInto(target.toObject(), plan.value("line").toString() + QLatin1Char('\n'), windows); !error.isEmpty())
+                failures.insert(target.toObject().value("sessionID").toString(), error);
+        step = AssistantBridge::finishSend(plan, failures);
+    }
+    for (const QJsonValue &v : step.value("effects").toArray()) {
+        const QJsonObject effect = v.toObject();
+        const QString type = effect.value("type").toString();
+        if (type == QLatin1String("input") && sink)
+            sink->enqueue(effect.value("streamText").toString());
+        if (type == QLatin1String("input") || type == QLatin1String("sent"))
+            emitMessage(effect.value("entry").toObject(), windows);
+        else if (type == QLatin1String("providerChanged") && sink)
+            sink->providerChanged(effect.value("provider").toString());
+        else if (type == QLatin1String("show"))
+            AssistantBridge::markSeen(); // shortcut: no chat view yet, so a show always succeeds; the Elis row's selection replaces it
+    }
+    return step.value("reply").toObject();
+}
+
+QJsonObject stamp(const QJsonObject &treeReply, const QList<Window> &windows, const QStringList &providers)
+{
+    if (!treeReply.value("ok").toBool())
+        return treeReply;
+    const QJsonObject tree = AssistantBridge::stamp(treeReply["result"]["tree"].toObject(), peers(windows), QJsonArray::fromStringList(providers));
+    if (tree.contains("error"))
+        return {{"ok", false}, {"error", tree.value("error")}};
+    return {{"ok", true}, {"result", QJsonObject{{"tree", tree}}}};
+}
+
+void emitMessage(const QJsonObject &entry, const QList<Window> &windows)
+{
+    if (windows.isEmpty())
+        return;
+    const QString from = entry.value("from").toString();
+    QJsonObject payload{{"kind", entry.value("kind")}, {"text", entry.value("text")}};
+    Terminals *via = windows.first().terminals;
+    if (!from.isEmpty()) {
+        payload.insert("from", from);
+        const QJsonObject probe{{"workspaces", QJsonArray{QJsonObject{{"sessions", QJsonArray{QJsonObject{{"id", from}}}}}}}};
+        const QString handle = AssistantBridge::stamp(probe, peers(windows), QJsonValue::Null)["workspaces"][0]["sessions"][0]["handle"].toString();
+        if (!handle.isEmpty())
+            payload.insert("handle", handle);
+        for (const Window &w : windows)
+            if (w.store->session(from))
+                via = w.terminals;
+    }
+    via->emitEvent(QStringLiteral("assistant.message"), from, payload);
 }
 
 }

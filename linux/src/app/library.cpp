@@ -2,6 +2,7 @@
 
 #include "hooks.h"
 
+#include "assistant.h"
 #include "control.h"
 #include "zmx.h"
 #include "mainwindow.h"
@@ -35,6 +36,7 @@ static bool wayland()
 WindowLibrary::WindowLibrary(const QString &stateDir)
     : m_dir(stateDir)
 {
+    AssistantBridge::open(stateDir); // one chat for the app, every window's
 }
 
 WindowLibrary::~WindowLibrary()
@@ -333,6 +335,14 @@ QJsonObject WindowLibrary::dispatch(const QJsonObject &request)
     const QList<MainWindow *> open = openWindows();
     if (open.isEmpty())
         return fail(QStringLiteral("no open window"));
+    QList<Assistant::Window> everyWindow;
+    for (const Entry &e : std::as_const(m_entries))
+        if (e.open && e.window)
+            everyWindow << Assistant::Window{e.id, e.store, e.window};
+    QStringList providers = active()->availableLaunchers(); // detected at launch, never probed per request
+    providers.removeAll(QStringLiteral("terminal"));
+    if (cmd.startsWith(QLatin1String("assistant.")))
+        return Assistant::dispatch(request, everyWindow, providers, assistantSink);
     // config the whole app shares, and the app-global restore commands, act on every open window
     static const QStringList everywhere{"keymap.reload", "hooks.reload", "theme.set", "restore.mode", "restore.capture", "restore.clear"};
     if (everywhere.contains(cmd)) {
@@ -372,7 +382,8 @@ QJsonObject WindowLibrary::dispatch(const QJsonObject &request)
             }
         }
     }
-    return ::dispatch(*e->store, *e->window, request);
+    const QJsonObject reply = ::dispatch(*e->store, *e->window, request);
+    return cmd == QLatin1String("tree") ? Assistant::stamp(reply, everyWindow, providers) : reply; // handles are app-wide
 }
 
 QJsonObject WindowLibrary::windowCommand(const QString &cmd, const QString &target, const QJsonObject &args)

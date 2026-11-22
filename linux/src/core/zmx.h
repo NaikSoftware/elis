@@ -41,6 +41,8 @@ struct Lead {
 };
 // a pane whose zmx reported a role types and reads through its daemon (the Mac's coveredType and coveredText)
 bool type(const QString &stateDir, const QString &paneId, const QString &text, QString *error);
+// a pane without zmx under the same rule: *head goes now, then the ms to wait before a lone "\r" (0: none follows)
+int pacedReturn(const QString &text, QString *head);
 std::optional<QString> screen(const QString &stateDir, const QString &paneId, bool all, int lines); // nullopt: unread
 Lead report(const QString &paneId, const QString &title); // report false: an ordinary title
 Lead lead(const QString &paneId);

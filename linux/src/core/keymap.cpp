@@ -469,7 +469,8 @@ QString expandTokens(QString command, const QHash<QString, QString> &ctx)
 const QStringList &eventKinds()
 {
     static const QStringList kinds{"status",       "notify",      "session.created", "session.closed", "session.selected", "tree.changed",
-                                   "pane.split",   "pane.scratch", "pane.focused",   "remote.opened",  "remote.closed",    "app.launched", "message"};
+                                   "pane.split",   "pane.scratch", "pane.focused",   "remote.opened",  "remote.closed",    "app.launched", "message",
+                                   "assistant.message"};
     return kinds;
 }
 

@@ -580,6 +580,46 @@ private Q_SLOTS:
         QCOMPARE(error, QStringLiteral("cannot delete last window"));
     }
 
+    void assistantCommandsReachEveryWindowAndStampTheTree()
+    {
+        QTemporaryDir state;
+        WindowLibrary lib(state.path());
+        lib.load();
+        lib.newWindow("second");
+        MainWindow *w2 = lib.entries()[1].window;
+        Store *s2 = lib.entries()[1].store;
+        w2->activateWindow();
+        QVERIFY(QTest::qWaitForWindowActive(w2));
+        const QString target = s2->allSessions().first()->id;
+        s2->setAgent(target, QStringLiteral("claude"));
+        const QJsonObject tree = lib.dispatch({{"cmd", "tree"}}).value("result")["tree"].toObject();
+        QVERIFY(tree["assistant"].toObject().contains("providers"));
+        QCOMPARE(tree["workspaces"][0]["sessions"][0]["id"].toString(), target);
+        QVERIFY(!tree["workspaces"][0]["sessions"][0]["handle"].toString().isEmpty());
+        const QJsonObject r = lib.dispatch({{"cmd", "assistant.send"}, {"args", QJsonObject{{"text", "hi there"}, {"recipients", QJsonArray{"@all"}}}}});
+        QCOMPARE(r["result"]["assistant"]["deliveredIDs"].toArray(), QJsonArray{target});
+    }
+
+    void typedTextGetsItsFinalReturnInItsOwnWrite()
+    {
+        Store store;
+        MainWindow w(store, dir.filePath("paced.json"));
+        w.restore({});
+        const QString id = store.addSession(store.addWorkspace("w"), {}, {});
+        store.select(id);
+        w.show();
+        w.activateWindow();
+        QVERIFY(QTest::qWaitForWindowActive(&w));
+        QString error;
+        QTRY_VERIFY_WITH_TIMEOUT(!w.text(id, "left", false, &error).trimmed().isEmpty(), 5000); // the prompt
+        auto type = [&](const QString &text) { return dispatch(store, w, {{"cmd", "session.type"}, {"target", id}, {"args", QJsonObject{{"text", text}}}}); };
+        QVERIFY(type("stty raw -echo; dd bs=4096 count=1 2>/dev/null | od -An -tx1; stty sane\n")["ok"].toBool());
+        QTRY_COMPARE_WITH_TIMEOUT(w.foregroundArgv(id, "main").value(0), QStringLiteral("dd"), 5000);
+        QVERIFY(type("hello\n")["ok"].toBool());
+        QTRY_VERIFY_WITH_TIMEOUT(w.text(id, "left", false, &error).contains("6c 6c 6f"), 5000);
+        QVERIFY2(!w.text(id, "left", false, &error).contains("6f 0"), qPrintable(w.text(id, "left", false, &error))); // dd's one read held no Return
+    }
+
     void selectingASessionUpdatesTheSidebarInPlace()
     {
         Store store;

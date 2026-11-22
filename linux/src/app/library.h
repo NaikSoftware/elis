@@ -44,6 +44,7 @@ public:
     bool saveIndex();
     // every pane identity of every window, the closed ones read from their files; nullopt when one cannot be read
     std::optional<QStringList> paneIds() const;
+    class AssistantSink *assistantSink = nullptr; // the provider process assistant.* feeds; null drops its inputs
 
 Q_SIGNALS:
     void changed();

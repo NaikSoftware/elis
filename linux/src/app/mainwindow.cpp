@@ -1514,7 +1514,16 @@ bool MainWindow::type(const QString &sessionId, const QString &pane, const QStri
         if (!Zmx::type(stateDir(), zmx, text, error))
             return false;
     } else {
-        t->sendInput(text);
+        QString head;
+        const int gap = Zmx::pacedReturn(text, &head);
+        t->sendInput(head);
+        // Konsole's pty queues writes until the event loop runs, so a sleep here would still send one burst; the control
+        // server holds the reply until returnPending expires, as zmx's blocking Return does.
+        // shortcut: a second type into this pane within one request lands before the first's Return; queue per pane if that bites
+        if (gap > 0) {
+            QTimer::singleShot(gap, part, [t] { t->sendInput(QStringLiteral("\r")); });
+            returnPending = QDeadlineTimer(gap, Qt::PreciseTimer);
+        }
     }
     if (text.contains(QLatin1Char('\n')) || text.contains(QLatin1Char('\r')))
         m_store.keyPressed(sessionId, Store::Key::Submit); // injected text carrying a newline is a submit
