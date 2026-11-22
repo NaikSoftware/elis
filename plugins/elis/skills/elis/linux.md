@@ -39,7 +39,7 @@ An elis-server host is not this app: SKILL.md's "Remote windows and elis-server"
 - The phone: Settings ▸ Connect a Phone…, or `elisctl mobile serve [--port N] [--bind ADDR] [--host NAME]`, which
   runs the Mac's relay (Term, direct input, Fit to phone, Chat, Bluetooth through BlueZ; pages are refused) and prints
   the pairing QR code and link; `mobile reset` replaces the token. `--no-bluetooth` turns Bluetooth off; stderr says
-  `bluetooth: advertising` or `off (<reason>)`, and Connect a Phone… shows no Bluetooth row. There is no `phone …`
+  `bluetooth: advertising` or `off (<reason>)`, as Connect a Phone…'s Bluetooth row does. There is no `phone …`
   command. `session attach [--pane left|right] [--claim] [--json]` attaches to a Live pane (no `origin`).
 
 ## Not supported

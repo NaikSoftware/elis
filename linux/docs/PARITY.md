@@ -173,8 +173,10 @@ Legend: [x] done · [ ] todo · (fork) = fork-only feature, not in upstream docs
   token's rotating service UUID and serves the PSM characteristic, the phone opens an unencrypted LE L2CAP channel that
   Noise keyed by the token secures; the Mac's wire, `bluetooth.lock` and busy cap; a powered-off adapter drops the
   Bluetooth phones and advertises again when it powers on
-- [ ] Connect a Phone…'s Bluetooth row (Starting…, Advertising, Off with a reason): the relay prints the state, the
-  dialog does not show it
+- [x] Connect a Phone…'s Bluetooth row (Starting…, Advertising, Off with a reason), with Open Bluetooth Settings
+  (KDE's Bluetooth page) where the Mac offers it for `unauthorized`: BlueZ has no permission state, so for a powered-off adapter
+- [ ] `phone status|on|off|toggle|port|host|revoke|link` and `tree.phone` (master's `phone.*`): not ported, the window and
+  `mobile serve` are the only ways in
 - [x] `session attach [--pane left|right] [--claim] [--json]` and `phone.*` events: attaches this terminal to a Live
   pane as a passive zmx viewer (skipping scrollback) or claiming lead (`--claim`), or prints
   `{argv, paneID, screen, remote, nonce?}` with `--json` (no `origin`; C++ `elisctl` runs the Swift `elisctl`
