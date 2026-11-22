@@ -186,17 +186,19 @@ void PhoneRelay::stop()
 {
     if (!m_proc)
         return;
-    m_proc->disconnect(this);
+    QProcess *p = m_proc; // taken first: a start or stop re-entered from the loop below finds no child
+    m_proc = nullptr;
+    p->disconnect(this);
     // SIGTERM makes serve give the phone's grids back over the control socket, so the loop keeps it answering
-    m_proc->terminate();
+    p->terminate();
     QEventLoop wait;
-    connect(m_proc, &QProcess::finished, &wait, &QEventLoop::quit);
+    connect(p, &QProcess::finished, &wait, &QEventLoop::quit);
     QTimer::singleShot(5000, &wait, &QEventLoop::quit);
-    if (m_proc->state() != QProcess::NotRunning)
-        wait.exec();
-    m_proc->kill();
-    m_proc->waitForFinished(2000); // the port is free before a restart binds it again
-    delete m_proc;
+    if (p->state() != QProcess::NotRunning)
+        wait.exec(QEventLoop::ExcludeUserInputEvents);
+    p->kill();
+    p->waitForFinished(2000); // the port is free before a restart binds it again
+    delete p;
     m_links.clear();
     releaseViewers();
 }

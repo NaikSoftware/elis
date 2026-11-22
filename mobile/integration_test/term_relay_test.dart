@@ -1,7 +1,6 @@
-// On a device against a live relay, with a Live session named "phone-target" running a shell on the computer:
-//   flutter test integration_test/term_relay_test.dart -d <device> --dart-define=PAIR_LINK='elis://pair?h=10.0.2.2&...'
-// Once the pane shows `typed-42`, the computer must take the lead back: a key on the pane's cover, or a claiming
-// `zmx attach` of its daemon.
+// On a device or emulator against the computer `tool/term-relay-host.sh up` sets up (Linux), which prints the link:
+//   flutter test integration_test/term_relay_test.dart -d emulator-5554 --dart-define=PAIR_LINK='elis://pair?h=10.0.2.2&...'
+// with `tool/term-relay-host.sh takeback` running beside it: once phone-target shows `typed-42` it takes the lead back.
 import 'package:elis_mobile/client.dart';
 import 'package:elis_mobile/main.dart' as app;
 import 'package:elis_mobile/model.dart';
@@ -51,7 +50,7 @@ void main() {
   IntegrationTestWidgetsFlutterBinding.ensureInitialized();
   const link = String.fromEnvironment('PAIR_LINK');
 
-  testWidgets('a Live pane over the relay: colour, lead, typing, take-back, prompt card', (t) async {
+  testWidgets('a Live pane over the relay: colour, lead, typing, take-back, then a prompt card from the coloured grid', (t) async {
     expect(link, isNotEmpty, reason: 'pass --dart-define=PAIR_LINK=...');
     final computer = await Connection.open(Pairing.parse(link)!);
     addTearDown(computer.close);
@@ -84,5 +83,11 @@ void main() {
 
     await pumpUntil(t, find.text('The computer took the lead back.'), timeout: const Duration(seconds: 90));
     await waitLead(t, computer, false);
+
+    // Chat over claude-target reads the dialog from the pane's vt grid; session.text alone carries no colours for it
+    await t.binding.handlePopRoute();
+    await pumpUntil(t, find.text('claude-target'));
+    await t.tap(find.text('claude-target').last);
+    await pumpUntil(t, find.byKey(const Key('promptCard')));
   });
 }

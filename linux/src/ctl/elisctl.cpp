@@ -281,10 +281,19 @@ int main(int argc, char **argv)
             : QDir::cleanPath(dir + QStringLiteral("/" ELIS_LIBEXEC_FROM_BIN "/elisctl"));
         const QByteArray helperPath = QFile::encodeName(helper);
         const QByteArray state = QFile::encodeName(stateDir());
-        // Swift derives the same <state>/elis.sock from it; a --socket argument passes through
+        const QByteArray sock = QFile::encodeName(socketPath());
         ::setenv("ELIS_STATE_DIR", state.constData(), 1);
         std::vector<char *> execArgs{const_cast<char *>(helperPath.constData())};
-        execArgs.insert(execArgs.end(), argv + 1, argv + argc);
+        bool hasSocket = false;
+        for (int i = 1; i < argc; ++i) {
+            hasSocket = hasSocket || std::strcmp(argv[i], "--socket") == 0 || std::strncmp(argv[i], "--socket=", 9) == 0;
+            execArgs.push_back(argv[i]);
+        }
+        // only the commands that reach the app take --socket; mobile reset touches the state dir alone
+        if (!hasSocket && (attach || (argc >= 3 && std::strcmp(argv[2], "serve") == 0))) {
+            execArgs.push_back(const_cast<char *>("--socket"));
+            execArgs.push_back(const_cast<char *>(sock.constData()));
+        }
         execArgs.push_back(nullptr);
         ::execv(helperPath.constData(), execArgs.data());
         fprintf(stderr, "elisctl: cannot run %s: %s\n", helperPath.constData(), std::strerror(errno));
