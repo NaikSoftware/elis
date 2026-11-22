@@ -17,6 +17,7 @@ public:
     bool detected() const { return m_detected; }
     void refresh(); // asks again once the last answer is 5 minutes old
     void found(const QStringList &ids, const QString &path);
+    void probed(const QString &shellOutput); // the login shell's stdout, "" when it failed
 
 Q_SIGNALS:
     void changed();
@@ -25,5 +26,6 @@ private:
     QStringList m_ids{QStringLiteral("terminal")};
     QString m_path;
     bool m_detected = false;
+    bool m_fromShell = false; // the path came from a login shell
     QDateTime m_at;
 };

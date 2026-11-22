@@ -35,7 +35,8 @@ static bool wayland()
 }
 
 WindowLibrary::WindowLibrary(const QString &stateDir)
-    : m_dir(stateDir)
+    : launchers(DetectedLaunchers::instance())
+    , m_dir(stateDir)
 {
     AssistantBridge::open(stateDir); // one chat for the app, every window's
 }
@@ -338,7 +339,7 @@ QList<Assistant::Window> WindowLibrary::assistantWindows() const
 
 QStringList WindowLibrary::assistantProviders() const
 {
-    QStringList out = DetectedLaunchers::instance()->ids();
+    QStringList out = launchers->ids();
     out.removeAll(QStringLiteral("terminal"));
     return out;
 }

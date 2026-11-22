@@ -10,6 +10,7 @@
 
 #include <optional>
 
+class DetectedLaunchers;
 class MainWindow;
 class Store;
 
@@ -49,6 +50,7 @@ public:
     AssistantSink *assistantSink = nullptr; // the provider process assistant.* feeds; null fails its inputs
     QList<Assistant::Window> assistantWindows() const; // the open ones, in library order: it sets the handles
     QStringList assistantProviders() const;            // detected at launch, never probed per request
+    DetectedLaunchers *launchers;                      // the app's, unless a test gives its own before any runner
 
 Q_SIGNALS:
     void changed();

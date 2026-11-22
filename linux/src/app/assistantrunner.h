@@ -19,7 +19,7 @@ class AssistantRunner : public QObject, public AssistantSink
 {
     Q_OBJECT
 public:
-    AssistantRunner(WindowLibrary &library, const QString &stateDir, DetectedLaunchers &launchers);
+    AssistantRunner(WindowLibrary &library, const QString &stateDir); // runs what the library's launchers found
     ~AssistantRunner() override;
     void enqueue(const QString &streamText) override;
     void providerChanged(const QString &provider) override;

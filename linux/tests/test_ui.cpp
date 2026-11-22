@@ -79,8 +79,9 @@ struct AssistantHost {
             launchers.found({"terminal", "claude", "codex"}, path());
         qputenv("ELIS_ASSISTANT_PROVIDER_CMD", standIn);
         lib = std::make_unique<WindowLibrary>(state.path());
+        lib->launchers = &launchers;
         lib->load();
-        runner = std::make_unique<AssistantRunner>(*lib, state.path(), launchers);
+        runner = std::make_unique<AssistantRunner>(*lib, state.path());
         lib->assistantSink = runner.get();
     }
     ~AssistantHost()
@@ -90,12 +91,7 @@ struct AssistantHost {
         qunsetenv("ELIS_ASSISTANT_PROVIDER_CMD");
     }
     QJsonObject ask(const QString &text) { return lib->dispatch({{"cmd", "assistant.ask"}, {"args", QJsonObject{{"text", text}}}}); }
-    // as assistant.provider does it, with codex available whatever this machine has
-    void choose(const QString &provider)
-    {
-        AssistantBridge::run({{"cmd", "assistant.provider"}, {"args", QJsonObject{{"provider", provider}}}}, QJsonValue::Null, QJsonArray{"claude", "codex"});
-        runner->providerChanged(provider);
-    }
+    void choose(const QString &provider) { lib->dispatch({{"cmd", "assistant.provider"}, {"args", QJsonObject{{"provider", provider}}}}); }
     QStringList texts(const QString &kind)
     {
         QStringList out;
@@ -776,6 +772,41 @@ private Q_SLOTS:
         QTRY_COMPARE_WITH_TIMEOUT(host.texts("assistant").size(), 1, 5000);
         QCOMPARE(host.node()["provider"].toString(), QStringLiteral("claude"));
         QVERIFY(!host.running());
+    }
+
+    void assistantStreamProviderGetsTheRecapAfterASwitch()
+    {
+        AssistantHost host("bash " ELIS_TEST_FIXTURES "/fake-provider.sh", "codex");
+        QVERIFY(host.ask("zero")["ok"].toBool());
+        QTRY_COMPARE_WITH_TIMEOUT(host.texts("assistant").size(), 1, 5000);
+        QVERIFY(host.ask("one")["ok"].toBool());
+        host.choose("claude"); // codex has not answered "one" yet
+        QTRY_COMPARE_WITH_TIMEOUT(host.texts("assistant").size(), 2, 5000);
+        QString answer = host.texts("assistant")[1];
+        QVERIFY2(answer.contains("Earlier messages in this chat") && answer.contains("user: zero") && !answer.contains("user: one")
+                     && answer.endsWith("\n\none"),
+                 qPrintable(answer));
+        host.choose("codex"); // idle
+        host.choose("claude");
+        QVERIFY(host.ask("two")["ok"].toBool());
+        QTRY_COMPARE_WITH_TIMEOUT(host.texts("assistant").size(), 3, 5000);
+        answer = host.texts("assistant")[2];
+        QVERIFY2(answer.contains("Earlier messages in this chat") && answer.contains("user: one") && answer.endsWith("\n\ntwo"), qPrintable(answer));
+        QVERIFY(!host.running());
+    }
+
+    void detectedPathHasNoEmptyElementAndSurvivesAFailedProbe()
+    {
+        DetectedLaunchers launchers;
+        launchers.probed({});
+        QVERIFY(launchers.detected());
+        QVERIFY2(!launchers.path().split(QLatin1Char(':')).contains(QString()), qPrintable(launchers.path()));
+        launchers.probed("rc noise\nelis-launcher-path\n\n");
+        QVERIFY2(!launchers.path().split(QLatin1Char(':')).contains(QString()), qPrintable(launchers.path()));
+        launchers.probed("rc noise\nelis-launcher-path\n/login/bin\n");
+        QVERIFY(launchers.path().startsWith("/login/bin:"));
+        launchers.probed({}); // timed out
+        QVERIFY(launchers.path().startsWith("/login/bin:"));
     }
 
     void typedTextGetsItsFinalReturnInItsOwnWrite()

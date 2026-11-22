@@ -24,13 +24,13 @@ static QStringList strings(const QJsonValue &array)
     return out;
 }
 
-AssistantRunner::AssistantRunner(WindowLibrary &library, const QString &stateDir, DetectedLaunchers &launchers)
+AssistantRunner::AssistantRunner(WindowLibrary &library, const QString &stateDir)
     : m_library(library)
     , m_stateDir(stateDir)
-    , m_launchers(launchers)
+    , m_launchers(*library.launchers)
 {
     connect(qApp, &QCoreApplication::aboutToQuit, this, [this] { stop(true); });
-    connect(&launchers, &DetectedLaunchers::changed, this, &AssistantRunner::pump); // inputs wait for the first detection
+    connect(&m_launchers, &DetectedLaunchers::changed, this, &AssistantRunner::pump); // inputs wait for the first detection
     m_watchdog.setSingleShot(true);
     m_watchdog.setInterval(10min);
     connect(&m_watchdog, &QTimer::timeout, this, [this] {
@@ -90,8 +90,7 @@ void AssistantRunner::pump()
 
 bool AssistantRunner::launch()
 {
-    QStringList available = m_launchers.ids();
-    available.removeAll(QStringLiteral("terminal"));
+    const QStringList available = m_library.assistantProviders();
     const QJsonArray providers = QJsonArray::fromStringList(available);
     const QJsonObject saved = AssistantBridge::run({{"cmd", "assistant.provider"}}, QJsonValue::Null, providers);
     QString provider = saved["reply"]["result"]["assistant"]["provider"].toString();
