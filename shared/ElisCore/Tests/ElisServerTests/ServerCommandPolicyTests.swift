@@ -36,6 +36,9 @@ struct ServerCommandPolicyTests {
         "UI-test seam": [.debugAppearance],
         "the Mac's phone relay and the grid it forces": [.sessionGrid, .sessionScroll, .phoneStatus, .phoneEnable, .phonePort, .phoneHost, .phoneRevoke],
         "deferred to docs/backlog/server-user-event-hooks.md": [.hooksList, .hooksReload],
+        "deferred to docs/backlog/assistant-remote-reply-route.md": [
+            .assistantAsk, .assistantSend, .assistantReply, .assistantRead, .assistantProvider, .assistantShow,
+        ],
     ]
 
     @Test func everyCommandIsServedWindowOnlyOrRefusedByDesign() {

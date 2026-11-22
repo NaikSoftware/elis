@@ -1,3 +1,4 @@
+#include "assistant.h"
 #include "ci.h"
 #include "control.h"
 #include "elis_bridge.h"
@@ -21,6 +22,7 @@
 #include <QSqlDatabase>
 #include <QSqlQuery>
 #include <QTest>
+#include <QThread>
 #include <QUuid>
 #include <csignal>
 #include <future>
@@ -29,8 +31,15 @@ class FakeTerminals : public Terminals
 {
 public:
     QString typed, typedPane;
+    QStringList typedTo;
+    QString refuseType; // the session whose typing fails
     QString screen = QStringLiteral("a\nb\nc\n\n");
-    bool type(const QString &, const QString &pane, const QString &text, QString *) override { return typed += text, typedPane = pane, true; }
+    bool type(const QString &id, const QString &pane, const QString &text, QString *error) override
+    {
+        if (id == refuseType)
+            return *error = QStringLiteral("pane gone"), false;
+        return typed += text, typedPane = pane, typedTo << id, true;
+    }
     QString scrollback = QStringLiteral("old\na\nb\nc\n  \n");
     QString lastPane;
     QString text(const QString &, const QString &pane, bool history, QString *) override { return lastPane = pane, history ? scrollback : screen; }
@@ -60,6 +69,14 @@ public:
         *out = {QDir::tempPath(), pane == "right" ? "exec 'top'" : ""};
         return true;
     }
+};
+
+class FakeSink : public AssistantSink
+{
+public:
+    QStringList inputs, providers;
+    void enqueue(const QString &streamText) override { inputs << streamText; }
+    void providerChanged(const QString &provider) override { providers << provider; }
 };
 
 // ControlDispatcherTranscriptTests' fixture: a Claude directory holding projects/-proj/c1.jsonl and a session running
@@ -156,6 +173,7 @@ class TestCore : public QObject
     {
         return dispatch(s, t, {{"cmd", cmd}, {"target", target}, {"args", args}});
     }
+    static QList<Assistant::Window> one(Store &s, FakeTerminals &t) { return {Assistant::Window{"w1", &s, &t}}; }
 
 private Q_SLOTS:
 
@@ -1192,6 +1210,34 @@ private Q_SLOTS:
         QVERIFY(s.selected.isEmpty());
     }
 
+    void anEmptySelectionIsNoSessionSelectedEvent()
+    {
+        Store s;
+        const QString ws = s.addWorkspace("w");
+        const QString a = s.addSession(ws, "a", {}), b = s.addSession(ws, "b", {});
+        s.select(a);
+        EventSource events(s);
+        QSignalSpy spy(&events, &EventSource::event);
+        auto selected = [&] {
+            QList<QJsonObject> out;
+            for (const QList<QVariant> &e : std::as_const(spy))
+                if (e.first().toJsonObject()["kind"].toString() == QLatin1String("session.selected"))
+                    out << e.first().toJsonObject();
+            return out;
+        };
+        s.selected.clear(); // as the Elis chat shows
+        Q_EMIT s.selectionChanged({});
+        QVERIFY(selected().isEmpty());
+        s.select(a);
+        QCOMPARE(selected().size(), 1);
+        QCOMPARE(selected()[0]["session"].toString(), a);
+        QVERIFY(!selected()[0]["payload"].toObject().contains("previous"));
+        s.selected.clear();
+        Q_EMIT s.selectionChanged({});
+        s.select(b);
+        QCOMPARE(selected().last().value("payload")["previous"].toString(), a);
+    }
+
     void eventsReadWalksTheRing()
     {
         Store s;
@@ -1356,6 +1402,351 @@ private Q_SLOTS:
         const QJsonObject gone = call(f.s, f.t, "tree")["result"]["tree"]["workspaces"][0]["sessions"][0].toObject();
         QVERIFY(!gone.contains("agentPane"));
         QCOMPARE(gone["agentSessionId"].toString(), QStringLiteral("c1")); // the id outlives claude
+    }
+
+    // the bridge's main-actor calls hold on the process main thread under the static-stdlib build
+    void assistantAskRoundTripsOnTheMainThread()
+    {
+        QCOMPARE(QThread::currentThread(), qApp->thread());
+        QTemporaryDir dir;
+        AssistantBridge::open(dir.path());
+        const QJsonObject step = AssistantBridge::run({{"cmd", "assistant.ask"}, {"args", QJsonObject{{"text", "hi"}}}}, QJsonArray{},
+                                                      QJsonValue::Null);
+        const QJsonObject entry = step["reply"]["result"]["assistant"]["entries"][0].toObject();
+        QVERIFY(step["reply"]["ok"].toBool());
+        QCOMPARE(entry["kind"].toString(), QStringLiteral("user"));
+        QCOMPARE(step["effects"].toArray(), (QJsonArray{QJsonObject{{"type", "input"}, {"entry", entry}, {"streamText", "hi"}}}));
+        QVERIFY(QFile::exists(dir.filePath("assistant/chat.jsonl")));
+        QCOMPARE(AssistantBridge::run({{"cmd", "tree"}}, QJsonArray{}, QJsonValue::Null).value("reply")["ok"].toBool(), false);
+        QCOMPARE(AssistantBridge::run({{"cmd", "assistant.ask"}}, QJsonValue::Null, QJsonValue::Null).value("reply")["error"].toString(),
+                 QStringLiteral("assistant.ask is not supported on this platform"));
+    }
+
+    static QJsonArray assistantPeers()
+    {
+        auto peer = [](const char *id, const char *name, const char *status) {
+            return QJsonObject{{"sessionID", id},  {"window", "w1"},     {"workspaceID", "ws1"}, {"workspaceName", "elis"},
+                               {"name", name},     {"agent", "claude"},  {"status", status}};
+        };
+        return {peer("a1b2c3d4e5f6", "claude one", "idle"), peer("0123456789ab", "claude two", "idle")};
+    }
+
+    void assistantSendPlansThenFinishesWithOneFailure()
+    {
+        QTemporaryDir dir;
+        AssistantBridge::open(dir.path());
+        const QJsonObject plan = AssistantBridge::run({{"cmd", "assistant.send"}, {"args", QJsonObject{{"text", "run tests"}, {"recipients", QJsonArray{"@all"}}}}},
+                                                      assistantPeers(), QJsonValue::Null)["plan"].toObject();
+        QCOMPARE(plan["targets"].toArray().size(), 2);
+        QCOMPARE(plan["body"].toString(), QStringLiteral("run tests"));
+
+        const QJsonObject step = AssistantBridge::finishSend(plan, {{"a1b2c3d4e5f6", "pane gone"}});
+        const QJsonObject result = step["reply"]["result"]["assistant"].toObject();
+        QCOMPARE(result["deliveredIDs"].toArray(), (QJsonArray{"0123456789ab"}));
+        QCOMPARE(result["skipped"].toArray(), (QJsonArray{QJsonObject{{"handle", "claude-one"}, {"reason", "failed: pane gone"}}}));
+        QCOMPARE(step["effects"][0]["type"].toString(), QStringLiteral("sent"));
+        QCOMPARE(step["effects"][0]["entry"]["to"].toArray(), (QJsonArray{"0123456789ab"}));
+        QCOMPARE(AssistantBridge::finishSend({{"line", 1}}, {}).value("reply")["ok"].toBool(), false);
+        const QJsonObject tree{{"workspaces", QJsonArray{QJsonObject{{"id", "ws1"}, {"sessions", QJsonArray{QJsonObject{{"id", "a1b2c3d4e5f6"}},
+                                                                                                         QJsonObject{{"id", "0123456789ab"}}}}}}}};
+        const QJsonArray sessions = AssistantBridge::stamp(tree, assistantPeers(), QJsonArray{}).value("workspaces")[0]["sessions"].toArray();
+        QCOMPARE(sessions[0]["assistantMark"].toString(), QStringLiteral("not-delivered"));
+        QCOMPARE(sessions[1]["assistantMark"].toString(), QStringLiteral("waiting"));
+    }
+
+    void assistantProviderAndShowEffects()
+    {
+        QTemporaryDir dir;
+        AssistantBridge::open(dir.path());
+        const QJsonObject provider = AssistantBridge::run({{"cmd", "assistant.provider"}, {"args", QJsonObject{{"provider", "claude"}}}},
+                                                          QJsonValue::Null, QJsonArray{"terminal", "claude"});
+        QCOMPARE(provider["effects"].toArray(), (QJsonArray{QJsonObject{{"type", "providerChanged"}, {"provider", "claude"}}}));
+        const QJsonObject show = AssistantBridge::run({{"cmd", "assistant.show"}}, QJsonValue::Null, QJsonValue::Null);
+        QVERIFY(show["reply"]["ok"].toBool());
+        QCOMPARE(show["effects"].toArray(), (QJsonArray{QJsonObject{{"type", "show"}}}));
+    }
+
+    void assistantStampAddsHandlesAndKeepsTheTree()
+    {
+        Store s;
+        FakeTerminals t;
+        const QString w = s.addWorkspace("elis"), a = s.addSession(w, "claude one", {});
+        const QJsonObject tree = call(s, t, "tree")["result"]["tree"].toObject();
+        QTemporaryDir dir;
+        AssistantBridge::open(dir.path());
+        const QJsonArray peers{QJsonObject{{"sessionID", a}, {"window", "w1"}, {"workspaceID", w}, {"workspaceName", "elis"}, {"name", "claude one"}}};
+
+        QJsonObject stamped = AssistantBridge::stamp(tree, peers, QJsonArray{"terminal", "claude"});
+        QCOMPARE(stamped["assistant"].toObject(), (QJsonObject{{"providers", QJsonArray{"claude"}}, {"running", false}, {"unread", 0}}));
+        QJsonObject workspace = stamped["workspaces"][0].toObject();
+        QJsonObject session = workspace["sessions"][0].toObject();
+        QCOMPARE(workspace.take("handle").toString(), QStringLiteral("elis"));
+        QCOMPARE(session.take("handle").toString(), QStringLiteral("claude-one"));
+        workspace["sessions"] = QJsonArray{session};
+        stamped["workspaces"] = QJsonArray{workspace};
+        stamped.remove("assistant");
+        QCOMPARE(stamped, tree);
+        QCOMPARE(AssistantBridge::stamp(tree, QJsonValue::Null, QJsonValue::Null), tree);
+    }
+
+    void assistantDecodesEachProviderFixture_data()
+    {
+        QTest::addColumn<QString>("provider");
+        QTest::addColumn<QStringList>("events");
+        const QStringList once{"conversation", "pong", "end", "ping", "end"}, each{"conversation", "pong", "end", "conversation", "ping", "end"};
+        QTest::newRow("claude") << "claude" << once;
+        QTest::newRow("antigravity") << "antigravity" << once;
+        QTest::newRow("codex") << "codex" << each;
+        QTest::newRow("opencode") << "opencode" << each;
+    }
+
+    void assistantDecodesEachProviderFixture()
+    {
+        QFETCH(QString, provider);
+        QFETCH(QStringList, events);
+        QTemporaryDir dir;
+        AssistantBridge::open(dir.path());
+        QFile f(QDir(ELIS_SOURCE_ASSISTANT_FIXTURES).filePath(provider + ".jsonl"));
+        QVERIFY(f.open(QIODevice::ReadOnly));
+        QStringList seen;
+        QString conversation;
+        for (const QByteArray &line : f.readAll().split('\n'))
+            for (const QJsonValue &e : AssistantBridge::decode(provider, QString::fromUtf8(line)).toArray()) {
+                if (e.toObject().contains("conversation"))
+                    conversation = e["conversation"].toString();
+                seen << (e.toObject().contains("conversation") ? QStringLiteral("conversation")
+                         : e.toObject().contains("turnEnded")  ? QStringLiteral("end")
+                                                               : e["text"].toString());
+                QVERIFY(!e.toObject().contains("error"));
+            }
+        QCOMPARE(seen, events);
+        const QJsonObject launch = AssistantBridge::launch(provider, assistantPeers());
+        if (provider == QLatin1String("claude"))
+            QCOMPARE(launch["argv"].toArray().last().toString(), conversation);
+        if (provider == QLatin1String("codex"))
+            QCOMPARE(AssistantBridge::turnArgv(provider, "hi", assistantPeers()).toVariant().toStringList().mid(2, 2), (QStringList{"resume", "--json"}));
+    }
+
+    void assistantLaunchCarriesThePromptAndStreamFraming()
+    {
+        QTemporaryDir dir;
+        AssistantBridge::open(dir.path());
+        const QJsonObject claude = AssistantBridge::launch("claude", assistantPeers());
+        const QStringList argv = claude["argv"].toVariant().toStringList();
+        QCOMPARE(claude["mode"].toString(), QStringLiteral("stream"));
+        QVERIFY(argv.join(' ').contains("--input-format stream-json"));
+        QVERIFY(argv[argv.indexOf("--append-system-prompt") + 1].contains("claude-one | elis | claude | idle | a1b2c3d4e5f6"));
+        QCOMPARE(AssistantBridge::launch("codex", assistantPeers())["mode"].toString(), QStringLiteral("perInput"));
+        QVERIFY(AssistantBridge::turnArgv("codex", "hi", assistantPeers()).toVariant().toStringList().last().endsWith("\n\nhi"));
+        QCOMPARE(AssistantBridge::turnArgv("claude", "hi", assistantPeers()), QJsonValue(QJsonArray{}));
+        QCOMPARE(AssistantBridge::decode("claude", R"({"type":"result","is_error":true,"errors":["boom"]})"),
+                 QJsonValue(QJsonArray{QJsonObject{{"turnEnded", true}, {"error", "boom"}}}));
+        const QJsonObject line = QJsonDocument::fromJson(AssistantBridge::encode("claude", "a\nb").toUtf8()).object();
+        QCOMPARE(line["message"]["content"][0]["text"].toString(), QStringLiteral("a\nb"));
+    }
+
+    // only JSON null means "cannot list"; anything else that does not decode is refused, never read as absent
+    void assistantRefusesMalformedInput()
+    {
+        QTemporaryDir dir;
+        AssistantBridge::open(dir.path());
+        const QJsonObject ask{{"cmd", "assistant.ask"}, {"args", QJsonObject{{"text", "hi"}}}};
+        auto runError = [&](const QJsonValue &peers, const QJsonValue &providers) {
+            return AssistantBridge::run(ask, peers, providers).value("reply")["error"].toString();
+        };
+        QCOMPARE(runError(QJsonArray{QJsonObject{{"sessionID", "x"}}}, QJsonValue::Null), QStringLiteral("invalid peers"));
+        QCOMPARE(runError(QJsonObject{}, QJsonValue::Null), QStringLiteral("invalid peers"));
+        QCOMPARE(runError(QJsonValue("x"), QJsonValue::Null), QStringLiteral("invalid peers"));
+        QCOMPARE(runError(QJsonArray{}, QJsonValue(true)), QStringLiteral("invalid providers"));
+
+        const QJsonObject plan = AssistantBridge::run({{"cmd", "assistant.send"}, {"args", QJsonObject{{"text", "go"}, {"recipients", QJsonArray{"@all"}}}}},
+                                                      assistantPeers(), QJsonValue::Null)["plan"].toObject();
+        QCOMPARE(AssistantBridge::finishSend(plan, {{"a1b2c3d4e5f6", 1}}).value("reply")["error"].toString(), QStringLiteral("invalid failures"));
+
+        const QJsonObject tree{{"workspaces", QJsonArray{}}};
+        QCOMPARE(AssistantBridge::stamp(tree, QJsonArray{QJsonObject{{"name", "x"}}}, QJsonValue::Null), (QJsonObject{{"error", "invalid peers"}}));
+        QCOMPARE(AssistantBridge::stamp(tree, QJsonArray{}, QJsonValue(1)), (QJsonObject{{"error", "invalid providers"}}));
+
+        const QJsonArray badPeers{QJsonObject{{"sessionID", "x"}}};
+        QCOMPARE(AssistantBridge::launch("claude", badPeers), (QJsonObject{{"error", "invalid peers"}}));
+        QCOMPARE(AssistantBridge::turnArgv("codex", "hi", badPeers), QJsonValue(QJsonObject{{"error", "invalid peers"}}));
+        for (const char *name : {"terminal", "nope"}) {
+            const QJsonObject unknown{{"error", QStringLiteral("unknown provider %1").arg(name)}};
+            QCOMPARE(AssistantBridge::launch(name, {}), unknown);
+            QCOMPARE(AssistantBridge::turnArgv(name, "hi", {}), QJsonValue(unknown));
+            QCOMPARE(AssistantBridge::decode(name, R"({"type":"turn.completed"})"), QJsonValue(unknown));
+            QCOMPARE(AssistantBridge::encode(name, "hi"), QString());
+        }
+    }
+
+    void assistantTurnStateAndEntries()
+    {
+        QTemporaryDir dir;
+        AssistantBridge::open(dir.path());
+        auto running = [] { return AssistantBridge::stamp({{"workspaces", QJsonArray{}}}, QJsonArray{}, QJsonArray{}).value("assistant")["running"].toBool(); };
+        AssistantBridge::run({{"cmd", "assistant.ask"}, {"args", QJsonObject{{"text", "first"}}}}, QJsonArray{}, QJsonValue::Null);
+        QVERIFY(running());
+        AssistantBridge::turnEnded();
+        QVERIFY(!running());
+        QCOMPARE(AssistantBridge::appendAssistant("answer")["kind"].toString(), QStringLiteral("assistant"));
+        AssistantBridge::run({{"cmd", "assistant.ask"}, {"args", QJsonObject{{"text", "second"}}}}, QJsonArray{}, QJsonValue::Null);
+        const QJsonObject failed = AssistantBridge::providerFailed("claude exited");
+        QCOMPARE(failed["kind"].toString(), QStringLiteral("error"));
+        QCOMPARE(failed["text"].toString(), QStringLiteral("claude exited"));
+        QVERIFY(!running());
+        QCOMPARE(AssistantBridge::recap(), QStringLiteral("Earlier messages in this chat, oldest first:\nuser: first\nassistant: answer\n"
+                                                          "user: second\nerror: claude exited"));
+
+        AssistantBridge::run({{"cmd", "assistant.reply"}, {"target", "a1b2c3d4e5f6"}, {"args", QJsonObject{{"text", "done"}}}}, assistantPeers(),
+                             QJsonValue::Null);
+        auto unread = [] { return AssistantBridge::stamp({{"workspaces", QJsonArray{}}}, QJsonArray{}, QJsonArray{}).value("assistant")["unread"].toInt(); };
+        QCOMPARE(unread(), 1);
+        AssistantBridge::markSeen();
+        QCOMPARE(unread(), 0);
+    }
+
+    void assistantAskEmitsAMessageAndFeedsTheSink()
+    {
+        QTemporaryDir dir;
+        AssistantBridge::open(dir.path());
+        Store s;
+        FakeTerminals t;
+        FakeSink sink;
+        const QJsonObject r = Assistant::dispatch({{"cmd", "assistant.ask"}, {"args", QJsonObject{{"text", "hi"}}}}, one(s, t), {}, &sink);
+        QVERIFY(r["ok"].toBool());
+        QCOMPARE(r["result"]["assistant"]["entries"][0]["kind"].toString(), QStringLiteral("user"));
+        QCOMPARE(sink.inputs, QStringList{"hi"});
+        QCOMPARE(t.events.size(), 1);
+        QCOMPARE(t.events[0]["kind"].toString(), QStringLiteral("assistant.message"));
+        QCOMPARE(t.events[0]["payload"].toObject(), (QJsonObject{{"kind", "user"}, {"text", "hi"}}));
+        QVERIFY(Assistant::dispatch({{"cmd", "assistant.ask"}, {"args", QJsonObject{{"text", "no sink"}}}}, one(s, t), {}, nullptr)["ok"].toBool());
+        QCOMPARE(t.events.size(), 3);
+        QCOMPARE(t.events[1].value("payload")["text"].toString(), QStringLiteral("no sink"));
+        QCOMPARE(t.events[2]["payload"].toObject(), (QJsonObject{{"kind", "error"}, {"text", "no assistant provider is running"}}));
+        QVERIFY(!Assistant::stamp(call(s, t, "tree"), one(s, t), {}).value("result")["tree"]["assistant"]["running"].toBool());
+    }
+
+    void assistantSendTypesIntoAgentSessionsOnly()
+    {
+        QTemporaryDir dir;
+        AssistantBridge::open(dir.path());
+        Store s;
+        FakeTerminals t;
+        const QString w = s.addWorkspace("elis");
+        const QString agent = s.addSession(w, "alpha", {}), shell = s.addSession(w, "shell", {}), blocked = s.addSession(w, "beta", {}),
+                      gone = s.addSession(w, "gamma", {}), right = s.addSession(w, "delta", {});
+        for (const QString &id : {agent, blocked, gone})
+            s.setAgent(id, QStringLiteral("claude"));
+        s.setStatus(blocked, "blocked");
+        s.setSplit(right, true, true, "vertical");
+        s.setAgent(right, QStringLiteral("claude"), QStringLiteral("right"));
+        t.refuseType = gone;
+        const QJsonObject r = Assistant::dispatch({{"cmd", "assistant.send"}, {"args", QJsonObject{{"text", "run tests"}, {"recipients", QJsonArray{"@all"}}}}},
+                                                  one(s, t), {}, nullptr);
+        QVERIFY(r["ok"].toBool());
+        QCOMPARE(t.typedTo, (QStringList{agent, right}));
+        QCOMPARE(t.typedPane, QStringLiteral("right"));
+        QVERIFY(t.typed.startsWith("[Elis] run tests") && t.typed.endsWith("\n"));
+        const QJsonObject result = r["result"]["assistant"].toObject();
+        QCOMPARE(result["delivered"].toArray(), (QJsonArray{"alpha", "delta"}));
+        QCOMPARE(result["deliveredIDs"].toArray(), (QJsonArray{agent, right}));
+        QCOMPARE(result["skipped"].toArray(), (QJsonArray{QJsonObject{{"handle", "beta"}, {"reason", "blocked"}},
+                                                          QJsonObject{{"handle", "gamma"}, {"reason", "failed: pane gone"}}}));
+        QCOMPARE(t.events.last()["payload"].toObject(), (QJsonObject{{"kind", "sent"}, {"text", "run tests"}}));
+        QCOMPARE(Assistant::dispatch({{"cmd", "assistant.send"}, {"args", QJsonObject{{"text", "x"}, {"recipients", QJsonArray{"@shell"}}}}}, one(s, t), {},
+                                     nullptr).value("result")["assistant"]["deliveredIDs"],
+                 QJsonValue(QJsonArray{shell})); // an explicit tag reaches a plain shell
+    }
+
+    void assistantReplyComesFromASession()
+    {
+        QTemporaryDir dir;
+        AssistantBridge::open(dir.path());
+        Store s, other;
+        FakeTerminals t, u;
+        const QString a = s.addSession(s.addWorkspace("elis"), "alpha", {});
+        const QString b = other.addSession(other.addWorkspace("docs"), "alpha", {});
+        FakeSink sink;
+        const QList<Assistant::Window> windows{Assistant::Window{"w1", &s, &t}, Assistant::Window{"w2", &other, &u}};
+        const QJsonObject r = Assistant::dispatch({{"cmd", "assistant.reply"}, {"target", b}, {"args", QJsonObject{{"text", "done"}}}}, windows, {}, &sink);
+        QVERIFY(r["ok"].toBool());
+        QCOMPARE(sink.inputs, QStringList{QStringLiteral("[reply from @alpha-2 %1] done").arg(b)});
+        QVERIFY(t.events.isEmpty());
+        QCOMPARE(u.events.size(), 1); // through the window holding the sender
+        QCOMPARE(u.events[0]["session"].toString(), b);
+        QCOMPARE(u.events[0]["payload"].toObject(), (QJsonObject{{"kind", "reply"}, {"from", b}, {"handle", "alpha-2"}, {"text", "done"}}));
+        QCOMPARE(Assistant::dispatch({{"cmd", "assistant.reply"}, {"target", "nope"}, {"args", QJsonObject{{"text", "x"}}}}, windows, {}, &sink)["error"].toString(),
+                 QStringLiteral("assistant.reply: unknown session nope"));
+        Q_UNUSED(a);
+    }
+
+    void assistantProviderAndShowThroughTheHost()
+    {
+        QTemporaryDir dir;
+        AssistantBridge::open(dir.path());
+        Store s;
+        FakeTerminals t;
+        FakeSink sink;
+        const QJsonObject r = Assistant::dispatch({{"cmd", "assistant.provider"}, {"args", QJsonObject{{"provider", "codex"}}}}, one(s, t),
+                                                  {"claude", "codex"}, &sink);
+        QCOMPARE(r["result"]["assistant"]["providers"].toArray(), (QJsonArray{"claude", "codex"}));
+        QCOMPARE(sink.providers, QStringList{"codex"});
+        const QString a = s.addSession(s.addWorkspace("elis"), "alpha", {});
+        Assistant::dispatch({{"cmd", "assistant.reply"}, {"target", a}, {"args", QJsonObject{{"text", "done"}}}}, one(s, t), {}, &sink);
+        auto unread = [&] { return Assistant::stamp(call(s, t, "tree"), one(s, t), {}).value("result")["tree"]["assistant"]["unread"].toInt(); };
+        const QJsonObject refused = Assistant::dispatch({{"cmd", "assistant.show"}, {"args", QJsonObject{{"window", "w9"}}}}, one(s, t), {}, &sink,
+                                                        [](const QString &window) { return QStringLiteral("no such window: ") + window; });
+        QCOMPARE(refused["error"].toString(), QStringLiteral("no such window: w9"));
+        QCOMPARE(unread(), 1);
+        QVERIFY(Assistant::dispatch({{"cmd", "assistant.show"}}, one(s, t), {}, &sink, [](const QString &) { return QString(); })["ok"].toBool());
+        QCOMPARE(unread(), 0);
+    }
+
+    void assistantStampsTheTreeWithAppWideHandles()
+    {
+        QTemporaryDir dir;
+        AssistantBridge::open(dir.path());
+        Store s, other;
+        FakeTerminals t, u;
+        const QString w = s.addWorkspace("Міграція Linux"), a = s.addSession(w, "alpha", {});
+        const QString b = other.addSession(other.addWorkspace("docs"), "alpha", {});
+        const QList<Assistant::Window> windows{Assistant::Window{"w1", &s, &t}, Assistant::Window{"w2", &other, &u}};
+        const QJsonObject tree = Assistant::stamp(call(other, u, "tree"), windows, {"claude"}).value("result")["tree"].toObject();
+        QCOMPARE(tree["workspaces"][0]["handle"].toString(), QStringLiteral("docs"));
+        QCOMPARE(tree["workspaces"][0]["sessions"][0]["id"].toString(), b);
+        QCOMPARE(tree["workspaces"][0]["sessions"][0]["handle"].toString(), QStringLiteral("alpha-2"));
+        QCOMPARE(tree["assistant"].toObject(), (QJsonObject{{"providers", QJsonArray{"claude"}}, {"running", false}, {"unread", 0}}));
+        QVERIFY(tree.contains("sidebarMode"));
+        QCOMPARE(Assistant::stamp(call(s, t, "tree"), windows, {}).value("result")["tree"]["workspaces"][0]["handle"].toString(), QStringLiteral("mihr-linux"));
+        const QJsonObject failed{{"ok", false}, {"error", "x"}};
+        QCOMPARE(Assistant::stamp(failed, windows, {}), failed);
+        const QJsonObject unencodable{{"ok", true}, {"result", QJsonObject{{"tree", QJsonObject{{"bad", QString(QChar(0xD800))}}}}}};
+        QCOMPARE(Assistant::stamp(unencodable, windows, {}), unencodable); // a stamp error keeps the tree
+        Q_UNUSED(a);
+    }
+
+    void typedTextSendsItsFinalReturnApart_data()
+    {
+        QTest::addColumn<QString>("text");
+        QTest::addColumn<QString>("head");
+        QTest::addColumn<bool>("paced");
+        QTest::newRow("line") << "hello\n" << "hello" << true;
+        QTest::newRow("crlf") << "hello\r\n" << "hello" << true;
+        QTest::newRow("cr") << "hello\r" << "hello" << true;
+        QTest::newRow("two lines") << "a\nb\n" << "a\nb" << true;
+        QTest::newRow("blank line kept") << "a\n\n" << "a\n" << true;
+        QTest::newRow("no ending") << "a\nb" << "a\nb" << false;
+        QTest::newRow("returns only") << "\n\n" << "\n\n" << false;
+    }
+
+    void typedTextSendsItsFinalReturnApart()
+    {
+        QFETCH(QString, text);
+        QFETCH(QString, head);
+        QFETCH(bool, paced);
+        QString out;
+        QCOMPARE(Zmx::pacedReturn(text, &out) > 0, paced);
+        QCOMPARE(out, head);
     }
 
     void ciIsReadBackWhileSetAndNoneOutsideGit()

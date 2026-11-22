@@ -1,5 +1,6 @@
 #include "sidebar.h"
 
+#include "assistant.h"
 #include "store.h"
 
 #include <QApplication>
@@ -78,8 +79,8 @@ static int attentionRank(const QString &status)
     return status == QLatin1String("blocked") ? 0 : status == QLatin1String("active") ? 1 : 2;
 }
 
-static const char *sessionsMime = "application/x-elis-sessions";
-static const char *workspaceMime = "application/x-elis-workspace";
+static const char *sessionsMime = SidebarMime::sessions;
+static const char *workspaceMime = SidebarMime::workspace;
 
 namespace {
 QImage tintedSvg(const QString &path, const QColor &color, int px)
@@ -286,6 +287,7 @@ void SidebarDelegate::paint(QPainter *p, const QStyleOptionViewItem &opt, const 
     p->save();
     p->setRenderHint(QPainter::Antialiasing);
     const bool session = index.data(Kind).toInt() == SessionRow;
+    const bool assistant = index.data(Kind).toInt() == AssistantRow;
     const bool flat = m_sidebar->flatList();
     const bool selected = opt.state & QStyle::State_Selected;
     const Sidebar::Edge edge = m_sidebar->groupEdge(index);
@@ -327,16 +329,19 @@ void SidebarDelegate::paint(QPainter *p, const QStyleOptionViewItem &opt, const 
         p->setBrush(faded(tint, 0.09));
         p->drawPath(shape(r, 8));
     }
+    // Elis stands alone at a group card's size, so its edges and the gap under it match the cards below
+    const qreal pad = assistant ? Sidebar::groupPadding : 0;
+    const QRectF fill = r.adjusted(-pad, -pad, pad, pad);
     if (selected) {
         // the group's tint, else the row's own, else the accent; dimmer while the window is in the background
         const QColor c = band.isValid() ? band : tint.isValid() ? tint : pal.color(QPalette::Highlight);
         const bool key = m_sidebar->isActiveWindow();
         p->setPen(QPen(faded(c, key ? 0.55 : 0.35), 1));
         p->setBrush(faded(c, key ? 0.20 : 0.12));
-        p->drawPath(shape(r.adjusted(0.5, 0.5, -0.5, -0.5), 7.5));
+        p->drawPath(shape(fill.adjusted(0.5, 0.5, -0.5, -0.5), assistant ? 10.5 : 7.5));
     } else if (opt.state & QStyle::State_MouseOver) {
         p->setBrush(faded(text, 0.07));
-        p->drawPath(shape(r, 8));
+        p->drawPath(shape(fill, assistant ? 10.5 : 8));
     }
 
     if (session && index.data(Status).toString() == QLatin1String("active")) {
@@ -360,7 +365,13 @@ void SidebarDelegate::paint(QPainter *p, const QStyleOptionViewItem &opt, const 
     const QRect title = m_sidebar->titleRect(index, opt.rect);
     const qreal cy = QRectF(title).center().y();
     QFont font = opt.font;
-    if (!session) {
+    if (assistant) {
+        static const QImage dog = QImage(QStringLiteral(":/elis.png")).scaled(64, 64, Qt::KeepAspectRatio, Qt::SmoothTransformation);
+        p->setRenderHint(QPainter::SmoothPixmapTransform);
+        p->drawImage(QRectF(x - 1, cy - 9, 18, 18), dog);
+        x += 18 + iconGap;
+        font.setWeight(QFont::DemiBold);
+    } else if (!session) {
         QPainterPath chevron;
         if (index.data(Expanded).toBool()) {
             chevron.moveTo(x + 1, cy - 1.8);
@@ -421,7 +432,7 @@ void SidebarDelegate::paint(QPainter *p, const QStyleOptionViewItem &opt, const 
 
     qreal right = r.right() - 8;
     // hover-only: the launcher menu "+" and, left of it, a repeat of the last choice
-    const bool buttons = !session && m_sidebar->hovered() == index && m_sidebar->settings().shows(QStringLiteral("workspaceAddSession"));
+    const bool buttons = !session && !assistant && m_sidebar->hovered() == index && m_sidebar->settings().shows(QStringLiteral("workspaceAddSession"));
     const QRect content = title;
     // a collapsed workspace rolls up its sessions' status and badge, as master does; an open one leaves them to its rows
     if (session || (!buttons && !index.data(Expanded).toBool())) {
@@ -556,6 +567,14 @@ Sidebar::Sidebar(Store &store, QWidget *parent)
     });
 }
 
+void Sidebar::setAssistantSelected(bool on)
+{
+    if (on == m_assistantSelected)
+        return;
+    m_assistantSelected = on;
+    rebuild();
+}
+
 QString Sidebar::lastLauncher() const
 {
     return m_store.settings.lastLauncher;
@@ -570,6 +589,8 @@ Sidebar::Edge Sidebar::groupEdge(const QModelIndex &index) const
 {
     if (flatList() || !index.isValid())
         return NoEdge;
+    if (index.data(Kind).toInt() == AssistantRow)
+        return Single;
     if (index.data(Kind).toInt() == WorkspaceRow)
         return isExpanded(index) && model()->rowCount(index) > 0 ? First : Single;
     return index.row() == model()->rowCount(index.parent()) - 1 ? Last : Middle;
@@ -732,6 +753,18 @@ void Sidebar::rebuild()
             setCurrentItem(item, 0, QItemSelectionModel::NoUpdate);
         item->setSelected(s.id == m_store.selected || keepSelected.contains(s.id));
     };
+    {
+        QTreeWidgetItem *elis = topItem();
+        const QJsonObject node = AssistantBridge::stamp({}, QJsonArray(), QJsonValue::Null).value("assistant").toObject(); // app-wide
+        elis->setText(0, QStringLiteral("Elis"));
+        elis->setData(0, Kind, AssistantRow);
+        elis->setData(0, Unseen, node.value("unread").toInt());
+        elis->setData(0, Status, node.value("running").toBool() ? QStringLiteral("active") : QStringLiteral("idle"));
+        elis->setFlags(Qt::ItemIsEnabled | Qt::ItemIsSelectable);
+        if (m_assistantSelected)
+            setCurrentItem(elis, 0, QItemSelectionModel::NoUpdate);
+        elis->setSelected(m_assistantSelected);
+    }
     for (const auto &w : m_store.workspaces) {
         if (flatList()) {
             for (const auto &s : w.sessions)
@@ -850,10 +883,15 @@ void Sidebar::mousePressEvent(QMouseEvent *event)
 {
     const QPoint pos = event->position().toPoint();
     QTreeWidgetItem *item = itemAt(pos);
-    if (!item && m_store.flaggedView && !topLevelItemCount() && event->button() == Qt::LeftButton)
-        return Q_EMIT editFlaggedRequested();
+    if (!item && m_store.flaggedView && topLevelItemCount() == 1 && event->button() == Qt::LeftButton)
+        return Q_EMIT editFlaggedRequested(); // only the Elis row: the empty flagged view's link
     if (!item)
         return; // a click on empty space would clear the selection; the shown session always stays selected
+    if (item->data(0, Kind).toInt() == AssistantRow) {
+        if (event->button() == Qt::LeftButton)
+            Q_EMIT assistantRequested();
+        return; // no rename, drag or multi-selection
+    }
     if (item && item->data(0, HasCompanions).toBool() && !m_store.flaggedView && event->button() == Qt::LeftButton
         && pos.x() < visualItemRect(item).left() + 34) {
         const QString id = item->data(0, Id).toString(); // the parent's chevron folds its companions
@@ -936,10 +974,9 @@ void Sidebar::mouseDoubleClickEvent(QMouseEvent *event)
     QTreeWidget::mouseDoubleClickEvent(event);
 }
 
-void Sidebar::startDrag(Qt::DropActions)
+QMimeData *Sidebar::dragMime(const QString &pressed) const
 {
     auto *mime = new QMimeData;
-    const QString pressed = std::exchange(m_pressedId, {});
     QTreeWidgetItem *item = pressed.isEmpty() ? currentItem() : nullptr;
     if (item && item->data(0, Kind).toInt() == WorkspaceRow)
         mime->setData(workspaceMime, item->data(0, Id).toString().toUtf8());
@@ -948,7 +985,15 @@ void Sidebar::startDrag(Qt::DropActions)
         mime->setData(sessionsMime, ids.join(QLatin1Char(',')).toUtf8());
         mime->setText(ids.join(QLatin1Char(','))); // dropped on a terminal, types the Elis ids, as on the Mac
     } else
-        return delete mime;
+        return delete mime, nullptr;
+    return mime;
+}
+
+void Sidebar::startDrag(Qt::DropActions)
+{
+    QMimeData *mime = dragMime(std::exchange(m_pressedId, {}));
+    if (!mime)
+        return;
     auto *drag = new QDrag(this);
     drag->setMimeData(mime);
     drag->exec(Qt::MoveAction);
@@ -969,8 +1014,8 @@ Sidebar::Drop Sidebar::dropTarget(const QPoint &pos, bool workspaceDrag) const
         }
         QTreeWidgetItem *top = item->parent() ? item->parent() : item;
         const QRect r = visualItemRect(top);
-        const bool after = item->parent() || pos.y() > r.center().y();
-        d.workspaceIndex = indexOfTopLevelItem(top) + (after ? 1 : 0);
+        const bool after = item->parent() || pos.y() > r.center().y() || top->data(0, Kind).toInt() == AssistantRow; // nothing goes above Elis
+        d.workspaceIndex = indexOfTopLevelItem(top) - 1 + (after ? 1 : 0); // less the Elis row
         const QRect edge = after && top->isExpanded() && top->childCount() ? visualItemRect(top->child(top->childCount() - 1)) : r;
         d.line = QRect(8, after ? edge.bottom() : r.top(), w - 16, 2);
         return d;
@@ -1071,10 +1116,10 @@ void Sidebar::dropEvent(QDropEvent *event)
 void Sidebar::paintEvent(QPaintEvent *event)
 {
     QTreeWidget::paintEvent(event);
-    if (m_store.flaggedView && !topLevelItemCount()) {
+    if (m_store.flaggedView && topLevelItemCount() == 1) { // only the Elis row
         QPainter p(viewport());
         p.setPen(palette().color(QPalette::PlaceholderText));
-        const QRect r = viewport()->rect().adjusted(12, 24, -12, 0);
+        const QRect r = viewport()->rect().adjusted(12, visualItemRect(topLevelItem(0)).bottom() + 24, -12, 0);
         p.drawText(r, Qt::AlignHCenter | Qt::AlignTop, tr("No flagged sessions"));
         p.setPen(palette().color(QPalette::Link));
         p.drawText(r.adjusted(0, fontMetrics().height() + 6, 0, 0), Qt::AlignHCenter | Qt::AlignTop, tr("Edit Flagged Sessions…"));

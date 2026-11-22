@@ -149,6 +149,12 @@ public enum Command: String, Codable, Sendable, CaseIterable {
     case msgSend = "msg.send"
     case msgRead = "msg.read"
     case msgAck = "msg.ack"
+    case assistantAsk = "assistant.ask"
+    case assistantSend = "assistant.send"
+    case assistantReply = "assistant.reply"
+    case assistantRead = "assistant.read"
+    case assistantProvider = "assistant.provider"
+    case assistantShow = "assistant.show"
     case restoreClear = "restore.clear"
     case version = "version"
     case restoreCapture = "restore.capture"
@@ -528,7 +534,8 @@ public struct ControlArgs: Codable, Sendable, Equatable {
     public var value: String?
     /// page is the page id `session.overlay.result` reads the outcome of, instead of a program's exit status.
     public var page: String?
-    /// recipients are the `SESSION:PANE` addresses `msg.send --to` names; the scalar `to` keeps its navigation meaning.
+    /// recipients are the `SESSION:PANE` addresses `msg.send --to` names, or the tags `assistant.send --to` names;
+    /// the scalar `to` keeps its navigation meaning.
     public var recipients: [String]?
     /// identity is the `SESSION:PANE-ID` the caller acts as on `msg.*`.
     public var identity: String?
@@ -548,6 +555,10 @@ public struct ControlArgs: Codable, Sendable, Equatable {
     public var transcript: String?
     /// maxBytes is `session.transcript`'s page budget, clamped to `ClaudeTranscript.pageBudget`.
     public var maxBytes: Int?
+    /// last is how many of the newest entries `assistant.read` returns; nil returns all.
+    public var last: Int?
+    /// provider is the assistant CLI `assistant.provider` selects, a `SessionLauncher` raw value.
+    public var provider: String?
 
     public init(name: String? = nil, cwd: String? = nil, targets: [String]? = nil,
                 workspace: String? = nil, workspaceName: String? = nil,
@@ -583,7 +594,10 @@ public struct ControlArgs: Codable, Sendable, Equatable {
                 placeholder: String? = nil, choices: [ControlAskChoice]? = nil, multiple: Bool? = nil,
                 checked: [String]? = nil, other: String? = nil, undoable: Bool? = nil,
                 tint: String? = nil, tintOn: [String]? = nil, recipients: [String]? = nil,
-                identity: String? = nil, ack: Bool? = nil, ids: [String]? = nil, folder: String? = nil) {
+                identity: String? = nil, ack: Bool? = nil, ids: [String]? = nil, folder: String? = nil,
+                last: Int? = nil, provider: String? = nil) {
+        self.last = last
+        self.provider = provider
         self.name = name
         self.cwd = cwd
         self.targets = targets
@@ -850,6 +864,7 @@ public struct ControlResult: Codable, Sendable, Equatable {
     public var meta: ControlTranscriptMeta?
     public var commands: [ControlTranscriptCommand]?
     public var skipped: Int?
+    public var assistant: ControlAssistantResult?
 
     public init(id: String? = nil, tree: ControlTree? = nil, text: String? = nil,
                 windows: [ControlWindowNode]? = nil, exitCode: Int? = nil, count: Int? = nil,
@@ -871,7 +886,9 @@ public struct ControlResult: Codable, Sendable, Equatable {
                 messageID: String? = nil, delivered: [String]? = nil, rejected: [MessageRejection]? = nil,
                 messages: [BusMessage]? = nil, remaining: Int? = nil, acked: [String]? = nil,
                 remoteGroup: ControlRemoteGroup? = nil, macCatalog: CatalogVersions? = nil, columns: Int? = nil, rows: Int? = nil,
-                lines: Int? = nil, phone: ControlPhoneStatus? = nil, attach: ControlAttach? = nil) {
+                lines: Int? = nil, phone: ControlPhoneStatus? = nil, attach: ControlAttach? = nil,
+                assistant: ControlAssistantResult? = nil) {
+        self.assistant = assistant
         self.attach = attach
         self.macCatalog = macCatalog
         self.phone = phone

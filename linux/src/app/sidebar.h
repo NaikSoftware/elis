@@ -26,7 +26,13 @@ QColor tintColor(const QString &name);
 
 namespace SidebarRole {
 enum { Id = Qt::UserRole, Kind, Status, Blink, Agent, Flagged, Expanded, Unseen, Busy, Companion, HasCompanions, FoldedAttention, TintColor, Focused, WorkspaceLabel, Split, Info };
-enum { WorkspaceRow = 1, SessionRow };
+enum { WorkspaceRow = 1, SessionRow, AssistantRow }; // AssistantRow: the Elis row, pinned first
+}
+
+// what a sidebar drag carries: session ids joined by commas, or one workspace id
+namespace SidebarMime {
+inline constexpr char sessions[] = "application/x-elis-sessions";
+inline constexpr char workspace[] = "application/x-elis-workspace";
 }
 
 class SidebarDelegate : public QStyledItemDelegate
@@ -53,8 +59,12 @@ public:
     bool flaggedView() const;
     bool flatList() const; // the flagged view as one list (flat or plain layout)
     QStringList selectedSessionIds() const;
+    // what a drag of the pressed session row ("" for the current row: a workspace, or the selection) carries; null for none
+    class QMimeData *dragMime(const QString &pressed) const;
     bool editing() const { return state() == EditingState; }
     QString lastLauncher() const;
+    void setAssistantSelected(bool on); // the Elis row stands for the shown chat
+    bool assistantSelected() const { return m_assistantSelected; }
 
     // geometry shared by painting and hit-testing. A row is its workspace group's first, middle or last, and the
     // group's gap and padding sit outside the content at its outer ends (elis's band)
@@ -84,6 +94,7 @@ Q_SIGNALS:
     void renameRequested(const QString &kind, const QString &id, const QString &name);
     void editFlaggedRequested(); // the empty flagged view's link
     void closeRequested(const QString &sessionId);
+    void assistantRequested(); // a click on the Elis row
     void ciPanelRequested(const QString &sessionId, const QPoint &globalPos); // a click on the CI line
 
 protected:
@@ -116,6 +127,7 @@ private:
     QRect m_dropLine;
     Store &m_store;
     bool m_rebuilding = false;
+    bool m_assistantSelected = false;
     QModelIndex m_hovered;
     QString m_pressedId; // a session row pressed but not yet selected: shown on release, or dragged
     bool m_pressedCi = false; // that press was on its CI line: a release opens the CI panel and selects nothing

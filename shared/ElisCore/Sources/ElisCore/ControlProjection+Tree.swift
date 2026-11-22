@@ -1,6 +1,6 @@
 /// The whole workspace tree, the payload of a `tree` response.
 public struct ControlTree: Codable, Sendable, Equatable {
-    public let workspaces: [ControlWorkspaceNode]
+    public var workspaces: [ControlWorkspaceNode]
     /// Milliseconds since the last user input in the projected window; nil/omitted before any activity. A
     /// LIVE, continuously-growing delta — `tree`-only, since the tree is built fresh per request on the main
     /// actor while cache-served `window.list` would freeze it between commands. The auto-follow idle metric.
@@ -104,6 +104,8 @@ public struct ControlTree: Codable, Sendable, Equatable {
     /// snapshotUnsaved is true after this window's AppStore save fails until its next successful save,
     /// omitted otherwise. Per window, unlike `indexUnsaved`.
     public let snapshotUnsaved: Bool?
+    /// assistant is the app-wide assistant chat's state, omitted on a host without one.
+    public var assistant: ControlAssistantNode?
 
     public init(workspaces: [ControlWorkspaceNode], idleMs: Int? = nil, autoFollowMs: Int? = nil,
                 attentionIncludesActive: Bool? = nil, attentionNavigationAcrossWindows: Bool? = nil,
@@ -144,6 +146,20 @@ public struct ControlTree: Codable, Sendable, Equatable {
         self.pickPending = pickPending
         self.askPending = askPending
         self.app = app
+    }
+}
+
+public struct ControlAssistantNode: Codable, Sendable, Equatable {
+    public var provider: String?
+    public var providers: [String]
+    public var running: Bool
+    public var unread: Int
+
+    public init(provider: String?, providers: [String], running: Bool, unread: Int) {
+        self.provider = provider
+        self.providers = providers
+        self.running = running
+        self.unread = unread
     }
 }
 

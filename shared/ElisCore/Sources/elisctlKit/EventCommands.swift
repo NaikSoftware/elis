@@ -120,6 +120,11 @@ enum EventFormatter {
         case .message:
             return "\(time) \(event.kind.rawValue) \(name) pane-id=\(event.payload.paneID ?? "-")"
                 + " from=\(event.payload.from ?? "-") id=\(event.payload.messageID ?? "-")"
+        case .assistantMessage:
+            let kind = event.payload.kind ?? "-"
+            let sender = [event.payload.handle, event.payload.from].compactMap { $0 }.first { !$0.isEmpty } ?? "-"
+            let text = String(AssistantLine.fold(event.payload.text ?? "").prefix(80))
+            return "\(time) \(event.kind.rawValue) kind=\(kind) from=\(sender) \(text)"
         }
     }
 }

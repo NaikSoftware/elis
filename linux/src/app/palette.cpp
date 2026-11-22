@@ -53,7 +53,7 @@ public:
             text.setAlpha(110);
         const QString status = index.data(Status).toString();
         const bool blink = index.data(Blink).toBool();
-        const int alpha = m_palette->blinkAlpha ? m_palette->blinkAlpha() : 255;
+        const int alpha = m_palette && m_palette->blinkAlpha ? m_palette->blinkAlpha() : 255;
         QFont small = opt.font;
         small.setPointSizeF(small.pointSizeF() * 0.85);
         if (index.data(SingleLine).toBool()) {
@@ -63,10 +63,13 @@ public:
             if (const QString icon = index.data(Icon).toString(); !icon.isEmpty()) {
                 QColor ic = text;
                 ic.setAlphaF(text.alphaF() * 0.58);
-                drawLauncher(p, QRectF(x + 2, cy - 7, 14, 14), icon, ic);
+                if (icon.startsWith(QLatin1String("chrome:")))
+                    p->drawPixmap(QRectF(x, cy - 9, 18, 18).toRect(), chromeIcon(icon.mid(7), ic).pixmap(18));
+                else
+                    drawLauncher(p, QRectF(x + 2, cy - 7, 14, 14), icon, ic);
                 x += 28;
             }
-            if (!status.isEmpty() && m_palette->settings) {
+            if (!status.isEmpty() && m_palette && m_palette->settings) {
                 paintStatus(p, *m_palette->settings, status, blink, alpha, QPointF(right - 5, cy));
                 right -= 20;
             }
@@ -90,13 +93,14 @@ public:
             p->setFont(opt.font);
             p->drawText(QRectF(x, r.top(), avail, r.height()), Qt::AlignVCenter | Qt::AlignLeft, shownTitle);
             const QString detail = index.data(Subtitle).toString();
-            const qreal detailRoom = avail - titleW - 10;
+            const qreal column = index.data(TitleColumn).toReal(), detailX = column > 0 ? x + column : x + titleW + 10;
+            const qreal detailRoom = right - detailX;
             if (!detail.isEmpty() && detailRoom > sfm.averageCharWidth() * 2) {
                 QColor dim = text;
                 dim.setAlphaF(text.alphaF() * 0.58);
                 p->setPen(dim);
                 p->setFont(small);
-                p->drawText(QRectF(x + titleW + 10, r.top(), detailRoom, r.height()), Qt::AlignVCenter | Qt::AlignLeft,
+                p->drawText(QRectF(detailX, r.top(), detailRoom, r.height()), Qt::AlignVCenter | Qt::AlignLeft,
                             sfm.elidedText(detail, Qt::ElideMiddle, detailRoom));
             }
             p->restore();
@@ -105,7 +109,7 @@ public:
         QColor dim = text;
         dim.setAlpha(text.alpha() * 150 / 255);
         qreal textWidth = r.width() - 24;
-        if (!status.isEmpty() && m_palette->settings) {
+        if (!status.isEmpty() && m_palette && m_palette->settings) {
             paintStatus(p, *m_palette->settings, status, blink, alpha, QPointF(r.right() - 12, r.center().y()));
             textWidth -= 22;
         }
@@ -186,6 +190,11 @@ Palette::Palette(QWidget *window)
     m_search->installEventFilter(this);
     qApp->installEventFilter(this); // Ctrl release ends the switcher; a click elsewhere dismisses
     hide();
+}
+
+QStyledItemDelegate *Palette::rowDelegate(QObject *parent)
+{
+    return new RowDelegate(nullptr, parent);
 }
 
 bool Palette::fuzzyMatch(const QString &needle, const QString &haystack)

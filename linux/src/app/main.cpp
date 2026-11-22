@@ -1,3 +1,4 @@
+#include "assistantrunner.h"
 #include "control.h"
 #include "help.h"
 #include "hooks.h"
@@ -54,7 +55,7 @@ static void serve(QLocalServer &server, WindowLibrary &library)
                 };
                 const std::function<QJsonObject()> job = takeDeferred();
                 if (!response.value("deferred").toBool() || !job)
-                    return send(socket, response);
+                    return MainWindow::whenTyped(socket, [send, socket, response] { send(socket, response); });
                 QThreadPool::globalInstance()->start([job, send, to = QPointer<QLocalSocket>(socket)] {
                     const QJsonObject reply = job();
                     QMetaObject::invokeMethod(qApp, [send, to, reply] {
@@ -164,6 +165,8 @@ int main(int argc, char **argv)
     Zmx::recordBuild(dir); // before any pane starts a daemon, which would otherwise date before the cutoff
     WindowLibrary library(dir);
     library.load(); // the windows open at the last quit, each with its saved frame
+    AssistantRunner assistant(library, dir);
+    library.assistantSink = &assistant;
     MainWindow &window = *library.active();
     // master's reap: Fresh shells and Re-run launches end every daemon a live run left, a live one those no pane claims
     for (const auto &e : library.entries())

@@ -1,5 +1,7 @@
 #pragma once
 
+#include "assistant.h"
+
 #include <QJsonObject>
 #include <QList>
 #include <QObject>
@@ -8,6 +10,7 @@
 
 #include <optional>
 
+class DetectedLaunchers;
 class MainWindow;
 class Store;
 
@@ -44,6 +47,10 @@ public:
     bool saveIndex();
     // every pane identity of every window, the closed ones read from their files; nullopt when one cannot be read
     std::optional<QStringList> paneIds() const;
+    AssistantSink *assistantSink = nullptr; // the provider process assistant.* feeds; null fails its inputs
+    QList<Assistant::Window> assistantWindows() const; // the open ones, in library order: it sets the handles
+    QStringList assistantProviders() const;            // detected at launch, never probed per request
+    DetectedLaunchers *launchers;                      // the app's, unless a test gives its own before any runner
 
 Q_SIGNALS:
     void changed();

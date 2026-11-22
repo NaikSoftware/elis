@@ -44,14 +44,20 @@ EventSource::EventSource(Store &store, QObject *parent)
         emitEvent(QStringLiteral("session.closed"), m_workspaceOf.value(id), id, {{"name", m_names.value(id)}});
     });
     connect(&store, &Store::selectionChanged, this, [this](const QString &id) {
+        if (id.isEmpty()) { // nothing selected (the Elis chat, or no session left) selects no session: no event
+            if (!m_selected.isEmpty())
+                m_left = std::exchange(m_selected, {});
+            return;
+        }
         if (id == m_selected)
             return;
         const Session *s = m_store.session(id);
         QJsonObject payload;
         if (s)
             payload.insert("name", s->displayName());
-        if (!m_selected.isEmpty())
-            payload.insert("previous", m_selected);
+        const QString previous = m_selected.isEmpty() ? std::exchange(m_left, {}) : m_selected;
+        if (!previous.isEmpty() && previous != id)
+            payload.insert("previous", previous);
         m_selected = id;
         emitEvent(QStringLiteral("session.selected"), s ? m_store.workspaceOf(id)->id : QString(), s ? id : QString(), payload);
     });

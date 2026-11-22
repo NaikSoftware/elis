@@ -2,7 +2,9 @@
 
 #include "hooks.h"
 
+#include "assistant.h"
 #include "control.h"
+#include "detectedlaunchers.h"
 #include "zmx.h"
 #include "mainwindow.h"
 #include "store.h"
@@ -33,8 +35,10 @@ static bool wayland()
 }
 
 WindowLibrary::WindowLibrary(const QString &stateDir)
-    : m_dir(stateDir)
+    : launchers(DetectedLaunchers::instance())
+    , m_dir(stateDir)
 {
+    AssistantBridge::open(stateDir); // one chat for the app, every window's
 }
 
 WindowLibrary::~WindowLibrary()
@@ -324,6 +328,22 @@ bool WindowLibrary::saveIndex()
     return f.commit();
 }
 
+QList<Assistant::Window> WindowLibrary::assistantWindows() const
+{
+    QList<Assistant::Window> out;
+    for (const Entry &e : m_entries)
+        if (e.open && e.window)
+            out << Assistant::Window{e.id, e.store, e.window};
+    return out;
+}
+
+QStringList WindowLibrary::assistantProviders() const
+{
+    QStringList out = launchers->ids();
+    out.removeAll(QStringLiteral("terminal"));
+    return out;
+}
+
 QJsonObject WindowLibrary::dispatch(const QJsonObject &request)
 {
     const QString cmd = request.value("cmd").toString(), target = request.value("target").toString();
@@ -333,6 +353,21 @@ QJsonObject WindowLibrary::dispatch(const QJsonObject &request)
     const QList<MainWindow *> open = openWindows();
     if (open.isEmpty())
         return fail(QStringLiteral("no open window"));
+    const QList<Assistant::Window> everyWindow = assistantWindows();
+    const QStringList providers = assistantProviders();
+    if (cmd == QLatin1String("assistant.provider") && args.contains("provider") && !launchers->detected())
+        return fail(QStringLiteral("agents are still being detected; try again in a moment"));
+    if (cmd.startsWith(QLatin1String("assistant.")))
+        return Assistant::dispatch(request, everyWindow, providers, assistantSink, [this](const QString &window) {
+            QString error;
+            const Entry *e = entry(resolve(window, &error));
+            if (!error.isEmpty())
+                return error;
+            if (!e->open || !e->window)
+                return QStringLiteral("window not open — window.select it first");
+            e->window->showAssistant();
+            return QString();
+        });
     // config the whole app shares, and the app-global restore commands, act on every open window
     static const QStringList everywhere{"keymap.reload", "hooks.reload", "theme.set", "restore.mode", "restore.capture", "restore.clear"};
     if (everywhere.contains(cmd)) {
@@ -393,7 +428,8 @@ QJsonObject WindowLibrary::dispatch(const QJsonObject &request)
             }
         }
     }
-    return ::dispatch(*e->store, *e->window, request);
+    const QJsonObject reply = ::dispatch(*e->store, *e->window, request);
+    return cmd == QLatin1String("tree") ? Assistant::stamp(reply, everyWindow, providers) : reply; // handles are app-wide
 }
 
 QJsonObject WindowLibrary::windowCommand(const QString &cmd, const QString &target, const QJsonObject &args)

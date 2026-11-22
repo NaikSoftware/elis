@@ -1,5 +1,6 @@
 #pragma once
 
+#include "assistant.h"
 #include "control.h"
 #include "keymap.h"
 
@@ -42,6 +43,8 @@ public:
     QString windowId;
 
     bool type(const QString &sessionId, const QString &pane, const QString &text, QString *error) override;
+    // runs then once no plain pane has a paced Return still to send, so a control reply follows the Return as zmx's does
+    static void whenTyped(QObject *context, const std::function<void()> &then);
     QString text(const QString &sessionId, const QString &pane, bool scrollback, QString *error) override;
     QSize gridSize(const QString &sessionId, const QString &pane) override;
     bool setGrid(const QString &sessionId, const QString &pane, const QSize &grid, QString *error) override;
@@ -58,7 +61,7 @@ public:
     bool isOwnShortcut(QKeyEvent *event) const;
     void paneTitle(const QString &id, QObject *part, const QString &title); // an OSC 0/2 title, or the caption
     void setSocketStatus(bool ok, const QString &error);
-    QStringList availableLaunchers() const { return m_launchers; }
+    QStringList availableLaunchers() const; // the app-wide DetectedLaunchers
     bool filePanel(const QString &mode, int width, QString *error) override;
     QJsonObject chromeState() const override;
     QJsonObject sessionExtras(const QString &sessionId) const override;
@@ -90,6 +93,14 @@ public:
     void editFocusedWorkspaces();
     qint64 autoFollowMs() const; // 0 = disabled
     QString autoFollowTick(qint64 idleMs); // selects the oldest blocked session not yet shown once idle long enough; its id
+    // the Elis row: its chat replaces the shown session, which leaves no session selected until one is picked
+    void showAssistant();
+    bool assistantShown() const { return m_assistantShown; }
+    QList<Assistant::Window> assistantWindows() const; // the library's, else this window alone
+    QStringList assistantProviders() const;
+    class DetectedLaunchers *assistantLaunchers() const; // the library's, whose detection the provider list waits for
+    QJsonObject assistantRequest(const QJsonObject &request); // an assistant.* request, as the control socket sends it
+    void goToSession(const QString &id);                      // in whichever window holds it, raised
 
 protected:
     void closeEvent(QCloseEvent *event) override;
@@ -98,6 +109,9 @@ protected:
     bool eventFilter(QObject *watched, QEvent *event) override;
 
 private:
+    void writeTyped(KParts::ReadOnlyPart *part, const QString &text);
+    QHash<QObject *, QStringList> m_typed; // a plain pane with a paced Return pending -> the texts typed behind it, in order
+    static inline int s_returnsPending = 0;
     QAction *action(const QString &name, const QString &text, const QString &icon, const QKeySequence &key, std::function<void()> slot);
     void createMenus();
     void createTerminal(const QString &id);
@@ -229,7 +243,6 @@ private:
     QHash<QString, QAction *> m_chrome; // interface element -> its title-strip action
     QHash<QString, QWidget *> m_footer; // interface element -> its footer button
     void sampleAgents();
-    void detectLaunchers();
     TerminalInterface *terminal(const QString &id) const;
     QString liveCwd(const QString &id) const;
     void prime(QWidget *page, QWidget *pane = nullptr); // pane: mark that one terminal as sized, not the whole page
@@ -249,6 +262,8 @@ private:
     QLabel *m_title;
     QStackedWidget *m_stack;
     QWidget *m_empty;
+    class AssistantView *m_assistantView;
+    bool m_assistantShown = false;
     QWidget *m_wash; // a TintWash over the terminal
     QHash<QString, QAction *> m_actions;
     struct Panes {
@@ -269,10 +284,8 @@ private:
     bool m_zoomRestoreSidebar = true, m_zoomRestoreMenu = true;
     bool m_dashHidFiles = false; // the dashboard hid the file panel and gives it back on close
     QHash<QString, QPointer<QObject>> m_sessions;
-    QStringList m_launchers{QStringLiteral("terminal")};
     QStringList m_denylist; // restore-denylist.conf, read at launch
     void replay(const QString &id, KParts::ReadOnlyPart *part, bool split);
-    QDateTime m_launchersAt;
     QTimer m_saveTimer, m_agentTimer;
     bool m_quitting = false;
 };

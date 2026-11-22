@@ -470,7 +470,7 @@ const QStringList &eventKinds()
 {
     static const QStringList kinds{"status",       "notify",      "session.created", "session.closed", "session.selected", "tree.changed",
                                    "pane.split",   "pane.scratch", "pane.focused",   "remote.opened",  "remote.closed",    "app.launched", "message",
-                                   "phone.connected", "phone.disconnected", "phone.refused",
+                                   "assistant.message", "phone.connected", "phone.disconnected", "phone.refused",
                                    "phone.attached", "phone.detached", "phone.claimed", "phone.released"};
     return kinds;
 }

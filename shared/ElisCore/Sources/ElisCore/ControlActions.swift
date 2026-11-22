@@ -341,4 +341,15 @@ public protocol ControlActions {
     func messagePanes(workspace: String?, window: String?) -> Result<[MessageRecipient], MessagePaneError>
     /// messageQueued reports a queued message so each recipient's store emits its `message` event.
     func messageQueued(_ messageID: UUID, from: String?, to recipients: [MessageRecipient])
+    /// assistantPeers lists the sessions the assistant can tag; nil on a host without the assistant.
+    func assistantPeers() -> [AssistantPeer]?
+    /// assistantInput writes `streamText` (for stored `entry`) into the assistant's stream, already counted by `chat.inputQueued()`;
+    /// the host calls `chat.turnEnded()` per finished turn and `chat.providerFailed` when no provider can run or it dies.
+    func assistantInput(_ entry: AssistantEntry, streamText: String)
+    /// assistantSent reports the `sent` entry `assistant.send` appended, so the host can emit it.
+    func assistantSent(_ entry: AssistantEntry)
+    /// assistantProviders lists the assistant CLIs installed here; nil on a host without the assistant.
+    func assistantProviders() -> [SessionLauncher]?
+    func assistantProviderChanged(_ provider: SessionLauncher)
+    func showAssistant(window: String?) -> ControlResponse
 }

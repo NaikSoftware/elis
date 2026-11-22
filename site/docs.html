@@ -212,6 +212,7 @@
             <a href="#workspaces" style="color: #bfbab0; padding: 7px 12px; border-radius: 7px" class="hv9"
               >Workspaces &amp; sessions</a
             >
+            <a href="#assistant" style="color: #bfbab0; padding: 7px 12px; border-radius: 7px" class="hv9">Elis assistant</a>
             <a href="#terminals" style="color: #bfbab0; padding: 7px 12px; border-radius: 7px" class="hv9">Terminals</a>
             <a href="#navigation" style="color: #bfbab0; padding: 7px 12px; border-radius: 7px" class="hv9">Navigation</a>
             <a href="#windows" style="color: #bfbab0; padding: 7px 12px; border-radius: 7px" class="hv9">Windows</a>
@@ -573,6 +574,34 @@ elisctl session overlay open --html report.html --page</code></pre>
 <li>Creating a workspace while the filter is on adds it to the set. Selecting a session outside the set suspends the filter rather than discarding it.</li>
 <li>The set is per window and remembered across restarts.</li>
 </ul>
+</section>
+
+          <!-- ELIS ASSISTANT -->
+          <section id="assistant" class="doc-v2" style="scroll-margin-top: 88px; padding-top: 56px">
+<h2>Elis assistant</h2>
+<p><strong>Elis</strong> is a system chat pinned above the workspaces in the sidebar, shown with the dog icon, the name <strong>Elis</strong> and an unread count of replies from other sessions. It lets you talk to your sessions from one thread and manages them through <code>elisctl</code>. Available in the Linux app now; the macOS app gets it later.</p>
+<p>Open the chat by clicking the row or with <strong>Navigate ▸ Show Elis</strong> (bindable as <code>show_assistant</code>). Opening it leaves the session you were in, so no session shortcut reaches a session hidden behind the chat; one tap of the session switcher (<kbd>Ctrl</kbd>+<kbd>Tab</kbd>) takes you back to it.</p>
+<h3 id="assistant-providers">Choosing an agent</h3>
+<p>Every message goes through the agent you pick by name in the composer's provider panel: Claude Code, Codex, Antigravity or OpenCode, whichever are installed. The choice applies from the next message.</p>
+<p>Elis keeps one conversation across your messages. Replies from other sessions reach it in the order they arrive, each after the turn it is busy with.</p>
+<p><strong>Note:</strong> Providers run in their full-auto permission mode so no confirmation prompt stalls the chat.</p>
+<h3 id="assistant-tags">Tagging sessions</h3>
+<p>Address sessions or workspaces in the message box with tags: <code>@handle</code> (a short Latin handle derived for each session and shown in <code>tree</code>), <code>@ws:&lt;workspace&gt;</code>, <code>@all</code>, or an exact session id.</p>
+<ul>
+<li>Type <code>@</code> for completion, or drag a session row or workspace header from the sidebar onto the message box.</li>
+<li>Group tags (<code>@ws:&lt;workspace&gt;</code> and <code>@all</code>) reach only sessions running an agent.</li>
+<li>Sessions waiting for approval (status <code>blocked</code>) are never typed into.</li>
+</ul>
+<h3 id="assistant-replies">Delivery and replies</h3>
+<p>Messages to sessions are typed into them at once as a single line ending with <code>elisctl reply "…"</code>. Nothing is queued. Inside a session, an agent answers with <code>elisctl reply TEXT</code> or <code>--stdin</code> (using <code>ELIS_SESSION_ID</code>), and each answer appears in the chat as a card with a <strong>Go to session</strong> link.</p>
+<h3 id="assistant-cli">Driving Elis from scripts</h3>
+<pre class="bash"><code>elisctl assistant ask &quot;check why the tests failed&quot; --wait --timeout 60
+elisctl assistant send --to @claude-1 &quot;run the tests&quot;
+elisctl assistant read --last 10
+elisctl assistant provider
+elisctl assistant show
+elisctl reply &quot;all tests pass&quot;</code></pre>
+<p><code>tree --json</code> reports top-level <code>assistant</code> (<code>provider</code>, <code>providers</code>, <code>running</code>, <code>unread</code>), <code>handle</code> on every workspace and session, <code>assistantMark</code> on sessions (<code>waiting</code>, <code>replied</code> or <code>not-delivered</code> for the current exchange), and <code>assistantShown</code> when the chat is open; <code>events</code> emits <code>assistant.message</code>. Details: <a href="commands.html#assistant">command reference</a>.</p>
 </section>
 
           <!-- TERMINALS -->

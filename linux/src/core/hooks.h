@@ -34,6 +34,7 @@ private:
     QHash<QString, QString> m_status, m_workspaceOf, m_names;
     QHash<QString, bool> m_splitShown;
     QString m_selected;
+    QString m_left; // the session an empty selection (the Elis chat) replaced: the next pick's previous
     QTimer m_treeTimer; // tree.changed coalesces over 100 ms, as master
 };
 

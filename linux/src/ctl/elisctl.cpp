@@ -4,15 +4,18 @@
 #include <QCoreApplication>
 #include <QDateTime>
 #include <QDir>
+#include <QElapsedTimer>
 #include <QFile>
 #include <QFileInfo>
 #include <QJsonArray>
 #include <QJsonDocument>
 #include <QJsonObject>
 #include <QLocalSocket>
+#include <QLocale>
 #include <QSet>
 #include <QThread>
 #include <cerrno>
+#include <cmath>
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
@@ -98,6 +101,12 @@ static const char *usage = R"(usage: elisctl <command> [args] [--target T] [--so
   msg send <text>|--stdin (--to SESSION:PANE... | --all [--workspace W]) [--as SESSION:PANE-ID]
   msg read [--ack] [--wait [--timeout S]] [--as SESSION:PANE-ID]   identity defaults to $ELIS_SESSION_ID:$ELIS_PANE_ID
   msg ack <id>... [--as SESSION:PANE-ID]
+  assistant ask <text> [--wait [--timeout N]]
+  assistant send --to TAG... <text>|--stdin
+  assistant read [--last N]
+  assistant provider [NAME]
+  assistant show [--window W]
+  reply <text>|--stdin                   reply to the assistant from inside an Elis session ($ELIS_SESSION_ID)
   keymap reload | list                  re-read keymap.conf; show what each built-in and custom command is bound to
   keymap run <name>                     start a custom command for the target session
   hooks reload | list                   re-read hooks.conf; show each hook's live state
@@ -185,6 +194,261 @@ static int awaitOutcome(const QString &path, const QString &kind, const QString 
     }
 }
 
+static QString foldLine(const QString &text)
+{
+    QString out;
+    bool pendingSpace = false;
+    for (const QChar ch : text) {
+        if (ch.isSpace() || ch.category() == QChar::Other_Control) {
+            pendingSpace = true;
+        } else {
+            if (pendingSpace && !out.isEmpty())
+                out.append(QLatin1Char(' '));
+            pendingSpace = false;
+            out.append(ch);
+        }
+    }
+    return out;
+}
+
+static QString formatAssistantEntry(const QJsonObject &entry)
+{
+    const QDateTime dt = QDateTime::fromMSecsSinceEpoch(qint64(entry.value("ts").toDouble() * 1000));
+    const QString time = QLocale::c().toString(dt, QStringLiteral("HH:mm"));
+    const QString from = entry.value("from").toString();
+    const QString sender = from.isEmpty() ? QString() : QStringLiteral(" @") + from;
+    return QStringLiteral("%1 %2%3: %4").arg(time, entry.value("kind").toString(), sender, entry.value("text").toString());
+}
+
+static QString readStdinUtf8(QString *error)
+{
+    QFile f;
+    if (!f.open(stdin, QIODevice::ReadOnly))
+        return *error = QStringLiteral("cannot read stdin"), QString();
+    const QByteArray raw = f.readAll();
+    const QString text = QString::fromUtf8(raw);
+    if (text.toUtf8() != raw)
+        return *error = QStringLiteral("stdin must be valid UTF-8"), QString();
+    return text;
+}
+
+static QString canonicalSocket(const QString &p)
+{
+    const QFileInfo fi(QFileInfo(p).absoluteFilePath());
+    const QString dir = fi.dir().canonicalPath();
+    return (dir.isEmpty() ? fi.absolutePath() : dir) + QLatin1Char('/') + fi.fileName();
+}
+
+static int emitAssistantReply(const QByteArray &line, const QJsonObject &response, bool json)
+{
+    const bool ok = response.value("ok").toBool();
+    if (json) {
+        fputs(line.constData(), stdout);
+        if (!line.endsWith('\n'))
+            putchar('\n');
+        return ok ? 0 : 1;
+    }
+    if (!ok)
+        return die(response.value("error").toString());
+    return -1;
+}
+
+static int runAssistant(const QString &cmd, const QStringList &pos, const QHash<QString, QString> &opt, const QHash<QString, QStringList> &multi)
+{
+    const QString path = opt.value(QStringLiteral("socket"), socketPath());
+    const bool json = opt.contains(QStringLiteral("json"));
+    QString error;
+
+    if (cmd == QLatin1String("assistant.ask")) {
+        if (pos.isEmpty())
+            return die(QStringLiteral("provide message text"));
+        const bool wait = opt.contains(QStringLiteral("wait"));
+        const bool hasTimeout = opt.contains(QStringLiteral("timeout"));
+        double timeoutSec = 0;
+        if (hasTimeout) {
+            if (!wait)
+                return die(QStringLiteral("--timeout needs --wait"));
+            bool ok = false;
+            timeoutSec = opt.value(QStringLiteral("timeout")).toDouble(&ok);
+            if (!ok || !std::isfinite(timeoutSec) || timeoutSec <= 0)
+                return die(QStringLiteral("--timeout must be a positive number of seconds"));
+        }
+        const QByteArray line = roundTrip(path, {{"cmd", "assistant.ask"}, {"args", QJsonObject{{"text", pos.first()}}}}, &error);
+        if (line.isEmpty())
+            return die(error);
+        const QJsonObject posted = QJsonDocument::fromJson(line).object();
+        if (!posted.value("ok").toBool() || !wait) {
+            if (const int rc = emitAssistantReply(line, posted, json); rc >= 0)
+                return rc;
+            return puts("ok"), 0;
+        }
+        const QString postedId = posted["result"]["assistant"]["entries"].toArray().first().toObject().value("id").toString();
+        QElapsedTimer timer;
+        timer.start();
+        const qint64 timeoutMs = hasTimeout ? qMax<qint64>(1, qRound64(timeoutSec * 1000.0)) : -1;
+        for (int pendingPolls = 0;;) {
+            if (timeoutMs >= 0 && timer.elapsed() >= timeoutMs)
+                return fputs("timed out\n", stderr), 124;
+            const QByteArray treeLine = roundTrip(path, {{"cmd", "tree"}}, &error);
+            if (treeLine.isEmpty())
+                return die(error);
+            const QJsonObject treeResp = QJsonDocument::fromJson(treeLine).object();
+            if (!treeResp.value("ok").toBool())
+                return emitAssistantReply(treeLine, treeResp, json);
+            if (!treeResp["result"]["tree"]["assistant"]["running"].toBool())
+                break;
+            ++pendingPolls;
+            const qint64 delayMs = pendingPolls <= 10 ? 100 : 500;
+            if (timeoutMs >= 0) {
+                const qint64 left = timeoutMs - timer.elapsed();
+                if (left <= 0)
+                    return fputs("timed out\n", stderr), 124;
+                QThread::msleep(qMin(delayMs, left));
+            } else {
+                QThread::msleep(delayMs);
+            }
+        }
+        const QByteArray readLine = roundTrip(path, {{"cmd", "assistant.read"}}, &error);
+        if (readLine.isEmpty())
+            return die(error);
+        const QJsonObject readResp = QJsonDocument::fromJson(readLine).object();
+        if (const int rc = emitAssistantReply(readLine, readResp, json); rc >= 0)
+            return rc;
+        if (postedId.isEmpty())
+            return puts("ok"), 0;
+        const QJsonArray all = readResp["result"]["assistant"]["entries"].toArray();
+        qsizetype start = 0;
+        for (qsizetype i = all.size() - 1; i >= 0; --i)
+            if (all[i].toObject().value("id").toString() == postedId) {
+                start = i + 1;
+                break;
+            }
+        if (start >= all.size())
+            return puts("ok"), 0;
+        for (qsizetype i = start; i < all.size(); ++i)
+            printf("%s\n", qPrintable(formatAssistantEntry(all[i].toObject())));
+        return 0;
+    }
+
+    if (cmd == QLatin1String("assistant.send")) {
+        const QStringList recipients = multi.value(QStringLiteral("to"));
+        if (recipients.isEmpty())
+            return die(QStringLiteral("provide at least one --to tag"));
+        const bool hasStdin = opt.contains(QStringLiteral("stdin"));
+        if (pos.isEmpty() == !hasStdin)
+            return die(QStringLiteral("provide the message as TEXT or --stdin, exactly one"));
+        const QString body = hasStdin ? readStdinUtf8(&error) : pos.first();
+        if (hasStdin && !error.isEmpty())
+            return die(error);
+        const QJsonObject req{{"cmd", "assistant.send"}, {"args", QJsonObject{{"text", body}, {"recipients", QJsonArray::fromStringList(recipients)}}}};
+        const QByteArray line = roundTrip(path, req, &error);
+        if (line.isEmpty())
+            return die(error);
+        const QJsonObject resp = QJsonDocument::fromJson(line).object();
+        const QJsonObject a = resp["result"]["assistant"].toObject();
+        const QJsonArray deliveredArr = a["delivered"].toArray();
+        if (json) {
+            fputs(line.constData(), stdout);
+            if (!line.endsWith('\n'))
+                putchar('\n');
+            return (!resp.value("ok").toBool() || deliveredArr.isEmpty()) ? 1 : 0;
+        }
+        if (!resp.value("ok").toBool())
+            return die(resp.value("error").toString());
+        for (const auto &v : a["skipped"].toArray()) {
+            const QJsonObject s = v.toObject();
+            fprintf(stderr, "skipped %s: %s\n", qPrintable(s["handle"].toString()), qPrintable(s["reason"].toString()));
+        }
+        if (deliveredArr.isEmpty())
+            return fputs("nothing was delivered\n", stderr), 1;
+        QStringList delivered;
+        for (const auto &v : deliveredArr)
+            delivered << v.toString();
+        return printf("delivered: %s\n", qPrintable(delivered.join(QStringLiteral(", ")))), 0;
+    }
+
+    if (cmd == QLatin1String("assistant.read")) {
+        QJsonObject args;
+        if (opt.contains(QStringLiteral("last"))) {
+            bool ok = false;
+            const int last = opt.value(QStringLiteral("last")).toInt(&ok);
+            if (!ok || last < 1)
+                return die(QStringLiteral("--last must be a positive integer"));
+            args.insert("last", last);
+        }
+        const QJsonObject req = args.isEmpty() ? QJsonObject{{"cmd", "assistant.read"}} : QJsonObject{{"cmd", "assistant.read"}, {"args", args}};
+        const QByteArray line = roundTrip(path, req, &error);
+        if (line.isEmpty())
+            return die(error);
+        const QJsonObject resp = QJsonDocument::fromJson(line).object();
+        if (const int rc = emitAssistantReply(line, resp, json); rc >= 0)
+            return rc;
+        for (const auto &v : resp["result"]["assistant"]["entries"].toArray())
+            printf("%s\n", qPrintable(formatAssistantEntry(v.toObject())));
+        return 0;
+    }
+
+    if (cmd == QLatin1String("assistant.provider")) {
+        QJsonObject args;
+        if (!pos.isEmpty())
+            args.insert("provider", pos.first());
+        const QJsonObject req = args.isEmpty() ? QJsonObject{{"cmd", "assistant.provider"}} : QJsonObject{{"cmd", "assistant.provider"}, {"args", args}};
+        const QByteArray line = roundTrip(path, req, &error);
+        if (line.isEmpty())
+            return die(error);
+        const QJsonObject resp = QJsonDocument::fromJson(line).object();
+        if (const int rc = emitAssistantReply(line, resp, json); rc >= 0)
+            return rc;
+        const QJsonObject a = resp["result"]["assistant"].toObject();
+        const QString current = a["provider"].toString();
+        printf("current: %s\n", qPrintable(current.isEmpty() ? QStringLiteral("none") : current));
+        QStringList providers;
+        for (const auto &v : a["providers"].toArray())
+            providers << v.toString();
+        if (!providers.isEmpty())
+            printf("available: %s\n", qPrintable(providers.join(QStringLiteral(", "))));
+        return 0;
+    }
+
+    if (cmd == QLatin1String("assistant.show")) {
+        QJsonObject args;
+        if (opt.contains(QStringLiteral("window")))
+            args.insert("window", opt.value(QStringLiteral("window")));
+        const QJsonObject req = args.isEmpty() ? QJsonObject{{"cmd", "assistant.show"}} : QJsonObject{{"cmd", "assistant.show"}, {"args", args}};
+        const QByteArray line = roundTrip(path, req, &error);
+        if (line.isEmpty())
+            return die(error);
+        const QJsonObject resp = QJsonDocument::fromJson(line).object();
+        if (const int rc = emitAssistantReply(line, resp, json); rc >= 0)
+            return rc;
+        return puts("ok"), 0;
+    }
+
+    if (cmd == QLatin1String("assistant.reply")) {
+        const bool hasStdin = opt.contains(QStringLiteral("stdin"));
+        if (pos.isEmpty() == !hasStdin)
+            return die(QStringLiteral("provide the reply as TEXT or --stdin, exactly one"));
+        QString session = qEnvironmentVariable("ELIS_SESSION_ID");
+        const QString paneSocket = qEnvironmentVariable("ELIS_SOCKET");
+        if (!paneSocket.isEmpty() && canonicalSocket(paneSocket) != canonicalSocket(path))
+            session.clear();
+        if (session.isEmpty())
+            return fputs("elisctl reply runs inside an Elis session\n", stderr), 1;
+        const QString body = hasStdin ? readStdinUtf8(&error) : pos.first();
+        if (hasStdin && !error.isEmpty())
+            return die(error);
+        const QByteArray line = roundTrip(path, {{"cmd", "assistant.reply"}, {"target", session}, {"args", QJsonObject{{"text", body}}}}, &error);
+        if (line.isEmpty())
+            return die(error);
+        const QJsonObject resp = QJsonDocument::fromJson(line).object();
+        if (const int rc = emitAssistantReply(line, resp, json); rc >= 0)
+            return rc;
+        return puts("ok"), 0;
+    }
+
+    return die(QStringLiteral("unknown assistant command '%1'").arg(cmd));
+}
+
 static QString eventLine(const QJsonObject &e)
 {
     const QJsonObject p = e.value("payload").toObject();
@@ -192,6 +456,13 @@ static QString eventLine(const QJsonObject &e)
     QString line = QDateTime::fromMSecsSinceEpoch(qint64(e.value("ts").toDouble() * 1000)).toString(QStringLiteral("HH:mm:ss ")) + kind;
     if (kind == QLatin1String("app.launched"))
         return line;
+    if (kind == QLatin1String("assistant.message")) {
+        const QString msgKind = p.value("kind").toString();
+        const QString handle = p.value("handle").toString();
+        const QString from = p.value("from").toString();
+        const QString sender = !handle.isEmpty() ? handle : !from.isEmpty() ? from : QStringLiteral("-");
+        return line + QStringLiteral(" kind=%1 from=%2 %3").arg(msgKind.isEmpty() ? QStringLiteral("-") : msgKind, sender, foldLine(p.value("text").toString()).left(80));
+    }
     if (kind.startsWith(QLatin1String("phone."))) { // app-wide: no window or session to name
         line += QStringLiteral(" ip=") + p.value("ip").toString(QStringLiteral("-"));
         return QStringList{"phone.connected", "phone.disconnected", "phone.refused"}.contains(kind)
@@ -325,10 +596,16 @@ int main(int argc, char **argv)
         return fputs(usage, stderr), 1;
 
     QString cmd = pos.takeFirst();
-    if (QStringList{"workspace", "session", "recent", "font", "keymap", "hooks", "theme", "restore", "window", "surface", "config", "msg", "zmx", "browser", "quick"}
-            .contains(cmd)
-        && !pos.isEmpty())
+    if (cmd == QLatin1String("reply"))
+        cmd = QStringLiteral("assistant.reply");
+    else if (QStringList{"workspace", "session", "recent", "font", "keymap", "hooks", "theme", "restore", "window", "surface", "config", "msg", "assistant", "zmx", "browser", "quick"}
+                 .contains(cmd)
+             && !pos.isEmpty())
         cmd += QLatin1Char('.') + pos.takeFirst();
+    if (cmd == QLatin1String("assistant"))
+        return die(QStringLiteral("missing assistant subcommand"));
+    if (cmd.startsWith(QLatin1String("assistant.")))
+        return runAssistant(cmd, pos, opt, multi);
     // a verb whose bare form is a command of its own takes only its known subcommands
     static const QHash<QString, QStringList> subs{{"pick", {"open", "result", "cancel"}}, {"ask", {"open", "result", "cancel"}},
                                                    {"sidebar", {"mode", "flagged-layout", "density", "expand", "collapse", "width"}}};

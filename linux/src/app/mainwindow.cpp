@@ -1,4 +1,6 @@
 #include "mainwindow.h"
+#include "assistantview.h"
+#include "detectedlaunchers.h"
 
 #include "cipanel.h"
 #include "filepanel.h"
@@ -165,7 +167,8 @@ protected:
         const qreal used = fixed + wsW + nameW + (ctx.isEmpty() ? 0 : gap + fm.horizontalAdvance(ctx));
         qreal x = pad + (room - used) / 2;
         const qreal cy = height() / 2.0;
-        p.drawPixmap(QRectF(x, cy - logo / 2, logo, logo).toRect(), launcherIcon(m_agent, faded(0.7)).pixmap(int(logo)));
+        const QIcon icon = m_agent == QLatin1String("elis") ? QIcon(QStringLiteral(":/elis.png")) : launcherIcon(m_agent, faded(0.7)); // elis: the chat
+        p.drawPixmap(QRectF(x, cy - logo / 2, logo, logo).toRect(), icon.pixmap(int(logo)));
         x += logo + gap;
         auto text = [&](const QString &t, const QFont &f, const QColor &c) {
             p.setFont(f);
@@ -348,7 +351,7 @@ MainWindow::MainWindow(Store &store, const QString &statePath)
 
     m_sidebarPanel = new QWidget;
     auto *side = new QVBoxLayout(m_sidebarPanel);
-    side->setContentsMargins(0, 6, 0, 0);
+    side->setContentsMargins(0, 0, 0, 0); // flush with the content beside it, or its top edge steps
     side->setSpacing(0);
     side->addWidget(m_tree, 1);
     auto *hairline = new QFrame; // elis's footer rule: the text colour at 10%
@@ -365,6 +368,9 @@ MainWindow::MainWindow(Store &store, const QString &statePath)
     m_stack = new QStackedWidget;
     m_empty = new QWidget;
     m_stack->addWidget(m_empty);
+    m_assistantView = new AssistantView(*this, store);
+    m_stack->addWidget(m_assistantView);
+    connect(m_assistantView, &AssistantView::changed, m_tree, &Sidebar::rebuild);
     m_wash = new TintWash(m_stack);
 
     m_split = new QSplitter;
@@ -518,6 +524,7 @@ MainWindow::MainWindow(Store &store, const QString &statePath)
         if (item && item->data(0, SidebarRole::Kind).toInt() == SidebarRole::SessionRow)
             m_store.select(item->data(0, SidebarRole::Id).toString());
     });
+    connect(m_tree, &Sidebar::assistantRequested, this, &MainWindow::showAssistant);
     connect(m_tree, &QTreeWidget::customContextMenuRequested, this, &MainWindow::sidebarMenu);
     connect(m_tree, &Sidebar::launcherMenuRequested, this, &MainWindow::launcherMenu);
     connect(m_tree, &Sidebar::repeatRequested, this, [this](const QString &ws) { launch(m_store.settings.lastLauncher, ws); });
@@ -567,7 +574,7 @@ MainWindow::MainWindow(Store &store, const QString &statePath)
         m_defaultKeys.insert(it.key(), keys);
     }
     qApp->installEventFilter(this);
-    detectLaunchers();
+    DetectedLaunchers::instance()->refresh();
     applySettings();
 }
 
@@ -790,6 +797,7 @@ void MainWindow::createMenus()
         }
         return items;
     };
+    nav->addAction(action(QStringLiteral("show_assistant"), tr("Show Elis"), QStringLiteral("elis"), {}, [this] { showAssistant(); }));
     nav->addAction(action(QStringLiteral("session_palette"), tr("Go to Session…"), QStringLiteral("search"), QKeySequence(QStringLiteral("Ctrl+P")),
                           [this, sessionRow] {
                               // elis's switcher: Needs you across open windows, then Recent, then Recently closed
@@ -883,12 +891,14 @@ void MainWindow::createMenus()
     nav->addAction(action(QStringLiteral("custom_command_palette"), tr("Custom Commands…"), QStringLiteral("system-run"), QKeySequence(QStringLiteral("Ctrl+Alt+O")),
                           [this] { customCommandPalette(); }));
     nav->addAction(action(QStringLiteral("mru_switcher"), tr("Switch to Recent Session"), {}, QKeySequence(QStringLiteral("Ctrl+Tab")), [this, sessionItems] {
-        m_palette->switching() ? m_palette->step(1) : m_palette->open({}, sessionItems(true), true);
+        // the switcher's first row is the shown session, so a tap flips to the next; with none shown (the Elis chat) the
+        // first row is the session it replaced, and a tap returns there
+        m_palette->switching() ? m_palette->step(1) : m_palette->open({}, sessionItems(true), true, {}, m_store.selected.isEmpty() ? 0 : -1);
     }));
     nav->addAction(action(QStringLiteral("mru_switcher_back"), tr("Switch to Recent Session (Reverse)"), {}, QKeySequence(QStringLiteral("Ctrl+Shift+Backtab")),
                           [this, sessionItems] {
                               if (!m_palette->switching())
-                                  m_palette->open({}, sessionItems(true), true);
+                                  m_palette->open({}, sessionItems(true), true, {}, m_store.selected.isEmpty() ? 0 : -1);
                               m_palette->step(-1);
                           }));
     nav->addAction(action(QStringLiteral("dashboard"), tr("Dashboard"), QStringLiteral("view-grid"), QKeySequence(QStringLiteral("Ctrl+Alt+Shift+G")),
@@ -1357,9 +1367,9 @@ bool MainWindow::saveNow(QString *error)
 
 void MainWindow::swapPanes(const QString &id)
 {
+    if (!m_panes.value(id).right)
+        return; // and no empty entry for "" (nothing selected), whose null view prime() would read
     Panes &p = m_panes[id];
-    if (!p.right)
-        return;
     p.split->insertWidget(0, p.right->widget()); // physical positions and the primary role move together
     std::swap(p.main, p.right);
     if (Session *s = m_store.session(id)) { // each pane keeps its identity, and so its daemon, in its new role
@@ -1423,6 +1433,8 @@ QJsonObject MainWindow::chromeState() const
                     {"idleMs", m_idle.elapsed()}};
     if (const qint64 follow = autoFollowMs())
         out.insert("autoFollowMs", follow);
+    if (m_assistantShown)
+        out.insert("assistantShown", true);
     for (const QJsonObject &extra : {dashboardState(), controlChrome()})
         for (auto it = extra.begin(); it != extra.end(); ++it)
             out.insert(it.key(), it.value());
@@ -1526,12 +1538,53 @@ bool MainWindow::type(const QString &sessionId, const QString &pane, const QStri
     if (const QString zmx = part->property("elisZmx").toString(); !zmx.isEmpty() && !Zmx::lead(zmx).role.isEmpty()) {
         if (!Zmx::type(stateDir(), zmx, text, error))
             return false;
+    } else if (auto queued = m_typed.find(part); queued != m_typed.end()) {
+        queued->append(text); // behind the Return still to come
     } else {
-        t->sendInput(text);
+        writeTyped(part, text);
     }
     if (text.contains(QLatin1Char('\n')) || text.contains(QLatin1Char('\r')))
         m_store.keyPressed(sessionId, Store::Key::Submit); // injected text carrying a newline is a submit
     return true;
+}
+
+// Konsole's pty queues writes until the event loop runs, so a sleep between head and Return would still send one burst:
+// the gap is a timer started once the head has had a turn to reach the pty, and the pane's later texts wait behind it
+void MainWindow::writeTyped(KParts::ReadOnlyPart *part, const QString &text)
+{
+    QString head;
+    const int gap = Zmx::pacedReturn(text, &head);
+    qobject_cast<TerminalInterface *>(part)->sendInput(head);
+    if (gap <= 0)
+        return;
+    m_typed.insert(part, {});
+    ++s_returnsPending;
+    QObject *key = part;
+    QTimer::singleShot(0, qApp, [self = QPointer(this), pane = QPointer(part), key, gap] {
+        QTimer::singleShot(gap, qApp, [self, pane, key] {
+            --s_returnsPending; // also for a pane or window gone meanwhile, or every later reply would wait forever
+            if (!self)
+                return;
+            QStringList waiting = self->m_typed.take(key);
+            if (!pane)
+                return;
+            qobject_cast<TerminalInterface *>(pane.data())->sendInput(QStringLiteral("\r"));
+            while (!waiting.isEmpty()) {
+                self->writeTyped(pane, waiting.takeFirst());
+                if (self->m_typed.contains(key)) {
+                    self->m_typed[key] = waiting;
+                    break;
+                }
+            }
+        });
+    });
+}
+
+void MainWindow::whenTyped(QObject *context, const std::function<void()> &then)
+{
+    if (s_returnsPending == 0)
+        return then();
+    QTimer::singleShot(1, context, [context, then] { whenTyped(context, then); });
 }
 
 QJsonObject MainWindow::info(const QString &sessionId)
@@ -1551,6 +1604,28 @@ QJsonObject MainWindow::info(const QString &sessionId)
 
 void MainWindow::showSelected()
 {
+    if (!m_store.selected.isEmpty())
+        m_assistantShown = false; // a picked session leaves the chat
+    m_tree->setAssistantSelected(m_assistantShown);
+    if (m_assistantShown) {
+        if (m_dashboard)
+            return refreshDashboard(); // a grid opened over the chat stays until it closes, then the chat shows
+        const bool entering = m_stack->currentWidget() != m_assistantView;
+        m_stack->setCurrentWidget(m_assistantView);
+        static_cast<TintWash *>(m_wash)->setColor({});
+        if (entering)
+            AssistantView::refreshAll(); // not on showEvent: a window being destroyed shows the page while its stack empties
+        if (entering && !m_tree->editing())
+            m_assistantView->focusComposer(); // a background window gives it the keys when next activated
+        m_shownId.clear(); // the session picked next takes the focus back
+        m_title->setText(QStringLiteral("Elis"));
+        m_context->clear();
+        m_workspaceLabel->clear();
+        static_cast<SessionPill *>(m_pill)->set(QStringLiteral("elis"), {}, QStringLiteral("Elis"), {},
+                                                m_actions.value(QStringLiteral("session_palette"))->shortcut().toString(QKeySequence::NativeText));
+        setWindowTitle(QStringLiteral("Elis"));
+        return;
+    }
     if (m_dashboard) { // a status repaint keeps the grid; picking another session leaves it
         if (m_store.selected == m_shownId)
             return refreshDashboard();
@@ -1588,6 +1663,57 @@ void MainWindow::showSelected()
     setWindowTitle(name);
 }
 
+void MainWindow::showAssistant()
+{
+    if (m_dashboard)
+        closeDashboard(); // the chat replaces the grid as it replaces a session
+    if (!m_assistantShown) {
+        m_assistantShown = true;
+        if (m_store.selected.isEmpty()) {
+            showSelected();
+        } else {
+            m_store.selected.clear(); // nothing session-scoped may act on the session hidden behind the chat
+            Q_EMIT m_store.selectionChanged({});
+            Q_EMIT m_store.changed();
+        }
+    }
+    AssistantBridge::markSeen();
+    AssistantView::refreshAll();
+}
+
+QList<Assistant::Window> MainWindow::assistantWindows() const
+{
+    return library ? library->assistantWindows() : QList<Assistant::Window>{{windowId, &m_store, const_cast<MainWindow *>(this)}};
+}
+
+QStringList MainWindow::assistantProviders() const
+{
+    return library ? library->assistantProviders() : QStringList();
+}
+
+DetectedLaunchers *MainWindow::assistantLaunchers() const
+{
+    return library ? library->launchers : DetectedLaunchers::instance();
+}
+
+QJsonObject MainWindow::assistantRequest(const QJsonObject &request)
+{
+    if (library)
+        return library->dispatch(request);
+    return Assistant::dispatch(request, assistantWindows(), {}, nullptr, [this](const QString &) { return showAssistant(), QString(); });
+}
+
+void MainWindow::goToSession(const QString &id)
+{
+    for (const Assistant::Window &w : assistantWindows())
+        if (w.store->session(id)) {
+            if (auto *window = static_cast<MainWindow *>(w.terminals); window != this && library)
+                library->select(window->windowId);
+            w.store->select(id);
+            return;
+        }
+}
+
 QString MainWindow::currentWorkspace()
 {
     QString error;
@@ -1616,40 +1742,20 @@ void MainWindow::launch(const QString &launcherId, const QString &workspaceId)
     }
 }
 
+QStringList MainWindow::availableLaunchers() const
+{
+    return DetectedLaunchers::instance()->ids();
+}
+
 void MainWindow::launcherMenu(const QString &workspaceId, const QPoint &globalPos)
 {
-    detectLaunchers();
+    DetectedLaunchers::instance()->refresh();
     QMenu menu;
     const QColor ink = palette().color(QPalette::WindowText);
-    for (const QString &id : std::as_const(m_launchers))
+    for (const QString &id : availableLaunchers())
         if (const Launcher *l = launcher(id))
             menu.addAction(launcherIcon(id, ink), l->title, this, [this, id, workspaceId] { launch(id, workspaceId); });
     menu.exec(globalPos);
-}
-
-void MainWindow::detectLaunchers()
-{
-    // agents install into directories only the user's shell startup adds to PATH, so ask a login shell
-    if (m_launchersAt.isValid() && m_launchersAt.secsTo(QDateTime::currentDateTime()) < 300)
-        return;
-    m_launchersAt = QDateTime::currentDateTime();
-    auto *proc = new QProcess(this);
-    const QString marker = QStringLiteral("elis-launcher-path");
-    QProcessEnvironment env = QProcessEnvironment::systemEnvironment();
-    env.remove(QStringLiteral("ELIS_SESSION_ID"));
-    proc->setProcessEnvironment(env);
-    proc->setStandardInputFile(QProcess::nullDevice());
-    connect(proc, &QProcess::finished, this, [this, proc, marker] {
-        const QString out = QString::fromUtf8(proc->readAllStandardOutput());
-        const int at = out.lastIndexOf(marker + QLatin1Char('\n'));
-        const QString shellPath = at < 0 ? QString() : out.mid(at + marker.size() + 1).trimmed();
-        const QString path = QStringList{shellPath, qEnvironmentVariable("PATH"), QDir::homePath() + QStringLiteral("/.local/bin")}.join(QLatin1Char(':'));
-        m_launchers = ::availableLaunchers(path, [](const QString &f) { return QFileInfo(f).isExecutable() && QFileInfo(f).isFile(); });
-        proc->deleteLater();
-    });
-    QTimer::singleShot(3000, proc, [proc] { proc->kill(); });
-    proc->start(qEnvironmentVariable("SHELL", QStringLiteral("/bin/bash")),
-                {QStringLiteral("-l"), QStringLiteral("-i"), QStringLiteral("-c"), QStringLiteral("printf '\\n%s\\n' %1; printenv PATH").arg(marker)});
 }
 
 void MainWindow::sampleAgents()
@@ -1895,6 +2001,8 @@ void MainWindow::sidebarMenu(const QPoint &pos)
 {
     QMenu menu;
     QTreeWidgetItem *item = m_tree->itemAt(pos);
+    if (item && item->data(0, SidebarRole::Kind).toInt() == SidebarRole::AssistantRow)
+        return; // the Elis row is not renamed, moved or closed
     if (!item) {
         menu.addAction(QIcon::fromTheme(QStringLiteral("list-add")), tr("New Workspace…"), this, &MainWindow::newWorkspace);
         menu.exec(m_tree->viewport()->mapToGlobal(pos));
@@ -2080,7 +2188,7 @@ bool MainWindow::eventFilter(QObject *watched, QEvent *event)
     if (event->type() == QEvent::KeyPress && !m_quitting) {
         auto *w = qobject_cast<QWidget *>(watched);
         auto *key = static_cast<QKeyEvent *>(event);
-        if (w && m_stack->isAncestorOf(w) && !isOwnShortcut(key) && !key->isAutoRepeat()) {
+        if (w && m_stack->isAncestorOf(w) && !m_assistantView->isAncestorOf(w) && !isOwnShortcut(key) && !key->isAutoRepeat()) {
             const bool interrupt = key->key() == Qt::Key_Escape || (key->key() == Qt::Key_C && key->modifiers() == Qt::ControlModifier);
             const bool submit = (key->key() == Qt::Key_Return || key->key() == Qt::Key_Enter) && !(key->modifiers() & ~Qt::KeypadModifier);
             m_store.keyPressed(m_store.selected, interrupt ? Store::Key::Interrupt : submit ? Store::Key::Submit : Store::Key::Plain);

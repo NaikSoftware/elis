@@ -1,4 +1,6 @@
 #include "mainwindow.h"
+#include "assistantrunner.h"
+#include "detectedlaunchers.h"
 #include "cipanel.h"
 #include "help.h"
 #include "hooks.h"
@@ -27,6 +29,8 @@
 #include <QSet>
 #include <algorithm>
 #include <numeric>
+#include <memory>
+#include <signal.h>
 #include <QPointer>
 #include <QTemporaryDir>
 #include <QToolButton>
@@ -46,6 +50,13 @@
 #include "elis_bridge.h"
 #include "zmx.h"
 #include "konsoleprivate.h"
+#include "assistantview.h"
+#include <QAbstractItemView>
+#include <QCompleter>
+#include <QDragEnterEvent>
+#include <QMimeData>
+#include <QPlainTextEdit>
+#include <QStackedWidget>
 
 namespace Konsole
 {
@@ -60,6 +71,62 @@ protected:
     void wheelEvent(QWheelEvent *e) override { deltas << e->angleDelta().y(); }
 };
 }
+
+// a library whose chat chose `choice` ("" for none), run by `standIn` in place of its binary; `detected` agents are
+// found on a PATH that leads with a directory of its own
+struct AssistantHost {
+    QTemporaryDir state;
+    DetectedLaunchers launchers;
+    std::unique_ptr<WindowLibrary> lib;
+    std::unique_ptr<AssistantRunner> runner;
+    static QString path() { return QStringLiteral("/nonexistent-detected:") + qEnvironmentVariable("PATH"); }
+    // resume: the stored conversation ids, as <state>/assistant/chat.jsonl.resume holds them
+    explicit AssistantHost(const QByteArray &standIn, const QByteArray &choice = "claude", bool detected = true, const QByteArray &resume = {})
+    {
+        QDir().mkpath(state.filePath("assistant"));
+        if (!resume.isEmpty()) {
+            QFile file(state.filePath("assistant/chat.jsonl.resume"));
+            if (file.open(QIODevice::WriteOnly))
+                file.write(resume);
+        }
+        if (!choice.isEmpty()) {
+            QFile file(state.filePath("assistant/chat.jsonl.provider"));
+            if (file.open(QIODevice::WriteOnly))
+                file.write(choice);
+        }
+        if (detected)
+            launchers.found({"terminal", "claude", "codex"}, path());
+        qputenv("ELIS_ASSISTANT_PROVIDER_CMD", standIn);
+        lib = std::make_unique<WindowLibrary>(state.path());
+        lib->launchers = &launchers;
+        lib->load();
+        runner = std::make_unique<AssistantRunner>(*lib, state.path());
+        lib->assistantSink = runner.get();
+    }
+    ~AssistantHost()
+    {
+        lib->assistantSink = nullptr;
+        runner.reset();
+        qunsetenv("ELIS_ASSISTANT_PROVIDER_CMD");
+    }
+    QJsonObject ask(const QString &text) { return lib->dispatch({{"cmd", "assistant.ask"}, {"args", QJsonObject{{"text", text}}}}); }
+    void choose(const QString &provider) { lib->dispatch({{"cmd", "assistant.provider"}, {"args", QJsonObject{{"provider", provider}}}}); }
+    QStringList texts(const QString &kind)
+    {
+        QStringList out;
+        const QJsonObject read = lib->dispatch({{"cmd", "assistant.read"}});
+        for (const QJsonValue &e : read["result"]["assistant"]["entries"].toArray())
+            if (e["kind"].toString() == kind)
+                out << e["text"].toString();
+        return out;
+    }
+    QJsonObject node()
+    {
+        const QJsonObject tree = lib->dispatch({{"cmd", "tree"}});
+        return tree["result"]["tree"]["assistant"].toObject();
+    }
+    bool running() { return node()["running"].toBool(); }
+};
 
 class TestUi : public QObject
 {
@@ -647,6 +714,552 @@ private Q_SLOTS:
         QCOMPARE(error, QStringLiteral("cannot delete last window"));
     }
 
+    void assistantCommandsReachEveryWindowAndStampTheTree()
+    {
+        QTemporaryDir state;
+        WindowLibrary lib(state.path());
+        lib.load();
+        lib.newWindow("second");
+        MainWindow *w2 = lib.entries()[1].window;
+        Store *s2 = lib.entries()[1].store;
+        w2->activateWindow();
+        QVERIFY(QTest::qWaitForWindowActive(w2));
+        const QString target = s2->allSessions().first()->id;
+        s2->setAgent(target, QStringLiteral("claude"));
+        const QJsonObject tree = lib.dispatch({{"cmd", "tree"}}).value("result")["tree"].toObject();
+        QVERIFY(tree["assistant"].toObject().contains("providers"));
+        QCOMPARE(tree["workspaces"][0]["sessions"][0]["id"].toString(), target);
+        QVERIFY(!tree["workspaces"][0]["sessions"][0]["handle"].toString().isEmpty());
+        const QJsonObject r = lib.dispatch({{"cmd", "assistant.send"}, {"args", QJsonObject{{"text", "hi there"}, {"recipients", QJsonArray{"@all"}}}}});
+        QCOMPARE(r["result"]["assistant"]["deliveredIDs"].toArray(), QJsonArray{target});
+    }
+
+    void elisRowIsFirstInEveryMode()
+    {
+        Store store;
+        const QString a = store.addWorkspace("alpha"), b = store.addWorkspace("beta");
+        const QString a1 = store.addSession(a, "a1", {});
+        store.addSession(b, "b1", {});
+        Sidebar tree(store);
+        auto first = [&] { return tree.topLevelItem(0)->data(0, SidebarRole::Kind).toInt(); };
+        tree.rebuild();
+        QCOMPARE(first(), int(SidebarRole::AssistantRow));
+        QVERIFY(!(tree.topLevelItem(0)->flags() & (Qt::ItemIsEditable | Qt::ItemIsDragEnabled | Qt::ItemIsDropEnabled)));
+        store.focusWorkspace(b, "add");
+        store.setFilter(true);
+        tree.rebuild();
+        QCOMPARE(tree.topLevelItemCount(), 2);
+        QCOMPARE(first(), int(SidebarRole::AssistantRow));
+        store.setFilter(false);
+        tree.setFlaggedView(true);
+        QCOMPARE(tree.topLevelItemCount(), 1); // nothing flagged: only Elis
+        store.setFlag(a1, true);
+        tree.rebuild();
+        QCOMPARE(first(), int(SidebarRole::AssistantRow));
+        QCOMPARE(tree.topLevelItem(1)->data(0, SidebarRole::Id).toString(), a1);
+        Settings s = store.settings;
+        s.flaggedViewLayout = "tree";
+        store.setSettings(s);
+        tree.rebuild();
+        QCOMPARE(first(), int(SidebarRole::AssistantRow));
+        QCOMPARE(tree.topLevelItem(1)->data(0, SidebarRole::Id).toString(), a);
+    }
+
+    void selectingElisShowsTheChatAndKeysReachTheComposer()
+    {
+        Store store;
+        MainWindow w(store, dir.filePath("elis-select.json"));
+        w.restore({});
+        const QString ws = store.addWorkspace("w");
+        const QString a = store.addSession(ws, "a", {});
+        store.select(a);
+        w.show();
+        w.activateWindow();
+        QVERIFY(QTest::qWaitForWindowActive(&w));
+        auto *tree = w.findChild<Sidebar *>();
+        auto *view = w.findChild<AssistantView *>();
+        auto *stack = w.findChild<QStackedWidget *>();
+        QTest::mouseClick(tree->viewport(), Qt::LeftButton, {}, tree->visualItemRect(tree->topLevelItem(0)).center());
+        QVERIFY(w.assistantShown());
+        QCOMPARE(stack->currentWidget(), view);
+        QVERIFY(store.selected.isEmpty()); // no session behind the chat for a shortcut to reach
+        QVERIFY(tree->topLevelItem(0)->isSelected());
+        QVERIFY(w.chromeState()["assistantShown"].toBool());
+        auto *composer = view->findChild<QPlainTextEdit *>("assistantComposer");
+        QTRY_COMPARE(QApplication::focusWidget(), composer);
+        QTest::keyClicks(QApplication::focusWidget(), "hello");
+        QCOMPARE(composer->toPlainText(), QStringLiteral("hello"));
+        w.namedAction("close_session")->trigger();
+        QVERIFY(store.session(a));
+        store.select(a); // the session it left: a pick leaves the chat
+        QVERIFY(!w.assistantShown());
+        QVERIFY(stack->currentWidget() != view);
+        QVERIFY(!w.chromeState().contains("assistantShown"));
+    }
+
+    void aReplyRaisesTheUnreadBadgeAndShowClearsIt()
+    {
+        QTemporaryDir state;
+        WindowLibrary lib(state.path());
+        lib.load();
+        MainWindow *w = lib.entries()[0].window;
+        Store *s = lib.entries()[0].store;
+        w->show();
+        w->activateWindow();
+        QVERIFY(QTest::qWaitForWindowActive(w));
+        auto *tree = w->findChild<Sidebar *>();
+        const QString id = s->allSessions().first()->id;
+        auto unread = [&] { return tree->topLevelItem(0)->data(0, SidebarRole::Unseen).toInt(); };
+        QVERIFY(lib.dispatch({{"cmd", "assistant.reply"}, {"target", id}, {"args", QJsonObject{{"text", "done"}}}})["ok"].toBool());
+        QTRY_COMPARE(unread(), 1);
+        const QJsonObject refused = lib.dispatch({{"cmd", "assistant.show"}, {"args", QJsonObject{{"window", "nope"}}}});
+        QCOMPARE(refused["error"].toString(), QStringLiteral("no such window: nope"));
+        QVERIFY(!w->assistantShown());
+        QCOMPARE(unread(), 1);
+        QVERIFY(lib.dispatch({{"cmd", "assistant.show"}})["ok"].toBool());
+        QVERIFY(w->assistantShown());
+        QVERIFY(s->selected.isEmpty());
+        QTRY_COMPARE(unread(), 0);
+        QVERIFY(lib.dispatch({{"cmd", "tree"}}).value("result")["tree"]["assistantShown"].toBool());
+        QVERIFY(lib.dispatch({{"cmd", "assistant.reply"}, {"target", id}, {"args", QJsonObject{{"text", "again"}}}})["ok"].toBool());
+        QTest::qWait(100);
+        QCOMPARE(unread(), 0); // a reply arriving on the shown chat is already seen
+        const QString second = lib.newWindow("second");
+        lib.close(second);
+        QTRY_VERIFY(!lib.entries()[1].open);
+        const QJsonObject closed = lib.dispatch({{"cmd", "assistant.show"}, {"args", QJsonObject{{"window", second}}}});
+        QCOMPARE(closed["error"].toString(), QStringLiteral("window not open — window.select it first"));
+    }
+
+    void aReplyBehindAnotherWindowStaysUnreadUntilTheChatIsInFront()
+    {
+        QTemporaryDir state;
+        WindowLibrary lib(state.path());
+        lib.load();
+        MainWindow *w = lib.entries()[0].window;
+        const QString id = lib.entries()[0].store->allSessions().first()->id;
+        w->show();
+        QWidget other;
+        other.show();
+        other.activateWindow();
+        QVERIFY(QTest::qWaitForWindowActive(&other));
+        QVERIFY(lib.dispatch({{"cmd", "assistant.show"}, {"args", QJsonObject{{"window", w->windowId}}}})["ok"].toBool());
+        QVERIFY(w->assistantShown());
+        auto *tree = w->findChild<Sidebar *>();
+        auto unread = [&] { return tree->topLevelItem(0)->data(0, SidebarRole::Unseen).toInt(); };
+        QVERIFY(lib.dispatch({{"cmd", "assistant.reply"}, {"target", id}, {"args", QJsonObject{{"text", "done"}}}})["ok"].toBool());
+        QTRY_COMPARE(unread(), 1);
+        QTest::qWait(100);
+        QCOMPARE(unread(), 1); // shown behind another window is not seen
+        w->activateWindow();
+        QVERIFY(QTest::qWaitForWindowActive(w));
+        QTRY_COMPARE(unread(), 0);
+        QCOMPARE(QApplication::focusWidget(), w->findChild<QPlainTextEdit *>("assistantComposer")); // .show in the background
+    }
+
+    void ctrlTabFromTheChatReturnsToTheSessionItReplaced()
+    {
+        Store store;
+        MainWindow w(store, dir.filePath("elis-mru.json"));
+        w.restore({});
+        const QString ws = store.addWorkspace("w");
+        const QString a = store.addSession(ws, "a", {}), b = store.addSession(ws, "b", {});
+        store.select(b);
+        store.select(a);
+        w.show();
+        w.activateWindow();
+        QVERIFY(QTest::qWaitForWindowActive(&w));
+        w.showAssistant();
+        w.namedAction("mru_switcher")->trigger();
+        QKeyEvent release(QEvent::KeyRelease, Qt::Key_Control, Qt::NoModifier);
+        QApplication::sendEvent(QApplication::focusWidget() ? QApplication::focusWidget() : &w, &release);
+        QCOMPARE(store.selected, a);
+        QVERIFY(!w.assistantShown());
+    }
+
+    void providerPickerClickWhileOpenClosesIt()
+    {
+        DetectedLaunchers launchers;
+        launchers.found({"terminal", "claude", "codex"}, qEnvironmentVariable("PATH"));
+        QTemporaryDir state;
+        WindowLibrary lib(state.path());
+        lib.launchers = &launchers;
+        lib.load();
+        MainWindow *w = lib.entries()[0].window;
+        w->show();
+        w->activateWindow();
+        QVERIFY(QTest::qWaitForWindowActive(w));
+        w->showAssistant();
+        auto *picker = w->findChild<QToolButton *>("assistantProvider");
+        QTRY_VERIFY(picker->isEnabled());
+        // the platform hands a press outside a popup to the popup, then replays it unless WA_NoMouseReplay
+        auto pressOutside = [&](const QPoint &global) {
+            picker->click();
+            QPointer<QWidget> popup = QApplication::activePopupWidget();
+            if (!popup)
+                return -1;
+            QTest::mousePress(popup, Qt::LeftButton, {}, popup->mapFromGlobal(global));
+            return int(popup->isVisible()) * 2 + int(popup->testAttribute(Qt::WA_NoMouseReplay));
+        };
+        QCOMPARE(pressOutside(picker->mapToGlobal(picker->rect().center())), 1); // closed, the picker not pressed again
+        QTRY_VERIFY(!QApplication::activePopupWidget());
+        QCOMPARE(pressOutside(w->mapToGlobal(QPoint(5, w->height() - 5))), 0); // closed, the press reaches what it hit
+    }
+
+    void sidebarRowsDropIntoTheComposerAsTags()
+    {
+        QTemporaryDir state;
+        WindowLibrary lib(state.path());
+        lib.load();
+        MainWindow *w = lib.entries()[0].window;
+        Store *s = lib.entries()[0].store;
+        const QString ws = s->workspaces.first().id;
+        const QString id = s->allSessions().first()->id;
+        s->renameWorkspace(ws, "mobile app");
+        s->renameSession(id, "pair link");
+        w->show();
+        w->activateWindow();
+        QVERIFY(QTest::qWaitForWindowActive(w));
+        w->showAssistant();
+        const QJsonObject tree = lib.dispatch({{"cmd", "tree"}}).value("result")["tree"].toObject();
+        const QString session = QLatin1Char('@') + tree["workspaces"][0]["sessions"][0]["handle"].toString();
+        const QString group = QStringLiteral("@ws:") + tree["workspaces"][0]["handle"].toString();
+        auto *sidebar = w->findChild<Sidebar *>();
+        auto *view = w->findChild<AssistantView *>();
+        QWidget *target = view->findChild<QPlainTextEdit *>("assistantComposer")->viewport();
+        auto drop = [&](QMimeData *mime) {
+            QVERIFY(mime);
+            QDragEnterEvent enter(QPoint(10, 10), Qt::MoveAction, mime, Qt::LeftButton, {});
+            QApplication::sendEvent(target, &enter);
+            QVERIFY(enter.isAccepted());
+            QDropEvent dropped(QPointF(10, 10), Qt::MoveAction, mime, Qt::LeftButton, {});
+            QApplication::sendEvent(target, &dropped);
+            QVERIFY(dropped.isAccepted());
+            delete mime;
+        };
+        drop(sidebar->dragMime(id));
+        QCOMPARE(view->tags(), QStringList{session});
+        QTest::mousePress(sidebar->viewport(), Qt::LeftButton, {}, sidebar->visualItemRect(sidebar->topLevelItem(1)).center());
+        drop(sidebar->dragMime({})); // the pressed workspace header
+        QCOMPARE(view->tags(), (QStringList{session, group}));
+        QCOMPARE(view->findChild<QPlainTextEdit *>("assistantComposer")->toPlainText(), QString()); // a tag, not typed ids
+    }
+
+    void atCompletionListsHandles()
+    {
+        QTemporaryDir state;
+        WindowLibrary lib(state.path());
+        lib.load();
+        MainWindow *w = lib.entries()[0].window;
+        Store *s = lib.entries()[0].store;
+        s->renameSession(s->allSessions().first()->id, "pair link");
+        s->addSession(s->workspaces.first().id, "logcat", {});
+        w->show();
+        w->activateWindow();
+        QVERIFY(QTest::qWaitForWindowActive(w));
+        w->showAssistant();
+        const QJsonObject tree = lib.dispatch({{"cmd", "tree"}}).value("result")["tree"].toObject();
+        auto *view = w->findChild<AssistantView *>();
+        auto *composer = view->findChild<QPlainTextEdit *>("assistantComposer");
+        QCompleter *completer = view->findChild<QCompleter *>();
+        auto listed = [&] {
+            QStringList tags;
+            for (int i = 0; completer->setCurrentRow(i); ++i)
+                tags << completer->currentIndex().data(Qt::UserRole).toString();
+            return tags;
+        };
+        composer->setFocus();
+        QTest::keyClicks(composer, "ask @");
+        QTRY_VERIFY(completer->popup()->isVisible());
+        QStringList all{"@all", QStringLiteral("@ws:") + tree["workspaces"][0]["handle"].toString()};
+        for (const QJsonValue &session : tree["workspaces"][0]["sessions"].toArray())
+            all << QLatin1Char('@') + session["handle"].toString();
+        QCOMPARE(listed(), all);
+        QVERIFY(completer->popup()->sizeHintForRow(0) >= completer->popup()->fontMetrics().height()); // the palette's rows
+        QTest::keyClicks(composer, "lo");
+        QCOMPARE(listed(), QStringList{all.last()});
+        QTest::keyClick(completer->popup(), Qt::Key_Return);
+        QCOMPARE(view->tags(), QStringList{all.last()});
+        QCOMPARE(composer->toPlainText(), QStringLiteral("ask "));
+        QTest::keyClick(composer, Qt::Key_Home);
+        QTest::keyClick(composer, Qt::Key_Backspace);
+        QVERIFY(view->tags().isEmpty());
+    }
+
+    void providerPickerSitsAboveTheComposerAndPicksWithKeys()
+    {
+        struct Quiet : AssistantSink {
+            void enqueue(const QString &) override { }
+            void providerChanged(const QString &) override { }
+        } sink;
+        QTemporaryDir state;
+        DetectedLaunchers launchers;
+        launchers.found({"terminal", "claude", "codex"}, qEnvironmentVariable("PATH"));
+        WindowLibrary lib(state.path());
+        lib.launchers = &launchers;
+        lib.assistantSink = &sink;
+        lib.load();
+        MainWindow *w = lib.entries()[0].window;
+        w->show();
+        w->activateWindow();
+        QVERIFY(QTest::qWaitForWindowActive(w));
+        w->showAssistant();
+        auto provider = [&] {
+            const QJsonObject tree = lib.dispatch({{"cmd", "tree"}});
+            return tree["result"]["tree"]["assistant"]["provider"].toString();
+        };
+        QVERIFY(lib.dispatch({{"cmd", "assistant.provider"}, {"args", QJsonObject{{"provider", "claude"}}}})["ok"].toBool());
+        auto *picker = w->findChild<QToolButton *>("assistantProvider");
+        QTRY_COMPARE(picker->text(), QStringLiteral("Claude Code"));
+        picker->click();
+        QWidget *popup = QApplication::activePopupWidget();
+        QVERIFY(popup && popup->objectName() == QLatin1String("assistantProviderPopup"));
+        const QWidget *box = w->findChild<QFrame *>("composer");
+        QVERIFY(popup->geometry().bottom() - 14 < box->mapToGlobal(QPoint(0, 0)).y()); // the panel, not its shadow, clears the box
+        QTest::keyClick(popup, Qt::Key_Down);
+        QTest::keyClick(popup, Qt::Key_Return);
+        QTRY_VERIFY(!QApplication::activePopupWidget());
+        QCOMPARE(provider(), QStringLiteral("codex"));
+    }
+
+    void assistantProviderTakesOneInputPerTurnInOrder()
+    {
+        AssistantHost host("bash " ELIS_TEST_FIXTURES "/fake-provider.sh");
+        const QByteArray sessionVar = qgetenv("ELIS_SESSION_ID"), claudeVar = qgetenv("CLAUDECODE");
+        qputenv("ELIS_SESSION_ID", "leak");
+        qputenv("CLAUDECODE", "1");
+        auto restore = qScopeGuard([&] {
+            sessionVar.isNull() ? qunsetenv("ELIS_SESSION_ID") : qputenv("ELIS_SESSION_ID", sessionVar);
+            claudeVar.isNull() ? qunsetenv("CLAUDECODE") : qputenv("CLAUDECODE", claudeVar);
+        });
+        QSignalSpy events(host.lib->active()->events(), &EventSource::event);
+        const QString session = host.lib->entries()[0].store->allSessions().first()->id;
+        QVERIFY(host.ask("one")["ok"].toBool());
+        QVERIFY(host.ask("two")["ok"].toBool());
+        QVERIFY(host.lib->dispatch({{"cmd", "assistant.reply"}, {"target", session}, {"args", QJsonObject{{"text", "three"}}}})["ok"].toBool());
+        QVERIFY(host.running());
+        QTRY_COMPARE_WITH_TIMEOUT(host.texts("assistant").size(), 3, 10000);
+        const QStringList replies = host.texts("assistant");
+        QVERIFY2(replies[0].endsWith(": one") && replies[1].endsWith(": two"), qPrintable(replies.join(" | ")));
+        QVERIFY2(replies[2].endsWith(session + "] three"), qPrintable(replies[2])); // no " early": each input followed a result
+        QVERIFY(!host.running());
+        int answered = 0;
+        for (const QList<QVariant> &e : std::as_const(events))
+            answered += e.first().toJsonObject().value("payload")["kind"].toString() == QLatin1String("assistant");
+        QCOMPARE(answered, 3);
+    }
+
+    void assistantPerInputProviderRunsOnceForEachInput()
+    {
+        // cat returns at once only on /dev/null stdin
+        AssistantHost host("sh -c \"cat; head -n 5 " ELIS_TEST_ASSISTANT_FIXTURES "/codex.jsonl\"", "codex");
+        QVERIFY(host.ask("one")["ok"].toBool());
+        QVERIFY(host.ask("two")["ok"].toBool());
+        QTRY_COMPARE_WITH_TIMEOUT(host.texts("assistant"), QStringList({"pong", "pong"}), 5000);
+        QVERIFY(!host.running());
+    }
+
+    void assistantProviderThatCannotStartIsAnError()
+    {
+        AssistantHost host("/nonexistent/elis-fake-provider");
+        QVERIFY(host.ask("hi")["ok"].toBool());
+        QTRY_COMPARE_WITH_TIMEOUT(host.texts("error").size(), 1, 5000);
+        QVERIFY(!host.running());
+    }
+
+    void assistantProviderStopsWithTheAppAndStaysOnReselect()
+    {
+        AssistantHost host("bash " ELIS_TEST_FIXTURES "/fake-provider.sh");
+        auto pidOf = [](const QString &reply) { return reply.section(QLatin1Char(' '), 1, 1).chopped(1).toInt(); };
+        QVERIFY(host.ask("one")["ok"].toBool());
+        QTRY_COMPARE_WITH_TIMEOUT(host.texts("assistant").size(), 1, 5000);
+        const int pid = pidOf(host.texts("assistant")[0]);
+        QVERIFY(pid > 0 && ::kill(pid, 0) == 0);
+        host.choose("claude");
+        QTest::qWait(200);
+        QCOMPARE(::kill(pid, 0), 0);
+        host.runner.reset();
+        QCOMPARE(::kill(pid, 0), -1);
+    }
+
+    void assistantSwitchMidTurnHandsTheCutInputToTheNewProvider()
+    {
+        AssistantHost host("bash " ELIS_TEST_FIXTURES "/fake-provider.sh");
+        QVERIFY(host.ask("zero")["ok"].toBool());
+        QTRY_COMPARE_WITH_TIMEOUT(host.texts("assistant").size(), 1, 5000);
+        const int first = host.texts("assistant")[0].section(QLatin1Char(' '), 1, 1).chopped(1).toInt();
+        QVERIFY(host.ask("one")["ok"].toBool());
+        host.choose("codex"); // claude is still answering "one"
+        QTRY_COMPARE_WITH_TIMEOUT(::kill(first, 0), -1, 5000);
+        QTRY_COMPARE_WITH_TIMEOUT(host.texts("assistant").size(), 2, 5000);
+        const QString answer = host.texts("assistant")[1];
+        QVERIFY2(answer.endsWith("\n\none") && answer.contains("user: zero") && !answer.contains("user: one"), qPrintable(answer));
+        QVERIFY(!host.running());
+    }
+
+    void assistantErrorTurnKeepsTheQueue()
+    {
+        AssistantHost host("bash " ELIS_TEST_FIXTURES "/fake-provider.sh");
+        QVERIFY(host.ask("fail")["ok"].toBool());
+        QVERIFY(host.ask("two")["ok"].toBool());
+        QTRY_COMPARE_WITH_TIMEOUT(host.texts("assistant").size(), 1, 5000);
+        QCOMPARE(host.texts("error"), QStringList{"boom"});
+        QVERIFY(host.texts("assistant")[0].endsWith(": two"));
+        QVERIFY(!host.running());
+    }
+
+    void assistantCrashMidTurnIsAnErrorAndTheNextInputRestarts()
+    {
+        AssistantHost host("bash " ELIS_TEST_FIXTURES "/fake-provider.sh");
+        QVERIFY(host.ask("crash")["ok"].toBool());
+        QTRY_COMPARE_WITH_TIMEOUT(host.texts("error").size(), 1, 5000);
+        QVERIFY2(host.texts("error")[0].contains("crashed"), qPrintable(host.texts("error")[0]));
+        QVERIFY(!host.running());
+        QVERIFY(host.ask("after")["ok"].toBool());
+        QTRY_COMPARE_WITH_TIMEOUT(host.texts("assistant").size(), 1, 5000);
+        QVERIFY(host.texts("assistant")[0].endsWith(": after"));
+    }
+
+    void assistantProviderGetsThisAppsStateDirAndTools()
+    {
+        AssistantHost host("bash " ELIS_TEST_FIXTURES "/fake-provider.sh");
+        QVERIFY(host.ask("env")["ok"].toBool());
+        QTRY_COMPARE_WITH_TIMEOUT(host.texts("assistant").size(), 1, 5000);
+        QCOMPARE(host.texts("assistant")[0], host.state.path() + " " + QCoreApplication::applicationDirPath() + ":" + AssistantHost::path());
+    }
+
+    void assistantInputWaitsForDetectionAndSavesTheDefault()
+    {
+        AssistantHost host("bash " ELIS_TEST_FIXTURES "/fake-provider.sh", "", false);
+        QVERIFY(host.ask("one")["ok"].toBool());
+        QTest::qWait(500);
+        QVERIFY(host.texts("assistant").isEmpty() && host.texts("error").isEmpty());
+        QVERIFY(host.running());
+        QVERIFY(host.node()["provider"].toString().isEmpty());
+        host.launchers.found({"terminal", "claude"}, AssistantHost::path());
+        QTRY_COMPARE_WITH_TIMEOUT(host.texts("assistant").size(), 1, 5000);
+        QCOMPARE(host.node()["provider"].toString(), QStringLiteral("claude"));
+        QVERIFY(!host.running());
+    }
+
+    void assistantTurnWithoutTextClearsTheWorkingState()
+    {
+        AssistantHost host("bash " ELIS_TEST_FIXTURES "/fake-provider.sh");
+        MainWindow *w = host.lib->entries()[0].window;
+        w->show();
+        QVERIFY(QTest::qWaitForWindowExposed(w));
+        w->showAssistant();
+        host.ask("hi");
+        QTRY_COMPARE_WITH_TIMEOUT(host.texts("assistant").size(), 1, 5000);
+        host.ask("quiet");
+        auto *working = w->findChild<QLabel *>("assistantWorking");
+        auto *tree = w->findChild<Sidebar *>();
+        QTRY_VERIFY_WITH_TIMEOUT(!host.running(), 5000);
+        QTRY_VERIFY(working->isHidden());
+        QTRY_COMPARE(tree->topLevelItem(0)->data(0, SidebarRole::Status).toString(), QStringLiteral("idle"));
+        QCOMPARE(host.texts("assistant").size(), 1);
+    }
+
+    void assistantResumeOfAGoneConversationStartsAfresh()
+    {
+        AssistantHost host("bash " ELIS_TEST_FIXTURES "/fake-provider.sh", "claude", true, R"({"claude":"gone"})");
+        QCOMPARE(AssistantBridge::resume("claude"), QStringLiteral("gone"));
+        host.ask("hi");
+        QTRY_COMPARE_WITH_TIMEOUT(host.texts("assistant").size(), 1, 5000);
+        QVERIFY(host.texts("assistant")[0].endsWith("hi"));
+        QVERIFY(host.texts("error").isEmpty());
+        QVERIFY(AssistantBridge::resume("claude").startsWith("fake-")); // the fresh conversation, resumed next time
+    }
+
+    void assistantSavedProviderNoLongerInstalledRunsThePickersDefault()
+    {
+        AssistantHost host("bash " ELIS_TEST_FIXTURES "/fake-provider.sh", "opencode");
+        host.ask("hi");
+        QTRY_COMPARE_WITH_TIMEOUT(host.texts("assistant").size(), 1, 5000);
+        QCOMPARE(host.node()["provider"].toString(), QStringLiteral("claude"));
+    }
+
+    void assistantProviderChoiceWaitsForDetection()
+    {
+        AssistantHost host("bash " ELIS_TEST_FIXTURES "/fake-provider.sh", "claude", false);
+        MainWindow *w = host.lib->entries()[0].window;
+        w->show();
+        QVERIFY(QTest::qWaitForWindowExposed(w));
+        w->showAssistant();
+        auto *picker = w->findChild<QToolButton *>("assistantProvider");
+        QTRY_VERIFY(!picker->isEnabled());
+        QCOMPARE(picker->text(), QStringLiteral("Claude Code")); // the saved choice, not "No agent found"
+        const QJsonObject choose{{"cmd", "assistant.provider"}, {"args", QJsonObject{{"provider", "codex"}}}};
+        QCOMPARE(host.lib->dispatch(choose)["error"].toString(), QStringLiteral("agents are still being detected; try again in a moment"));
+        host.launchers.found({"terminal", "claude", "codex"}, AssistantHost::path());
+        QTRY_VERIFY(picker->isEnabled());
+        QVERIFY(host.lib->dispatch(choose)["ok"].toBool());
+    }
+
+    void assistantStreamProviderGetsTheRecapAfterASwitch()
+    {
+        AssistantHost host("bash " ELIS_TEST_FIXTURES "/fake-provider.sh", "codex");
+        QVERIFY(host.ask("zero")["ok"].toBool());
+        QTRY_COMPARE_WITH_TIMEOUT(host.texts("assistant").size(), 1, 5000);
+        QVERIFY(host.ask("one")["ok"].toBool());
+        host.choose("claude"); // codex has not answered "one" yet
+        QTRY_COMPARE_WITH_TIMEOUT(host.texts("assistant").size(), 2, 5000);
+        QString answer = host.texts("assistant")[1];
+        QVERIFY2(answer.contains("Earlier messages in this chat") && answer.contains("user: zero") && !answer.contains("user: one")
+                     && answer.endsWith("\n\none"),
+                 qPrintable(answer));
+        host.choose("codex"); // idle
+        host.choose("claude");
+        QVERIFY(host.ask("two")["ok"].toBool());
+        QTRY_COMPARE_WITH_TIMEOUT(host.texts("assistant").size(), 3, 5000);
+        answer = host.texts("assistant")[2];
+        QVERIFY2(answer.contains("Earlier messages in this chat") && answer.contains("user: one") && answer.endsWith("\n\ntwo"), qPrintable(answer));
+        QVERIFY(!host.running());
+    }
+
+    void detectedPathHasNoEmptyElementAndSurvivesAFailedProbe()
+    {
+        DetectedLaunchers launchers;
+        launchers.probed({});
+        QVERIFY(launchers.detected());
+        QVERIFY2(!launchers.path().split(QLatin1Char(':')).contains(QString()), qPrintable(launchers.path()));
+        launchers.probed("rc noise\nelis-launcher-path\n\n");
+        QVERIFY2(!launchers.path().split(QLatin1Char(':')).contains(QString()), qPrintable(launchers.path()));
+        launchers.probed("rc noise\nelis-launcher-path\n/login/bin\n");
+        QVERIFY(launchers.path().startsWith("/login/bin:"));
+        launchers.probed({}); // timed out
+        QVERIFY(launchers.path().startsWith("/login/bin:"));
+    }
+
+    void typedTextGetsItsFinalReturnInItsOwnWrite()
+    {
+        Store store;
+        MainWindow w(store, dir.filePath("paced.json"));
+        w.restore({});
+        const QString id = store.addSession(store.addWorkspace("w"), {}, {});
+        store.select(id);
+        w.show();
+        w.activateWindow();
+        QVERIFY(QTest::qWaitForWindowActive(&w));
+        QString error;
+        QTRY_VERIFY_WITH_TIMEOUT(!w.text(id, "left", false, &error).trimmed().isEmpty(), 5000); // the prompt
+        auto type = [&](const QString &text) { return dispatch(store, w, {{"cmd", "session.type"}, {"target", id}, {"args", QJsonObject{{"text", text}}}}); };
+        // each dd is one read; head then takes the next ten bytes whatever the reads
+        const QString read = QStringLiteral("dd bs=4096 count=1 2>/dev/null | od -An -tx1; ");
+        QVERIFY(type("stty raw -echo; " + read + read + "head -c 10 | od -An -tx1; stty sane\n")["ok"].toBool());
+        QTRY_COMPARE_WITH_TIMEOUT(w.foregroundArgv(id, "main").value(0), QStringLiteral("dd"), 5000);
+        QVERIFY(type("hello\n")["ok"].toBool());
+        bool replied = false;
+        MainWindow::whenTyped(&w, [&] { replied = true; });
+        QVERIFY(!replied); // a control reply waits for the Return
+        QTRY_VERIFY(replied);
+        const QRegularExpression twoReads(QStringLiteral("68 65 6c 6c 6f\\n *0d\\b")); // raw mode: no carriage return before a line
+        QTRY_VERIFY2_WITH_TIMEOUT(twoReads.match(w.text(id, "left", false, &error)).hasMatch(), qPrintable(w.text(id, "left", false, &error)), 5000);
+        QVERIFY(type("msg1\n")["ok"].toBool());
+        QVERIFY(type("msg2\n")["ok"].toBool()); // still behind msg1's Return
+        QTRY_VERIFY2_WITH_TIMEOUT(w.text(id, "left", false, &error).contains("6d 73 67 31 0d 6d 73 67 32 0d"), qPrintable(w.text(id, "left", false, &error)), 5000);
+    }
+
     void selectingASessionUpdatesTheSidebarInPlace()
     {
         Store store;
@@ -657,16 +1270,16 @@ private Q_SLOTS:
         store.select(a);
         w.show();
         auto *tree = w.findChild<Sidebar *>();
-        QTreeWidgetItem *wsItem = tree->topLevelItem(0), *rowA = wsItem->child(0), *rowB = wsItem->child(1);
+        QTreeWidgetItem *wsItem = tree->topLevelItem(1), *rowA = wsItem->child(0), *rowB = wsItem->child(1);
         store.select(b);
         store.setStatus(a, "blocked");
-        QCOMPARE(tree->topLevelItem(0), wsItem);
+        QCOMPARE(tree->topLevelItem(1), wsItem);
         QCOMPARE(wsItem->child(0), rowA);
         QCOMPARE(wsItem->child(1), rowB);
         QVERIFY(rowB->isSelected() && !rowA->isSelected());
         QCOMPARE(rowA->data(0, SidebarRole::Status).toString(), QStringLiteral("blocked"));
         store.addSession(ws, {}, {}); // a new row is a structural change
-        QCOMPARE(tree->topLevelItem(0)->childCount(), 3);
+        QCOMPARE(tree->topLevelItem(1)->childCount(), 3);
     }
 
     void aBlinkingGlyphKeepsFadingThroughRebuilds()
@@ -717,7 +1330,7 @@ private Q_SLOTS:
         const QString a = store.addSession(ws, {}, {}), b = store.addSession(ws, {}, {});
         Sidebar tree(store);
         tree.rebuild();
-        auto *row = tree.topLevelItem(0);
+        auto *row = tree.topLevelItem(1);
         QCOMPARE(row->data(0, SidebarRole::Status).toString(), QStringLiteral("idle"));
         store.setStatus(a, "completed");
         store.setStatus(b, "active", false, true);
@@ -989,16 +1602,16 @@ private Q_SLOTS:
             if (b->accessibleName() == QLatin1String("Toggle Workspace Filter"))
                 filter = b;
         QVERIFY(filter && !filter->isEnabled());
-        QCOMPARE(tree->topLevelItemCount(), 2);
+        QCOMPARE(tree->topLevelItemCount(), 3);
         store.focusWorkspace(a, "add");
         QVERIFY(filter->isEnabled());
-        QCOMPARE(tree->topLevelItemCount(), 2);
+        QCOMPARE(tree->topLevelItemCount(), 3);
         filter->click();
         QVERIFY(store.focusEnabled);
-        QCOMPARE(tree->topLevelItemCount(), 1);
-        QVERIFY(tree->topLevelItem(0)->data(0, SidebarRole::Focused).toBool());
+        QCOMPARE(tree->topLevelItemCount(), 2);
+        QVERIFY(tree->topLevelItem(1)->data(0, SidebarRole::Focused).toBool());
         store.setTint(a, "red");
-        QCOMPARE(tree->topLevelItem(0)->data(0, SidebarRole::TintColor).toString(), QStringLiteral("red"));
+        QCOMPARE(tree->topLevelItem(1)->data(0, SidebarRole::TintColor).toString(), QStringLiteral("red"));
     }
 
     void tintMenuListsTheMacPaletteAndAHexAsCustom()
@@ -1011,7 +1624,7 @@ private Q_SLOTS:
         store.setTint(a, "#FF8800");
         w.show();
         auto *tree = w.findChild<Sidebar *>();
-        QTreeWidgetItem *row = tree->topLevelItem(0)->child(0);
+        QTreeWidgetItem *row = tree->topLevelItem(1)->child(0);
         QCOMPARE(row->data(0, SidebarRole::TintColor).toString(), QStringLiteral("#ff8800"));
         QStringList titles;
         QTimer::singleShot(0, this, [&] {
@@ -1112,9 +1725,9 @@ private Q_SLOTS:
         tree.resize(260, 400);
         tree.show();
         auto height = [&](const QString &id) {
-            for (int i = 0; i < tree.topLevelItem(0)->childCount(); ++i)
-                if (tree.topLevelItem(0)->child(i)->data(0, SidebarRole::Id).toString() == id)
-                    return tree.visualItemRect(tree.topLevelItem(0)->child(i)).height();
+            for (int i = 0; i < tree.topLevelItem(1)->childCount(); ++i)
+                if (tree.topLevelItem(1)->child(i)->data(0, SidebarRole::Id).toString() == id)
+                    return tree.visualItemRect(tree.topLevelItem(1)->child(i)).height();
             return -1;
         };
         QTRY_COMPARE(height(a), height(b) + QFontMetrics(Sidebar::infoFont(tree.font())).height());
@@ -1146,7 +1759,7 @@ private Q_SLOTS:
         tree.rebuild();
         QVERIFY(QTest::qWaitForWindowExposed(&tree));
         QSignalSpy panel(&tree, &Sidebar::ciPanelRequested);
-        const QRect rect = tree.visualItemRect(tree.topLevelItem(0)->child(0));
+        const QRect rect = tree.visualItemRect(tree.topLevelItem(1)->child(0));
         const QRect title = tree.titleRect(tree.indexAt(rect.center()), rect);
         QTest::mouseClick(tree.viewport(), Qt::LeftButton, {}, QPoint(rect.center().x(), title.bottom() - 4)); // the line's top edge
         QCOMPARE(panel.count(), 1);
@@ -1184,7 +1797,7 @@ private Q_SLOTS:
         tree.rebuild();
         tree.resize(260, 400);
         tree.show();
-        QTreeWidgetItem *row = tree.topLevelItem(0);
+        QTreeWidgetItem *row = tree.topLevelItem(1);
         const int open = tree.visualItemRect(row).height();
         QTest::mouseClick(tree.viewport(), Qt::LeftButton, {}, tree.visualItemRect(row).center());
         QVERIFY(store.collapsed.contains(ws));
@@ -1232,23 +1845,23 @@ private Q_SLOTS:
         store.setFlag(a1, true), store.setFlag(a2, true), store.setFlag(c1, true);
         Sidebar tree(store);
         tree.setFlaggedView(true);
-        QCOMPARE(tree.topLevelItemCount(), 3); // flat: one list labelled with the workspace
-        QCOMPARE(tree.topLevelItem(0)->data(0, SidebarRole::WorkspaceLabel).toString(), QStringLiteral("alpha"));
+        QCOMPARE(tree.topLevelItemCount(), 4); // Elis, then flat: one list labelled with the workspace
+        QCOMPARE(tree.topLevelItem(1)->data(0, SidebarRole::WorkspaceLabel).toString(), QStringLiteral("alpha"));
         Settings s = store.settings;
         s.flaggedViewLayout = "plain";
         store.setSettings(s);
         tree.rebuild();
-        QVERIFY(tree.topLevelItem(0)->data(0, SidebarRole::WorkspaceLabel).toString().isEmpty());
+        QVERIFY(tree.topLevelItem(1)->data(0, SidebarRole::WorkspaceLabel).toString().isEmpty());
         s.flaggedViewLayout = "tree";
         store.setSettings(s);
         tree.rebuild();
-        QCOMPARE(tree.topLevelItemCount(), 2); // beta holds nothing flagged
-        QCOMPARE(tree.topLevelItem(0)->text(0), QStringLiteral("alpha"));
-        QCOMPARE(tree.topLevelItem(0)->childCount(), 2);
-        QCOMPARE(tree.topLevelItem(1)->child(0)->data(0, SidebarRole::Id).toString(), c1);
+        QCOMPARE(tree.topLevelItemCount(), 3); // Elis; beta holds nothing flagged
+        QCOMPARE(tree.topLevelItem(1)->text(0), QStringLiteral("alpha"));
+        QCOMPARE(tree.topLevelItem(1)->childCount(), 2);
+        QCOMPARE(tree.topLevelItem(2)->child(0)->data(0, SidebarRole::Id).toString(), c1);
         store.collapsed.insert(a); // shared with the ordinary tree
         tree.rebuild();
-        QVERIFY(!tree.topLevelItem(0)->isExpanded());
+        QVERIFY(!tree.topLevelItem(1)->isExpanded());
     }
 
     void clicksNeverDeselectTheShownSession()
@@ -1267,9 +1880,9 @@ private Q_SLOTS:
         QVERIFY(shown());
         QTest::mouseClick(tree.viewport(), Qt::LeftButton, {}, QPoint(150, 390));
         QVERIFY(shown());
-        QTest::mouseClick(tree.viewport(), Qt::LeftButton, Qt::ControlModifier, tree.visualItemRect(tree.topLevelItem(0)->child(0)).center());
+        QTest::mouseClick(tree.viewport(), Qt::LeftButton, Qt::ControlModifier, tree.visualItemRect(tree.topLevelItem(1)->child(0)).center());
         QVERIFY(shown());
-        QTest::mouseClick(tree.viewport(), Qt::LeftButton, {}, tree.visualItemRect(tree.topLevelItem(0)).topLeft() + QPoint(5, 5));
+        QTest::mouseClick(tree.viewport(), Qt::LeftButton, {}, tree.visualItemRect(tree.topLevelItem(1)).topLeft() + QPoint(5, 5));
         QVERIFY(shown());
     }
 
@@ -1296,7 +1909,7 @@ private Q_SLOTS:
         QSignalSpy spy(&tree, &Sidebar::closeRequested);
         auto click = [&](int row) {
             QTest::mouseClick(tree.viewport(), Qt::LeftButton, {},
-                              Sidebar::closeButtonRect(tree.visualItemRect(tree.topLevelItem(0)->child(row))).center());
+                              Sidebar::closeButtonRect(tree.visualItemRect(tree.topLevelItem(1)->child(row))).center());
         };
         click(1); // an active session has no close button
         QVERIFY(spy.isEmpty());

@@ -1,0 +1,7 @@
+{"fixture":"documented"}
+{"type":"step_start","timestamp":1767036064000,"sessionID":"ses_494719016ffe85dkDMj0FPRbHK","part":{"id":"prt_1","sessionID":"ses_494719016ffe85dkDMj0FPRbHK","messageID":"msg_1","type":"step-start"}}
+{"type":"text","timestamp":1767036064268,"sessionID":"ses_494719016ffe85dkDMj0FPRbHK","part":{"id":"prt_2","sessionID":"ses_494719016ffe85dkDMj0FPRbHK","messageID":"msg_1","type":"text","text":"pong","time":{"start":1767036064265,"end":1767036064265}}}
+{"type":"step_finish","timestamp":1767036065100,"sessionID":"ses_494719016ffe85dkDMj0FPRbHK","part":{"id":"prt_3","sessionID":"ses_494719016ffe85dkDMj0FPRbHK","messageID":"msg_1","type":"step-finish","reason":"stop"}}
+{"type":"step_start","timestamp":1767036066000,"sessionID":"ses_494719016ffe85dkDMj0FPRbHK","part":{"id":"prt_4","sessionID":"ses_494719016ffe85dkDMj0FPRbHK","messageID":"msg_2","type":"step-start"}}
+{"type":"text","timestamp":1767036066268,"sessionID":"ses_494719016ffe85dkDMj0FPRbHK","part":{"id":"prt_5","sessionID":"ses_494719016ffe85dkDMj0FPRbHK","messageID":"msg_2","type":"text","text":"ping","time":{"start":1767036066265,"end":1767036066265}}}
+{"type":"step_finish","timestamp":1767036067100,"sessionID":"ses_494719016ffe85dkDMj0FPRbHK","part":{"id":"prt_6","sessionID":"ses_494719016ffe85dkDMj0FPRbHK","messageID":"msg_2","type":"step-finish","reason":"stop"}}

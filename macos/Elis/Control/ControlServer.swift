@@ -724,8 +724,7 @@ final class ControlServer {
         case .tree, .eventsRead, .sessionNew, .sessionDuplicate, .sessionSelect, .sessionGo, .sessionClose, .sessionTerminate, .sessionUndo,
                 .sessionRename, .sessionReveal, .sessionMove,
                 .workspaceNew, .workspaceSelect, .workspaceGo, .workspaceRename, .workspaceDelete, .workspaceMove,
-                .workspaceFocus,
-                .workspaceFilter, .workspaceCollapse, .workspaceExpand, .workspaceFlag,
+                .workspaceFocus, .workspaceFilter, .workspaceCollapse, .workspaceExpand, .workspaceFlag,
                 .sessionCollapse, .sessionExpand, .sessionCompanionNew, .sessionCompanionPage, .sessionPage, .sessionCompanionDuplicate,
                 .sessionCompanionConvert, .sessionCompanionMove, .sessionCompanionPageAttach,
                 .sessionSplit, .sessionSplitClose, .sessionSwap, .sessionLead, .sessionRestart, .sessionScratch, .sessionFocus,
@@ -761,6 +760,8 @@ final class ControlServer {
             preconditionFailure("ask command returned nil from ControlDispatcher")
         case .msgSend, .msgRead, .msgAck:
             preconditionFailure("msg command returned nil from ControlDispatcher")
+        case .assistantAsk, .assistantSend, .assistantReply, .assistantRead, .assistantProvider, .assistantShow:
+            preconditionFailure("assistant command returned nil from ControlDispatcher")
         case .sessionHudOpen, .sessionHudUpdate, .sessionHudClose:
             preconditionFailure("hud command returned nil from ControlDispatcher")
         }
