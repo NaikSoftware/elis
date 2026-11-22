@@ -98,14 +98,6 @@ QFrame *card()
     return f;
 }
 
-QFrame *hairline()
-{
-    auto *f = new QFrame;
-    f->setFixedHeight(1);
-    f->setStyleSheet(QStringLiteral("background:%1;").arg(css(ink(0.10))));
-    return f;
-}
-
 class Chip : public QLabel
 {
 public:
@@ -374,7 +366,6 @@ AssistantView::AssistantView(MainWindow &window, Store &store)
             m_scroll->verticalScrollBar()->setValue(max);
     });
     main->addWidget(m_scroll, 1);
-    main->addWidget(hairline());
 
     // the composer: tag chips and the message, then the provider picker and send
     auto *composer = new QFrame;
@@ -467,6 +458,18 @@ AssistantView::AssistantView(MainWindow &window, Store &store)
     m_completer->setCompletionRole(Qt::UserRole);
     m_completer->popup()->setObjectName(QStringLiteral("assistantCompletion"));
     m_completer->popup()->setItemDelegate(Palette::rowDelegate(m_completer->popup())); // the session switcher's rows
+    // the provider panel's surface (painted in eventFilter), so the rows do not float on the chat; a thin scrollbar with no groove rule
+    QAbstractItemView *list = m_completer->popup();
+    list->setAttribute(Qt::WA_TranslucentBackground);
+    list->setFrameShape(QFrame::NoFrame);
+    list->viewport()->setAutoFillBackground(false);
+    list->installEventFilter(this);
+    list->setStyleSheet(QStringLiteral("QListView{background:transparent;border:0;}"
+                                       "QScrollBar:vertical{background:transparent;width:10px;margin:8px 3px 8px 0;}"
+                                       "QScrollBar::handle:vertical{background:%1;border-radius:3px;min-height:24px;}"
+                                       "QScrollBar::add-line:vertical,QScrollBar::sub-line:vertical{height:0;}"
+                                       "QScrollBar::add-page:vertical,QScrollBar::sub-page:vertical{background:transparent;}")
+                            .arg(css(ink(0.22))));
     m_completer->setMaxVisibleItems(8);
     editor->completer = m_completer;
     connect(m_completer, qOverload<const QModelIndex &>(&QCompleter::activated), this, [this](const QModelIndex &index) {
@@ -794,6 +797,16 @@ void AssistantView::paintEvent(QPaintEvent *event)
 bool AssistantView::eventFilter(QObject *watched, QEvent *event)
 {
     switch (event->type()) {
+    case QEvent::Paint:
+        if (watched == m_completer->popup()) { // the provider panel's rounded surface under a transparent list
+            auto *popup = static_cast<QWidget *>(watched);
+            QPainter p(popup);
+            p.setRenderHint(QPainter::Antialiasing);
+            p.setPen(QPen(ink(0.14), 1));
+            p.setBrush(QApplication::palette().color(QPalette::Window));
+            p.drawRoundedRect(QRectF(popup->rect()).adjusted(0.5, 0.5, -0.5, -0.5), 10, 10);
+        }
+        return false;
     case QEvent::DragEnter:
     case QEvent::DragMove: {
         auto *drag = static_cast<QDragMoveEvent *>(event);

@@ -329,16 +329,19 @@ void SidebarDelegate::paint(QPainter *p, const QStyleOptionViewItem &opt, const 
         p->setBrush(faded(tint, 0.09));
         p->drawPath(shape(r, 8));
     }
+    // Elis stands alone at a group card's size, so its edges and the gap under it match the cards below
+    const qreal pad = assistant ? Sidebar::groupPadding : 0;
+    const QRectF fill = r.adjusted(-pad, -pad, pad, pad);
     if (selected) {
         // the group's tint, else the row's own, else the accent; dimmer while the window is in the background
         const QColor c = band.isValid() ? band : tint.isValid() ? tint : pal.color(QPalette::Highlight);
         const bool key = m_sidebar->isActiveWindow();
         p->setPen(QPen(faded(c, key ? 0.55 : 0.35), 1));
         p->setBrush(faded(c, key ? 0.20 : 0.12));
-        p->drawPath(shape(r.adjusted(0.5, 0.5, -0.5, -0.5), 7.5));
+        p->drawPath(shape(fill.adjusted(0.5, 0.5, -0.5, -0.5), assistant ? 10.5 : 7.5));
     } else if (opt.state & QStyle::State_MouseOver) {
         p->setBrush(faded(text, 0.07));
-        p->drawPath(shape(r, 8));
+        p->drawPath(shape(fill, assistant ? 10.5 : 8));
     }
 
     if (session && index.data(Status).toString() == QLatin1String("active")) {
