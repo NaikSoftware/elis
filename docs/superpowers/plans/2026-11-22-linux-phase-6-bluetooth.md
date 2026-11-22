@@ -54,8 +54,8 @@ link, so Bluetooth only. The Mac's numbers are the spike's in the spec, a raw L2
   Live pane, which re-read `session text --lines 2000` every 700 ms while the watch channel streamed, each answer the
   whole history; the phone's code is shared, so a Mac relay forwards the same reads. On Linux `events.read` also
   refused the relay's upper-case cursor run, so channel 1 sent `{"gap":true}` every 1.25 s and the phone re-read
-  `tree`. Re-measured on one throwaway `b=1` pairing, the relay's sends on the L2CAP socket counted by strace; the link
-  carried only about 3 KB/s that evening:
+  `tree`. Re-measured on one throwaway `b=1` pairing, the relay's sends on the L2CAP socket counted by strace; before
+  the fix they stalled (`EAGAIN`) at about 3 KB/s behind the queued history answers:
 
   | | before | after |
   |---|---|---|
