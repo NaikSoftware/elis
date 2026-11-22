@@ -1,4 +1,4 @@
-#if os(macOS)
+#if !canImport(Musl)
 import Foundation
 import ElisCore
 
@@ -151,6 +151,11 @@ final class PhoneSession: @unchecked Sendable {
                 guard !closing else { return }
                 connection.send(PhoneLinkUpgrade.answer) { [self] in
                     guard !closing else { return }
+                    #if os(macOS)
+                    let window: UInt32 = connection is BlePhoneLink ? 16384 : 262_144
+                    #else
+                    let window: UInt32 = 262_144 // no Bluetooth on Linux yet
+                    #endif
                     let link = PhoneLinkSession(
                         send: { [weak self] bytes, done in
                             guard let self, !closing else { return done() }
@@ -166,7 +171,7 @@ final class PhoneSession: @unchecked Sendable {
                             return revoked(token)
                         },
                         socketPath: settings.socketPath, queue: queue, peer: connection.peerLabel,
-                        window: connection is BlePhoneLink ? 16384 : 262_144, log: settings.log, clock: Date.init)
+                        window: window, log: settings.log, clock: Date.init)
                     link.onEnd = { [weak self] in self?.close() }
                     self.link = link
                     let held = buffer
@@ -197,6 +202,9 @@ final class PhoneSession: @unchecked Sendable {
         // a paired phone must not switch the relay off, revoke its pairing or read the link, nor get an argv to run
         let cmd = request["cmd"] as? String ?? ""
         let refusal = cmd.hasPrefix("phone.") ? "phone.*" : cmd == Command.sessionAttach.rawValue ? cmd : nil
+        #if os(Linux)
+        nonisolated(unsafe) let reply = reply // called on `queue` only; Linux's Dispatch takes @Sendable blocks
+        #endif
         // holds the session: a request queued before the phone left still runs, and its grid is then released
         work.async { [self] in
             let answer: Data
