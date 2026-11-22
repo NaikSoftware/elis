@@ -48,6 +48,12 @@ let package = Package(
 // Foundation's attributed Markdown parser is Darwin only; elis-server parses with swift-markdown instead
 package.dependencies.append(.package(url: "https://github.com/swiftlang/swift-markdown", exact: "0.8.0"))
 package.targets[0].dependencies.append(.product(name: "Markdown", package: "swift-markdown"))
+// the phone relay: swift-crypto for CryptoKit, OpenSSL for Network's TLS listener, qrcodegen for CoreImage's QR filter
+package.dependencies.append(.package(url: "https://github.com/apple/swift-crypto", exact: "5.1.2"))
+package.targets += [.target(name: "CElisTLS"), .target(name: "CQRCode")]
+let crypto: Target.Dependency = .product(name: "Crypto", package: "swift-crypto")
+for target in package.targets where target.name == "elisctlKit" { target.dependencies += [crypto, "CElisTLS", "CQRCode"] }
+for target in package.targets where target.name == "elisctlKitTests" { target.dependencies += [crypto, "CElisTLS"] }
 #endif
 
 #if os(macOS)
