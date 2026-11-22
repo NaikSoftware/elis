@@ -4,6 +4,7 @@
 #include "hooks.h"
 #include "konsoleprivate.h"
 #include "palette.h"
+#include "paneleadcover.h"
 #include "paths.h"
 #include "store.h"
 #include "zmx.h"
@@ -533,7 +534,10 @@ bool MainWindow::uiCommand(const QString &cmd, const QString &id, const QJsonObj
     // the Mac's coveredRefusal: a covered pane shows another grid's output and the daemon drops what it sends
     if (const QString zmx = part->property("elisZmx").toString();
         !zmx.isEmpty() && Zmx::lead(zmx).covered && !(cmd == QLatin1String("session.search") && args.value("to").toString() == QLatin1String("close")))
-        return *error = QStringLiteral("pane is covered while another terminal leads it; press a key on it to take the lead"), false;
+        return *error = PaneLeadCover::phoneLeads(part->property("elisPaneId").toString())
+                            ? QStringLiteral("pane is in use on your phone; press a key on it to take the lead")
+                            : QStringLiteral("pane is covered while another terminal leads it; press a key on it to take the lead"),
+               false;
     if (cmd == QLatin1String("session.copy")) {
         const QString text = KonsolePrivate::selectedText(session);
         if (text.isEmpty())

@@ -41,6 +41,9 @@
 #include <QWheelEvent>
 #include "smoothwheel.h"
 #include "phone.h"
+#include "paneleadcover.h"
+#include "elis_bridge.h"
+#include "zmx.h"
 #include "konsoleprivate.h"
 
 namespace Konsole
@@ -76,6 +79,24 @@ private Q_SLOTS:
         QVERIFY(code.width() >= 21 + 8);                       // the smallest QR plus a four-module quiet zone
         QCOMPARE(code.pixel(0, 0), qRgb(255, 255, 255));        // light border on any theme
         QCOMPARE(code.pixel(4, 4), qRgb(0, 0, 0));              // the top-left finder starts inside it
+    }
+
+    void paneLeadCoverNamesPhoneWhenPhoneLeads()
+    {
+        auto reset = qScopeGuard([] { elis_free(elis_phone_viewers_reset()); });
+        QWidget pane;
+        PaneLeadCover cover(&pane, nullptr, QStringLiteral("phone-test-pane"), {}, {});
+        auto *title = cover.findChild<QLabel *>(QStringLiteral("paneLeadTitle"));
+        QVERIFY(title);
+        Zmx::Lead lead;
+        lead.covered = true;
+        lead.role = QStringLiteral("follower");
+        cover.apply(lead);
+        QCOMPARE(title->text(), QStringLiteral("In use from another terminal"));
+        elis_free(elis_phone_relay_line("phone leads from - pane phone-test-pane"));
+        cover.apply(lead);
+        QCOMPARE(title->text(), QStringLiteral("In use on your phone"));
+        QCOMPARE(PaneLeadCover::title(QStringLiteral("follower"), true, true), QStringLiteral("Taking over…"));
     }
 
     void smoothWheelReplaysNotchesLineByLine()
