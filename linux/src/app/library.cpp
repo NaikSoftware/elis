@@ -4,6 +4,7 @@
 
 #include "assistant.h"
 #include "control.h"
+#include "detectedlaunchers.h"
 #include "zmx.h"
 #include "mainwindow.h"
 #include "store.h"
@@ -337,7 +338,7 @@ QList<Assistant::Window> WindowLibrary::assistantWindows() const
 
 QStringList WindowLibrary::assistantProviders() const
 {
-    QStringList out = active() ? active()->availableLaunchers() : QStringList();
+    QStringList out = DetectedLaunchers::instance()->ids();
     out.removeAll(QStringLiteral("terminal"));
     return out;
 }

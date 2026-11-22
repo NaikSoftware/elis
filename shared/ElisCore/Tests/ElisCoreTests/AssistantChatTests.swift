@@ -49,6 +49,31 @@ import Testing
         #expect(chat.running)
     }
 
+    @Test func turnFailureRecordsTheErrorAndEndsOnlyThatTurn() {
+        let chat = AssistantChat()
+        chat.inputQueued()
+        chat.inputQueued()
+        let entry = chat.turnFailed("rate limited", now: 5)
+        #expect([entry.kind.rawValue, entry.text] == ["error", "rate limited"])
+        #expect(chat.entries(last: 1) == [entry])
+        #expect(chat.running)
+        chat.turnEnded()
+        #expect(!chat.running)
+    }
+
+    @Test func settledEntriesLeaveOutTheQueuedInputs() {
+        let chat = AssistantChat()
+        chat.append(.user, text: "answered", now: 1)
+        chat.append(.assistant, text: "yes", now: 2)
+        chat.append(.user, text: "queued", now: 3)
+        chat.inputQueued()
+        chat.append(.sent, text: "go", to: ["a"], now: 4)
+        chat.append(.reply, text: "done", from: "a", now: 5)
+        chat.inputQueued()
+        #expect(chat.settledEntries(last: 50).map(\.text) == ["answered", "yes", "go"])
+        #expect(chat.settledEntries(last: 1).map(\.text) == ["go"])
+    }
+
     @Test func providerFailureRecordsTheErrorAndClearsTheQueue() {
         let chat = AssistantChat()
         chat.inputQueued()

@@ -1,4 +1,5 @@
 #include "mainwindow.h"
+#include "detectedlaunchers.h"
 
 #include "cipanel.h"
 #include "filepanel.h"
@@ -555,7 +556,7 @@ MainWindow::MainWindow(Store &store, const QString &statePath)
         m_defaultKeys.insert(it.key(), keys);
     }
     qApp->installEventFilter(this);
-    detectLaunchers();
+    DetectedLaunchers::instance()->refresh();
     applySettings();
 }
 
@@ -1644,40 +1645,20 @@ void MainWindow::launch(const QString &launcherId, const QString &workspaceId)
     }
 }
 
+QStringList MainWindow::availableLaunchers() const
+{
+    return DetectedLaunchers::instance()->ids();
+}
+
 void MainWindow::launcherMenu(const QString &workspaceId, const QPoint &globalPos)
 {
-    detectLaunchers();
+    DetectedLaunchers::instance()->refresh();
     QMenu menu;
     const QColor ink = palette().color(QPalette::WindowText);
-    for (const QString &id : std::as_const(m_launchers))
+    for (const QString &id : availableLaunchers())
         if (const Launcher *l = launcher(id))
             menu.addAction(launcherIcon(id, ink), l->title, this, [this, id, workspaceId] { launch(id, workspaceId); });
     menu.exec(globalPos);
-}
-
-void MainWindow::detectLaunchers()
-{
-    // agents install into directories only the user's shell startup adds to PATH, so ask a login shell
-    if (m_launchersAt.isValid() && m_launchersAt.secsTo(QDateTime::currentDateTime()) < 300)
-        return;
-    m_launchersAt = QDateTime::currentDateTime();
-    auto *proc = new QProcess(this);
-    const QString marker = QStringLiteral("elis-launcher-path");
-    QProcessEnvironment env = QProcessEnvironment::systemEnvironment();
-    env.remove(QStringLiteral("ELIS_SESSION_ID"));
-    proc->setProcessEnvironment(env);
-    proc->setStandardInputFile(QProcess::nullDevice());
-    connect(proc, &QProcess::finished, this, [this, proc, marker] {
-        const QString out = QString::fromUtf8(proc->readAllStandardOutput());
-        const int at = out.lastIndexOf(marker + QLatin1Char('\n'));
-        const QString shellPath = at < 0 ? QString() : out.mid(at + marker.size() + 1).trimmed();
-        const QString path = QStringList{shellPath, qEnvironmentVariable("PATH"), QDir::homePath() + QStringLiteral("/.local/bin")}.join(QLatin1Char(':'));
-        m_launchers = ::availableLaunchers(path, [](const QString &f) { return QFileInfo(f).isExecutable() && QFileInfo(f).isFile(); });
-        proc->deleteLater();
-    });
-    QTimer::singleShot(3000, proc, [proc] { proc->kill(); });
-    proc->start(qEnvironmentVariable("SHELL", QStringLiteral("/bin/bash")),
-                {QStringLiteral("-l"), QStringLiteral("-i"), QStringLiteral("-c"), QStringLiteral("printf '\\n%s\\n' %1; printenv PATH").arg(marker)});
 }
 
 void MainWindow::sampleAgents()

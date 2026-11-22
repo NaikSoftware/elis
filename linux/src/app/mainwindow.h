@@ -58,7 +58,7 @@ public:
     bool isOwnShortcut(QKeyEvent *event) const;
     void paneTitle(const QString &id, QObject *part, const QString &title); // an OSC 0/2 title, or the caption
     void setSocketStatus(bool ok, const QString &error);
-    QStringList availableLaunchers() const { return m_launchers; }
+    QStringList availableLaunchers() const; // the app-wide DetectedLaunchers
     bool filePanel(const QString &mode, int width, QString *error) override;
     QJsonObject chromeState() const override;
     QJsonObject sessionExtras(const QString &sessionId) const override;
@@ -232,7 +232,6 @@ private:
     QHash<QString, QAction *> m_chrome; // interface element -> its title-strip action
     QHash<QString, QWidget *> m_footer; // interface element -> its footer button
     void sampleAgents();
-    void detectLaunchers();
     TerminalInterface *terminal(const QString &id) const;
     QString liveCwd(const QString &id) const;
     void prime(QWidget *page, QWidget *pane = nullptr); // pane: mark that one terminal as sized, not the whole page
@@ -272,10 +271,8 @@ private:
     bool m_zoomRestoreSidebar = true, m_zoomRestoreMenu = true;
     bool m_dashHidFiles = false; // the dashboard hid the file panel and gives it back on close
     QHash<QString, QPointer<QObject>> m_sessions;
-    QStringList m_launchers{QStringLiteral("terminal")};
     QStringList m_denylist; // restore-denylist.conf, read at launch
     void replay(const QString &id, KParts::ReadOnlyPart *part, bool split);
-    QDateTime m_launchersAt;
     QTimer m_saveTimer, m_agentTimer;
     bool m_quitting = false;
 };

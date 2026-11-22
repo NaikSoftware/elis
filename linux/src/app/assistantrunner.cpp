@@ -1,5 +1,6 @@
 #include "assistantrunner.h"
 
+#include "detectedlaunchers.h"
 #include "library.h"
 
 #include <QCoreApplication>
@@ -7,10 +8,13 @@
 #include <QFileInfo>
 #include <QJsonArray>
 #include <QProcessEnvironment>
+#include <QStandardPaths>
 
 #include <memory>
 #include <signal.h>
 #include <sys/prctl.h>
+
+using namespace std::chrono_literals;
 
 static QStringList strings(const QJsonValue &array)
 {
@@ -20,16 +24,24 @@ static QStringList strings(const QJsonValue &array)
     return out;
 }
 
-AssistantRunner::AssistantRunner(WindowLibrary &library, const QString &stateDir)
+AssistantRunner::AssistantRunner(WindowLibrary &library, const QString &stateDir, DetectedLaunchers &launchers)
     : m_library(library)
-    , m_dir(stateDir + QStringLiteral("/assistant"))
+    , m_stateDir(stateDir)
+    , m_launchers(launchers)
 {
-    connect(qApp, &QCoreApplication::aboutToQuit, this, &AssistantRunner::stop);
+    connect(qApp, &QCoreApplication::aboutToQuit, this, [this] { stop(true); });
+    connect(&launchers, &DetectedLaunchers::changed, this, &AssistantRunner::pump); // inputs wait for the first detection
+    m_watchdog.setSingleShot(true);
+    m_watchdog.setInterval(10min);
+    connect(&m_watchdog, &QTimer::timeout, this, [this] {
+        stop(false);
+        fail(tr("the assistant stopped responding"));
+    });
 }
 
 AssistantRunner::~AssistantRunner()
 {
-    stop();
+    stop(true);
 }
 
 void AssistantRunner::enqueue(const QString &streamText)
@@ -38,10 +50,12 @@ void AssistantRunner::enqueue(const QString &streamText)
     pump();
 }
 
-void AssistantRunner::providerChanged(const QString &)
+void AssistantRunner::providerChanged(const QString &provider)
 {
-    stop();
-    m_recap = AssistantBridge::recap(); // now, before the next input joins the chat it recaps
+    if (provider == m_provider)
+        return;
+    stop(false);
+    m_recap = true;
     if (m_busy) // the new provider takes the cut turn over
         m_queue.prepend(m_current), m_busy = false;
     pump();
@@ -49,18 +63,20 @@ void AssistantRunner::providerChanged(const QString &)
 
 void AssistantRunner::pump()
 {
-    if (m_busy || m_queue.isEmpty() || (m_provider.isEmpty() && !launch()))
+    if (m_busy || m_queue.isEmpty() || !m_launchers.detected() || (m_provider.isEmpty() && !launch()))
         return;
     m_current = m_queue.takeFirst();
     m_busy = true;
     m_ended = false;
     m_text.clear();
     m_turnError.clear();
+    m_lastError.clear();
+    m_watchdog.start();
     QString input = m_current;
     if (m_fresh) {
-        input = m_preamble + (m_recap.isEmpty() ? QString() : m_recap + QStringLiteral("\n\n")) + input;
+        const QString recap = m_recap ? AssistantBridge::recap() : QString(); // without the queued inputs, sent anyway
+        input = m_preamble + (recap.isEmpty() ? QString() : recap + QStringLiteral("\n\n")) + input;
         m_fresh = false;
-        m_recap.clear();
     }
     if (!m_perInput) {
         m_proc->write(AssistantBridge::encode(m_provider, input).toUtf8() + '\n');
@@ -74,12 +90,19 @@ void AssistantRunner::pump()
 
 bool AssistantRunner::launch()
 {
-    const QStringList available = m_library.assistantProviders();
-    const QJsonObject read = AssistantBridge::run({{"cmd", "assistant.provider"}}, QJsonValue::Null, QJsonArray::fromStringList(available));
-    const QString provider = read["reply"]["result"]["assistant"]["provider"].toString(available.value(0)); // the choice, else the first detected
+    QStringList available = m_launchers.ids();
+    available.removeAll(QStringLiteral("terminal"));
+    const QJsonArray providers = QJsonArray::fromStringList(available);
+    const QJsonObject saved = AssistantBridge::run({{"cmd", "assistant.provider"}}, QJsonValue::Null, providers);
+    QString provider = saved["reply"]["result"]["assistant"]["provider"].toString();
     if (provider.isEmpty()) {
-        fail(QStringLiteral("no assistant provider installed"));
-        return false;
+        provider = available.value(0);
+        if (provider.isEmpty()) {
+            fail(QStringLiteral("no assistant provider installed"));
+            return false;
+        }
+        // saved, so the tree reads it back and a later detection never swaps it; its providerChanged is this launch
+        AssistantBridge::run({{"cmd", "assistant.provider"}, {"args", QJsonObject{{"provider", provider}}}}, QJsonValue::Null, providers);
     }
     const QJsonObject launch = AssistantBridge::launch(provider, Assistant::peers(m_library.assistantWindows()));
     if (launch.contains("error")) {
@@ -101,29 +124,47 @@ void AssistantRunner::spawn(QStringList argv)
     if (const QStringList standIn = QProcess::splitCommand(qEnvironmentVariable("ELIS_ASSISTANT_PROVIDER_CMD")); !standIn.isEmpty())
         argv = standIn + argv.mid(1); // tests run a fake in the provider binary's place
     QProcessEnvironment env = QProcessEnvironment::systemEnvironment();
+    // a parent Claude Code session's markers, which would make the provider its child; CLAUDE_CONFIG_DIR and the rest stay
+    static const QStringList markers{"CLAUDECODE",
+                                     "CLAUDE_PID",
+                                     "CLAUDE_CODE_ENTRYPOINT",
+                                     "CLAUDE_CODE_EXECPATH",
+                                     "CLAUDE_CODE_CHILD_SESSION",
+                                     "CLAUDE_CODE_CHILD_NOTES_DIR",
+                                     "CLAUDE_CODE_SESSION_ID",
+                                     "CLAUDE_CODE_SESSION_ATTENDED",
+                                     "CLAUDE_CODE_SSE_PORT",
+                                     "CLAUDE_CODE_MESSAGING_SOCKET",
+                                     "CLAUDE_CODE_MESSAGING_TOKEN"};
     for (const QString &key : env.keys())
-        if (key.startsWith(QLatin1String("ELIS_")) || key.startsWith(QLatin1String("CLAUDE")))
+        if (key.startsWith(QLatin1String("ELIS_")) || markers.contains(key))
             env.remove(key);
-    // except the app's own state dir: without it the provider's elisctl would reach the default socket, not this app
-    if (qEnvironmentVariableIsSet("ELIS_STATE_DIR"))
-        env.insert(QStringLiteral("ELIS_STATE_DIR"), qEnvironmentVariable("ELIS_STATE_DIR"));
+    env.insert(QStringLiteral("ELIS_STATE_DIR"), m_stateDir); // the provider's elisctl reaches this app, not the default socket
+    // its tools on the PATH that found it, this build's elisctl first, as in every pane
+    const QString path = QCoreApplication::applicationDirPath() + QLatin1Char(':') + m_launchers.path();
+    env.insert(QStringLiteral("PATH"), path);
     for (auto it = m_environment.begin(); it != m_environment.end(); ++it)
         env.insert(it.key(), it.value().toString());
-    QDir().mkpath(m_dir);
+    if (const QString found = QStandardPaths::findExecutable(argv.value(0), path.split(QLatin1Char(':'), Qt::SkipEmptyParts)); !found.isEmpty())
+        argv[0] = found; // QProcess would search the app's PATH
+    const QString dir = m_stateDir + QStringLiteral("/assistant");
+    QDir().mkpath(dir);
     auto *p = new QProcess(this);
     m_proc = p;
-    m_lastError.clear();
     p->setProcessEnvironment(env);
-    p->setWorkingDirectory(m_dir);
+    p->setWorkingDirectory(dir);
     p->setChildProcessModifier([] { ::prctl(PR_SET_PDEATHSIG, SIGTERM); }); // a crashed app leaves no provider running
     if (m_perInput)
         p->setStandardInputFile(QProcess::nullDevice());
     auto out = std::make_shared<QByteArray>();
     auto read = [this, p, out] {
         *out += p->readAllStandardOutput();
+        if (m_busy)
+            m_watchdog.start();
         for (qsizetype i; (i = out->indexOf('\n')) >= 0; out->remove(0, i + 1))
             decoded(QString::fromUtf8(out->left(i)));
     };
+    connect(p, &QProcess::started, this, [this] { m_recap = false; });
     connect(p, &QProcess::readyReadStandardOutput, this, read);
     connect(p, &QProcess::readyReadStandardError, this, [this, p] {
         if (const QByteArray line = p->readAllStandardError().trimmed().split('\n').last().trimmed(); !line.isEmpty())
@@ -170,13 +211,16 @@ void AssistantRunner::decoded(const QString &line)
 
 void AssistantRunner::endTurn(const QString &error)
 {
+    const QList<Assistant::Window> windows = m_library.assistantWindows();
     if (!m_text.isEmpty())
-        Assistant::emitMessage(AssistantBridge::appendAssistant(m_text.join(QStringLiteral("\n\n"))), m_library.assistantWindows());
+        Assistant::emitMessage(AssistantBridge::appendAssistant(m_text.join(QStringLiteral("\n\n"))), windows);
     m_text.clear();
     m_busy = false;
-    if (!error.isEmpty())
-        return fail(error); // the chat stores an error only through providerFailed, which drops the queue
-    AssistantBridge::turnEnded();
+    m_watchdog.stop();
+    if (error.isEmpty())
+        AssistantBridge::turnEnded();
+    else
+        Assistant::emitMessage(AssistantBridge::turnFailed(error), windows);
     pump();
 }
 
@@ -185,19 +229,32 @@ void AssistantRunner::fail(const QString &message)
     m_queue.clear(); // as the chat's count was
     m_busy = false;
     m_text.clear();
+    m_watchdog.stop();
     Assistant::emitMessage(AssistantBridge::providerFailed(message), m_library.assistantWindows());
 }
 
-void AssistantRunner::stop()
+void AssistantRunner::stop(bool wait)
 {
     m_provider.clear();
-    if (!m_proc)
+    m_watchdog.stop();
+    QProcess *p = m_proc;
+    if (!p)
         return;
-    m_proc->disconnect(this);
-    m_proc->terminate(); // SIGTERM first, so the provider can end what it started
-    if (!m_proc->waitForFinished(2000)) {
-        m_proc->kill();
-        m_proc->waitForFinished(1000);
+    m_proc = nullptr;
+    p->disconnect(this);
+    if (p->state() == QProcess::NotRunning) {
+        p->deleteLater();
+        return;
     }
-    delete m_proc;
+    p->terminate(); // SIGTERM first, so the provider can end what it started
+    if (wait) {
+        if (!p->waitForFinished(2000)) {
+            p->kill();
+            p->waitForFinished(1000);
+        }
+        delete p;
+        return;
+    }
+    QTimer::singleShot(3000, p, [p] { p->kill(); });
+    connect(p, &QProcess::finished, p, &QObject::deleteLater);
 }

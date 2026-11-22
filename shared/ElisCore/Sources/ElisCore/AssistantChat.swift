@@ -91,6 +91,25 @@ public final class AssistantChat {
 
     public func turnEnded() { pending = max(0, pending - 1) }
 
+    /// turnFailed ends a turn the provider answered with an error; the inputs queued behind it still run.
+    @discardableResult
+    public func turnFailed(_ message: String, now: Double) -> AssistantEntry {
+        let entry = append(.error, text: message, now: now)
+        turnEnded()
+        return entry
+    }
+
+    /// settledEntries is `entries(last:)` without the inputs still queued for the provider, which it is sent anyway.
+    public func settledEntries(last: Int) -> [AssistantEntry] {
+        var queued = pending
+        let settled = all.reversed().filter { entry in
+            guard queued > 0, entry.kind == .user || entry.kind == .reply else { return true }
+            queued -= 1
+            return false
+        }
+        return Array(settled.reversed().suffix(max(0, last)))
+    }
+
     /// providerFailed records why no provider could run, or why it died, and drops every queued input.
     public func providerFailed(_ message: String, now: Double) {
         append(.error, text: message, now: now)

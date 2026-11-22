@@ -54,6 +54,7 @@ char *elis_assistant_finish_send(const char *planJSON, const char *failuresJSON)
 // other key is kept. Null peers leave the tree as it is; a bad tree, peers or providers is {"error"}.
 char *elis_assistant_stamp(const char *treeJSON, const char *peersJSON, const char *providersJSON);
 void elis_assistant_turn_ended(void);
+char *elis_assistant_turn_failed(const char *message); // the error entry it stores; ends that turn only
 char *elis_assistant_provider_failed(const char *message); // the error entry it stores; drops every queued input
 void elis_assistant_mark_seen(void);
 char *elis_assistant_append_assistant(const char *text); // the assistant entry it stores
@@ -68,7 +69,8 @@ char *elis_assistant_encode(const char *provider, const char *text); // one NDJS
 // One provider stdout line as [{"text"}|{"conversation"}|{"turnEnded":true,"error"?}]; a conversation is stored as the
 // provider's resume id.
 char *elis_assistant_decode(const char *provider, const char *line);
-char *elis_assistant_recap(void); // plain text: the last 50 entries for a newly started provider's first input
+// plain text: the last 50 entries, less the inputs still queued, for a newly started provider's first input
+char *elis_assistant_recap(void);
 
 #ifdef __cplusplus
 }

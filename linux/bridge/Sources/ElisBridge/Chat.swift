@@ -162,6 +162,12 @@ public func elisAssistantProviderFailed(_ message: UnsafePointer<CChar>) -> Unsa
     }
 }
 
+@_cdecl("elis_assistant_turn_failed")
+public func elisAssistantTurnFailed(_ message: UnsafePointer<CChar>) -> UnsafeMutablePointer<CChar>? {
+    let message = text(message)
+    return onMain { json(chat.turnFailed(message, now: Date().timeIntervalSince1970)) }
+}
+
 @_cdecl("elis_assistant_mark_seen")
 public func elisAssistantMarkSeen() {
     MainActor.assumeIsolated { chat.markSeen() }
@@ -239,5 +245,5 @@ public func elisAssistantDecode(_ name: UnsafePointer<CChar>, _ line: UnsafePoin
 
 @_cdecl("elis_assistant_recap")
 public func elisAssistantRecap() -> UnsafeMutablePointer<CChar>? {
-    onMain { AssistantPrompt.inline(chat.entries(last: 50)) }
+    onMain { AssistantPrompt.inline(chat.settledEntries(last: 50)) }
 }

@@ -7,8 +7,8 @@ public enum AssistantMode: Sendable, Equatable {
 
 /// How the host starts a provider: `environment` is added to the inherited one, and `preamble`
 /// is prepended to the text of the first input encoded into a fresh conversation.
-/// The host strips inherited `ELIS_*` and `CLAUDE*` variables from that environment, and gives a `.perInput`
-/// process `/dev/null` as stdin.
+/// The host strips inherited `ELIS_*` variables (setting its own `ELIS_STATE_DIR`) and a parent Claude Code session's
+/// markers from that environment, keeps every other `CLAUDE_*` setting, and gives a `.perInput` process `/dev/null` as stdin.
 public struct AssistantLaunch: Sendable, Equatable {
     public let argv: [String]
     public let mode: AssistantMode

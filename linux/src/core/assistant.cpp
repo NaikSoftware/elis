@@ -61,6 +61,11 @@ void turnEnded()
     elis_assistant_turn_ended();
 }
 
+QJsonObject turnFailed(const QString &message)
+{
+    return object(elis_assistant_turn_failed(message.toUtf8().constData()));
+}
+
 QJsonObject providerFailed(const QString &message)
 {
     return object(elis_assistant_provider_failed(message.toUtf8().constData()));

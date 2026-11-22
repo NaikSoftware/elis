@@ -18,6 +18,7 @@ QJsonObject run(const QJsonObject &request, const QJsonValue &peers, const QJson
 QJsonObject finishSend(const QJsonObject &plan, const QJsonObject &failures);
 QJsonObject stamp(const QJsonObject &tree, const QJsonValue &peers, const QJsonValue &providers);
 void turnEnded();
+QJsonObject turnFailed(const QString &message); // the error entry; the queue behind it still runs
 QJsonObject providerFailed(const QString &message);
 void markSeen();
 QJsonObject appendAssistant(const QString &text);
