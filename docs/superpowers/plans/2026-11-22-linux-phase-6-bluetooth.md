@@ -48,7 +48,22 @@ link, so Bluetooth only. The Mac's numbers are the spike's in the spec, a raw L2
   advertising interval is the first suspect). Serve reports `advertising` 10 ms after it starts.
 - Throughput: the relay's sends saturate the socket (`EAGAIN`) at 16–20 KB/s of sealed, compressed frames, against the
   Mac's 62–65 KB/s raw. End to end, 40 KB of base64 text printed in a Live pane open in Term view reached the phone's
-  screen in 18.5–18.8 s, 2.2 KB/s.
-- Open: while the phone shows an idle Live pane in Term view the relay keeps sending about 16 KB/s (0.7 KB/s on the
-  session list), so the link is full before any output; the pane's daemon sends a passive viewer nothing meanwhile and
-  the relay's attaches stay up. Not yet compared with a Mac relay.
+  screen in 18.5–18.8 s, 2.2 KB/s, measured while the idle traffic below filled the link.
+- Idle traffic, fixed (PR fix/relay-idle-term-traffic). The relay's own terminal path is quiet: a test client holding a
+  watch and a claim on an idle pane received about 22 B/s. The bytes were the phone's history view of a main-screen
+  Live pane, which re-read `session text --lines 2000` every 700 ms while the watch channel streamed, each answer the
+  whole history; the phone's code is shared, so a Mac relay forwards the same reads. On Linux `events.read` also
+  refused the relay's upper-case cursor run, so channel 1 sent `{"gap":true}` every 1.25 s and the phone re-read
+  `tree`. Re-measured on one throwaway `b=1` pairing, the relay's sends on the L2CAP socket counted by strace; the link
+  carried only about 3 KB/s that evening:
+
+  | | before | after |
+  |---|---|---|
+  | session list | 0.76 KB/s | 0.11 KB/s |
+  | Term view, idle shell, no history | 0.94 KB/s | 0.12 KB/s |
+  | Term view, idle shell, 40 KB of history | 3.4 KB/s, the link full | 0.12 KB/s |
+  | 40 KB printed into a cleared pane, to the phone's screen | not there after 10 min | 5.0–5.2 s |
+
+  Before, a history read slower than the phone's 15 s call timeout was dropped by the phone and sent anyway, so with
+  more history the screen stopped updating while the link stayed full. Each read still sends the whole history;
+  reading only what changed is left for later.
