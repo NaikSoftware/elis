@@ -24,8 +24,9 @@ SyntaxHighlighting, WindowSystem) and `konsole-kpart`. Install `wl-clipboard` (o
 Building also needs Swift 6.3 (the swift.org tarball or `swiftly`) on PATH, or `-DSWIFT=/path/to/swift`: `linux/bridge`
 builds the shared `ElisCore` (`shared/ElisCore`) into `libElisBridge.so` with the Swift runtime linked in, so running Elis needs no Swift.
 The first build of it takes a few minutes; it installs to `lib/elis` beside the binaries' `bin`.
-The Swift `elisctl` helper's phone relay links the system OpenSSL: building needs `libssl-dev`, running it `libssl3`
-and the `openssl` command, which makes the relay's certificate.
+The Swift `elisctl` helper's phone relay links the system OpenSSL, libsystemd and zlib: building needs `libssl-dev`,
+`libsystemd-dev` and `zlib1g-dev`, running it `libssl3` and the `openssl` command, which makes the relay's certificate.
+Its Bluetooth link needs BlueZ (`bluetoothd`) and an adapter that can advertise.
 Live sessions run under the Mac's patched zmx, which the build makes from source with zig 0.16, git and `shasum`
 (`macos/scripts/setup.sh --zmx-only`, network on the first build) and installs it to `libexec/elis`, off PATH. Unpack
 [zig 0.16.0](https://ziglang.org/download/) into `~/.local/opt`, where configure finds it, or pass `-DZIG=/path/to/zig`;
@@ -33,7 +34,7 @@ the build patches that zig's `float.h` once, as the Mac build does.
 
 ```sh
 cd linux
-sudo apt install libssl-dev
+sudo apt install libssl-dev libsystemd-dev zlib1g-dev
 sudo apt install libkf6parts-dev   # or, without root: scripts/fetch-kparts-headers.sh
 cmake -S . -B build -DCMAKE_INSTALL_PREFIX=~/.local   # the menu entry gets an absolute Exec
 cmake --build build -j
@@ -199,7 +200,7 @@ Tailscale name) and the port, and Revoke Paired Phones. While switched on, the r
 it. The same relay runs from a terminal too, while the command runs:
 
 ```sh
-elisctl mobile serve [--port 8765] [--bind ADDR] [--host NAME] [--no-qr]
+elisctl mobile serve [--port 8765] [--bind ADDR] [--host NAME] [--no-qr] [--no-bluetooth]
 ```
 
 It prints the QR code and the link; Ctrl+C stops it. Nothing listens unless one of the two runs.
@@ -211,8 +212,13 @@ It prints the QR code and the link; Ctrl+C stops it. Nothing listens unless one 
   one at once.
 - `serve` listens on all interfaces by default; `--bind` restricts it. It reaches the phone over your LAN or a VPN such
   as Tailscale; `--host` only sets the address written into the link (e.g. the machine's Tailscale name or IP).
+- The relay also offers Bluetooth, as the Mac does, so the phone works without Wi-Fi: BlueZ advertises a service UUID that rotates every 15 minutes and the phone opens an LE L2CAP channel,
+  encrypted with a key from the pairing token. Its stderr reports `bluetooth: advertising` or `bluetooth: off (<reason>)`;
+  `--no-bluetooth` turns it off. One relay per state directory advertises. BlueZ advertises from the adapter's fixed
+  address unless `/etc/bluetooth/main.conf` sets `Privacy = device`, so without it the rotating UUID does not stop a
+  nearby scanner from recognising the computer.
 - A pane running Claude Code opens in Chat, as on the Mac, read from its transcript (`session transcript`).
-  Bluetooth and pages on the phone are Mac-only for now (page overlays are not ported to Linux).
+  Pages on the phone are Mac-only for now (page overlays are not ported to Linux).
 
 ## Credits and license
 

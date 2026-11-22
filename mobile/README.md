@@ -5,7 +5,7 @@ session's screen in two modes, Chat (a Claude Code conversation drawn as a nativ
 (the terminal grid) with Fit to phone, on while the screen is open (gives the program the phone's columns and rows, so it redraws for the phone and
 nothing wraps, and gives the grid back on leave), typing into it, direct input of a Live pane (the phone leads a Live pane it opens), the sidebar's row menus, and notifications when an agent blocks or finishes while the app is in the background, over
 the TLS relay that `elisctl mobile serve` runs on the computer. On a Linux computer everything works as on the Mac
-except Bluetooth and pages. The project
+except pages. The project
 README's [Phone app](../linux/README.md#phone-app) section covers the relay and its security model.
 
 ## Build and run
