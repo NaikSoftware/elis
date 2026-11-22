@@ -15,7 +15,8 @@ Legend: [x] done · [ ] todo · (fork) = fork-only feature, not in upstream docs
 - [x] Sidebar density (Settings ▸ Appearance, `sidebar density`); app accent copper as the palette's Highlight
 - [x] Session icon = logo of the agent in its foreground process group (claude, codex, opencode, agy), sampled every 2 s (fork)
 - [x] Workspace "+" on hover: menu of Terminal + agents found on the login shell PATH, with logos; repeat button for the last choice (fork)
-- [x] Remembered folder per workspace (last cwd its panes reported); new sessions open there (fork)
+- [x] Remembered folder (`rememberedFolder`) and pinned project folder (`projectFolder`, `workspace folder <set DIR|clear>`,
+  `workspace new [name] [--collapsed] [--folder DIR]`) per workspace; new sessions open there and `session new --cwd` routes to the deepest matching project folder (fork)
 - [x] Settings: new session directory (home / workspace folder / custom), placement (end / after current)
 - [x] Session name: pinned rename, else the title a running program (agent) set (agy's conversation title, which it keeps in its own store, not the terminal), else the plain command in the foreground (sampled every 2 s, cleared when it ends), else the folder (`~` for home); shell prompt titles ignored; inline rename on double-click
 - [x] Sidebar footer: new session, new workspace, flagged view (flat list)
@@ -87,7 +88,7 @@ Legend: [x] done · [ ] todo · (fork) = fork-only feature, not in upstream docs
 - [x] Open: Markdown, text (syntax-highlighted as in Kate) and images in the built-in viewer; others with the default app
 - [x] Context menu: Open, Open with Default App, New Companion Here, Cut, Copy, Paste, Rename…, Move to Trash
 - [x] Drag inside to move (Ctrl to copy), drop from the file manager to copy in, drop on a terminal to paste the path
-- [x] `filepanel [show|hide|toggle]`, `filepanel width`
+- [x] `filepanel [show|hide|toggle]`, `filepanel width` (read-back `filePanelVisible`, `filePanelWidth`)
 
 ## Phase 5: settings, keymap, extension
 
@@ -103,10 +104,10 @@ Legend: [x] done · [ ] todo · (fork) = fork-only feature, not in upstream docs
 - [x] Hooks (`hooks.conf`, File ▸ Edit/Reload Hooks, `hooks reload|list`): status, notify, session.created/closed/selected,
   tree.changed, pane.split, app.launched, message fire; pane.scratch, pane.focused and remote.* parse but never fire
 - [ ] Page bridge
-- [x] Program overlays: `session overlay open|close|result|text|hide|show|toggle|resize` (full, `--size-percent`,
+- [x] Program overlays: `session overlay open|close|result|text|copy|hide|show|toggle|resize` (full, `--size-percent`,
   `--width/--height`, `--pane left|right`, `--wait`, `--follow`, CLI `--block`), View ▸ Hide/Show Overlays Ctrl+Alt+Shift+J;
   read-back `overlay`, `overlaySizePercent`, `overlayWidth/Height`, `paneOverlays`, `hiddenOverlays`.
-  `--background-color` tints the floating frame only (Konsole takes colours from the profile); `overlay copy` is not ported
+  `--background-color` tints the floating frame only (Konsole takes colours from the profile)
 - [x] Dashboard Ctrl+Alt+Shift+G (Navigate ▸ Dashboard, palette: the MRU grid, auto-sized; again closes), `dashboard <id[:left|:right]>…
   | --mru [--font-size N | --auto-size] | --close`; ≤9 cells, ceil(√n) columns, master's auto font factors; the cells are the live
   Konsole panes themselves, re-hosted view-only (arrows without wrap, Enter or click opens that pane, Esc closes) with a name chip in
@@ -140,15 +141,17 @@ Legend: [x] done · [ ] todo · (fork) = fork-only feature, not in upstream docs
   panes, the focused one first): the argument check and the reader are master's own `ElisCore`, linked through
   `linux/bridge` (ElisBridge); the read runs on a worker thread
 - [x] Control API breadth: master's catalog with its argument names, errors and read-backs — `events` (an app-wide ring
-  with run/after cursors; the CLI polls it), `workspace go|collapse|expand|flag`, `session context|get|reveal|collapse|expand|focus|resize|
+  with run/after cursors; the CLI polls it), `workspace new [name] [--collapsed] [--folder DIR]|folder <set DIR|clear>|move --to up|down|top|bottom|delete|select|go|collapse|expand|flag`
+  (`workspace delete` refuses the last workspace; `workspace select` selects an empty workspace too),
+  `session move <workspace>|--to up|down|top|bottom|--after SID|--before SID`, `session context|get|reveal|collapse|expand|focus|resize|
   copy|paste|select-all|search`, `session text` (visible screen; `--all` and `--lines` page the scrollback through the view's
   scrollbar), `session new --parent` as `session.companion.new`, `surface zoom`, `sidebar [show|hide|toggle]|mode|flagged-layout|
   density|expand|collapse|width`, `pick` (the palette; exits 0 picked/custom, 2 cancelled), `ask` (a dialog; buttons, hotkeys, line or
-  multiline input, choices with other; exits 0/2/3), `msg send|read|ack` (panes export `ELIS_PANE_ID`), `recent list|open <id>|clear`,
-  `notify <body>`, repeated `--target` for `session close|move`. Read-back `context`, `collapsed`, `splitFocused`, `ask`,
-  `sidebarFlaggedLayout`, `sidebarWidth`, `zoomedSurface`, `pickPending`, `askPending`. Absent features answer master's
-  "<cmd> is not supported on this platform" with the reason: `zmx.*`, `session restart|lead|background`, `surface cursor`
-  (Konsole exposes no cursor), `config reload`, `browser.*`, page overlays/companions, quick and scratch terminals.
+  multiline input, choices with other; `--cancel` or default Cancel resolves as `escaped` with exit 3; exits 0/2/3), `msg send|read|ack` (panes export `ELIS_PANE_ID`), `recent list|open <id>|clear`,
+  `notify <body>`, repeated `--target` for `session close|move`. Read-back `projectFolder`, `context`, `collapsed`, `splitFocused`, `ask`,
+  `sidebarFlaggedLayout`, `sidebarWidth`, `filePanelVisible`, `filePanelWidth`, `zoomedSurface`, `pickPending`, `askPending`. Absent features answer master's
+  "<cmd> is not supported on this platform" with the reason: `zmx.*`, `session restart|lead|background|page`, `surface cursor`
+  (Konsole exposes no cursor), `config reload`, `browser.*`, page overlays (`session.overlay.reload|navigate|submit|follow|search|changes|files|wrap|page.serve`) and companions, quick and scratch terminals.
   Simplified: a terminal-style ask is a dialog over the window rather than drawn in the pane; pick rows show no status glyph;
   `msg send --all` reaches the addressed window only; search counts case-insensitive matches in the pane's history;
   `pane.focused` events are not emitted
