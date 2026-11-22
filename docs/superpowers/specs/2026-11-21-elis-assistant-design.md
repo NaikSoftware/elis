@@ -134,9 +134,10 @@ replied, or not delivered. The dots clear when that next message is sent, so non
 - Sidebar: the Elis row is pinned above workspaces in every sidebar mode, not movable, closable or renamable.
   Unread count = replies since the chat was last shown.
 - Main area: centered chat column; a reply card per answering session with a "go to session" link.
-- Right rail: who is in the conversation, with status and agent.
+  No right rail (owner): a session row or workspace header dragged from the sidebar onto the composer becomes its tag chip.
 - Composer: tag chips, `@` completion (sessions, `@ws:`, `@all`), drop target for sidebar rows,
-  provider picker listing detected agents by name only, send button.
+  provider picker listing detected agents by name only, send button; no hint line under it.
+- Showing the chat clears the window's selected session, so no session shortcut reaches a session hidden behind it.
 
 ### Control API
 
@@ -146,7 +147,7 @@ replied, or not delivered. The dots clear when that next message is sent, so non
 - `assistant.reply TEXT` — from a session (`ELIS_SESSION_ID`); appends a reply card. CLI: `elisctl reply`.
 - `assistant.read [--last N]` — the transcript.
 - `assistant.provider [NAME]` — read or set the provider.
-- `assistant.show` — select the Elis row.
+- `assistant.show [--window W]` — select the Elis row; read back as the window's `assistantShown: true`.
 - Tree top level: `assistant {provider, providers, running, unread}`; nodes: `handle`, sessions also
   `assistantMark`; the dispatcher stamps them, never the host. A tag may also be an exact session id.
 - `send` answers `delivered` (handles), `deliveredIDs`, `skipped` and `cut`; it fails when nothing is delivered.
