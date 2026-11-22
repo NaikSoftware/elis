@@ -124,8 +124,8 @@ static const char *usage = R"(usage: elisctl <command> [args] [--target T] [--so
   window move [id] --x X --y Y [--display N]   refused on Wayland, which does not let apps place windows
   window minimize [id] [on|off|toggle]
   --window W                            address a session/workspace/tree command to that window (default: frontmost)
-  mobile serve [--port N] [--bind ADDR] [--host NAME] [--no-qr]
-                                        let the elis Mobile app drive this elis over TLS (default port 8765);
+  mobile serve [--port N] [--bind ADDR] [--host NAME] [--no-qr] [--no-bluetooth]
+                                        let the elis Mobile app drive this elis over TLS (default port 8765) or Bluetooth;
                                         prints a pairing QR code and link (--host: the address put in it)
   mobile reset                          new pairing token: phones paired before are cut off
   restore mode [none|rerun|live]        bare: configured / at launch / active; a mode applies from the next launch
