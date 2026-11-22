@@ -89,6 +89,10 @@ The event kinds and payloads are:
   carries the recipient's `paneID`, the sender's address as `from` (absent for a sender outside
   Elis) and `messageID`; never the body. One event per delivered recipient. The human line reads
   `HH:MM:SS message NAME pane-id=ID from=SENDER id=MESSAGE-ID`, with `from=-` for an anonymous sender.
+- `assistant.message`: an entry was added to the Elis assistant chat. Payload carries `kind` (`user`,
+  `assistant`, `sent`, `reply`, `error`), optional `from` (session id) and `handle` (sender handle), and
+  `text`. The human line reads `HH:MM:SS assistant.message kind=KIND from=SENDER TEXT` (whitespace folded,
+  text capped at 80 characters).
 
 Every event has `seq` (app-wide sequence), `ts` (Unix timestamp), `kind`, optional
 `window`/`workspace`/`session` ids, and `payload`. Human mode prints one compact line. `--json` emits
@@ -321,7 +325,7 @@ overlay is addressable the same way: zooming it shows the session while the over
 leaving zoom brings the overlay back. Caveat: `active`/`visible`
 derive from the session's own flags, not from zoom — and `visible` reads false for a pane behind a
 FLOATING overlay even though it is visually on screen; address by `id`/`kind`, and read the zoom state
-from the top-level `zoomedSurface`. Workspace nodes carry
+from the top-level `zoomedSurface`. Sessions also carry `handle` (short Latin `@` tag derived from the session name) and `assistantMark` (`waiting`, `replied`, or `not-delivered` during an assistant exchange; omitted when none). Workspace nodes carry
 `id`, `name`, `active`, `sessions` (a flat list, each companion right after its parent), `focused` (whether this workspace is a MEMBER of the sidebar's focus
 set — the read side of `workspace focus`, distinct from `active` the SELECTED workspace; omitted on
 non-members, and absent entirely when nothing is marked. Membership is reported INDEPENDENTLY of whether
@@ -336,7 +340,7 @@ mode with the filter ON narrows visibility to the members), and `collapsed` (whe
 when expanded, so an all-expanded tree carries no `collapsed` keys), and `tint`/`tintOn` (the workspace row's own
 tint, the read side of `workspace tint`; both omitted when untinted), and `rememberedFolder` (the last
 directory a local pane of the workspace reported, kept when it empties; set only by the shell's `cd`, no
-setter; omitted when none), and `projectFolder` (the pinned project folder from `workspace folder`; omitted when none).
+setter; omitted when none), `projectFolder` (the pinned project folder from `workspace folder`; omitted when none), and `handle` (the workspace's short Latin `@ws:` tag).
 
 The tree object itself carries these top-level read-only fields: `idleMs` (milliseconds since the last
 user input in the window, omitted before any activity), `autoFollowMs` (the window's Auto-follow
@@ -379,7 +383,7 @@ reading the tree gets its version floor without a second round-trip; it is not d
 `window.list`, where a caller uses `version` instead), `indexUnsaved` (true while the last write of
 the window index failed, omitted otherwise; app-wide, and it clears on the next index write that lands),
 and `snapshotUnsaved` (true while the last save of this window's sessions failed, omitted otherwise; per
-window, and it clears on the next save of that window that lands).
+window, and it clears on the next save of that window that lands), `assistant` (`{provider?, providers, running, unread}`, the app-wide Elis assistant state, omitted on a host without it), and `assistantShown` (`true` when the Elis assistant chat is shown in this window, omitted otherwise).
 `idleMs` is live
 and grows while the window is idle, so it is on `tree` only, never `window.list`; `sidebarVisible` is on
 both; `sidebarMode`, `sidebarWidth`, `workspaceFilter`, `quickVisible`, `zoomedSurface`, the four
@@ -2125,6 +2129,43 @@ scratch running on the host, for a row attached alone with `zmx attach` or from 
 predates these counts reports none on such a row. A local pane and
 a server pane cannot message each other yet: a Mac send to a server row is rejected `unknown pane` with detail
 `remote session`, a server send to a Mac session `unknown pane`, and a server row as `--as` is refused.
+
+## assistant
+
+App-wide system chat pinned above the workspaces in the sidebar (dog icon, row named **Elis**, unread count of replies).
+Available in the Linux app now; the macOS app gets it later. Everything in the chat runs through the chosen provider
+(`claude`, `codex`, `antigravity`, `opencode`, whichever are installed) as one long-lived process so other sessions'
+replies reach Elis while it works. **Note:** providers run in their full-auto permission mode so no confirmation
+prompt stalls the stream.
+
+- `elisctl assistant ask TEXT [--wait [--timeout N]]` (`assistant.ask`) posts a user message to the Elis assistant
+  (refuses empty text). Without `--wait`, prints `ok`. With `--wait`, polls `tree` until `assistant.running` is
+  `false`, then reads the transcript and prints entries added after the posted message (or `ok` if none). `--timeout N`
+  (positive seconds, requires `--wait`) prints `timed out` to stderr and exits `124`.
+- `elisctl assistant send --to TAG... (TEXT|--stdin)` (`assistant.send`) resolves repeatable `--to` tags (`@handle`,
+  `@ws:<workspace>`, `@all`, or an exact session id; `@` optional, case-insensitive) and types the message into each
+  target at once as one line ending with `elisctl reply "<answer>"`; nothing is queued. Group tags (`@ws:`, `@all`)
+  expand only to sessions running an agent; sessions with status `blocked` are skipped. Newlines and control characters
+  fold to spaces, NUL is refused, and lines over 900 bytes are truncated (`cut: true`). Returns `result.assistant` with
+  `entries`, `delivered` (handles), `deliveredIDs`, `skipped` (`{handle, reason}`), and optional `cut`. Prints
+  `skipped HANDLE: REASON` lines on stderr, `delivered: ...` on stdout, and fails (`nothing was delivered`, non-zero
+  exit in both human and `--json` mode) when `delivered` is empty.
+- `elisctl assistant read [--last N]` (`assistant.read`) returns up to 500 persisted transcript entries
+  (`{id, kind, from?, to?, text, ts}`, where `kind` is `user`, `assistant`, `sent`, `reply`, or `error`); `--last N`
+  returns the newest N (positive integer). Human output prints `HH:mm KIND[ @FROM]: TEXT`.
+- `elisctl assistant provider [NAME]` (`assistant.provider`) reads the current provider and available installed choices,
+  or selects `NAME` from the next message onward (`current: NAME|none`, `available: ...`).
+- `elisctl assistant show [--window W]` (`assistant.show`) selects the pinned Elis row in the addressed window, clearing
+  any selected session and clearing `unread`.
+- `elisctl reply (TEXT|--stdin)` (`assistant.reply`) runs from inside an Elis session (`ELIS_SESSION_ID`) and posts a
+  reply card with a "Go to session" link into the chat and into the live assistant stream (`[reply from @<handle> <session id>] <text>`).
+  Prints `ok`. Fails outside a session (`elisctl reply runs inside an Elis session`) or when `--socket` targets another
+  instance.
+
+Read back in `tree`: top-level `assistant` (`{provider?, providers, running, unread}`), `assistantShown` (`true` when
+open), `handle` on every workspace and session, and `assistantMark` (`waiting`, `replied`, or `not-delivered`) on
+sessions (cleared when the user posts the next message). Events emit `assistant.message` (`kind`, `from`, `handle`,
+`text`).
 
 ## font
 

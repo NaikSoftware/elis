@@ -201,6 +201,7 @@ renumbering. Do not reintroduce a count anywhere.
   `ask.open`, `ask.result`, `ask.cancel`
 - `quick`, `quick.type`, `quick.text`
 - `msg.send`, `msg.read`, `msg.ack`
+- `assistant.ask`, `assistant.send`, `assistant.reply`, `assistant.read`, `assistant.provider`, `assistant.show`
 - `sidebar`, `sidebar.mode`, `sidebar.flagged-layout`, `sidebar.density`, `sidebar.expand`, `sidebar.collapse`,
   `sidebar.width`, `filepanel`, `filepanel.width`, `notify`
 - `font.inc`, `font.dec`, `font.reset`

@@ -8,8 +8,8 @@ Elis is a Qt6/KDE Frameworks 6 port of [agterm](https://github.com/umputun/agter
 [NaikSoftware/elis](https://github.com/NaikSoftware/elis), which adds the file panel, agent logos and launchers,
 remembered workspace folders and more on top of upstream. It follows Elis's model, keys (translated to Linux
 conventions), config files, agent-status hooks and `elisctl` wire protocol, so agents and scripts written for Elis
-work here. It is an independent project: report bugs here, not upstream. [docs/PARITY.md](docs/PARITY.md) tracks what
-is ported and what is not yet (web-page overlays, HTML companions, `browser.*` and remote sessions are missing).
+work here. It is an independent project: report bugs here, not upstream. Not ported yet: web-page overlays, HTML companions,
+`browser.*` and remote sessions.
 
 Each terminal is a Konsole KPart, so Konsole's profiles, colour schemes, scrollback, search and copy/paste work as
 in Konsole.
@@ -149,7 +149,7 @@ and `ELISCTL`, so
 `active`; `--window` picks a window other than the frontmost. `elisctl --help` lists the commands; the wire format is Elis's (one JSON request line, one response
 line) on `<state dir>/elis.sock`. The state dir is `~/.local/share/elis`, or `ELIS_STATE_DIR`.
 Beyond sessions and workspaces it streams events (`elisctl events`), shows pickers and questions (`pick`, `ask`),
-passes messages between panes (`msg`, addressed by `ELIS_PANE_ID`), reads a pane's screen or scrollback
+passes messages between panes (`msg`, addressed by `ELIS_PANE_ID`), drives the pinned Elis assistant chat and sends tagged messages to sessions (`assistant ask|send|read|provider|show`, and `reply` from inside a session), reads a pane's screen or scrollback
 (`session text --all`), types into either pane (`session type --pane right`), and zooms a pane's font
 (`font inc|dec|reset`), sets a pane's grid apart from its window (`session grid <cols>x<rows>`, `--reset`), and wheels a pane as a mouse
 would (`session scroll <lines>`). Commands for features Elis

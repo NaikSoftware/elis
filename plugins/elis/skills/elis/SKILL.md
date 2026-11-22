@@ -5,7 +5,7 @@ description: >
   manage and move sessions, companions and workspaces; split panes; toggle the scratch or file panel; run, hide or show overlays;
   read exit status; show HTML pages, URLs or dev servers in an overlay or as a
   page row;
-  post a HUD/caption/notification; read CI/PR status; message panes; show a picker, question or input dialog; show images/markdown/code; type
+  post a HUD/caption/notification; read CI/PR status; message panes; message other sessions through Elis, reply to Elis; show a picker, question or input dialog; show images/markdown/code; type
   into or restart a pane by id, copy its selection, set the clipboard, search scrollback; manage windows, fonts,
   theme; reload or edit the keymap, event hooks and elis-scoped ghostty config; run a custom command; read
   a closed window's screen; read a pane's Claude chat; subscribe to status, tree and other
@@ -21,6 +21,7 @@ when_to_use: >
   it, make a page that switches sessions or returns a choice, preview the report you generated, show this URL or the running dev server, keep me logged in to a page shown in an overlay, search the scrollback, flag every session in a workspace, tint a session or workspace row a color, pin a project folder to a workspace, route a session to its project workspace, show status or activity under a session in the sidebar, show or hide the file panel (file tree), make a companion session, keep a related program next to a session, duplicate this session with its programs as a companion, make this session a companion, move a companion under another session, open a sub-session under this one, fold a session's companions, show a page as a companion of this session, open a page as its own session row in the sidebar, run my custom command, send a message to the other pane or another agent, which agents are running, what is session ID doing, talk to the agent in that session, read my messages, wait for a message, tell me when the selected session changes, wait until that worker session finishes, bring back the session I just closed, attach a session from another Mac, attach a remote session with all its companions, open a remote window for my Linux server, run sessions on a Linux host with elis-server, watch events or wait for a session on the elis-server host, install elis-server on a Linux host, detach or reattach a remote session, copy this to the clipboard, was Elis upgraded under the running app, upgrade Elis without losing sessions, what recipes are there, connect my phone, pair Elis Mobile, revoke a paired phone, fit a pane to the phone,
   attach a script to a pane's terminal stream, lead or take over a pane from a script, does the phone lead a pane,
   show this on my phone, show a page where I am, show the dev server on my phone,
+  message other sessions through Elis, reply to Elis, ask the Elis assistant,
   the keymap editor will not open.
 allowed-tools: Bash(elisctl *)
 ---
@@ -175,6 +176,9 @@ session and whatever agent runs there:
 - Read it: `elisctl session text --lines 80 --target ID`.
 - Talk to it without typing into its prompt: `elisctl msg send --to ID:PANE TEXT`, PANE from `surfaces[].paneID`
   or `left`/`right`; the receiver reads with `msg read`. `session type --target ID` types into its prompt instead.
+- Through the Elis assistant (Linux now, macOS later): `elisctl assistant send --to @handle TEXT`
+  (`@handle`, `@ws:<workspace>`, `@all`, or a session id; `blocked` sessions are skipped), or answer Elis from inside a
+  session with `elisctl reply TEXT`.
 - Wait for it: `elisctl session wait --until completed --target ID`.
 
 ## Restore modes
@@ -745,6 +749,16 @@ but the sender. Inside a pane the CLI acts as that pane through `ELIS_SESSION_ID
 overrides). `read` prints `ID from SENDER` then the body, oldest first, and removes nothing until `ack`; `read --ack` takes
 the batch in one step. Mail is in memory only and is dropped when the pane closes or restarts. Read back
 `pendingMessages` on the tree surface and the `message` event. See [reference.md](reference.md#msg).
+
+**assistant & reply** — `assistant ask TEXT [--wait [--timeout N]]` · `assistant send --to TAG... TEXT|--stdin` ·
+`assistant read [--last N]` · `assistant provider [NAME]` · `assistant show [--window W]` · `reply TEXT|--stdin` —
+drive the pinned **Elis** system chat (available in the Linux app now; macOS gets it later). Providers (`claude`,
+`codex`, `antigravity`, `opencode`) run as one long-lived process in full-auto permission mode so other sessions'
+replies reach Elis while it works; switching applies from the next message. `send` tags `@handle`, `@ws:<workspace>`,
+`@all` (agent sessions only), or an exact session id, skips `blocked` sessions, types one line ending in
+`elisctl reply "…"`, and fails if nothing is delivered; `--wait --timeout N` exits 124. `reply` uses `ELIS_SESSION_ID`
+and posts a reply card. Read back `assistant` (`{provider?, providers, running, unread}`), `handle`, `assistantMark`
+and `assistantShown` in `tree`, and the `assistant.message` event. See [reference.md](reference.md#assistant).
 
 **font** — `font inc|dec|reset [--pane left|right|scratch]` — change a session pane's font size (omitted/`left` = main pane, `right` = the split pane, `scratch` = the scratch terminal). Read the resulting size back from `tree` (`fontSize`/`splitFontSize`/`scratchFontSize` per pane). A pane under an HTML overlay zooms the page instead, read back as `htmlOverlays[].zoom`.
 
