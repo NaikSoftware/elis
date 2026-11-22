@@ -1,8 +1,7 @@
 #!/usr/bin/env bash
-# Run the host-free ElisCore unit tests (no Xcode, no libghostty, no Metal).
+# Run the host-free SwiftPM tests: shared ElisCore, the Mac's ElisMac, and elis-server.
 set -euo pipefail
 cd "$(dirname "$0")/../../shared/ElisCore"
 swift test
-# the Mac relay's Network listener and Core Bluetooth pipe, through the same suites
-cd ../../macos/ElisMac
-swift test
+cd ../../macos/ElisMac && swift test
+cd ../../server && swift test

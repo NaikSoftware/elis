@@ -1,6 +1,6 @@
 ---
 worth: maybe
-where: shared/ElisCore/Sources/ElisServerKit/ElisServer.swift:start
+where: server/Sources/ElisServerKit/ElisServer.swift:start
 added: 2026-11-14
 ---
 # user event hooks on elis-server

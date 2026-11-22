@@ -32,7 +32,7 @@ deploy: release ## release build + copy to ~/Applications
 	cp -R "$(RELEASE_APP)" "$(INSTALL_DIR)/Elis.app"
 	@echo "installed $(INSTALL_DIR)/Elis.app"
 
-test: ## host-free ElisCore unit tests (scripts/test.sh)
+test: ## host-free SwiftPM unit tests (scripts/test.sh)
 	./scripts/test.sh
 
 test-app: ## application-hosted AppKit unit tests (scripts/test-app.sh)
@@ -41,6 +41,7 @@ test-app: ## application-hosted AppKit unit tests (scripts/test-app.sh)
 lint: ## swiftlint over the tree (strict — warnings fail too)
 	swiftlint lint --strict --quiet
 	cd ../shared/ElisCore && swiftlint lint --strict --quiet
+	cd ../server && swiftlint lint --strict --quiet
 
 dist: ## release DMG, signed and notarized when a Developer ID is present — usage: make dist VERSION=x.y.z [PUBLISH=1]
 	@test -n "$(VERSION)" || { echo "usage: make dist VERSION=x.y.z [PUBLISH=1]" >&2; exit 1; }

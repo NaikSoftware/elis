@@ -1,6 +1,6 @@
 ---
 worth: maybe
-where: shared/ElisCore/Sources/SessionHostRuntime/Host.swift:handle(ensure:)
+where: macos/ElisMac/Sources/SessionHostRuntime/Host.swift:handle(ensure:)
 added: 2026-11-01
 ---
 # a fast Live --command loses its output in the session-host handoff
