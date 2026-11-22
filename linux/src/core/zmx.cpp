@@ -72,7 +72,7 @@ QString executable()
     // the build tree keeps it beside elis; an install keeps it off PATH, in libexec, as the Mac keeps it in its bundle
     const QString dir = QCoreApplication::applicationDirPath();
     const QString beside = dir + QStringLiteral("/zmx");
-    return QFileInfo(beside).isExecutable() ? beside : QDir::cleanPath(dir + QStringLiteral("/" ELIS_ZMX_FROM_BIN "/zmx"));
+    return QFileInfo(beside).isExecutable() ? beside : QDir::cleanPath(dir + QStringLiteral("/" ELIS_LIBEXEC_FROM_BIN "/zmx"));
 }
 
 Attach attach(const QString &stateDir, const QString &paneId, const QString &shell, const QString &line, const QString &command, bool claim,

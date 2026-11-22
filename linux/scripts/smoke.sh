@@ -408,6 +408,13 @@ spid=$(ctl session get --target src | awk '/^foregroundPid /{print $2}')
 [ -n "$spid" ] && [ "$spid" -gt 0 ] || fail "live pane foreground"
 ctl tree --json | grep -q '"backedByZmx":true' || fail "a live session reads backedByZmx"
 ctl tree --json | grep -q '"kind":"left","lead":"leader","paneID":"[0-9a-f-]*","visible":true' || fail "tree surfaces[]"
+out=$(ctl session attach --json --target src) || fail "session attach --json ($out)"
+grep -q '"argv"' <<<"$out" && grep -q '"screen"' <<<"$out" && grep -q '"paneID"' <<<"$out" && ! grep -q '"nonce"' <<<"$out" \
+  || fail "session attach --json fields ($out)"
+out=$(ctl session attach --json --claim --target src) || fail "session attach --json --claim ($out)"
+grep -q '"nonce"' <<<"$out" || fail "session attach --json --claim nonce ($out)"
+err=$(ctl session attach --json --pane right --target src 2>&1) && fail "session attach --pane right accepted"
+grep -q 'session has no split pane' <<<"$err" || fail "session attach --pane right error ($err)"
 ctl session type $'LIVE_VAR=kept\n' --target renamed
 sleep 0.5
 stop

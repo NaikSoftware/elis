@@ -6,13 +6,19 @@
 #include <QDateTime>
 #include <QDir>
 #include <QFile>
+#include <QFileInfo>
 #include <QJsonArray>
 #include <QJsonDocument>
 #include <QJsonObject>
 #include <QLocalSocket>
 #include <QSet>
 #include <QThread>
+#include <cerrno>
 #include <cstdio>
+#include <cstdlib>
+#include <cstring>
+#include <unistd.h>
+#include <vector>
 
 static const char *usage = R"(usage: elisctl <command> [args] [--target T] [--socket PATH] [--window W] [--json]
 
@@ -47,6 +53,7 @@ static const char *usage = R"(usage: elisctl <command> [args] [--target T] [--so
   session focus [left|right|other]      move keyboard focus between the split panes
   session scroll <lines> [--pane left|right]   wheel the pane like a mouse over it; negative = up (older)
   session grid <cols>x<rows> | --reset [--pane left|right]   the program's grid apart from the window (a phone's) | back
+  session attach [--pane left|right] [--claim] [--json]   mirror a Live pane here; --claim takes its lead
   session resize --split-ratio R | --grow-left D | --grow-right D   (also --grow-top/-bottom/-primary/-split)
   workspace move --to up|down|top|bottom
   session split [on|off|toggle] [--axis vertical|horizontal]
@@ -261,6 +268,34 @@ static QString callerPath(const QString &path)
 int main(int argc, char **argv)
 {
     QCoreApplication app(argc, argv);
+    if (argc >= 3 && std::strcmp(argv[1], "session") == 0 && std::strcmp(argv[2], "attach") == 0) {
+        // the Swift relay owns attach; both sides get the state dir explicitly
+        const QString dir = QCoreApplication::applicationDirPath();
+        const QString buildHelper = dir + QStringLiteral("/helper/elisctl");
+        const QString helper = QFileInfo(buildHelper).isExecutable()
+            ? buildHelper
+            : QDir::cleanPath(dir + QStringLiteral("/" ELIS_LIBEXEC_FROM_BIN "/elisctl"));
+        const QByteArray helperPath = QFile::encodeName(helper);
+        const QByteArray state = QFile::encodeName(stateDir());
+        const QByteArray sock = QFile::encodeName(socketPath());
+        ::setenv("ELIS_STATE_DIR", state.constData(), 1);
+        bool hasSocket = false;
+        std::vector<char *> execArgs;
+        execArgs.push_back(const_cast<char *>(helperPath.constData()));
+        for (int i = 1; i < argc; ++i) {
+            if (std::strcmp(argv[i], "--socket") == 0 || std::strncmp(argv[i], "--socket=", 9) == 0)
+                hasSocket = true;
+            execArgs.push_back(argv[i]);
+        }
+        if (!hasSocket) {
+            execArgs.push_back(const_cast<char *>("--socket"));
+            execArgs.push_back(const_cast<char *>(sock.constData()));
+        }
+        execArgs.push_back(nullptr);
+        ::execv(helperPath.constData(), execArgs.data());
+        fprintf(stderr, "elisctl: cannot run %s: %s\n", helperPath.constData(), std::strerror(errno));
+        return 1;
+    }
     const QStringList flags{"json", "stdin", "all", "no-select", "create-workspace", "auto-reset", "blink", "if-idle", "undoable", "companion",
                             "wait", "block", "follow", "full", "markdown", "sticky", "no-frame", "spinner", "none", "clear", "mru", "auto-size", "close", "minimized",
                             "next", "prev", "allow-custom", "no-block", "multiple", "ack", "no-qr", "reset", "collapsed", "page"};
