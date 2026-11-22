@@ -355,6 +355,8 @@ QJsonObject WindowLibrary::dispatch(const QJsonObject &request)
         return fail(QStringLiteral("no open window"));
     const QList<Assistant::Window> everyWindow = assistantWindows();
     const QStringList providers = assistantProviders();
+    if (cmd == QLatin1String("assistant.provider") && args.contains("provider") && !launchers->detected())
+        return fail(QStringLiteral("agents are still being detected; try again in a moment"));
     if (cmd.startsWith(QLatin1String("assistant.")))
         return Assistant::dispatch(request, everyWindow, providers, assistantSink, [this](const QString &window) {
             QString error;

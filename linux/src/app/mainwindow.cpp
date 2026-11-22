@@ -1678,6 +1678,11 @@ QStringList MainWindow::assistantProviders() const
     return library ? library->assistantProviders() : QStringList();
 }
 
+DetectedLaunchers *MainWindow::assistantLaunchers() const
+{
+    return library ? library->launchers : DetectedLaunchers::instance();
+}
+
 QJsonObject MainWindow::assistantRequest(const QJsonObject &request)
 {
     if (library)

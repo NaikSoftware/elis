@@ -106,6 +106,16 @@ QString recap()
     return QString::fromUtf8(taken(elis_assistant_recap()));
 }
 
+QString resume(const QString &provider)
+{
+    return QString::fromUtf8(taken(elis_assistant_resume(provider.toUtf8().constData())));
+}
+
+void forgetResume(const QString &provider)
+{
+    elis_assistant_forget_resume(provider.toUtf8().constData());
+}
+
 }
 
 namespace Assistant {

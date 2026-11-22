@@ -30,6 +30,8 @@ QJsonValue turnArgv(const QString &provider, const QString &input, const QJsonAr
 QString encode(const QString &provider, const QString &text);
 QJsonValue decode(const QString &provider, const QString &line);
 QString recap();
+QString resume(const QString &provider); // the conversation its next launch resumes, "" for none
+void forgetResume(const QString &provider);
 }
 
 // Where the commands' inputs and provider switches go: the provider process (app AssistantRunner)

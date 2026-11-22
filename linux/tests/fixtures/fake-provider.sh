@@ -1,15 +1,24 @@
 #!/bin/bash
 # A provider for tests, builtins only so a killed one leaves no child behind. Each input is one turn answering
 # "pid <pid>: <text>", with " early" when the next line arrived before that turn's result and " leaked" when the host
-# passed ELIS_SESSION_ID or CLAUDECODE on. The inputs "env", "fail" and "crash" answer ELIS_STATE_DIR and PATH, end
-# the turn with an error, and die. Run as `codex exec …` it answers its last argument in codex's shape; else claude's.
+# passed ELIS_SESSION_ID or CLAUDECODE on. The inputs "env", "fail", "crash" and "quiet" answer ELIS_STATE_DIR and PATH,
+# end the turn with an error, die, and end it with no text. Asked to resume the conversation "gone", it exits at once as
+# a provider does whose conversation is gone. Run as `codex exec …` it answers its last argument in codex's shape;
+# else claude's.
 leaked=
 [[ -n $ELIS_SESSION_ID$CLAUDECODE ]] && leaked=' leaked'
+prev=
+for arg; do
+    [[ $prev == --resume && $arg == gone ]] && { echo 'No conversation found with session ID: gone' >&2; exit 1; }
+    prev=$arg
+done
 answer() { # the text to answer, JSON-escaped, or "" for an error turn
+    quiet=
     case $1 in
     env) text="$ELIS_STATE_DIR $PATH" ;;
     fail) text= ;;
     crash) kill -9 $$ ;;
+    quiet) text= quiet=1 ;;
     *) text="pid $$: $1$2$leaked" ;;
     esac
 }
@@ -30,6 +39,10 @@ while if [[ -n $next ]]; then line=$next next=; else IFS= read -r line; fi; do
     early=
     if IFS= read -r -t 0.3 next; then early=' early'; else next=; fi
     answer "$input" "$early"
+    if [[ -n $quiet ]]; then
+        printf '{"type":"result","subtype":"success","is_error":false,"session_id":"fake-%s"}\n' $$
+        continue
+    fi
     if [[ -z $text ]]; then
         printf '{"type":"result","subtype":"error_during_execution","is_error":true,"errors":["boom"]}\n'
         continue

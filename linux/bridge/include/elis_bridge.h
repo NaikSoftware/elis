@@ -71,6 +71,9 @@ char *elis_assistant_encode(const char *provider, const char *text); // one NDJS
 char *elis_assistant_decode(const char *provider, const char *line);
 // plain text: the last 50 entries, less the inputs still queued, for a newly started provider's first input
 char *elis_assistant_recap(void);
+// the conversation a launch of provider resumes, "" for none; forget drops it, so the next launch starts afresh
+char *elis_assistant_resume(const char *provider);
+void elis_assistant_forget_resume(const char *provider);
 
 #ifdef __cplusplus
 }

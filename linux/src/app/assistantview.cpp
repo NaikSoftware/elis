@@ -1,6 +1,7 @@
 #include "assistantview.h"
 
 #include "assistant.h"
+#include "detectedlaunchers.h"
 #include "launcher.h"
 #include "mainwindow.h"
 #include "palette.h"
@@ -356,6 +357,7 @@ AssistantView::AssistantView(MainWindow &window, Store &store)
     m_column->setSpacing(18);
     stack->addWidget(entries);
     m_working = text(tr("Elis is working…"), ink(0.55));
+    m_working->setObjectName(QStringLiteral("assistantWorking"));
     QFont italic = m_working->font();
     italic.setItalic(true);
     m_working->setFont(italic);
@@ -695,6 +697,18 @@ void AssistantView::append(const QJsonObject &e)
 void AssistantView::rebuildProviders()
 {
     const QJsonObject node = m_directory.value("assistant").toObject();
+    DetectedLaunchers *found = m_window.assistantLaunchers();
+    if (m_watched != found) { // the list fills when the login shell answers, a second or more after launch
+        m_watched = found;
+        connect(found, &DetectedLaunchers::changed, this, [] { refreshAll(); });
+    }
+    if (!found->detected()) { // still looking: the saved choice, not "none found"
+        const Launcher *saved = launcher(node["provider"].toString());
+        m_provider->setText(saved ? saved->title : tr("Detecting agents…"));
+        m_provider->setEnabled(false);
+        m_providerRows.clear();
+        return;
+    }
     const QJsonArray providers = node["providers"].toArray();
     QString current = node["provider"].toString();
     if (!providers.contains(QJsonValue(current)))

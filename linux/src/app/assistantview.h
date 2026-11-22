@@ -2,6 +2,7 @@
 
 #include <QHash>
 #include <QJsonObject>
+#include <QPointer>
 #include <QSet>
 #include <QWidget>
 
@@ -68,4 +69,5 @@ private:
     QToolButton *m_provider = nullptr, *m_send = nullptr;
     QList<QPair<QString, QString>> m_providerRows; // provider id, title
     QString m_currentProvider;
+    QPointer<class DetectedLaunchers> m_watched; // whose detection repaints the picker
 };

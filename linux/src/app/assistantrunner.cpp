@@ -1,5 +1,6 @@
 #include "assistantrunner.h"
 
+#include "assistantview.h"
 #include "detectedlaunchers.h"
 #include "library.h"
 
@@ -94,6 +95,8 @@ bool AssistantRunner::launch()
     const QJsonArray providers = QJsonArray::fromStringList(available);
     const QJsonObject saved = AssistantBridge::run({{"cmd", "assistant.provider"}}, QJsonValue::Null, providers);
     QString provider = saved["reply"]["result"]["assistant"]["provider"].toString();
+    if (!available.contains(provider))
+        provider.clear(); // one no longer installed: the default the picker shows
     if (provider.isEmpty()) {
         provider = available.value(0);
         if (provider.isEmpty()) {
@@ -163,6 +166,8 @@ void AssistantRunner::spawn(QStringList argv)
         for (qsizetype i; (i = out->indexOf('\n')) >= 0; out->remove(0, i + 1))
             decoded(QString::fromUtf8(out->left(i)));
     };
+    m_resumed = !AssistantBridge::resume(m_provider).isEmpty();
+    m_conversed = false;
     connect(p, &QProcess::started, this, [this] { m_recap = false; });
     connect(p, &QProcess::readyReadStandardOutput, this, read);
     connect(p, &QProcess::readyReadStandardError, this, [this, p] {
@@ -176,7 +181,7 @@ void AssistantRunner::spawn(QStringList argv)
         m_provider.clear();
         fail(tr("Cannot run %1: %2").arg(p->program(), p->errorString()));
     });
-    connect(p, &QProcess::finished, this, [this, p, read](int code, QProcess::ExitStatus status) {
+    connect(p, &QProcess::finished, this, [this, p, read, provider = m_provider](int code, QProcess::ExitStatus status) {
         read();
         p->deleteLater();
         if (!m_perInput)
@@ -185,6 +190,17 @@ void AssistantRunner::spawn(QStringList argv)
             return;
         if (m_perInput && (m_ended || (status == QProcess::NormalExit && code == 0)))
             return endTurn(m_turnError);
+        if (m_resumed && !m_conversed) {
+            // it died before naming its conversation: the stored one is gone, and resuming it again would fail every launch.
+            // The input goes once more to a fresh conversation, with the chat inlined
+            AssistantBridge::forgetResume(provider);
+            m_provider.clear();
+            m_busy = false;
+            m_recap = true;
+            m_text.clear();
+            m_queue.prepend(m_current);
+            return pump();
+        }
         const QString name = QFileInfo(p->program()).fileName();
         const QString why = status == QProcess::CrashExit ? tr("%1 crashed").arg(name) : tr("%1 exited with status %2").arg(name).arg(code);
         fail(m_lastError.isEmpty() ? why : why + QStringLiteral(": ") + m_lastError);
@@ -199,6 +215,8 @@ void AssistantRunner::decoded(const QString &line)
             return;
         if (e["text"].isString())
             m_text << e["text"].toString();
+        if (e["conversation"].isString())
+            m_conversed = true;
         if (!e["turnEnded"].toBool())
             continue;
         if (m_perInput) // its process exit ends the turn, so no two ever overlap
@@ -220,6 +238,7 @@ void AssistantRunner::endTurn(const QString &error)
         AssistantBridge::turnEnded();
     else
         Assistant::emitMessage(AssistantBridge::turnFailed(error), windows);
+    AssistantView::refreshAll(); // a turn with no text emits nothing, and its end still clears the working state
     pump();
 }
 
@@ -230,6 +249,7 @@ void AssistantRunner::fail(const QString &message)
     m_text.clear();
     m_watchdog.stop();
     Assistant::emitMessage(AssistantBridge::providerFailed(message), m_library.assistantWindows());
+    AssistantView::refreshAll();
 }
 
 void AssistantRunner::stop(bool wait)

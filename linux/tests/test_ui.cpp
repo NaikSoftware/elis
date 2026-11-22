@@ -74,9 +74,15 @@ struct AssistantHost {
     std::unique_ptr<WindowLibrary> lib;
     std::unique_ptr<AssistantRunner> runner;
     static QString path() { return QStringLiteral("/nonexistent-detected:") + qEnvironmentVariable("PATH"); }
-    explicit AssistantHost(const QByteArray &standIn, const QByteArray &choice = "claude", bool detected = true)
+    // resume: the stored conversation ids, as <state>/assistant/chat.jsonl.resume holds them
+    explicit AssistantHost(const QByteArray &standIn, const QByteArray &choice = "claude", bool detected = true, const QByteArray &resume = {})
     {
         QDir().mkpath(state.filePath("assistant"));
+        if (!resume.isEmpty()) {
+            QFile file(state.filePath("assistant/chat.jsonl.resume"));
+            if (file.open(QIODevice::WriteOnly))
+                file.write(resume);
+        }
         if (!choice.isEmpty()) {
             QFile file(state.filePath("assistant/chat.jsonl.provider"));
             if (file.open(QIODevice::WriteOnly))
@@ -1067,6 +1073,60 @@ private Q_SLOTS:
         QTRY_COMPARE_WITH_TIMEOUT(host.texts("assistant").size(), 1, 5000);
         QCOMPARE(host.node()["provider"].toString(), QStringLiteral("claude"));
         QVERIFY(!host.running());
+    }
+
+    void assistantTurnWithoutTextClearsTheWorkingState()
+    {
+        AssistantHost host("bash " ELIS_TEST_FIXTURES "/fake-provider.sh");
+        MainWindow *w = host.lib->entries()[0].window;
+        w->show();
+        QVERIFY(QTest::qWaitForWindowExposed(w));
+        w->showAssistant();
+        host.ask("hi");
+        QTRY_COMPARE_WITH_TIMEOUT(host.texts("assistant").size(), 1, 5000);
+        host.ask("quiet");
+        auto *working = w->findChild<QLabel *>("assistantWorking");
+        auto *tree = w->findChild<Sidebar *>();
+        QTRY_VERIFY_WITH_TIMEOUT(!host.running(), 5000);
+        QTRY_VERIFY(working->isHidden());
+        QTRY_COMPARE(tree->topLevelItem(0)->data(0, SidebarRole::Status).toString(), QStringLiteral("idle"));
+        QCOMPARE(host.texts("assistant").size(), 1);
+    }
+
+    void assistantResumeOfAGoneConversationStartsAfresh()
+    {
+        AssistantHost host("bash " ELIS_TEST_FIXTURES "/fake-provider.sh", "claude", true, R"({"claude":"gone"})");
+        QCOMPARE(AssistantBridge::resume("claude"), QStringLiteral("gone"));
+        host.ask("hi");
+        QTRY_COMPARE_WITH_TIMEOUT(host.texts("assistant").size(), 1, 5000);
+        QVERIFY(host.texts("assistant")[0].endsWith("hi"));
+        QVERIFY(host.texts("error").isEmpty());
+        QVERIFY(AssistantBridge::resume("claude").startsWith("fake-")); // the fresh conversation, resumed next time
+    }
+
+    void assistantSavedProviderNoLongerInstalledRunsThePickersDefault()
+    {
+        AssistantHost host("bash " ELIS_TEST_FIXTURES "/fake-provider.sh", "opencode");
+        host.ask("hi");
+        QTRY_COMPARE_WITH_TIMEOUT(host.texts("assistant").size(), 1, 5000);
+        QCOMPARE(host.node()["provider"].toString(), QStringLiteral("claude"));
+    }
+
+    void assistantProviderChoiceWaitsForDetection()
+    {
+        AssistantHost host("bash " ELIS_TEST_FIXTURES "/fake-provider.sh", "claude", false);
+        MainWindow *w = host.lib->entries()[0].window;
+        w->show();
+        QVERIFY(QTest::qWaitForWindowExposed(w));
+        w->showAssistant();
+        auto *picker = w->findChild<QToolButton *>("assistantProvider");
+        QTRY_VERIFY(!picker->isEnabled());
+        QCOMPARE(picker->text(), QStringLiteral("Claude Code")); // the saved choice, not "No agent found"
+        const QJsonObject choose{{"cmd", "assistant.provider"}, {"args", QJsonObject{{"provider", "codex"}}}};
+        QCOMPARE(host.lib->dispatch(choose)["error"].toString(), QStringLiteral("agents are still being detected; try again in a moment"));
+        host.launchers.found({"terminal", "claude", "codex"}, AssistantHost::path());
+        QTRY_VERIFY(picker->isEnabled());
+        QVERIFY(host.lib->dispatch(choose)["ok"].toBool());
     }
 
     void assistantStreamProviderGetsTheRecapAfterASwitch()

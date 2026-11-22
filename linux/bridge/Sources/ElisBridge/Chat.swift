@@ -243,6 +243,20 @@ public func elisAssistantDecode(_ name: UnsafePointer<CChar>, _ line: UnsafePoin
     }
 }
 
+@_cdecl("elis_assistant_resume")
+public func elisAssistantResume(_ name: UnsafePointer<CChar>) -> UnsafeMutablePointer<CChar>? {
+    let name = text(name)
+    return onMain { provider(name).flatMap { chat.resume[$0] } ?? "" }
+}
+
+@_cdecl("elis_assistant_forget_resume")
+public func elisAssistantForgetResume(_ name: UnsafePointer<CChar>) {
+    let name = text(name)
+    MainActor.assumeIsolated {
+        if let p = provider(name) { chat.resume[p] = nil }
+    }
+}
+
 @_cdecl("elis_assistant_recap")
 public func elisAssistantRecap() -> UnsafeMutablePointer<CChar>? {
     onMain { AssistantPrompt.inline(chat.settledEntries(last: 50)) }

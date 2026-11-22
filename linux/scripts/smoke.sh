@@ -298,7 +298,8 @@ ahandle=$(ctl tree --json | python3 -I -c 'import json,sys
 d=json.load(sys.stdin); d=d.get("result",d); d=d.get("tree",d)
 print([s["handle"] for w in d["workspaces"] for s in w["sessions"] if s["id"]==sys.argv[1]][0])' "$asst")
 out=$(ctl assistant ask hello --wait --timeout 20)
-grep -qE '^[0-9]{2}:[0-9]{2} assistant: pid [0-9]+:' <<<"$out" && grep -qx 'hello' <<<"$out" || fail "assistant ask --wait ($out)"
+# the saved codex runs only where codex is installed, else the first agent found; the fake answers either way
+grep -qE '^[0-9]{2}:[0-9]{2} assistant: pid [0-9]+:' <<<"$out" && grep -qE '(^|: )hello$' <<<"$out" || fail "assistant ask --wait ($out)"
 read_out=$(ctl assistant read)
 grep -qE '^[0-9]{2}:[0-9]{2} user: hello$' <<<"$read_out" || fail "assistant read user ($read_out)"
 grep -qE '^[0-9]{2}:[0-9]{2} assistant: pid [0-9]+:' <<<"$read_out" || fail "assistant read assistant ($read_out)"

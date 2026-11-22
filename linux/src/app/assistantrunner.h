@@ -48,6 +48,8 @@ private:
     QString m_current;   // that input
     QStringList m_text;
     bool m_ended = false; // a per-input turn's end arrived before its process exit
+    bool m_resumed = false;   // the running process resumes a stored conversation
+    bool m_conversed = false; // and it has named its conversation since it started
     QString m_turnError, m_lastError;
     QTimer m_watchdog;
 };
