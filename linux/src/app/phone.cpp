@@ -53,18 +53,12 @@ QString hostOf(const QString &link)
 }
 } // namespace
 
-QString pairLinkWithHost(const QString &link, const QString &host)
+QString pairLinkWithHost(const QString &link, const QString &host, quint16 port)
 {
-    QUrl url(link);
-    QUrlQuery q(url);
-    if (host.trimmed().isEmpty() || !q.hasQueryItem(QStringLiteral("h")))
-        return link;
-    q.removeQueryItem(QStringLiteral("h"));
-    QList<std::pair<QString, QString>> items = q.queryItems(QUrl::FullyDecoded);
-    items.prepend({QStringLiteral("h"), host.trimmed()});
-    q.setQueryItems(items);
-    url.setQuery(q);
-    return url.toString(QUrl::FullyEncoded);
+    char *raw = elis_phone_link_with_host(link.toUtf8().constData(), host.toUtf8().constData(), port);
+    const QString out = QString::fromUtf8(raw);
+    elis_free(raw);
+    return out;
 }
 
 QImage qrImage(const QString &text)
@@ -93,7 +87,8 @@ PhoneRelay::PhoneRelay()
     if (f.open(QIODevice::ReadOnly)) {
         const QJsonObject o = QJsonDocument::fromJson(f.readAll()).object();
         m_on = o.value(QStringLiteral("on")).toBool();
-        m_port = quint16(qBound(1, o.value(QStringLiteral("port")).toInt(8765), 65535));
+        const int port = o.value(QStringLiteral("port")).toInt(8765);
+        m_port = port >= 1024 && port <= 65535 ? quint16(port) : 8765; // PhoneDesktopState's rule
         m_host = o.value(QStringLiteral("host")).toString();
     }
     connect(qApp, &QCoreApplication::aboutToQuit, this, &PhoneRelay::stop);
@@ -241,11 +236,13 @@ QString PhoneRelay::host() const
 
 QString PhoneRelay::link() const
 {
-    return m_links.isEmpty() ? QString() : pairLinkWithHost(m_links.first(), host());
+    return m_links.isEmpty() ? QString() : pairLinkWithHost(m_links.first(), host(), m_port);
 }
 
 void PhoneRelay::setEnabled(bool on)
 {
+    if (on == m_on && !(on && !m_error.isEmpty()))
+        return;
     m_on = on;
     save();
     if (on)
@@ -286,7 +283,88 @@ bool PhoneRelay::revoke(QString *error)
     }
     if (m_on)
         start(); // serve prints the token it started with; a new run shows the new one
+    m_event = tr("paired phones revoked");
+    Q_EMIT changed();
     return true;
+}
+
+QJsonObject PhoneRelay::status() const
+{
+    QJsonObject o{{"on", m_on}, {"listening", listening()}, {"port", m_port}, {"host", host()}, {"hosts", QJsonArray::fromStringList(hosts())}};
+    if (!m_event.isEmpty())
+        o.insert("lastEvent", m_event);
+    if (!m_error.isEmpty())
+        o.insert("error", m_error);
+    if (listening())
+        o.insert("link", link());
+    if (const QString b = m_bluetooth.isEmpty() && listening() ? QStringLiteral("starting") : m_bluetooth; !b.isEmpty())
+        o.insert("bluetooth", b);
+    return o;
+}
+
+QJsonObject PhoneRelay::readback() const
+{
+    QJsonObject o = status();
+    for (const char *key : {"hosts", "lastEvent", "error", "link"})
+        o.remove(QLatin1String(key));
+    return o;
+}
+
+void PhoneRelay::whenSettled(std::function<void()> done)
+{
+    auto settled = [this] { return !m_on || !m_error.isEmpty() || (listening() && !m_bluetooth.isEmpty()); };
+    if (settled())
+        return done();
+    auto *timer = new QTimer(this);
+    timer->setSingleShot(true);
+    auto finish = [timer, done = std::make_shared<std::function<void()>>(std::move(done))] {
+        if (!*done)
+            return;
+        timer->deleteLater();
+        std::exchange(*done, nullptr)();
+    };
+    connect(this, &PhoneRelay::changed, timer, [settled, finish] {
+        if (settled())
+            finish();
+    });
+    connect(timer, &QTimer::timeout, this, finish);
+    timer->start(startLimitMs);
+}
+
+void phoneCommand(const QJsonObject &request, const std::function<void(const QJsonObject &)> &reply)
+{
+    char *raw = elis_phone_request(QJsonDocument(request).toJson(QJsonDocument::Compact).constData());
+    const QJsonObject parsed = QJsonDocument::fromJson(raw).object();
+    elis_free(raw);
+    if (!parsed.value("ok").toBool())
+        return reply({{"ok", false}, {"error", parsed.value("error").toString()}});
+    // every answer but phone.status leaves the link out: it carries the pairing token
+    auto answer = [](QJsonObject status) {
+        status.remove("link");
+        return QJsonObject{{"ok", true}, {"result", QJsonObject{{"phone", status}}}};
+    };
+    PhoneRelay *relay = PhoneRelay::instance();
+    const QString op = parsed.value("op").toString();
+    if (op == QLatin1String("status"))
+        return reply({{"ok", true}, {"result", QJsonObject{{"phone", relay->status()}}}});
+    if (op == QLatin1String("host")) {
+        relay->setHost(parsed.value("host").toString());
+        return reply(answer(relay->status()));
+    }
+    if (op == QLatin1String("enable")) {
+        const QString mode = parsed.value("mode").toString();
+        relay->setEnabled(mode == QLatin1String("toggle") ? !relay->enabled() : mode == QLatin1String("on"));
+    } else if (op == QLatin1String("port")) {
+        relay->setPort(quint16(parsed.value("port").toInt()));
+    } else if (QString error; !relay->revoke(&error)) {
+        return reply({{"ok", false}, {"error", error}});
+    }
+    relay->whenSettled([relay, reply, answer] {
+        QJsonObject status = relay->status();
+        if (status.value("on").toBool() && !status.value("listening").toBool() && !status.contains("error"))
+            status.insert("error", QStringLiteral("the relay did not start within %1 s").arg(PhoneRelay::startLimitMs / 1000));
+        reply(answer(status));
+    });
 }
 
 void showPhoneDialog(QWidget *parent)

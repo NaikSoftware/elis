@@ -3,7 +3,7 @@ import ArgumentParser
 import ElisCore
 import Foundation
 
-/// `elisctl phone`: the app's Connect a Phone relay over the socket. macOS-only beside `mobile`, whose QR it prints.
+/// `elisctl phone`: the app's Connect a Phone relay over the socket, beside `mobile`, whose QR it prints.
 struct Phone: ParsableCommand {
     static let configuration = CommandConfiguration(
         abstract: "Turn the app's phone relay on or off, set its port and address, revoke paired phones, or print the link.",

@@ -139,9 +139,12 @@ private Q_SLOTS:
     void phoneCodeShowsTheChosenAddress()
     {
         const QString link = QStringLiteral("elis://pair?h=172.17.0.1&p=8765&t=tok-en_&f=ab12&n=my%20pc");
-        const QString moved = pairLinkWithHost(link, QStringLiteral(" pc.tail1234.ts.net "));
+        const QString moved = pairLinkWithHost(link, QStringLiteral(" pc.tail1234.ts.net "), 8765);
         QCOMPARE(moved, QStringLiteral("elis://pair?h=pc.tail1234.ts.net&p=8765&t=tok-en_&f=ab12&n=my%20pc"));
-        QCOMPARE(pairLinkWithHost(link, QString()), link); // no choice keeps what serve printed
+        QCOMPARE(pairLinkWithHost(link, QString(), 8765), link); // no choice keeps what serve printed
+        // a Bluetooth-only link gains the address and port, its other bytes as serve printed them
+        QCOMPARE(pairLinkWithHost(QStringLiteral("elis://pair?t=a%2Bb&b=1"), QStringLiteral("pc"), 9000),
+                 QStringLiteral("elis://pair?h=pc&p=9000&t=a%2Bb&b=1"));
         const QImage code = qrImage(link);
         QCOMPARE(code.width(), code.height());
         QVERIFY(code.width() >= 21 + 8);                       // the smallest QR plus a four-module quiet zone
@@ -181,6 +184,55 @@ private Q_SLOTS:
         relay->setEnabled(false);
         QCOMPARE(bluetooth->text(), QStringLiteral("Off"));
         QVERIFY(settings->isHidden());
+    }
+
+    void phoneCommandsDriveTheRelay()
+    {
+        if (qEnvironmentVariableIsEmpty("ELIS_STATE_DIR"))
+            QSKIP("writes <state>/mobile: run it through ctest, which sets a throwaway ELIS_STATE_DIR");
+        auto call = [](const QString &cmd, const QJsonObject &args = {}) -> const QJsonObject {
+            QJsonObject request{{"cmd", cmd}}, out;
+            if (!args.isEmpty())
+                request.insert("args", args);
+            bool answered = false;
+            phoneCommand(request, [&](const QJsonObject &r) { out = r, answered = true; });
+            if (!QTest::qWaitFor([&] { return answered; }, PhoneRelay::startLimitMs + 5000))
+                return QJsonObject{{"error", "no answer"}};
+            return out;
+        };
+        PhoneRelay *relay = PhoneRelay::instance();
+        auto off = qScopeGuard([relay] { relay->setEnabled(false); });
+        QCOMPARE(call("phone.port", {{"port", 80}})["error"].toString(), QStringLiteral("port must be 1024...65535"));
+        QCOMPARE(call("phone.enable", {{"mode", "maybe"}})["error"].toString(), QStringLiteral("phone.enable requires on|off|toggle"));
+        QCOMPARE(call("phone.status", {{"window", "w"}})["error"].toString(), QStringLiteral("phone.status takes no target or --window"));
+        QTcpServer probe;
+        QVERIFY(probe.listen(QHostAddress::LocalHost));
+        const quint16 port = probe.serverPort();
+        probe.close();
+        QJsonObject r = call("phone.port", {{"port", int(port)}});
+        QCOMPARE(std::as_const(r)["result"]["phone"]["port"].toInt(), int(port));
+        QVERIFY(!std::as_const(r)["result"]["phone"]["on"].toBool());
+        r = call("phone.enable", {{"mode", "toggle"}}); // answers once serve listens and reported Bluetooth
+        QVERIFY2(std::as_const(r)["ok"].toBool(), qPrintable(QJsonDocument(r).toJson()));
+        QVERIFY2(std::as_const(r)["result"]["phone"]["listening"].toBool(), qPrintable(QJsonDocument(r).toJson()));
+        QVERIFY(!std::as_const(r)["result"]["phone"]["bluetooth"].toString().isEmpty());
+        QVERIFY(!std::as_const(r)["result"]["phone"].toObject().contains("link")); // the token stays out of every answer but status
+        const QString link = call("phone.status")["result"]["phone"]["link"].toString();
+        QVERIFY2(link.startsWith(QStringLiteral("elis://pair?")) && link.contains(QStringLiteral("&p=%1&").arg(port)), qPrintable(link));
+        const QJsonObject tree = relay->readback();
+        QVERIFY(tree["on"].toBool() && tree["listening"].toBool() && tree["port"].toInt() == port);
+        QVERIFY(!tree.contains("link") && !tree.contains("hosts"));
+        r = call("phone.host", {{"host", "pc.example"}});
+        QCOMPARE(std::as_const(r)["result"]["phone"]["host"].toString(), QStringLiteral("pc.example"));
+        QVERIFY(call("phone.status")["result"]["phone"]["link"].toString().contains(QStringLiteral("h=pc.example&")));
+        QCOMPARE(call("phone.host", {{"auto", true}})["result"]["phone"]["host"].toString(), relay->hosts().value(0));
+        r = call("phone.revoke");
+        QVERIFY2(std::as_const(r)["result"]["phone"]["listening"].toBool(), qPrintable(QJsonDocument(r).toJson()));
+        QCOMPARE(std::as_const(r)["result"]["phone"]["lastEvent"].toString(), QStringLiteral("paired phones revoked"));
+        QVERIFY(call("phone.status")["result"]["phone"]["link"].toString() != link); // a new token
+        r = call("phone.enable", {{"mode", "off"}});
+        QVERIFY(!std::as_const(r)["result"]["phone"]["on"].toBool() && !std::as_const(r)["result"]["phone"]["listening"].toBool());
+        QVERIFY(!std::as_const(r)["result"]["phone"].toObject().contains("bluetooth"));
     }
 
     void paneLeadCoverNamesPhoneWhenPhoneLeads()
@@ -1999,14 +2051,23 @@ private Q_SLOTS:
         auto call = [&](const QString &cmd, const QJsonObject &args = {}) -> const QJsonObject {
             return dispatch(store, w, {{"cmd", cmd}, {"target", id}, {"args", args}});
         };
-        QTRY_VERIFY_WITH_TIMEOUT(!call("session.text")["result"]["text"].toString().trimmed().isEmpty(), 5000);
+        // the shell's pace bounds every wait, so a loaded machine only makes the test slower
+        QTRY_VERIFY_WITH_TIMEOUT(!call("session.text")["result"]["text"].toString().trimmed().isEmpty(), 30000);
         QVERIFY(call("session.type", {{"text", "seq 1 100\n"}})["ok"].toBool());
-        QTRY_VERIFY_WITH_TIMEOUT(call("session.text")["result"]["text"].toString().contains("\n100\n"), 5000);
+        QTRY_VERIFY_WITH_TIMEOUT(call("session.text")["result"]["text"].toString().contains("\n100\n"), 30000);
         // the clear empties the history the scrollbar still counts, then the rows fill it again
         QVERIFY(call("session.type", {{"text", "clear; for i in $(seq 1 200); do echo row$i; sleep 0.005; done; echo DO''NE\n"}})["ok"].toBool());
-        // a phone polls like this; reads land between Konsole receiving output and its scrollbar catching up
-        QVERIFY(QTest::qWaitFor([&] { return call("session.text", {{"lines", 5}})["result"]["text"].toString().contains("DONE"); }, 10000));
-        QTRY_VERIFY_WITH_TIMEOUT(call("session.text")["result"]["text"].toString().contains("DONE"), 2000);
+        // a phone polls like this; reads land between Konsole receiving output and its scrollbar catching up. The wait
+        // lasts while rows keep coming: it fails only after 10 s with no new row
+        QString last;
+        QElapsedTimer still;
+        still.start();
+        for (QString tail; !(tail = call("session.text", {{"lines", 5}})["result"]["text"].toString()).contains("DONE"); QTest::qWait(10)) {
+            if (tail != last)
+                last = tail, still.restart();
+            QVERIFY2(still.elapsed() < 10000, qPrintable(QStringLiteral("output stopped at: ") + last));
+        }
+        QTRY_VERIFY_WITH_TIMEOUT(call("session.text")["result"]["text"].toString().contains("DONE"), 10000);
     }
 
     void controlCommandsDriveTheWindow()

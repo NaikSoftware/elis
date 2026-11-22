@@ -47,12 +47,18 @@ static void serve(QLocalServer &server, WindowLibrary &library)
                 }
                 QJsonParseError err{};
                 const auto doc = QJsonDocument::fromJson(socket->readLine(maxRequestBytes + 1), &err);
-                const QJsonObject response = doc.isObject() ? library.dispatch(doc.object())
-                                                            : QJsonObject{{"ok", false}, {"error", QStringLiteral("bad request: %1").arg(err.errorString())}};
                 auto send = [](QLocalSocket *to, const QJsonObject &r) {
                     to->write(QJsonDocument(r).toJson(QJsonDocument::Compact) + '\n');
                     to->disconnectFromServer();
                 };
+                static const QStringList phone{"phone.status", "phone.enable", "phone.port", "phone.host", "phone.revoke"};
+                if (phone.contains(doc.object().value("cmd").toString())) // app-wide, and enable/port/revoke answer late
+                    return phoneCommand(doc.object(), [send, to = QPointer<QLocalSocket>(socket)](const QJsonObject &r) {
+                        if (to)
+                            send(to, r);
+                    });
+                const QJsonObject response = doc.isObject() ? library.dispatch(doc.object())
+                                                            : QJsonObject{{"ok", false}, {"error", QStringLiteral("bad request: %1").arg(err.errorString())}};
                 const std::function<QJsonObject()> job = takeDeferred();
                 if (!response.value("deferred").toBool() || !job)
                     return MainWindow::whenTyped(socket, [send, socket, response] { send(socket, response); });

@@ -331,6 +331,23 @@ above. That it follows the drag and paste tests releasing their named pasteboard
   ending in `0` (1 in 16) stayed correct and passed the gate. Locally it failed 4 of 40 runs.
 - **Fix.** The test changes the last digit to one it does not have; 0 failures in 40 runs.
 
+## Linux app tests (`linux/`, `ctest`)
+
+### `TestUi::scrollbackReadsWhileOutputStreamsKeepTheViewFollowing`
+
+- **Symptom.** The final check of the visible screen fails: it still shows `row1`, `row2`… at the top while
+  `session text --lines 5` already reads `DONE`.
+- **Runs.** Local `ctest --test-dir build`: 3 of 4 runs at load average 40–54, and 7 of 8 at load 2–14 on trees
+  based on 2cc21820 and dd6599e7.
+- **Cause, demonstrated.** A product bug, not the timing. `KonsolePrivate::scrollback` ends by calling the
+  scrollbar's `scrollBarPositionChanged`, which scrolls the view to the old bottom and then lets Konsole refresh a
+  range that had lagged new rows. The range grew past the value, so the next read saw a view above the bottom,
+  restored it there, and output tracking stayed off. A trace of `was`/`max` per read showed it after the `clear`,
+  when the screen first spills into the history.
+- **Fix.** In the PR adding Linux `phone.*`: a view that was following is moved to the bottom again until the value
+  stays at the maximum: 0 failures in 13 runs. The test's wait for `DONE` also lasts while rows keep
+  arriving instead of a fixed 10 s, since the loop forks `sleep` 200 times.
+
 ## Release build job: surface teardown smoke
 
 ### `spam-8` stalls on `session new` (case retired)
