@@ -7,6 +7,8 @@
 #include <QProcess>
 #include <QStringList>
 
+#include <functional>
+
 class QWidget;
 
 // The phone relay without a terminal: the app runs `elisctl mobile serve` as its child, one for all windows, and starts
@@ -30,10 +32,16 @@ public:
     QString bluetooth() const { return m_bluetooth; } // serve's `phone.status` value, empty until it reports one
     QString bluetoothText() const;
 
-    void setEnabled(bool on);
+    void setEnabled(bool on); // on means "try to be listening": on again restarts only a relay that failed
     void setPort(quint16 port);
     void setHost(const QString &host);
     bool revoke(QString *error); // a new token: paired phones are cut off and the code changes
+
+    QJsonObject status() const;   // ControlPhoneStatus, with the link while listening
+    QJsonObject readback() const; // tree.phone: on, listening, port, host, bluetooth
+    // done runs once the relay listens and reported Bluetooth, failed, is off, or after startLimitMs
+    void whenSettled(std::function<void()> done);
+    static constexpr int startLimitMs = 10000;
 
 Q_SIGNALS:
     void changed();
@@ -56,6 +64,9 @@ private:
     QString m_error, m_event, m_bluetooth, m_bluetoothText;
 };
 
-QString pairLinkWithHost(const QString &link, const QString &host);
+// phone.*, the Mac's ControlServer+Phone: reply runs once, now or when an on, port or revoke settled
+void phoneCommand(const QJsonObject &request, const std::function<void(const QJsonObject &)> &reply);
+
+QString pairLinkWithHost(const QString &link, const QString &host, quint16 port);
 QImage qrImage(const QString &text); // one pixel per module, black on white, four modules of quiet zone
 void showPhoneDialog(QWidget *parent);

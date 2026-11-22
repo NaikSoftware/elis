@@ -137,6 +137,10 @@ static const char *usage = R"(usage: elisctl <command> [args] [--target T] [--so
                                         let the elis Mobile app drive this elis over TLS (default port 8765) or Bluetooth;
                                         prints a pairing QR code and link (--host: the address put in it)
   mobile reset                          new pairing token: phones paired before are cut off
+  phone status | link [--qr]            the app's phone relay: on/listening/port/address; link prints the pairing link
+  phone on | off | toggle               start or stop it (answers once it listens or fails)
+  phone port <N> | host <HOST> | host --auto   its port (1024-65535), the address its link names, or the best guess
+  phone revoke                          new pairing token, the relay restarts while on
   restore mode [none|rerun|live]        bare: configured / at launch / active; a mode applies from the next launch
   restore capture                       record each pane's foreground command now (rerun mode)
   restore clear                         forget every captured command
@@ -543,8 +547,10 @@ int main(int argc, char **argv)
 {
     QCoreApplication app(argc, argv);
     const bool attach = argc >= 3 && std::strcmp(argv[1], "session") == 0 && std::strcmp(argv[2], "attach") == 0;
-    if (attach || (argc >= 2 && std::strcmp(argv[1], "mobile") == 0)) {
-        // the Swift relay owns attach and mobile; both sides get the state dir explicitly (paths.h and ControlResolve differ)
+    const bool phone = argc >= 2 && std::strcmp(argv[1], "phone") == 0;
+    if (attach || phone || (argc >= 2 && std::strcmp(argv[1], "mobile") == 0)) {
+        // the Swift elisctl owns attach, mobile and phone (the Mac's parsing, output and `link --qr`); both sides get
+        // the state dir explicitly (paths.h and ControlResolve differ)
         const QString dir = QCoreApplication::applicationDirPath();
         const QString buildHelper = dir + QStringLiteral("/helper/elisctl");
         const QString helper = QFileInfo(buildHelper).isExecutable()
@@ -561,7 +567,7 @@ int main(int argc, char **argv)
             execArgs.push_back(argv[i]);
         }
         // only the commands that reach the app take --socket; mobile reset touches the state dir alone
-        if (!hasSocket && (attach || (argc >= 3 && std::strcmp(argv[2], "serve") == 0))) {
+        if (!hasSocket && (attach || (argc >= 3 && (phone || std::strcmp(argv[2], "serve") == 0)))) {
             execArgs.push_back(const_cast<char *>("--socket"));
             execArgs.push_back(const_cast<char *>(sock.constData()));
         }

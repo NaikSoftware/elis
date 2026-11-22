@@ -89,6 +89,10 @@ char *elis_phone_relay_line(const char *line); // one relay stderr line, viewer 
 char *elis_phone_viewers_reset(void);          // the relay stopped: what every count held
 char *elis_phone_viewers(const char *paneID);  // a pane's viewer count and lead
 
+// phone.* (Sources/ElisBridge/Phone.swift)
+char *elis_phone_request(const char *requestJSON); // {cmd,target?,args?} checked: {"ok":true,"op",mode?|port?|host?}
+char *elis_phone_link_with_host(const char *link, const char *host, int port); // the Mac's PhonePairLink.withHost
+
 #ifdef __cplusplus
 }
 #endif

@@ -1430,7 +1430,8 @@ QJsonObject MainWindow::chromeState() const
     QJsonObject out{{"sidebarVisible", !m_sidebarPanel->isHidden()},
                     {"filePanelVisible", !m_filePanel->isHidden()},
                     {"filePanelWidth", m_filePanelWidth},
-                    {"idleMs", m_idle.elapsed()}};
+                    {"idleMs", m_idle.elapsed()},
+                    {"phone", PhoneRelay::instance()->readback()}};
     if (const qint64 follow = autoFollowMs())
         out.insert("autoFollowMs", follow);
     if (m_assistantShown)
