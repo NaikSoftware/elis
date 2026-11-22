@@ -159,7 +159,11 @@ replied, or not delivered. The dots clear when that next message is sent, so non
 - Call `turnEnded()` per finished turn and `providerFailed(_:now:)` when no provider can start or it dies.
 - `assistantProviders()` and `assistantPeers()` run on every `tree` request: cache the detected providers.
 - `AssistantPeer.sessionID` is byte-identical to the tree node's `id` (handles and marks are exact lookups).
-- Strip inherited `ELIS_*` and `CLAUDE*` from the provider's environment; per-input providers get `/dev/null` stdin.
+- Strip inherited `ELIS_*` but set the app's own `ELIS_STATE_DIR` (the provider's `elisctl` resolves its socket from
+  it), and strip only Claude Code's parent-session markers (`CLAUDECODE`, `CLAUDE_CODE_ENTRYPOINT`,
+  `CLAUDE_CODE_CHILD_SESSION`, …), keeping `CLAUDE_CONFIG_DIR` and the user's other settings.
+  The provider's PATH is the app's own directory first, then the login-shell PATH that detected it.
+  Per-input providers get `/dev/null` stdin.
 - Linux `session.type` must send the final Return in its own write, as the Mac's submit gap does: Claude Code takes
   a long line and its Return in one burst as a paste and does not submit.
 
