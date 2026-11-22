@@ -14,7 +14,7 @@ class QToolButton;
 class QVBoxLayout;
 class Store;
 
-// The Elis chat page in a window's stack: the transcript column, the composer under it, the exchange rail beside it.
+// The Elis chat page in a window's stack: the transcript column with the composer under it.
 // It reads assistant.read and the app-wide directory, and acts only through the window's assistant requests.
 class AssistantView : public QWidget
 {
@@ -38,7 +38,6 @@ private:
     void refresh();
     void loadDirectory(); // the sessions change without an assistant.message: tags read it fresh
     void append(const QJsonObject &entry);
-    void rebuildRail();
     void rebuildProviders();
     void complete();
     void send();
@@ -56,7 +55,6 @@ private:
     QWidget *m_empty;
     QLabel *m_working;
     class QScrollArea *m_scroll;
-    QVBoxLayout *m_rail;
     QWidget *m_chips;
     QStringList m_tags;
     QPlainTextEdit *m_editor;

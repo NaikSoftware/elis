@@ -3,6 +3,7 @@
 #include "assistant.h"
 #include "launcher.h"
 #include "mainwindow.h"
+#include "palette.h"
 #include "sidebar.h"
 #include "store.h"
 
@@ -30,6 +31,8 @@
 #include <QTimer>
 #include <QToolButton>
 #include <QVBoxLayout>
+
+#include <array>
 
 namespace {
 QList<AssistantView *> s_views;
@@ -93,37 +96,13 @@ QFrame *card()
     return f;
 }
 
-QFrame *hairline(bool vertical)
+QFrame *hairline()
 {
     auto *f = new QFrame;
-    vertical ? f->setFixedWidth(1) : f->setFixedHeight(1);
+    f->setFixedHeight(1);
     f->setStyleSheet(QStringLiteral("background:%1;").arg(css(ink(0.10))));
     return f;
 }
-
-// an exchange mark as the sidebar's status glyph: waiting is working, replied is done, not delivered needs you
-class MarkDot : public QWidget
-{
-public:
-    MarkDot(const Settings &settings, const QString &mark)
-        : m_settings(settings),
-          m_status(mark == QLatin1String("replied") ? QStringLiteral("completed") : mark == QLatin1String("waiting") ? QStringLiteral("active") : QStringLiteral("blocked"))
-    {
-        setFixedSize(14, 14);
-    }
-
-protected:
-    void paintEvent(QPaintEvent *) override
-    {
-        QPainter p(this);
-        p.setRenderHint(QPainter::Antialiasing);
-        paintStatus(&p, m_settings, m_status, false, 255, QRectF(rect()).center());
-    }
-
-private:
-    const Settings &m_settings;
-    QString m_status;
-};
 
 class Chip : public QLabel
 {
@@ -261,7 +240,7 @@ AssistantView::AssistantView(MainWindow &window, Store &store)
             m_scroll->verticalScrollBar()->setValue(max);
     });
     main->addWidget(m_scroll, 1);
-    main->addWidget(hairline(false));
+    main->addWidget(hairline());
 
     // the composer: tag chips and the message, then the provider picker and send
     auto *composer = new QFrame;
@@ -342,12 +321,7 @@ AssistantView::AssistantView(MainWindow &window, Store &store)
     auto *composerColumn = new QWidget;
     auto *under = new QVBoxLayout(composerColumn);
     under->setContentsMargins(0, 14, 0, 16);
-    under->setSpacing(8);
     under->addWidget(composer);
-    auto *footnote = new QLabel(tr("Agents answer with <span style=\"font-family:monospace\">elisctl reply \"…\"</span>, which every message asks for."));
-    footnote->setFont(small);
-    footnote->setStyleSheet(QStringLiteral("color:%1;").arg(css(ink(0.55))));
-    under->addWidget(footnote);
     main->addWidget(centred(composerColumn));
     auto syncSend = [this] { m_send->setEnabled(!m_tags.isEmpty() || !m_editor->toPlainText().trimmed().isEmpty()); };
     connect(m_editor, &QPlainTextEdit::textChanged, this, syncSend);
@@ -360,6 +334,8 @@ AssistantView::AssistantView(MainWindow &window, Store &store)
     m_completer->setCaseSensitivity(Qt::CaseInsensitive);
     m_completer->setCompletionRole(Qt::UserRole);
     m_completer->popup()->setObjectName(QStringLiteral("assistantCompletion"));
+    m_completer->popup()->setItemDelegate(Palette::rowDelegate(m_completer->popup())); // the session switcher's rows
+    m_completer->setMaxVisibleItems(8);
     editor->completer = m_completer;
     connect(m_completer, qOverload<const QModelIndex &>(&QCompleter::activated), this, [this](const QModelIndex &index) {
         QTextCursor c = m_editor->textCursor();
@@ -369,20 +345,6 @@ AssistantView::AssistantView(MainWindow &window, Store &store)
         addTag(index.data(Qt::UserRole).toString());
     });
     connect(m_editor, &QPlainTextEdit::textChanged, this, &AssistantView::complete);
-
-    // the rail: who is in the current exchange
-    page->addWidget(hairline(true));
-    auto *rail = new QWidget;
-    rail->setFixedWidth(240);
-    auto *side = new QVBoxLayout(rail);
-    side->setContentsMargins(16, 18, 16, 16);
-    side->setSpacing(12);
-    side->addWidget(caption(tr("In this exchange")));
-    m_rail = new QVBoxLayout;
-    m_rail->setSpacing(10);
-    side->addLayout(m_rail);
-    side->addStretch(1);
-    page->addWidget(rail);
 
     setFocusProxy(m_editor);
 }
@@ -446,7 +408,6 @@ void AssistantView::refresh()
             append(e.toObject());
     m_empty->setVisible(m_shown.isEmpty());
     m_working->setVisible(m_directory.value("assistant")["running"].toBool());
-    rebuildRail();
     rebuildProviders();
 }
 
@@ -576,46 +537,6 @@ void AssistantView::append(const QJsonObject &e)
     m_shown << e["id"].toString();
 }
 
-void AssistantView::rebuildRail()
-{
-    while (QLayoutItem *item = m_rail->takeAt(0)) {
-        delete item->widget();
-        delete item->layout();
-        delete item;
-    }
-    int count = 0;
-    for (const QJsonValue &w : m_directory.value("workspaces").toArray())
-        for (const QJsonValue &s : w["sessions"].toArray()) {
-            const QString mark = s["assistantMark"].toString();
-            if (mark.isEmpty())
-                continue;
-            ++count;
-            auto *row = new QWidget;
-            row->setToolTip(s["name"].toString());
-            auto *line = new QGridLayout(row);
-            line->setContentsMargins(0, 0, 0, 0);
-            line->setHorizontalSpacing(8);
-            line->setVerticalSpacing(2);
-            line->addWidget(new MarkDot(m_store.settings, mark), 0, 0);
-            auto *handle = new QLabel(tagOf(s["id"].toString()));
-            handle->setFont(mono(font()));
-            line->addWidget(handle, 0, 1);
-            const Launcher *agent = launcher(s["agent"].toString());
-            auto *by = new QLabel(agent ? agent->title : QString());
-            by->setStyleSheet(QStringLiteral("color:%1;").arg(css(ink(0.55))));
-            line->addWidget(by, 0, 2, Qt::AlignRight);
-            line->setColumnStretch(1, 1);
-            if (mark == QLatin1String("not-delivered")) {
-                auto *why = new QLabel(tr("not delivered"));
-                why->setStyleSheet(QStringLiteral("color:%1;").arg(css(ink(0.55))));
-                line->addWidget(why, 1, 1, 1, 2);
-            }
-            m_rail->addWidget(row);
-        }
-    if (!count)
-        m_rail->addWidget(text(tr("No one yet. Tag sessions with @ and Elis messages them."), ink(0.55)));
-}
-
 void AssistantView::rebuildProviders()
 {
     const QJsonObject node = m_directory.value("assistant").toObject();
@@ -652,23 +573,32 @@ void AssistantView::complete()
         return m_completer->popup()->hide();
     loadDirectory();
     m_candidates->clear();
-    auto add = [this](const QString &tag, const QString &detail, const QIcon &icon) {
-        auto *item = new QStandardItem(icon, detail.isEmpty() ? tag : tag + QStringLiteral("   ") + detail);
-        item->setData(tag, Qt::UserRole);
-        m_candidates->appendRow(item);
-    };
-    add(QStringLiteral("@all"), tr("every agent session"), {});
+    QList<std::array<QString, 3>> rows; // tag, name, icon
+    rows.append({QStringLiteral("@all"), tr("every agent session"), QStringLiteral("chrome:dashboard")});
     for (const QJsonValue &w : m_directory.value("workspaces").toArray()) {
         if (!w["handle"].toString().isEmpty())
-            add(QStringLiteral("@ws:") + w["handle"].toString(), w["name"].toString(), chromeIcon(QStringLiteral("workspace-stack"), ink(0.6)));
+            rows.append({QStringLiteral("@ws:") + w["handle"].toString(), w["name"].toString(), QStringLiteral("chrome:workspace-stack")});
         for (const QJsonValue &s : w["sessions"].toArray())
-            add(tagOf(s["id"].toString()), s["name"].toString(), launcherIcon(s["agent"].toString(), ink(0.6)));
+            rows.append({tagOf(s["id"].toString()), s["name"].toString(), s["agent"].toString().isEmpty() ? QStringLiteral("terminal") : s["agent"].toString()});
+    }
+    const QFontMetrics fm(m_completer->popup()->font());
+    int column = 0;
+    for (const auto &r : std::as_const(rows))
+        column = qMax(column, fm.horizontalAdvance(r[0]) + 16);
+    for (const auto &r : std::as_const(rows)) {
+        auto *item = new QStandardItem(r[0]);
+        item->setData(r[0], Qt::UserRole);
+        item->setData(r[1], PaletteRole::Subtitle);
+        item->setData(r[2], PaletteRole::Icon);
+        item->setData(true, PaletteRole::SingleLine);
+        item->setData(column, PaletteRole::TitleColumn);
+        m_candidates->appendRow(item);
     }
     m_completer->setCompletionPrefix(m.captured(1));
     if (!m_completer->completionCount())
         return m_completer->popup()->hide();
     QRect at = m_editor->cursorRect();
-    at.setWidth(qMax(280, m_completer->popup()->sizeHintForColumn(0) + 32));
+    at.setWidth(qMin(460, 28 + column + 200 + 32)); // icon, handle column, a name, margins
     m_completer->complete(at);
     m_completer->popup()->setCurrentIndex(m_completer->completionModel()->index(0, 0));
 }

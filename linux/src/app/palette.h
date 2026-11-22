@@ -19,6 +19,7 @@ enum {
     Icon,
     Workspace,
     SingleLine,
+    TitleColumn, // singleLine: the subtitle starts this far after the title's start, so rows align in two columns
 };
 }
 
@@ -63,6 +64,8 @@ public:
     bool switching() const { return isVisible() && m_switcher; }
 
     static bool fuzzyMatch(const QString &needle, const QString &haystack); // case-insensitive subsequence
+    // the palette's row painting for another list (PaletteRole data; Icon is a launcher id or "chrome:<glyph>")
+    static class QStyledItemDelegate *rowDelegate(QObject *parent);
 
 protected:
     bool eventFilter(QObject *watched, QEvent *event) override;

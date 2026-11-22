@@ -59,6 +59,8 @@ public:
     bool flaggedView() const;
     bool flatList() const; // the flagged view as one list (flat or plain layout)
     QStringList selectedSessionIds() const;
+    // what a drag of the pressed session row ("" for the current row: a workspace, or the selection) carries; null for none
+    class QMimeData *dragMime(const QString &pressed) const;
     bool editing() const { return state() == EditingState; }
     QString lastLauncher() const;
     void setAssistantSelected(bool on); // the Elis row stands for the shown chat

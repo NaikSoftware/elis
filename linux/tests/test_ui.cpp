@@ -44,6 +44,13 @@
 #include "smoothwheel.h"
 #include "phone.h"
 #include "konsoleprivate.h"
+#include "assistantview.h"
+#include <QAbstractItemView>
+#include <QCompleter>
+#include <QDragEnterEvent>
+#include <QMimeData>
+#include <QPlainTextEdit>
+#include <QStackedWidget>
 
 namespace Konsole
 {
@@ -652,6 +659,177 @@ private Q_SLOTS:
         QVERIFY(!tree["workspaces"][0]["sessions"][0]["handle"].toString().isEmpty());
         const QJsonObject r = lib.dispatch({{"cmd", "assistant.send"}, {"args", QJsonObject{{"text", "hi there"}, {"recipients", QJsonArray{"@all"}}}}});
         QCOMPARE(r["result"]["assistant"]["deliveredIDs"].toArray(), QJsonArray{target});
+    }
+
+    void elisRowIsFirstInEveryMode()
+    {
+        Store store;
+        const QString a = store.addWorkspace("alpha"), b = store.addWorkspace("beta");
+        const QString a1 = store.addSession(a, "a1", {});
+        store.addSession(b, "b1", {});
+        Sidebar tree(store);
+        auto first = [&] { return tree.topLevelItem(0)->data(0, SidebarRole::Kind).toInt(); };
+        tree.rebuild();
+        QCOMPARE(first(), int(SidebarRole::AssistantRow));
+        QVERIFY(!(tree.topLevelItem(0)->flags() & (Qt::ItemIsEditable | Qt::ItemIsDragEnabled | Qt::ItemIsDropEnabled)));
+        store.focusWorkspace(b, "add");
+        store.setFilter(true);
+        tree.rebuild();
+        QCOMPARE(tree.topLevelItemCount(), 2);
+        QCOMPARE(first(), int(SidebarRole::AssistantRow));
+        store.setFilter(false);
+        tree.setFlaggedView(true);
+        QCOMPARE(tree.topLevelItemCount(), 1); // nothing flagged: only Elis
+        store.setFlag(a1, true);
+        tree.rebuild();
+        QCOMPARE(first(), int(SidebarRole::AssistantRow));
+        QCOMPARE(tree.topLevelItem(1)->data(0, SidebarRole::Id).toString(), a1);
+        Settings s = store.settings;
+        s.flaggedViewLayout = "tree";
+        store.setSettings(s);
+        tree.rebuild();
+        QCOMPARE(first(), int(SidebarRole::AssistantRow));
+        QCOMPARE(tree.topLevelItem(1)->data(0, SidebarRole::Id).toString(), a);
+    }
+
+    void selectingElisShowsTheChatAndKeysReachTheComposer()
+    {
+        Store store;
+        MainWindow w(store, dir.filePath("elis-select.json"));
+        w.restore({});
+        const QString ws = store.addWorkspace("w");
+        const QString a = store.addSession(ws, "a", {});
+        store.select(a);
+        w.show();
+        w.activateWindow();
+        QVERIFY(QTest::qWaitForWindowActive(&w));
+        auto *tree = w.findChild<Sidebar *>();
+        auto *view = w.findChild<AssistantView *>();
+        auto *stack = w.findChild<QStackedWidget *>();
+        QTest::mouseClick(tree->viewport(), Qt::LeftButton, {}, tree->visualItemRect(tree->topLevelItem(0)).center());
+        QVERIFY(w.assistantShown());
+        QCOMPARE(stack->currentWidget(), view);
+        QVERIFY(store.selected.isEmpty()); // no session behind the chat for a shortcut to reach
+        QVERIFY(tree->topLevelItem(0)->isSelected());
+        QVERIFY(w.chromeState()["assistantShown"].toBool());
+        auto *composer = view->findChild<QPlainTextEdit *>("assistantComposer");
+        QTRY_COMPARE(QApplication::focusWidget(), composer);
+        QTest::keyClicks(QApplication::focusWidget(), "hello");
+        QCOMPARE(composer->toPlainText(), QStringLiteral("hello"));
+        w.namedAction("close_session")->trigger();
+        QVERIFY(store.session(a));
+        store.select(a); // the session it left: a pick leaves the chat
+        QVERIFY(!w.assistantShown());
+        QVERIFY(stack->currentWidget() != view);
+        QVERIFY(!w.chromeState().contains("assistantShown"));
+    }
+
+    void aReplyRaisesTheUnreadBadgeAndShowClearsIt()
+    {
+        QTemporaryDir state;
+        WindowLibrary lib(state.path());
+        lib.load();
+        MainWindow *w = lib.entries()[0].window;
+        Store *s = lib.entries()[0].store;
+        w->show();
+        w->activateWindow();
+        QVERIFY(QTest::qWaitForWindowActive(w));
+        auto *tree = w->findChild<Sidebar *>();
+        const QString id = s->allSessions().first()->id;
+        auto unread = [&] { return tree->topLevelItem(0)->data(0, SidebarRole::Unseen).toInt(); };
+        QVERIFY(lib.dispatch({{"cmd", "assistant.reply"}, {"target", id}, {"args", QJsonObject{{"text", "done"}}}})["ok"].toBool());
+        QTRY_COMPARE(unread(), 1);
+        const QJsonObject refused = lib.dispatch({{"cmd", "assistant.show"}, {"args", QJsonObject{{"window", "nope"}}}});
+        QCOMPARE(refused["error"].toString(), QStringLiteral("no such window: nope"));
+        QVERIFY(!w->assistantShown());
+        QCOMPARE(unread(), 1);
+        QVERIFY(lib.dispatch({{"cmd", "assistant.show"}})["ok"].toBool());
+        QVERIFY(w->assistantShown());
+        QTRY_COMPARE(unread(), 0);
+        QVERIFY(lib.dispatch({{"cmd", "tree"}}).value("result")["tree"]["assistantShown"].toBool());
+        QVERIFY(lib.dispatch({{"cmd", "assistant.reply"}, {"target", id}, {"args", QJsonObject{{"text", "again"}}}})["ok"].toBool());
+        QTest::qWait(100);
+        QCOMPARE(unread(), 0); // a reply arriving on the shown chat is already seen
+    }
+
+    void sidebarRowsDropIntoTheComposerAsTags()
+    {
+        QTemporaryDir state;
+        WindowLibrary lib(state.path());
+        lib.load();
+        MainWindow *w = lib.entries()[0].window;
+        Store *s = lib.entries()[0].store;
+        const QString ws = s->workspaces.first().id;
+        const QString id = s->allSessions().first()->id;
+        s->renameWorkspace(ws, "mobile app");
+        s->renameSession(id, "pair link");
+        w->show();
+        w->activateWindow();
+        QVERIFY(QTest::qWaitForWindowActive(w));
+        w->showAssistant();
+        const QJsonObject tree = lib.dispatch({{"cmd", "tree"}}).value("result")["tree"].toObject();
+        const QString session = QLatin1Char('@') + tree["workspaces"][0]["sessions"][0]["handle"].toString();
+        const QString group = QStringLiteral("@ws:") + tree["workspaces"][0]["handle"].toString();
+        auto *sidebar = w->findChild<Sidebar *>();
+        auto *view = w->findChild<AssistantView *>();
+        QWidget *target = view->findChild<QPlainTextEdit *>("assistantComposer")->viewport();
+        auto drop = [&](QMimeData *mime) {
+            QVERIFY(mime);
+            QDragEnterEvent enter(QPoint(10, 10), Qt::MoveAction, mime, Qt::LeftButton, {});
+            QApplication::sendEvent(target, &enter);
+            QVERIFY(enter.isAccepted());
+            QDropEvent dropped(QPointF(10, 10), Qt::MoveAction, mime, Qt::LeftButton, {});
+            QApplication::sendEvent(target, &dropped);
+            QVERIFY(dropped.isAccepted());
+            delete mime;
+        };
+        drop(sidebar->dragMime(id));
+        QCOMPARE(view->tags(), QStringList{session});
+        QTest::mousePress(sidebar->viewport(), Qt::LeftButton, {}, sidebar->visualItemRect(sidebar->topLevelItem(1)).center());
+        drop(sidebar->dragMime({})); // the pressed workspace header
+        QCOMPARE(view->tags(), (QStringList{session, group}));
+        QCOMPARE(view->findChild<QPlainTextEdit *>("assistantComposer")->toPlainText(), QString()); // a tag, not typed ids
+    }
+
+    void atCompletionListsHandles()
+    {
+        QTemporaryDir state;
+        WindowLibrary lib(state.path());
+        lib.load();
+        MainWindow *w = lib.entries()[0].window;
+        Store *s = lib.entries()[0].store;
+        s->renameSession(s->allSessions().first()->id, "pair link");
+        s->addSession(s->workspaces.first().id, "logcat", {});
+        w->show();
+        w->activateWindow();
+        QVERIFY(QTest::qWaitForWindowActive(w));
+        w->showAssistant();
+        const QJsonObject tree = lib.dispatch({{"cmd", "tree"}}).value("result")["tree"].toObject();
+        auto *view = w->findChild<AssistantView *>();
+        auto *composer = view->findChild<QPlainTextEdit *>("assistantComposer");
+        QCompleter *completer = view->findChild<QCompleter *>();
+        auto listed = [&] {
+            QStringList tags;
+            for (int i = 0; completer->setCurrentRow(i); ++i)
+                tags << completer->currentIndex().data(Qt::UserRole).toString();
+            return tags;
+        };
+        composer->setFocus();
+        QTest::keyClicks(composer, "ask @");
+        QTRY_VERIFY(completer->popup()->isVisible());
+        QStringList all{"@all", QStringLiteral("@ws:") + tree["workspaces"][0]["handle"].toString()};
+        for (const QJsonValue &session : tree["workspaces"][0]["sessions"].toArray())
+            all << QLatin1Char('@') + session["handle"].toString();
+        QCOMPARE(listed(), all);
+        QVERIFY(completer->popup()->sizeHintForRow(0) >= completer->popup()->fontMetrics().height()); // the palette's rows
+        QTest::keyClicks(composer, "lo");
+        QCOMPARE(listed(), QStringList{all.last()});
+        QTest::keyClick(completer->popup(), Qt::Key_Return);
+        QCOMPARE(view->tags(), QStringList{all.last()});
+        QCOMPARE(composer->toPlainText(), QStringLiteral("ask "));
+        QTest::keyClick(composer, Qt::Key_Home);
+        QTest::keyClick(composer, Qt::Key_Backspace);
+        QVERIFY(view->tags().isEmpty());
     }
 
     void assistantProviderTakesOneInputPerTurnInOrder()

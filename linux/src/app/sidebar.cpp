@@ -971,10 +971,9 @@ void Sidebar::mouseDoubleClickEvent(QMouseEvent *event)
     QTreeWidget::mouseDoubleClickEvent(event);
 }
 
-void Sidebar::startDrag(Qt::DropActions)
+QMimeData *Sidebar::dragMime(const QString &pressed) const
 {
     auto *mime = new QMimeData;
-    const QString pressed = std::exchange(m_pressedId, {});
     QTreeWidgetItem *item = pressed.isEmpty() ? currentItem() : nullptr;
     if (item && item->data(0, Kind).toInt() == WorkspaceRow)
         mime->setData(workspaceMime, item->data(0, Id).toString().toUtf8());
@@ -983,7 +982,15 @@ void Sidebar::startDrag(Qt::DropActions)
         mime->setData(sessionsMime, ids.join(QLatin1Char(',')).toUtf8());
         mime->setText(ids.join(QLatin1Char(','))); // dropped on a terminal, types the Elis ids, as on the Mac
     } else
-        return delete mime;
+        return delete mime, nullptr;
+    return mime;
+}
+
+void Sidebar::startDrag(Qt::DropActions)
+{
+    QMimeData *mime = dragMime(std::exchange(m_pressedId, {}));
+    if (!mime)
+        return;
     auto *drag = new QDrag(this);
     drag->setMimeData(mime);
     drag->exec(Qt::MoveAction);
