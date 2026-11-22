@@ -2,6 +2,7 @@
 import Foundation
 import Testing
 @testable import elisctlKit
+@testable import ElisLinuxRelay
 
 struct OpenSSLPhoneConnectionTests {
     private final class Accepted: @unchecked Sendable {
@@ -18,8 +19,8 @@ struct OpenSSLPhoneConnectionTests {
         let (identity, _) = try MobilePairing.identity(in: dir)
         let queue = DispatchQueue(label: "test.openssl")
         let accepted = Accepted()
-        let listener = try TLSPhoneListener(identity: identity, port: 0, bind: "127.0.0.1", queue: queue,
-                                            onConnection: { accepted.set($0) }, onFailure: { _ in })
+        let listener = try identity.listen(port: 0, bind: "127.0.0.1", queue: queue,
+                                           onConnection: { accepted.set($0) }, onFailure: { _ in })
         defer { listener.cancel() }
         let client = try TLSLineClient(port: listener.port, reading: false)
         try #require(queue.sync { accepted.get() } != nil)

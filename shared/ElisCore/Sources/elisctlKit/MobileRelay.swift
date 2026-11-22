@@ -9,33 +9,55 @@ import ElisCore
 #if os(macOS)
 typealias PhoneTLSIdentity = SecIdentity
 #else
-typealias PhoneTLSIdentity = OpenSSLIdentity
+/// The relay's platform transports, registered by the platform's `elisctl` main before `Elisctl.main()`.
+/// Unregistered, `mobile serve` cannot listen and Bluetooth is `off (unsupported)`.
+public enum MobileTransports {
+    nonisolated(unsafe) public static var tls: (any PhoneTLSIdentity.Type)?
+    nonisolated(unsafe) public static var radio: (any BleRadio.Type)?
+}
+
+/// The certificate and key a TLS listener serves, loaded once.
+public protocol PhoneTLSIdentity: AnyObject, Sendable {
+    /// Whether `listen` takes `host` as its `bind`: an IP address literal.
+    static func isAddress(_ host: String) -> Bool
+    /// Nil when either PEM file is unusable.
+    init?(certificate: String, key: String)
+    /// Binds and listens, accepting on `queue`; throws with the system's reason, as NWListener does for a port in use.
+    func listen(port: UInt16, bind: String?, queue: DispatchQueue,
+                onConnection: @escaping @Sendable (any PhoneTransportConnection) -> Void,
+                onFailure: @escaping @Sendable (String) -> Void) throws -> any PhoneTLSListener
+}
+
+public protocol PhoneTLSListener: AnyObject {
+    var port: UInt16 { get }
+    func cancel()
+}
 #endif
 
 // MARK: - relay
 
 /// The phones of every transport, and the TLS listener that produces one kind of them. Every mutable property
 /// is touched on `queue` only.
-final class MobileRelay: @unchecked Sendable {
+public final class MobileRelay: @unchecked Sendable {
     /// Connections still owing their token, on any transport; past it the oldest is dropped, so a flood cannot
     /// use up descriptors.
     private let maxUnauthenticated: Int
 
     var onFailure: (@Sendable () -> Void)?
-    let queue = DispatchQueue(label: "elisctl.mobile")
+    public let queue = DispatchQueue(label: "elisctl.mobile")
     #if os(macOS)
     private let parameters: NWParameters
     #else
-    private let identity: PhoneTLSIdentity
+    private let identity: any PhoneTLSIdentity
     #endif
     private let port: UInt16
     private let bind: String?
-    let settings: PhoneSession.Settings
+    public let settings: PhoneSession.Settings
     private let releaseTimeout: TimeInterval
     #if os(macOS)
     private var listener: NWListener?
     #else
-    private var listener: TLSPhoneListener?
+    private var listener: (any PhoneTLSListener)?
     #endif
     private var phones: [ObjectIdentifier: PhoneSession] = [:]
     private var accepted = 0
@@ -109,12 +131,12 @@ final class MobileRelay: @unchecked Sendable {
     }
     #else
     func start() throws -> UInt16 {
-        let listener = try TLSPhoneListener(identity: identity, port: port, bind: bind, queue: queue,
-                                            onConnection: { [weak self] in self?.accept($0) },
-                                            onFailure: { [weak self] error in
-                                                self?.settings.log("listener failed: \(error)")
-                                                self?.onFailure?()
-                                            })
+        let listener = try identity.listen(port: port, bind: bind, queue: queue,
+                                           onConnection: { [weak self] in self?.accept($0) },
+                                           onFailure: { [weak self] error in
+                                               self?.settings.log("listener failed: \(error)")
+                                               self?.onFailure?()
+                                           })
         queue.sync { self.listener = listener }
         return listener.port
     }
