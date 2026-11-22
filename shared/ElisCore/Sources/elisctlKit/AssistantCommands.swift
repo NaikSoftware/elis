@@ -140,7 +140,7 @@ extension Assistant {
             """
         )
 
-        @Option(name: .customLong("to"), help: "Recipient tag (@handle, @ws:handle, or @all); repeat for several.")
+        @Option(name: .customLong("to"), help: "Recipient tag (@handle, @ws:handle, @all, or a session id); repeat for several.")
         var recipients: [String] = []
         @Argument(help: "Message text; use --stdin to read it instead.")
         var text: String?
