@@ -1,6 +1,7 @@
 #pragma once
 
 #include <QImage>
+#include <QJsonObject>
 #include <QObject>
 #include <QPointer>
 #include <QProcess>
@@ -34,12 +35,16 @@ public:
 
 Q_SIGNALS:
     void changed();
+    // phone.attached | detached | claimed | released, payload {paneID, ip?}: the relay's viewer and lead lines, and a
+    // detach and release for each one still counted when it stops
+    void paneEvent(const QString &kind, const QJsonObject &payload);
 
 private:
     PhoneRelay();
     void start();
     void stop();
     void save() const;
+    void releaseViewers();
 
     QPointer<QProcess> m_proc;
     bool m_on = false;

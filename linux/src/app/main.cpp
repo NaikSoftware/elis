@@ -182,6 +182,16 @@ int main(int argc, char **argv)
         w->setSocketStatus(listening, server.errorString());
     serve(server, library);
     PhoneRelay::instance(); // phone access switched on in Connect a Phone comes back with the app
+    // app-wide events, as the Mac's emitAppEvent; the window holding the pane rereads its tree's phoneViewers/phoneLead
+    QObject::connect(PhoneRelay::instance(), &PhoneRelay::paneEvent, &library, [&library](const QString &kind, const QJsonObject &payload) {
+        MainWindow *holder = nullptr;
+        for (MainWindow *w : library.openWindows())
+            if (w->holdsPane(payload.value("paneID").toString()))
+                holder = w;
+        (holder ? holder : library.active())->events()->emitAppEvent(kind, payload);
+        if (holder)
+            holder->events()->scheduleTreeChanged();
+    });
     window.events()->emitEvent(QStringLiteral("app.launched")); // hooks loaded, socket accepting, sessions restored
 
     // SIGTERM (logout, kill) must save like a window close; a self-pipe moves it onto the event loop

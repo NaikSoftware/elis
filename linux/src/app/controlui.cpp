@@ -59,6 +59,14 @@ Terminals::Backing MainWindow::backing(const QString &sessionId, const QString &
     return !part ? Backing::None : part->property("elisZmx").toString().isEmpty() ? Backing::Plain : Backing::Live;
 }
 
+bool MainWindow::holdsPane(const QString &paneId) const
+{
+    for (const Session *s : m_store.allSessions())
+        if (!paneId.isEmpty() && (s->paneId == paneId || (s->hasSplit && s->splitPaneId == paneId)))
+            return true;
+    return false;
+}
+
 QStringList MainWindow::paneIds(const QString &sessionId) const
 {
     QStringList out;

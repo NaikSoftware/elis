@@ -186,6 +186,8 @@ static QString eventLine(const QJsonObject &e)
     QString line = QDateTime::fromMSecsSinceEpoch(qint64(e.value("ts").toDouble() * 1000)).toString(QStringLiteral("HH:mm:ss ")) + kind;
     if (kind == QLatin1String("app.launched"))
         return line;
+    if (kind.startsWith(QLatin1String("phone."))) // app-wide: no window or session to name
+        return line + QStringLiteral(" ip=%1 pane-id=%2").arg(p.value("ip").toString(QStringLiteral("-")), p.value("paneID").toString(QStringLiteral("-")));
     line += QLatin1Char(' ') + name;
     if (kind == QLatin1String("status")) {
         line += QLatin1Char(' ') + p.value("status").toString();
