@@ -135,7 +135,8 @@ class ChatView extends StatefulWidget {
       this.promptCard,
       this.prompts,
       this.onKey = _noKey,
-      this.onAnswer = _noAnswer});
+      this.onAnswer = _noAnswer,
+      this.openImage});
 
   static const exitedText = 'Claude exited', staleText = 'Reconnecting…';
 
@@ -154,6 +155,7 @@ class ChatView extends StatefulWidget {
   final PromptLedger? prompts;
   final void Function(String? seq, VtKey? key, int mods) onKey; // the panel's keys: straight to the program, past the gate
   final void Function(String key) onAnswer;
+  final Future<String?> Function(String path)? openImage; // a picture file a tool call read, in the page sheet
 
   @override
   State<ChatView> createState() => _ChatViewState();
@@ -318,8 +320,8 @@ class _ChatViewState extends State<ChatView> {
     if (!mounted) return;
     final rows = chatRows(feed.items, pending: {for (final p in feed.pending) p.id});
     final old = _rows;
-    // a newest single call that a poll joins to a run moves to the run's key
-    final k = old.isEmpty ? -1 : rows.indexWhere((r) => r.key == old.first.key || r.key == 'group-${old.first.key}');
+    // a newest single call or thinking that a poll joins to a run moves to the run's key
+    final k = old.isEmpty ? -1 : rows.indexWhere((r) => r.key == old.first.key || r.group.any((i) => i.uuid == old.first.key));
     final added = k <= 0 ? 0 : rows.take(k).where((r) => r.day == null).length;
     // away from the bottom, any change keeps the row the user is reading where it is: the oldest on screen,
     // since a growing tool run is the newest and anchoring it would push every row above it
@@ -446,7 +448,7 @@ class _ChatViewState extends State<ChatView> {
         if (_built[r.key] == c) _built.remove(r.key);
         _gone.add(r.key);
       },
-      child: chatRowWidget(c, r, fresh: fresh, exited: widget.exited, stale: widget.stale, promptMark: widget.prompts?.mark),
+      child: chatRowWidget(c, r, fresh: fresh, exited: widget.exited, stale: widget.stale, promptMark: widget.prompts?.mark, openImage: widget.openImage),
     );
   }
 

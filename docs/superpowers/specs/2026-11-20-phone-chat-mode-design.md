@@ -182,7 +182,7 @@ Stop and Cancel keep a residual risk: a dialog opening inside that window turns 
 | Day separator | T `timestamp` | A date row between records on different days **[lead]** | Per day change |
 | Jump to bottom | Phone scroll state | Button with "N new", bottom-right above the composer; auto-follow pauses while scrolled up | While not at the bottom |
 | Messages | T | User bubbles; assistant `text` blocks grouped by `message.id`, markdown via `flutter_markdown_plus` 1.0.12 in the proportional font, one `MarkdownBody` per message in `ListView.builder(reverse: true)`, mono scrolling `pre` **[owner]**; long-press gives Copy, Copy code and Share, since `selectable: true` fights the list's scroll; new items fade and slide up 8 pt **[lead]** | Always |
-| Tool row | T `tool_use` + `tool_result`/`toolUseResult` | One collapsed row: tool name, short argument, result mark; a tap expands the clipped output or the diff; "Full output in Term" when clipped **[owner]**. Secondary colour and a smaller size than prose; the expansion animates its size **[lead]**. Consecutive calls fold per scope call 3 | Always |
+| Tool row | T `tool_use` + `tool_result`/`toolUseResult` | One collapsed row: tool name, short argument, result mark; a tap expands the clipped output or the diff, and on a call whose `file` is a picture opens that file as an `--image` page in the page sheet **[owner]**; "Full output in Term" when clipped **[owner]**. Secondary colour and a smaller size than prose; the expansion animates its size **[lead]**. Consecutive calls fold per scope call 3 | Always |
 | Diff | T `toolUseResult.structuredPatch` | Native hunk view, soft-wrapped, with the file path in a sticky hunk header **[lead]**; Write create counts content lines | Inside an Edit/Write row |
 | Thinking | T `thinkingDurationMs` | "Thought for Ns" row; content never shown **[owner]** | When the message had a thinking block |
 | Subagent row | T Agent `tool_use`/`toolUseResult` + `subagents/*.meta.json` | Name, `subagent_type`, running or finished; teammates show `name` and `color`; an open call reads "stopped" after an interrupted marker or once Claude exits **[lead]** | Per Agent call |
@@ -573,6 +573,7 @@ The owner delegated these on 2026-11-20 ("work autonomously; ask only non-obviou
    Its mark reads running while any call runs, else ✗ with the count of failed or rejected calls, else ✓.
    A tap lists the calls, each expandable as before; the expansion survives polls that grow the run.
    An Agent call and a call whose prompt is pending keep their own row and break the run **[lead]**.
+   A thinking row between two calls joins the run; one before the first call or after the last stays on its own **[owner]**.
 
 ## What is later
 
