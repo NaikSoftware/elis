@@ -40,7 +40,6 @@ final class MobileFixture: @unchecked Sendable {
         #endif
     }()
 
-
     let mobileDir: String
     let token: String
     let identity: PhoneTLSIdentity
