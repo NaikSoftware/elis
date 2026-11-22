@@ -99,9 +99,11 @@ void CiLine::showPanel(const QString &sessionId, const QPoint &globalPos)
             label->setEnabled(false);
         // a link opens its GitHub page and the panel closes, as on the Mac
         QObject::connect(label, &QLabel::linkActivated, panel, [panel](const QString &url) {
+            // close first: on Wayland openUrl waits for an activation token from the focused window, which the
+            // closing panel never delivers; with the panel gone it launches the browser at once
+            panel->close();
             if (QUrl(url).scheme() == QLatin1String("https"))
                 QDesktopServices::openUrl(QUrl(url));
-            panel->close();
         });
         box->addWidget(label);
     };

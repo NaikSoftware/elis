@@ -22,6 +22,7 @@
 #include <QDialog>
 #include <QFrame>
 #include <QLabel>
+#include <QDesktopServices>
 #include <QMenu>
 #include <QMenuBar>
 #include <QTimer>
@@ -71,6 +72,21 @@ protected:
     void wheelEvent(QWheelEvent *e) override { deltas << e->angleDelta().y(); }
 };
 }
+
+// records each URL QDesktopServices opens, and whether `watched` was still on screen then
+class UrlSink : public QObject
+{
+    Q_OBJECT
+public:
+    QPointer<QWidget> watched;
+    QList<QUrl> opened;
+    bool watchedVisible = false;
+    Q_INVOKABLE void open(const QUrl &url)
+    {
+        opened << url;
+        watchedVisible = watched && watched->isVisible();
+    }
+};
 
 // a library whose chat chose `choice` ("" for none), run by `standIn` in place of its binary; `detected` agents are
 // found on a PATH that leads with a directory of its own
@@ -1856,13 +1872,14 @@ private Q_SLOTS:
         QCOMPARE(panel.count(), 1);
         QCOMPARE(panel.at(0).at(0).toString(), a);
         QCOMPARE(tree.selectedSessionIds(), QStringList{a});
-        QFrame *shown = nullptr;
-        QTRY_VERIFY((shown = [] {
+        const auto visiblePanel = [] {
             for (QWidget *w : QApplication::topLevelWidgets())
                 if (auto *f = qobject_cast<QFrame *>(w); f && f->isVisible() && f->windowFlags().testFlag(Qt::Popup))
                     return f;
             return static_cast<QFrame *>(nullptr);
-        }()));
+        };
+        QFrame *shown = nullptr;
+        QTRY_VERIFY((shown = visiblePanel()));
         QStringList texts;
         for (QLabel *label : shown->findChildren<QLabel *>())
             texts << label->text();
@@ -1870,6 +1887,16 @@ private Q_SLOTS:
         QVERIFY(texts.contains("Approved: alice"));
         QVERIFY(texts.contains("Failed"));
         QVERIFY(texts.last().contains("https://github.com/o/r/actions/runs/1") && texts.last().contains("build"));
+        UrlSink sink;
+        sink.watched = shown;
+        QDesktopServices::setUrlHandler(QStringLiteral("https"), &sink, "open");
+        const auto unhandle = qScopeGuard([] { QDesktopServices::unsetUrlHandler(QStringLiteral("https")); });
+        Q_EMIT shown->findChildren<QLabel *>().last()->linkActivated(QStringLiteral("https://github.com/o/r/actions/runs/1"));
+        QCOMPARE(sink.opened, QList<QUrl>{QUrl(QStringLiteral("https://github.com/o/r/actions/runs/1"))});
+        QVERIFY(!sink.watchedVisible); // Wayland launches the browser only once the panel no longer has focus
+
+        QTest::mouseClick(tree.viewport(), Qt::LeftButton, {}, edge);
+        QTRY_VERIFY((shown = visiblePanel()));
         const QPointer<QFrame> guard = shown;
         store.setCi(a, {}, {});
         QTRY_VERIFY(guard.isNull() || !guard->isVisible()); // the panel goes with its line
