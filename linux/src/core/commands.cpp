@@ -4,8 +4,10 @@
 #include <QJsonDocument>
 #include "control.h"
 #include "hooks.h"
+#include "paths.h"
 #include "store.h"
 #include "transcript.h"
+#include "zmx.h"
 
 #include <QDateTime>
 #include <QDir>
@@ -208,6 +210,38 @@ static QJsonObject sessionScroll(Store &store, Terminals &terminals, const QStri
         return fail(QStringLiteral("session.scroll: lines must be -1000...1000 and not 0"));
     QString error;
     return terminals.scroll(id, pane, lines, &error) ? ok({{"id", id}, {"pane", pane}, {"lines", lines}}) : fail(error);
+}
+
+// session.attach: the Mac's ControlServer+Attach, its refusals in its order; the pane is parsed before the target
+static QJsonObject sessionAttach(Store &store, Terminals &terminals, const QString &target, const QJsonObject &args)
+{
+    const QString raw = args.value("pane").toString(QStringLiteral("left"));
+    if (!leftPane.contains(raw) && !rightPane.contains(raw))
+        return fail(QStringLiteral("invalid pane: %1").arg(raw));
+    QString error;
+    const QString id = store.resolveSession(target, &error);
+    if (id.isEmpty())
+        return fail(error);
+    const Session *s = store.session(id);
+    bool right = rightPane.contains(raw);
+    if (const QString token = args.value("paneID").toString(); !token.isEmpty()) {
+        if (token != s->paneId && !(s->hasSplit && token == s->splitPaneId))
+            return fail(QStringLiteral("unknown pane id: %1").arg(token));
+        right = token != s->paneId;
+    }
+    if (right && !s->hasSplit)
+        return fail(QStringLiteral("session has no split pane"));
+    const QString paneId = right ? s->splitPaneId : s->paneId;
+    const Terminals::Backing backing = terminals.backing(id, right ? QStringLiteral("right") : QStringLiteral("left"));
+    if (paneId.isEmpty() || backing == Terminals::Backing::None) // a pane never shown since launch has no zmx client to read
+        return fail(QStringLiteral("session not realized"));
+    const QString refusal = QStringLiteral("%1 is not a Live session").arg(target.isEmpty() ? QStringLiteral("active") : target);
+    if (backing != Terminals::Backing::Live)
+        return fail(refusal);
+    const QJsonObject r = Zmx::phoneAttach(stateDir(), paneId, args.value("claim").toBool());
+    if (r.value("outdated").toBool()) // its own zmx would ignore the viewer's skip-scrollback flag and overflow the relay
+        return fail(QStringLiteral("session predates this version; restart it to watch it on the phone"));
+    return r.contains("attach") ? ok({{"attach", r.value("attach")}}) : fail(refusal);
 }
 
 static QJsonObject sessionText(Store &store, Terminals &terminals, const QString &id, const QJsonObject &args)
@@ -722,6 +756,8 @@ QJsonObject moreCommands(Store &store, Terminals &terminals, const QString &cmd,
     }
     if (cmd == QLatin1String("session.transcript"))
         return sessionTranscript(store, terminals, target, args);
+    if (cmd == QLatin1String("session.attach"))
+        return sessionAttach(store, terminals, target, args);
     static const QStringList sessionCmds{"session.context", "session.collapse", "session.expand", "session.resize", "session.grid", "session.scroll", "session.text", "session.focus",
                                          "session.copy", "session.paste", "session.selectall", "session.search", "session.reveal", "ask.open"};
     if (!sessionCmds.contains(cmd)) {

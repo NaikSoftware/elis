@@ -131,12 +131,12 @@ Legend: [x] done · [ ] todo · (fork) = fork-only feature, not in upstream docs
   create-only payload. Deleting a session, closing a split or deleting a window ends its daemons and hangs up their
   foreground jobs; closing a window keeps them; a launch reaps as master (`none`/`rerun`: every idle daemon, `live`:
   the ones no window claims). Role reports cover a pane that does not lead ("In use from another terminal",
-  "Reconnecting…", "Taking over…"), in its split or its dashboard cell; a key takes the lead with a fresh claiming
-  attach. Once its zmx reported a role a pane's `session type` goes through `zmx type`, and a covered pane's
-  `session text` (any pane's `--all`/`--lines`) through `zmx screen`; `session copy|paste|selectall|search` refuse a
-  covered pane. Tree `surfaces[]` (`id`, `kind`, `active`, `visible`, `backedByZmx`, `lead`, `paneID`) and
-  `backedByZmx`. zmx installs to `libexec/elis`, off PATH. Not ported: `zmx.*`, `session restart|lead`, a reset
-  dialog, the phone's "In use on your phone" (Phase 4)
+  "In use on your phone", "Reconnecting…", "Taking over…"), in its split or its dashboard cell; a key takes the
+  lead with a fresh claiming attach. Once its zmx reported a role a pane's `session type` goes through `zmx type`,
+  and a covered pane's `session text` (any pane's `--all`/`--lines`) through `zmx screen`;
+  `session copy|paste|selectall|search` refuse a covered pane. Tree `surfaces[]` (`id`, `kind`, `active`, `visible`,
+  `backedByZmx`, `lead`, `paneID`, `phoneViewers`, `phoneLead`) and `backedByZmx`. zmx installs to `libexec/elis`,
+  off PATH. Not ported: `zmx.*`, `session restart|lead`, a reset dialog
 - [x] `session transcript` (the phone's Chat), and the tree's `agentPane` and `agentSessionId` (sampled from both
   panes, the focused one first): the argument check and the reader are master's own `ElisCore`, linked through
   `linux/bridge` (ElisBridge); the read runs on a worker thread
@@ -167,3 +167,10 @@ Legend: [x] done · [ ] todo · (fork) = fork-only feature, not in upstream docs
 - [x] Phone relay (Elis only): Settings ▸ Connect a Phone… or `elisctl mobile serve|reset` for the Elis Mobile app
   (`mobile/`): the control protocol over TLS, pinned by the certificate's SHA-256 and gated by a 256-bit token, paired by
   QR code or `elis://pair` link; `session type --pane` types into either pane
+- [x] `session attach [--pane left|right] [--claim] [--json]` and `phone.*` events: attaches this terminal to a Live
+  pane as a passive zmx viewer (skipping scrollback) or claiming lead (`--claim`), or prints
+  `{argv, paneID, screen, remote, nonce?}` with `--json` (no `origin`; C++ `elisctl` runs the Swift `elisctl`
+  installed in `libexec/elis` beside zmx; master's refusals, including daemons predating the zmx build). Relay stderr
+  emits `phone.connected`, `phone.disconnected`, `phone.refused` and `phone.attached`, `phone.detached`,
+  `phone.claimed`, `phone.released` (usable in `hooks.conf`; pane events update `phoneViewers`/`phoneLead`, schedule
+  `tree.changed` and clear when the relay stops; the Swift relay that prints the pane lines is Phase 5)

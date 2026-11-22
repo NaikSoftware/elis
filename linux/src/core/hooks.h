@@ -18,6 +18,8 @@ class EventSource : public QObject
 public:
     explicit EventSource(Store &store, QObject *parent = nullptr);
     void emitEvent(const QString &kind, const QString &workspace = {}, const QString &session = {}, const QJsonObject &payload = {});
+    void emitAppEvent(const QString &kind, const QJsonObject &payload); // app-wide (phone.*): no window stamped
+    void scheduleTreeChanged() { m_treeTimer.start(); }
     QString window; // the window id stamped on its events
     static const QStringList kinds;
     // events.read over the app-wide ring: without a cursor, an empty batch anchored at now; "" error when valid

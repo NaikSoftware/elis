@@ -1,5 +1,6 @@
 #include "ci.h"
 #include "control.h"
+#include "elis_bridge.h"
 #include "hooks.h"
 #include "installers.h"
 #include "keymap.h"
@@ -35,6 +36,8 @@ public:
     QString text(const QString &, const QString &pane, bool history, QString *) override { return lastPane = pane, history ? scrollback : screen; }
     QHash<QString, QStringList> panes; // session -> pane ids
     QStringList paneIds(const QString &id) const override { return panes.value(id); }
+    QHash<QString, Backing> backings; // "<session>:<pane>"
+    Backing backing(const QString &id, const QString &pane) const override { return backings.value(id + ':' + pane, Backing::None); }
     QList<QJsonObject> events;
     void emitEvent(const QString &kind, const QString &id, const QJsonObject &payload) override { events << QJsonObject{{"kind", kind}, {"session", id}, {"payload", payload}}; }
     QJsonObject info(const QString &) override { return {{"pid", 42}}; }
@@ -241,6 +244,9 @@ private Q_SLOTS:
         QVERIFY(d[3].message.contains("already defined"));
         QList<KeymapDiagnostic> none;
         QVERIFY(parseHooks(starterHooks(), &none).isEmpty() && none.isEmpty());
+        QCOMPARE(parseHooks("on phone.attached a\non phone.detached b\non phone.claimed c\non phone.released d\non phone.connected e\n"
+                            "on phone.disconnected f\non phone.refused g\n", &none).size(), 7);
+        QVERIFY(none.isEmpty() && EventSource::kinds.contains("phone.claimed"));
     }
 
     void hooksRunWithTheEventOnStdinAndReportFailures()
@@ -1027,6 +1033,94 @@ private Q_SLOTS:
         mine.waitForFinished();
         QCOMPARE(Zmx::surface({{"id", "x"}, {"kind", "right"}, {"active", false}, {"visible", false}, {"backedByZmx", false}, {"paneID", ""}}),
                  (QJsonObject{{"id", "x"}, {"kind", "right"}, {"active", false}, {"visible", false}, {"backedByZmx", false}}));
+    }
+
+    void sessionAttachRefusesInTheMacsOrder()
+    {
+        Store s;
+        FakeTerminals t;
+        const QString id = s.addSession(s.addWorkspace("w"), {}, QDir::homePath());
+        const auto error = [&](const QString &target, const QJsonObject &args) { return call(s, t, "session.attach", target, args).value("error").toString(); };
+        QCOMPARE(error("nope", {{"pane", "scratch"}}), QStringLiteral("invalid pane: scratch")); // the pane is parsed first
+        QVERIFY(error("nope", {}).contains(QLatin1String("nope")));
+        QCOMPARE(error(id, {}), QStringLiteral("session not realized")); // never shown: no pane id yet
+        s.session(id)->paneId = QUuid::createUuid().toString(QUuid::WithoutBraces);
+        QCOMPARE(error(id, {}), QStringLiteral("session not realized"));
+        QCOMPARE(error(id, {{"pane", "right"}}), QStringLiteral("session has no split pane"));
+        QCOMPARE(error(id, {{"paneID", "x"}}), QStringLiteral("unknown pane id: x"));
+        s.session(id)->splitPaneId = QStringLiteral("b"); // a closed split's id names nothing
+        QCOMPARE(error(id, {{"paneID", "b"}}), QStringLiteral("unknown pane id: b"));
+        t.backings.insert(id + ":left", Terminals::Backing::Plain);
+        QCOMPARE(error(id, {}), QStringLiteral("%1 is not a Live session").arg(id));
+        s.select(id);
+        QCOMPARE(error({}, {{"pane", "top"}}), QStringLiteral("active is not a Live session"));
+        s.session(id)->hasSplit = true; // --pane-id wins over --pane
+        QCOMPARE(error(id, {{"pane", "left"}, {"paneID", "b"}}), QStringLiteral("session not realized"));
+    }
+
+    void sessionAttachAnswersAViewerOrAClaimAndRefusesAnOutdatedDaemon()
+    {
+        ZmxNamespace ns;
+        qputenv("ELIS_STATE_DIR", ns.state.path().toUtf8());
+        Store s;
+        FakeTerminals t;
+        const QString id = s.addSession(s.addWorkspace("w"), {}, QDir::homePath()), pane = ns.pane();
+        s.session(id)->paneId = pane;
+        t.backings.insert(id + ":left", Terminals::Backing::Live);
+        const QJsonObject viewer = call(s, t, "session.attach", id).value("result").toObject().value("attach").toObject();
+        const QString daemon = Zmx::daemonName(ns.state.path(), pane);
+        QCOMPARE(viewer.value("paneID").toString(), pane);
+        QCOMPARE(viewer.value("remote").toBool(true), false);
+        QVERIFY(!viewer.contains("nonce") && !viewer.contains("origin"));
+        const QStringList argv = viewer.value("argv").toVariant().toStringList(), screen = viewer.value("screen").toVariant().toStringList();
+        QVERIFY2(argv.contains(Zmx::executable()) && argv.contains(daemon) && argv.contains("ZMX_MANAGED_FOLLOW=1"), qPrintable(argv.join(' ')));
+        QCOMPARE(screen.mid(screen.size() - 3), (QStringList{Zmx::executable(), "screen", daemon}));
+        const QJsonObject claim = call(s, t, "session.attach", id, {{"claim", true}}).value("result").toObject().value("attach").toObject();
+        const QString nonce = claim.value("nonce").toString();
+        QVERIFY(!nonce.isEmpty());
+        QVERIFY(claim.value("argv").toVariant().toStringList().contains("ZMX_MANAGED=" + nonce));
+        QVERIFY(claim.value("argv").toVariant().toStringList().contains("ZMX_MANAGED_CLAIM=1"));
+
+        QCOMPARE(createDetached(ns, pane, QStringLiteral("sleep 30")), daemon);
+        QTest::qWait(1100); // zmx dates a daemon in whole seconds
+        Zmx::recordBuild(ns.state.path()); // a first run of this build, after the daemon started
+        QVERIFY(QFile::exists(ns.state.filePath("zmx-build.json")));
+        QCOMPARE(call(s, t, "session.attach", id).value("error").toString(),
+                 QStringLiteral("session predates this version; restart it to watch it on the phone"));
+        QVERIFY(call(s, t, "session.attach", id, {{"pane", "split"}}).value("error").toString() == QStringLiteral("session has no split pane"));
+        qunsetenv("ELIS_STATE_DIR");
+    }
+
+    void phoneRelayLinesCountViewersAndLeads()
+    {
+        const auto line = [](const char *text) {
+            char *r = elis_phone_relay_line(text);
+            const QJsonObject o = QJsonDocument::fromJson(r).object();
+            elis_free(r);
+            return o;
+        };
+        const auto viewers = [](const QString &pane) {
+            char *r = elis_phone_viewers(pane.toUtf8().constData());
+            const QJsonObject o = QJsonDocument::fromJson(r).object();
+            elis_free(r);
+            return o;
+        };
+        QCOMPARE(line("elisctl: phone attached from 10.0.0.2 pane p1"),
+                 (QJsonObject{{"kind", "viewer"}, {"attached", true}, {"paneID", "p1"}, {"ip", "10.0.0.2"}, {"emit", true}}));
+        line("phone attached from - pane p1");
+        QCOMPARE(line("phone leads from - pane p1"), (QJsonObject{{"kind", "lead"}, {"leading", true}, {"paneID", "p1"}, {"emit", true}}));
+        QCOMPARE(viewers("p1"), (QJsonObject{{"viewers", 2}, {"lead", true}}));
+        QCOMPARE(Zmx::surface({{"id", "x"}, {"kind", "left"}, {"active", true}, {"visible", true}, {"backedByZmx", true}, {"paneID", "p1"}}),
+                 (QJsonObject{{"id", "x"}, {"kind", "left"}, {"active", true}, {"visible", true}, {"backedByZmx", true}, {"paneID", "p1"},
+                              {"phoneViewers", 2}, {"phoneLead", true}}));
+        QCOMPARE(line("phone detached from - pane p1").value("emit").toBool(), true);
+        QCOMPARE(line("phone released from 10.0.0.2 pane p2").value("emit").toBool(), false); // never counted
+        QCOMPARE(line("phone connected from 10.0.0.2").value("event").toString(), QStringLiteral("phone.connected"));
+        QCOMPARE(line("listening on 8765").value("kind").toString(), QStringLiteral("other"));
+        char *r = elis_phone_viewers_reset();
+        QCOMPARE(QJsonDocument::fromJson(r).object(), (QJsonObject{{"detached", QJsonArray{"p1"}}, {"released", QJsonArray{"p1"}}}));
+        elis_free(r);
+        QCOMPARE(viewers("p1"), (QJsonObject{{"viewers", 0}, {"lead", false}}));
     }
 
     void paneIdsPersistWithTheirSplit()

@@ -50,6 +50,16 @@ add_library(ElisBridge SHARED IMPORTED)
 set_target_properties(ElisBridge PROPERTIES IMPORTED_LOCATION ${ELIS_BRIDGE} INTERFACE_INCLUDE_DIRECTORIES ${CMAKE_SOURCE_DIR}/bridge/include)
 add_dependencies(ElisBridge elis-bridge)
 
+set(ELIS_SWIFT_CTL ${CMAKE_BINARY_DIR}/helper/elisctl)
+add_custom_command(OUTPUT ${ELIS_SWIFT_CTL}
+  COMMAND ${SWIFT} build -c release -Xswiftc -static-stdlib -Xlinker --strip-all --package-path ${CMAKE_SOURCE_DIR}/bridge --scratch-path ${CMAKE_BINARY_DIR}/swift-ctl --product elisctl
+  COMMAND ${CMAKE_COMMAND} -E make_directory ${CMAKE_BINARY_DIR}/helper
+  COMMAND ${CMAKE_COMMAND} -E copy ${CMAKE_BINARY_DIR}/swift-ctl/release/elisctl ${ELIS_SWIFT_CTL}
+  COMMAND ${CMAKE_COMMAND} -E touch ${ELIS_SWIFT_CTL}
+  DEPENDS ${ELIS_BRIDGE_SOURCES} ${CMAKE_SOURCE_DIR}/bridge/Package.swift ${CMAKE_SOURCE_DIR}/bridge/Package.resolved ${CMAKE_SOURCE_DIR}/../shared/ElisCore/Package.swift
+  COMMENT "Building Swift elisctl helper" USES_TERMINAL VERBATIM)
+add_custom_target(elis-swift-ctl ALL DEPENDS ${ELIS_SWIFT_CTL})
+
 # zmx: the Mac's patched zmx, which Live panes run under. macos/scripts/setup.sh pins it, its patches and its zig
 # (ZMX_ZIG_FORMULA) and builds it here for the host arch; its stamp makes a rebuild free until a pin or patch moves.
 if(CMAKE_HOST_SYSTEM_PROCESSOR MATCHES "^(x86_64|amd64|AMD64)$")
@@ -72,11 +82,13 @@ if(NOT ZIG OR NOT ELIS_ZIG_VERSION MATCHES "^0\\.16\\." OR NOT GIT OR NOT SHASUM
 endif()
 set(ELIS_ZMX ${CMAKE_BINARY_DIR}/zmx)
 file(GLOB ELIS_ZMX_PATCHES CONFIGURE_DEPENDS ${CMAKE_SOURCE_DIR}/../macos/scripts/zmx-patches/*.patch ${CMAKE_SOURCE_DIR}/../macos/scripts/zmx-patches/ghostty/*.patch)
-add_custom_command(OUTPUT ${ELIS_ZMX}
+# zmx.BUILD is that stamp: a Live daemon created before this state dir first ran the build predates it (session.attach)
+add_custom_command(OUTPUT ${ELIS_ZMX} ${ELIS_ZMX}.BUILD
   COMMAND ${CMAKE_COMMAND} -E env ELIS_ZMX_ZIG=${ZIG} ELIS_ZMX_TARGET=${ELIS_ZMX_ARCH}-linux-musl
     ELIS_ZMX_STAGE_DIR=${CMAKE_BINARY_DIR}/zmx-stage ELIS_ZMX_STAMP_FILE=${CMAKE_BINARY_DIR}/zmx-stage.stamp
     bash ${CMAKE_SOURCE_DIR}/../macos/scripts/setup.sh --zmx-only
   COMMAND ${CMAKE_COMMAND} -E copy ${CMAKE_BINARY_DIR}/zmx-stage/zmx ${ELIS_ZMX}
+  COMMAND ${CMAKE_COMMAND} -E copy ${CMAKE_BINARY_DIR}/zmx-stage.stamp ${ELIS_ZMX}.BUILD
   DEPENDS ${CMAKE_SOURCE_DIR}/../macos/scripts/setup.sh ${ELIS_ZMX_PATCHES}
   COMMENT "Building the patched zmx" USES_TERMINAL VERBATIM)
 add_custom_target(elis-zmx ALL DEPENDS ${ELIS_ZMX}) # not `zmx`, the output's own name
@@ -101,6 +113,7 @@ add_dependencies(elis elis-zmx) # spawned from the app's own directory
 
 add_executable(elisctl src/ctl/elisctl.cpp src/ctl/mobile.cpp src/ctl/qrcodegen/qrcodegen.cpp)
 target_link_libraries(elisctl PRIVATE elis-core Qt6::Network)
+add_dependencies(elisctl elis-swift-ctl)
 
 # shared with the Mac app; installed as share/elis/agent-status and share/elis/skill/elis
 set(ELIS_AGENT_STATUS ${CMAKE_SOURCE_DIR}/../shared/agent-status)
@@ -127,8 +140,10 @@ set_tests_properties(filepanel PROPERTIES ENVIRONMENT "QT_QPA_PLATFORM=offscreen
 include(GNUInstallDirs)
 install(TARGETS elis elisctl RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR})
 install(PROGRAMS ${ELIS_ZMX} DESTINATION ${CMAKE_INSTALL_LIBEXECDIR}/elis) # off PATH, as the Mac's bundle keeps it
-file(RELATIVE_PATH ELIS_ZMX_FROM_BIN ${CMAKE_INSTALL_PREFIX}/${CMAKE_INSTALL_BINDIR} ${CMAKE_INSTALL_PREFIX}/${CMAKE_INSTALL_LIBEXECDIR}/elis)
-target_compile_definitions(elis-core PRIVATE ELIS_ZMX_FROM_BIN="${ELIS_ZMX_FROM_BIN}")
+install(FILES ${ELIS_ZMX}.BUILD DESTINATION ${CMAKE_INSTALL_LIBEXECDIR}/elis)
+install(PROGRAMS ${CMAKE_BINARY_DIR}/helper/elisctl DESTINATION ${CMAKE_INSTALL_LIBEXECDIR}/elis)
+file(RELATIVE_PATH ELIS_LIBEXEC_FROM_BIN ${CMAKE_INSTALL_PREFIX}/${CMAKE_INSTALL_BINDIR} ${CMAKE_INSTALL_PREFIX}/${CMAKE_INSTALL_LIBEXECDIR}/elis)
+target_compile_definitions(elis-core PUBLIC ELIS_LIBEXEC_FROM_BIN="${ELIS_LIBEXEC_FROM_BIN}")
 install(FILES ${CMAKE_BINARY_DIR}/zmx-stage/LICENSE DESTINATION ${CMAKE_INSTALL_DOCDIR} RENAME zmx-LICENSE)
 install(FILES ${ELIS_BRIDGE} DESTINATION ${CMAKE_INSTALL_LIBDIR}/elis)
 file(RELATIVE_PATH ELIS_BRIDGE_RPATH ${CMAKE_INSTALL_PREFIX}/${CMAKE_INSTALL_BINDIR} ${CMAKE_INSTALL_PREFIX}/${CMAKE_INSTALL_LIBDIR}/elis)

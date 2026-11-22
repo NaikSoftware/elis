@@ -47,6 +47,8 @@ public:
     bool setGrid(const QString &sessionId, const QString &pane, const QSize &grid, QString *error) override;
     bool scroll(const QString &sessionId, const QString &pane, int lines, QString *error) override;
     QStringList paneIds(const QString &sessionId) const override;
+    Backing backing(const QString &sessionId, const QString &pane) const override;
+    bool holdsPane(const QString &paneId) const; // one of its sessions' panes has this ELIS_PANE_ID
     void emitEvent(const QString &kind, const QString &sessionId, const QJsonObject &payload) override;
     QJsonObject info(const QString &sessionId) override;
 

@@ -3,6 +3,7 @@
 #include "phone.h"
 
 #include "../ctl/qrcodegen/qrcodegen.hpp"
+#include "elis_bridge.h"
 #include "paths.h"
 
 #include <QApplication>
@@ -14,6 +15,7 @@
 #include <QDir>
 #include <QFile>
 #include <QFormLayout>
+#include <QJsonArray>
 #include <QHBoxLayout>
 #include <QJsonDocument>
 #include <QJsonObject>
@@ -142,12 +144,23 @@ void PhoneRelay::start()
             Q_EMIT changed();
     });
     connect(p, &QProcess::readyReadStandardError, this, [this, p, lines, errBuffer, lastError] {
-        for (QString line : lines(*errBuffer, p->readAllStandardError())) {
-            if (line.startsWith(QLatin1String("elisctl: ")))
-                line.remove(0, 11);
-            *lastError = line;
-            if (line.startsWith(QLatin1String("phone connected")) || line.startsWith(QLatin1String("refused")))
-                m_event = line, Q_EMIT changed();
+        for (const QString &raw : lines(*errBuffer, p->readAllStandardError())) {
+            char *reply = elis_phone_relay_line(raw.toUtf8().constData());
+            QJsonObject line = QJsonDocument::fromJson(reply).object();
+            elis_free(reply);
+            const QString kind = line.value("kind").toString();
+            if (kind == QLatin1String("other")) {
+                *lastError = line.value("text").toString();
+            } else if (kind == QLatin1String("event")) {
+                lastError->clear(); // an exit after an event says only that the relay stopped
+                m_event = line.value("text").toString(), Q_EMIT changed();
+                if (line.contains("event"))
+                    Q_EMIT phoneEvent(line.value("event").toString(), {{"ip", line.value("ip")}});
+            } else if ((kind == QLatin1String("viewer") || kind == QLatin1String("lead")) && line.take("emit").toBool()) {
+                const bool on = line.take(kind == QLatin1String("viewer") ? "attached" : "leading").toBool();
+                line.remove("kind");
+                Q_EMIT phoneEvent(kind == QLatin1String("viewer") ? (on ? "phone.attached" : "phone.detached") : (on ? "phone.claimed" : "phone.released"), line);
+            }
         }
     });
     connect(p, &QProcess::errorOccurred, this, [this, p](QProcess::ProcessError e) {
@@ -159,6 +172,7 @@ void PhoneRelay::start()
             m_error = lastError->isEmpty() ? tr("The relay stopped.") : *lastError;
         m_links.clear();
         p->deleteLater();
+        releaseViewers();
         Q_EMIT changed();
     });
     p->start(elisctl(), {QStringLiteral("mobile"), QStringLiteral("serve"), QStringLiteral("--no-qr"), QStringLiteral("--socket"), socketPath(),
@@ -175,6 +189,17 @@ void PhoneRelay::stop()
     m_proc->waitForFinished(2000); // the port is free before a restart binds it again
     delete m_proc;
     m_links.clear();
+    releaseViewers();
+}
+
+void PhoneRelay::releaseViewers()
+{
+    char *reply = elis_phone_viewers_reset();
+    const QJsonObject held = QJsonDocument::fromJson(reply).object();
+    elis_free(reply);
+    for (const auto &[key, kind] : {std::pair{"detached", "phone.detached"}, std::pair{"released", "phone.released"}})
+        for (const QJsonValue &pane : held.value(QLatin1String(key)).toArray())
+            Q_EMIT phoneEvent(QLatin1String(kind), {{"paneID", pane}});
 }
 
 QStringList PhoneRelay::hosts() const

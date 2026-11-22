@@ -59,6 +59,7 @@ std::optional<QByteArray> run(const QString &stateDir, const QStringList &args, 
     return p.readAllStandardOutput();
 }
 
+std::optional<double> s_buildCutoff; // recordBuild's, in seconds since the epoch
 QHash<QString, int> s_shells; // daemon name -> its shell, from the last listing
 qint64 s_listedAt = 0;
 
@@ -71,7 +72,7 @@ QString executable()
     // the build tree keeps it beside elis; an install keeps it off PATH, in libexec, as the Mac keeps it in its bundle
     const QString dir = QCoreApplication::applicationDirPath();
     const QString beside = dir + QStringLiteral("/zmx");
-    return QFileInfo(beside).isExecutable() ? beside : QDir::cleanPath(dir + QStringLiteral("/" ELIS_ZMX_FROM_BIN "/zmx"));
+    return QFileInfo(beside).isExecutable() ? beside : QDir::cleanPath(dir + QStringLiteral("/" ELIS_LIBEXEC_FROM_BIN "/zmx"));
 }
 
 Attach attach(const QString &stateDir, const QString &paneId, const QString &shell, const QString &line, const QString &command, bool claim,
@@ -258,6 +259,27 @@ void forget(const QString &paneId)
 QJsonObject surface(const QJsonObject &fields)
 {
     return taken(elis_zmx_surface(json(fields).constData()));
+}
+
+void recordBuild(const QString &stateDir)
+{
+    QFile stamp(executable() + QStringLiteral(".BUILD"));
+    if (!stamp.open(QIODevice::ReadOnly))
+        return;
+    const QJsonObject r = taken(elis_zmx_build_cutoff(json({{"stateDir", stateDir}, {"buildID", QString::fromUtf8(stamp.readAll())}}).constData()));
+    if (r.contains("cutoff"))
+        s_buildCutoff = r.value("cutoff").toDouble();
+}
+
+QJsonObject phoneAttach(const QString &stateDir, const QString &paneId, bool claim)
+{
+    QJsonObject args{{"zmx", executable()}, {"stateDir", stateDir}, {"runtimeDir", qEnvironmentVariable("XDG_RUNTIME_DIR")}, {"pane", paneId}, {"claim", claim}};
+    if (s_buildCutoff) {
+        args.insert("cutoff", *s_buildCutoff);
+        if (const std::optional<QByteArray> out = run(stateDir, {QStringLiteral("list")}))
+            args.insert("list", QString::fromUtf8(*out));
+    }
+    return taken(elis_session_attach(json(args).constData()));
 }
 
 } // namespace Zmx

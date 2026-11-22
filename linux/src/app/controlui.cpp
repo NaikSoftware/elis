@@ -4,6 +4,7 @@
 #include "hooks.h"
 #include "konsoleprivate.h"
 #include "palette.h"
+#include "paneleadcover.h"
 #include "paths.h"
 #include "store.h"
 #include "zmx.h"
@@ -51,6 +52,20 @@ KParts::ReadOnlyPart *MainWindow::panePart(const QString &id, const QString &pan
 {
     const Panes p = m_panes.value(id);
     return pane == QLatin1String("right") ? p.right : p.main;
+}
+
+Terminals::Backing MainWindow::backing(const QString &sessionId, const QString &pane) const
+{
+    const KParts::ReadOnlyPart *part = panePart(sessionId, pane);
+    return !part ? Backing::None : part->property("elisZmx").toString().isEmpty() ? Backing::Plain : Backing::Live;
+}
+
+bool MainWindow::holdsPane(const QString &paneId) const
+{
+    for (const Session *s : m_store.allSessions())
+        if (!paneId.isEmpty() && (s->paneId == paneId || (s->hasSplit && s->splitPaneId == paneId)))
+            return true;
+    return false;
 }
 
 QStringList MainWindow::paneIds(const QString &sessionId) const
@@ -519,7 +534,10 @@ bool MainWindow::uiCommand(const QString &cmd, const QString &id, const QJsonObj
     // the Mac's coveredRefusal: a covered pane shows another grid's output and the daemon drops what it sends
     if (const QString zmx = part->property("elisZmx").toString();
         !zmx.isEmpty() && Zmx::lead(zmx).covered && !(cmd == QLatin1String("session.search") && args.value("to").toString() == QLatin1String("close")))
-        return *error = QStringLiteral("pane is covered while another terminal leads it; press a key on it to take the lead"), false;
+        return *error = PaneLeadCover::phoneLeads(part->property("elisPaneId").toString())
+                            ? QStringLiteral("pane is in use on your phone; press a key on it to take the lead")
+                            : QStringLiteral("pane is covered while another terminal leads it; press a key on it to take the lead"),
+               false;
     if (cmd == QLatin1String("session.copy")) {
         const QString text = KonsolePrivate::selectedText(session);
         if (text.isEmpty())
