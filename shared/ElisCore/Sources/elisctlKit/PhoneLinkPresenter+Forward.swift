@@ -63,10 +63,10 @@ extension PhoneLinkPresenter {
 
     /// Runs `argv` until the relay's end of stdin closes, so a relay killed outright leaves no `ssh -N` behind; a stop's
     /// SIGTERM reaches the child, and the child's own end ends the wrapper. Stdin is kept on fd 3 because `sh` gives an
-    /// asynchronous list /dev/null as stdin.
+    /// asynchronous list /dev/null as stdin. The second `wait` reaps a child the trap killed, which a container's init may never do.
     static func tiedToInput(_ argv: [String]) -> [String] {
         let script = #"exec 3<&0; "$@" </dev/null >/dev/null 3<&- & pid=$!; (read -r _ <&3; kill $pid) >/dev/null 2>&1 & reader=$!; "#
-            + #"trap 'kill $pid' TERM; wait $pid; kill $reader 2>/dev/null"#
+            + #"trap 'kill $pid' TERM; wait $pid; wait $pid 2>/dev/null; kill $reader 2>/dev/null"#
         return ["/bin/sh", "-c", script, "sh"] + argv
     }
 
