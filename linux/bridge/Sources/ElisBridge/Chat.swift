@@ -21,8 +21,9 @@ private func json<T: Encodable>(_ value: T) -> String {
 
 private func text(_ pointer: UnsafePointer<CChar>) -> String { String(cString: pointer) }
 
-private func decoded<T: Decodable>(_ type: T.Type, _ json: UnsafePointer<CChar>) -> T? {
-    try? JSONDecoder().decode(type, from: Data(text(json).utf8))
+// Pointers are read into Strings before onMain: its closure may not capture them.
+private func decoded<T: Decodable>(_ type: T.Type, _ json: String) -> T? {
+    try? JSONDecoder().decode(type, from: Data(json.utf8))
 }
 
 /// Opens the chat at `<stateDir>/assistant/chat.jsonl`; the same path again keeps the open chat.
@@ -84,66 +85,66 @@ private func refused(_ message: String) -> String {
     json(Step(.reply(ControlResponse(ok: false, error: message), effects: [])))
 }
 
+private func failed(_ message: String) -> String { json(["error": message]) }
+
 private let commands: Set<Command> = [.assistantShow, .assistantProvider, .assistantAsk, .assistantSend, .assistantReply,
                                       .assistantRead]
 
-private func providers(_ json: UnsafePointer<CChar>) -> [SessionLauncher]? {
-    decoded([String].self, json)?.compactMap(SessionLauncher.init(rawValue:))
+/// Listed is a list the host passes, where the JSON text `null` means it cannot list it; anything else that does not
+/// decode fails the init.
+private struct Listed<T: Decodable> {
+    let value: T?
+
+    init?(_ type: T.Type, _ json: String) {
+        if json == "null" {
+            value = nil
+        } else if let value = decoded(type, json) {
+            self.value = value
+        } else {
+            return nil
+        }
+    }
 }
+
+private func launchers(_ names: [String]?) -> [SessionLauncher]? { names?.compactMap(SessionLauncher.init(rawValue:)) }
 
 @_cdecl("elis_assistant_run")
 public func elisAssistantRun(_ requestJSON: UnsafePointer<CChar>, _ peersJSON: UnsafePointer<CChar>,
                              _ providersJSON: UnsafePointer<CChar>) -> UnsafeMutablePointer<CChar>? {
-    let request = decoded(ControlRequest.self, requestJSON)
-    let peers = decoded([AssistantPeer].self, peersJSON)
-    let providers = providers(providersJSON)
+    let (request, peers, providers) = (text(requestJSON), text(peersJSON), text(providersJSON))
     return onMain {
-        guard let request else { return refused("invalid request") }
+        guard let request = decoded(ControlRequest.self, request) else { return refused("invalid request") }
         guard commands.contains(request.cmd) else { return refused("not an assistant command: \(request.cmd.rawValue)") }
-        return json(Step(AssistantCommands(chat: chat).run(request, peers: peers, providers: providers)))
+        guard let peers = Listed([AssistantPeer].self, peers) else { return refused("invalid peers") }
+        guard let providers = Listed([String].self, providers) else { return refused("invalid providers") }
+        return json(Step(AssistantCommands(chat: chat).run(request, peers: peers.value, providers: launchers(providers.value))))
     }
 }
 
 @_cdecl("elis_assistant_finish_send")
 public func elisAssistantFinishSend(_ planJSON: UnsafePointer<CChar>, _ failuresJSON: UnsafePointer<CChar>) -> UnsafeMutablePointer<CChar>? {
-    let plan = decoded(AssistantSendPlan.self, planJSON)
-    let failures = decoded([String: String].self, failuresJSON) ?? [:]
+    let (plan, failures) = (text(planJSON), text(failuresJSON))
     return onMain {
-        guard let plan else { return refused("invalid plan") }
+        guard let plan = decoded(AssistantSendPlan.self, plan) else { return refused("invalid plan") }
+        guard let failures = decoded([String: String].self, failures) else { return refused("invalid failures") }
         return json(Step(AssistantCommands(chat: chat).finishSend(plan, failures: failures)))
     }
 }
 
-// The host's tree is its own shape, not ControlTree, so the core's handles, marks and node are laid onto it by id.
 @_cdecl("elis_assistant_stamp")
 public func elisAssistantStamp(_ treeJSON: UnsafePointer<CChar>, _ peersJSON: UnsafePointer<CChar>,
                                _ providersJSON: UnsafePointer<CChar>) -> UnsafeMutablePointer<CChar>? {
-    let raw = text(treeJSON)
-    let peers = decoded([AssistantPeer].self, peersJSON)
-    let providers = providers(providersJSON)
+    let (tree, peers, providers) = (text(treeJSON), text(peersJSON), text(providersJSON))
     return onMain {
-        guard let peers, var tree = (try? JSONSerialization.jsonObject(with: Data(raw.utf8))) as? [String: Any],
-              let node = try? JSONSerialization.jsonObject(with: JSONEncoder().encode(AssistantCommands(chat: chat).node(providers: providers)))
-        else { return raw }
-        let directory = AssistantDirectory(peers)
-        if let workspaces = tree["workspaces"] as? [[String: Any]] {
-            tree["workspaces"] = workspaces.map { workspace in
-                var workspace = workspace
-                workspace["handle"] = (workspace["id"] as? String).flatMap(directory.workspaceHandle(of:))
-                if let sessions = workspace["sessions"] as? [[String: Any]] {
-                    workspace["sessions"] = sessions.map { session in
-                        var session = session
-                        let id = session["id"] as? String ?? ""
-                        session["handle"] = directory.handle(of: id)
-                        session["assistantMark"] = chat.marks[id]?.rawValue
-                        return session
-                    }
-                }
-                return workspace
-            }
+        guard let tree = (try? JSONSerialization.jsonObject(with: Data(tree.utf8))) as? [String: Any] else {
+            return failed("invalid tree")
         }
-        tree["assistant"] = node
-        return (try? JSONSerialization.data(withJSONObject: tree)).map { String(decoding: $0, as: UTF8.self) } ?? raw
+        guard let peers = Listed([AssistantPeer].self, peers) else { return failed("invalid peers") }
+        guard let providers = Listed([String].self, providers) else { return failed("invalid providers") }
+        guard let stamped = try? AssistantCommands(chat: chat).stampJSON(tree, peers: peers.value, providers: launchers(providers.value)),
+              let data = try? JSONSerialization.data(withJSONObject: stamped)
+        else { return failed("encoding failed") }
+        return String(decoding: data, as: UTF8.self)
     }
 }
 
@@ -172,59 +173,58 @@ public func elisAssistantAppendAssistant(_ reply: UnsafePointer<CChar>) -> Unsaf
     return onMain { json(chat.append(.assistant, text: reply, now: Date().timeIntervalSince1970)) }
 }
 
-private func launcher(_ name: UnsafePointer<CChar>) -> SessionLauncher? { SessionLauncher(rawValue: text(name)) }
-
-private func prompt(_ peersJSON: UnsafePointer<CChar>) -> String {
-    AssistantPrompt.system(AssistantDirectory(decoded([AssistantPeer].self, peersJSON) ?? []))
+/// provider is a name the assistant picker offers: never `terminal`.
+private func provider(_ name: String) -> SessionLauncher? {
+    SessionLauncher(rawValue: name).flatMap { AssistantProvider.choices([$0]).first }
 }
 
+private func prompt(_ peers: [AssistantPeer]?) -> String { AssistantPrompt.system(AssistantDirectory(peers ?? [])) }
+
 @_cdecl("elis_assistant_launch")
-public func elisAssistantLaunch(_ provider: UnsafePointer<CChar>, _ peersJSON: UnsafePointer<CChar>) -> UnsafeMutablePointer<CChar>? {
+public func elisAssistantLaunch(_ name: UnsafePointer<CChar>, _ peersJSON: UnsafePointer<CChar>) -> UnsafeMutablePointer<CChar>? {
     struct Launch: Encodable {
         let argv: [String]
         let mode: String
         let environment: [String: String]
         let preamble: String?
     }
-    let name = text(provider)
-    let prompt = prompt(peersJSON)
+    let (name, peers) = (text(name), text(peersJSON))
     return onMain {
-        guard let p = SessionLauncher(rawValue: name) else { return json(["error": "unknown provider \(name)"]) }
-        let launch = AssistantProvider.launch(p, prompt: prompt, resume: chat.resume[p])
+        guard let p = provider(name) else { return failed("unknown provider \(name)") }
+        guard let peers = Listed([AssistantPeer].self, peers) else { return failed("invalid peers") }
+        let launch = AssistantProvider.launch(p, prompt: prompt(peers.value), resume: chat.resume[p])
         return json(Launch(argv: launch.argv, mode: launch.mode == .stream ? "stream" : "perInput", environment: launch.environment,
                            preamble: launch.preamble))
     }
 }
 
 @_cdecl("elis_assistant_turn_argv")
-public func elisAssistantTurnArgv(_ provider: UnsafePointer<CChar>, _ input: UnsafePointer<CChar>,
+public func elisAssistantTurnArgv(_ name: UnsafePointer<CChar>, _ input: UnsafePointer<CChar>,
                                   _ peersJSON: UnsafePointer<CChar>) -> UnsafeMutablePointer<CChar>? {
-    let p = launcher(provider)
-    let input = text(input)
-    let prompt = prompt(peersJSON)
+    let (name, input, peers) = (text(name), text(input), text(peersJSON))
     return onMain {
-        guard let p else { return "[]" }
-        return json(AssistantProvider.turn(p, input: input, prompt: prompt, resume: chat.resume[p]))
+        guard let p = provider(name) else { return failed("unknown provider \(name)") }
+        guard let peers = Listed([AssistantPeer].self, peers) else { return failed("invalid peers") }
+        return json(AssistantProvider.turn(p, input: input, prompt: prompt(peers.value), resume: chat.resume[p]))
     }
 }
 
 @_cdecl("elis_assistant_encode")
-public func elisAssistantEncode(_ provider: UnsafePointer<CChar>, _ input: UnsafePointer<CChar>) -> UnsafeMutablePointer<CChar>? {
-    strdup(launcher(provider).map { AssistantStream.encode($0, text: text(input)) } ?? "")
+public func elisAssistantEncode(_ name: UnsafePointer<CChar>, _ input: UnsafePointer<CChar>) -> UnsafeMutablePointer<CChar>? {
+    strdup(provider(text(name)).map { AssistantStream.encode($0, text: text(input)) } ?? "")
 }
 
 @_cdecl("elis_assistant_decode")
-public func elisAssistantDecode(_ provider: UnsafePointer<CChar>, _ line: UnsafePointer<CChar>) -> UnsafeMutablePointer<CChar>? {
+public func elisAssistantDecode(_ name: UnsafePointer<CChar>, _ line: UnsafePointer<CChar>) -> UnsafeMutablePointer<CChar>? {
     struct Event: Encodable {
         var text: String?
         var conversation: String?
         var turnEnded: Bool?
         var error: String?
     }
-    let p = launcher(provider)
-    let line = text(line)
+    let (name, line) = (text(name), text(line))
     return onMain {
-        guard let p else { return "[]" }
+        guard let p = provider(name) else { return failed("unknown provider \(name)") }
         return json(AssistantStream.decode(p, line: line).map { event -> Event in
             switch event {
             case let .text(text): return Event(text: text)

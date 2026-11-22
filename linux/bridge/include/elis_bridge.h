@@ -37,28 +37,32 @@ char *elis_zmx_surface(const char *json);     // one tree surfaces[] entry
 char *elis_zmx_type_bytes(const char *text);  // session.type text as zmx type input, its final Return paced
 char *elis_zmx_screen(const char *output, int lines); // zmx screen's reply as text; lines > 0 keeps the last ones
 
-// The assistant chat (bridge Sources/ElisBridge/Chat.swift), all on the process main thread. Until open, the chat lives
-// in memory only.
+// The assistant chat (bridge Sources/ElisBridge/Chat.swift), all on the process main thread; no pointer is ever NULL.
+// Until open, the chat lives in memory only. peersJSON is [{sessionID,window,workspaceID,workspaceName,name,agent?,
+// status?}] and providersJSON ["claude",…], or the JSON text null when the host cannot list them; anything else that
+// does not decode is refused ("invalid peers", "invalid providers").
 char *elis_assistant_open(const char *stateDir); // {}; <stateDir>/assistant/chat.jsonl, the same path again a no-op
-// requestJSON is an assistant.* request; peersJSON [{sessionID,window,workspaceID,workspaceName,name,agent?,status?}]
-// and providersJSON ["claude",…] are null when the host cannot list them. {"reply":<response>,"effects":[effect]}, or
+// requestJSON is an assistant.* request. {"reply":<response>,"effects":[effect]}, or
 // {"plan":{targets,line,body,cut,skipped,skippedIDs,handles}} for the host to type and pass to finish_send. An effect is
 // {"type":"input","entry","streamText"}, {"type":"sent","entry"}, {"type":"providerChanged","provider"} or
 // {"type":"show","window"?}; the host performs a show and calls elis_assistant_mark_seen only when it succeeded.
+// A refusal is {"reply":{"ok":false,"error"},"effects":[]}.
 char *elis_assistant_run(const char *requestJSON, const char *peersJSON, const char *providersJSON);
 // A typed plan's outcome, failuresJSON {sessionID: typing error}: {"reply","effects"} as run's.
 char *elis_assistant_finish_send(const char *planJSON, const char *failuresJSON);
 // The host's tree with workspace and session "handle", session "assistantMark" and top-level "assistant" added; every
-// other key is kept. Null peers leave the tree as it is.
+// other key is kept. Null peers leave the tree as it is; a bad tree, peers or providers is {"error"}.
 char *elis_assistant_stamp(const char *treeJSON, const char *peersJSON, const char *providersJSON);
 void elis_assistant_turn_ended(void);
 char *elis_assistant_provider_failed(const char *message); // the error entry it stores; drops every queued input
 void elis_assistant_mark_seen(void);
 char *elis_assistant_append_assistant(const char *text); // the assistant entry it stores
 // {"argv":[…],"mode":"stream|perInput","environment":{…},"preamble"?} for provider, its system prompt listing peersJSON
-// and resuming its stored conversation; {"error"} for an unknown provider. A perInput provider's argv is empty.
+// and resuming its stored conversation. A perInput provider's argv is empty. A provider is one the picker offers
+// (never terminal); any other name, here and below, is {"error"}, and encode's "".
 char *elis_assistant_launch(const char *provider, const char *peersJSON);
-// A perInput provider's argv for one input, the system prompt prepended while no conversation is stored; [] otherwise.
+// A perInput provider's argv for one input, the system prompt prepended while no conversation is stored; [] for a
+// stream provider.
 char *elis_assistant_turn_argv(const char *provider, const char *input, const char *peersJSON);
 char *elis_assistant_encode(const char *provider, const char *text); // one NDJSON input line, not JSON-quoted; "" for none
 // One provider stdout line as [{"text"}|{"conversation"}|{"turnEnded":true,"error"?}]; a conversation is stored as the

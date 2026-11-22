@@ -1367,7 +1367,7 @@ private Q_SLOTS:
         QStringList seen;
         QString conversation;
         for (const QByteArray &line : f.readAll().split('\n'))
-            for (const QJsonValue &e : AssistantBridge::decode(provider, QString::fromUtf8(line))) {
+            for (const QJsonValue &e : AssistantBridge::decode(provider, QString::fromUtf8(line)).toArray()) {
                 if (e.toObject().contains("conversation"))
                     conversation = e["conversation"].toString();
                 seen << (e.toObject().contains("conversation") ? QStringLiteral("conversation")
@@ -1380,7 +1380,7 @@ private Q_SLOTS:
         if (provider == QLatin1String("claude"))
             QCOMPARE(launch["argv"].toArray().last().toString(), conversation);
         if (provider == QLatin1String("codex"))
-            QCOMPARE(AssistantBridge::turnArgv(provider, "hi", assistantPeers()).mid(2, 2), (QStringList{"resume", "--json"}));
+            QCOMPARE(AssistantBridge::turnArgv(provider, "hi", assistantPeers()).toVariant().toStringList().mid(2, 2), (QStringList{"resume", "--json"}));
     }
 
     void assistantLaunchCarriesThePromptAndStreamFraming()
@@ -1393,12 +1393,46 @@ private Q_SLOTS:
         QVERIFY(argv.join(' ').contains("--input-format stream-json"));
         QVERIFY(argv[argv.indexOf("--append-system-prompt") + 1].contains("claude-one | elis | claude | idle | a1b2c3d4e5f6"));
         QCOMPARE(AssistantBridge::launch("codex", assistantPeers())["mode"].toString(), QStringLiteral("perInput"));
-        QVERIFY(AssistantBridge::launch("nope", {}).contains("error"));
-        QVERIFY(AssistantBridge::turnArgv("codex", "hi", assistantPeers()).last().endsWith("\n\nhi"));
+        QVERIFY(AssistantBridge::turnArgv("codex", "hi", assistantPeers()).toVariant().toStringList().last().endsWith("\n\nhi"));
+        QCOMPARE(AssistantBridge::turnArgv("claude", "hi", assistantPeers()), QJsonValue(QJsonArray{}));
         QCOMPARE(AssistantBridge::decode("claude", R"({"type":"result","is_error":true,"errors":["boom"]})"),
-                 (QJsonArray{QJsonObject{{"turnEnded", true}, {"error", "boom"}}}));
+                 QJsonValue(QJsonArray{QJsonObject{{"turnEnded", true}, {"error", "boom"}}}));
         const QJsonObject line = QJsonDocument::fromJson(AssistantBridge::encode("claude", "a\nb").toUtf8()).object();
         QCOMPARE(line["message"]["content"][0]["text"].toString(), QStringLiteral("a\nb"));
+    }
+
+    // only JSON null means "cannot list"; anything else that does not decode is refused, never read as absent
+    void assistantRefusesMalformedInput()
+    {
+        QTemporaryDir dir;
+        AssistantBridge::open(dir.path());
+        const QJsonObject ask{{"cmd", "assistant.ask"}, {"args", QJsonObject{{"text", "hi"}}}};
+        auto runError = [&](const QJsonValue &peers, const QJsonValue &providers) {
+            return AssistantBridge::run(ask, peers, providers).value("reply")["error"].toString();
+        };
+        QCOMPARE(runError(QJsonArray{QJsonObject{{"sessionID", "x"}}}, QJsonValue::Null), QStringLiteral("invalid peers"));
+        QCOMPARE(runError(QJsonObject{}, QJsonValue::Null), QStringLiteral("invalid peers"));
+        QCOMPARE(runError(QJsonValue("x"), QJsonValue::Null), QStringLiteral("invalid peers"));
+        QCOMPARE(runError(QJsonArray{}, QJsonValue(true)), QStringLiteral("invalid providers"));
+
+        const QJsonObject plan = AssistantBridge::run({{"cmd", "assistant.send"}, {"args", QJsonObject{{"text", "go"}, {"recipients", QJsonArray{"@all"}}}}},
+                                                      assistantPeers(), QJsonValue::Null)["plan"].toObject();
+        QCOMPARE(AssistantBridge::finishSend(plan, {{"a1b2c3d4e5f6", 1}}).value("reply")["error"].toString(), QStringLiteral("invalid failures"));
+
+        const QJsonObject tree{{"workspaces", QJsonArray{}}};
+        QCOMPARE(AssistantBridge::stamp(tree, QJsonArray{QJsonObject{{"name", "x"}}}, QJsonValue::Null), (QJsonObject{{"error", "invalid peers"}}));
+        QCOMPARE(AssistantBridge::stamp(tree, QJsonArray{}, QJsonValue(1)), (QJsonObject{{"error", "invalid providers"}}));
+
+        const QJsonArray badPeers{QJsonObject{{"sessionID", "x"}}};
+        QCOMPARE(AssistantBridge::launch("claude", badPeers), (QJsonObject{{"error", "invalid peers"}}));
+        QCOMPARE(AssistantBridge::turnArgv("codex", "hi", badPeers), QJsonValue(QJsonObject{{"error", "invalid peers"}}));
+        for (const char *name : {"terminal", "nope"}) {
+            const QJsonObject unknown{{"error", QStringLiteral("unknown provider %1").arg(name)}};
+            QCOMPARE(AssistantBridge::launch(name, {}), unknown);
+            QCOMPARE(AssistantBridge::turnArgv(name, "hi", {}), QJsonValue(unknown));
+            QCOMPARE(AssistantBridge::decode(name, R"({"type":"turn.completed"})"), QJsonValue(unknown));
+            QCOMPARE(AssistantBridge::encode(name, "hi"), QString());
+        }
     }
 
     void assistantTurnStateAndEntries()

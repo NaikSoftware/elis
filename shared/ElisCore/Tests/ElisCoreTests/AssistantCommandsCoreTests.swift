@@ -114,4 +114,26 @@ struct AssistantCommandsCoreTests {
         #expect(stamped.workspaces[0].sessions.map(\.assistantMark) == ["waiting", nil])
         #expect(AssistantCommands(chat: chat).stamp(tree, peers: nil, providers: nil) == tree)
     }
+
+    @Test func stampJSONAddsWhatStampAdds() throws {
+        let chat = AssistantChat()
+        chat.provider = .claude
+        chat.append(.sent, text: "go", to: ["claude1-uuid"], now: 0)
+        let commands = AssistantCommands(chat: chat)
+        let sessions = ["claude1-uuid", "shell1-uuid"].map {
+            ControlSessionNode(id: $0, name: $0, cwd: "/", active: false, split: false, backedByZmx: nil)
+        }
+        let tree = ControlTree(workspaces: [ControlWorkspaceNode(id: "wsE", name: "elis", active: true, sessions: sessions)])
+        let plain = try #require(JSONSerialization.jsonObject(with: JSONEncoder().encode(tree)) as? [String: Any])
+        let sorted = { (object: Any) in try JSONSerialization.data(withJSONObject: object, options: .sortedKeys) }
+        var hostTree = plain
+        hostTree["linuxOnly"] = 1
+
+        var viaJSON = try commands.stampJSON(hostTree, peers: peers, providers: [.claude, .codex])
+
+        let typed = try JSONSerialization.jsonObject(with: JSONEncoder().encode(commands.stamp(tree, peers: peers, providers: [.claude, .codex])))
+        #expect(viaJSON.removeValue(forKey: "linuxOnly") as? Int == 1)
+        #expect(try sorted(viaJSON) == sorted(typed))
+        #expect(try sorted(commands.stampJSON(plain, peers: nil, providers: nil)) == sorted(plain))
+    }
 }

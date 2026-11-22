@@ -6,9 +6,11 @@
 
 static QByteArray json(const QJsonValue &value)
 {
+    // no argument is a scalar: anything but null, an object or an array goes as non-JSON, which the bridge refuses
     return value.isObject() ? QJsonDocument(value.toObject()).toJson(QJsonDocument::Compact)
          : value.isArray()  ? QJsonDocument(value.toArray()).toJson(QJsonDocument::Compact)
-                            : QByteArrayLiteral("null");
+         : value.isNull()   ? QByteArrayLiteral("null")
+                            : QByteArrayLiteral("invalid");
 }
 
 static QByteArray taken(char *reply)
@@ -23,9 +25,11 @@ static QJsonObject object(char *reply)
     return QJsonDocument::fromJson(taken(reply)).object();
 }
 
-static QJsonArray array(char *reply)
+// an array, or the bridge's {"error"}
+static QJsonValue arrayOrError(char *reply)
 {
-    return QJsonDocument::fromJson(taken(reply)).array();
+    const QJsonDocument doc = QJsonDocument::fromJson(taken(reply));
+    return doc.isArray() ? QJsonValue(doc.array()) : QJsonValue(doc.object());
 }
 
 namespace AssistantBridge {
@@ -75,12 +79,9 @@ QJsonObject launch(const QString &provider, const QJsonArray &peers)
     return object(elis_assistant_launch(provider.toUtf8().constData(), json(peers).constData()));
 }
 
-QStringList turnArgv(const QString &provider, const QString &input, const QJsonArray &peers)
+QJsonValue turnArgv(const QString &provider, const QString &input, const QJsonArray &peers)
 {
-    QStringList argv;
-    for (const QJsonValue &arg : array(elis_assistant_turn_argv(provider.toUtf8().constData(), input.toUtf8().constData(), json(peers).constData())))
-        argv << arg.toString();
-    return argv;
+    return arrayOrError(elis_assistant_turn_argv(provider.toUtf8().constData(), input.toUtf8().constData(), json(peers).constData()));
 }
 
 QString encode(const QString &provider, const QString &text)
@@ -88,9 +89,9 @@ QString encode(const QString &provider, const QString &text)
     return QString::fromUtf8(taken(elis_assistant_encode(provider.toUtf8().constData(), text.toUtf8().constData())));
 }
 
-QJsonArray decode(const QString &provider, const QString &line)
+QJsonValue decode(const QString &provider, const QString &line)
 {
-    return array(elis_assistant_decode(provider.toUtf8().constData(), line.toUtf8().constData()));
+    return arrayOrError(elis_assistant_decode(provider.toUtf8().constData(), line.toUtf8().constData()));
 }
 
 QString recap()

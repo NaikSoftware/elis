@@ -91,17 +91,45 @@ public struct AssistantCommands {
         for w in tree.workspaces.indices {
             tree.workspaces[w].handle = directory.workspaceHandle(of: tree.workspaces[w].id)
             for s in tree.workspaces[w].sessions.indices {
-                let id = tree.workspaces[w].sessions[s].id
-                tree.workspaces[w].sessions[s].handle = directory.handle(of: id)
-                tree.workspaces[w].sessions[s].assistantMark = chat.marks[id]?.rawValue
+                let added = sessionStamp(tree.workspaces[w].sessions[s].id, directory)
+                tree.workspaces[w].sessions[s].handle = added.handle
+                tree.workspaces[w].sessions[s].assistantMark = added.assistantMark
             }
         }
         tree.assistant = node(providers: providers)
         return tree
     }
 
-    /// node is the tree's top-level `assistant`, for a host that stamps a tree of its own shape.
-    public func node(providers: [SessionLauncher]?) -> ControlAssistantNode {
+    /// stampJSON is `stamp` for a host whose tree is JSON of its own shape: the same keys laid on by id, every other key kept.
+    public func stampJSON(_ tree: [String: Any], peers: [AssistantPeer]?, providers: [SessionLauncher]?) throws -> [String: Any] {
+        guard let peers else { return tree }
+        var tree = tree
+        let directory = AssistantDirectory(peers)
+        if let workspaces = tree["workspaces"] as? [[String: Any]] {
+            tree["workspaces"] = workspaces.map { workspace in
+                var workspace = workspace
+                workspace["handle"] = (workspace["id"] as? String).flatMap(directory.workspaceHandle(of:))
+                if let sessions = workspace["sessions"] as? [[String: Any]] {
+                    workspace["sessions"] = sessions.map { session in
+                        var session = session
+                        let added = sessionStamp(session["id"] as? String ?? "", directory)
+                        session["handle"] = added.handle
+                        session["assistantMark"] = added.assistantMark
+                        return session
+                    }
+                }
+                return workspace
+            }
+        }
+        tree["assistant"] = try JSONSerialization.jsonObject(with: JSONEncoder().encode(node(providers: providers)))
+        return tree
+    }
+
+    private func sessionStamp(_ id: String, _ directory: AssistantDirectory) -> (handle: String?, assistantMark: String?) {
+        (directory.handle(of: id), chat.marks[id]?.rawValue)
+    }
+
+    private func node(providers: [SessionLauncher]?) -> ControlAssistantNode {
         ControlAssistantNode(provider: chat.provider?.rawValue, providers: AssistantProvider.choices(providers ?? []).map(\.rawValue),
                              running: chat.running, unread: chat.unread)
     }

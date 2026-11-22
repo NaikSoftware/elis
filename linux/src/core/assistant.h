@@ -10,7 +10,7 @@
 // the Mac. elis_bridge.h owns each shape. Call every function on the GUI thread.
 namespace AssistantBridge {
 void open(const QString &stateDir);
-// peers and providers: null when the host cannot list them
+// peers and providers: null when the host cannot list them; a scalar is refused
 QJsonObject run(const QJsonObject &request, const QJsonValue &peers, const QJsonValue &providers);
 QJsonObject finishSend(const QJsonObject &plan, const QJsonObject &failures);
 QJsonObject stamp(const QJsonObject &tree, const QJsonValue &peers, const QJsonValue &providers);
@@ -19,8 +19,9 @@ QJsonObject providerFailed(const QString &message);
 void markSeen();
 QJsonObject appendAssistant(const QString &text);
 QJsonObject launch(const QString &provider, const QJsonArray &peers);
-QStringList turnArgv(const QString &provider, const QString &input, const QJsonArray &peers);
+// turnArgv and decode: an array, or {"error"}
+QJsonValue turnArgv(const QString &provider, const QString &input, const QJsonArray &peers);
 QString encode(const QString &provider, const QString &text);
-QJsonArray decode(const QString &provider, const QString &line);
+QJsonValue decode(const QString &provider, const QString &line);
 QString recap();
 }
