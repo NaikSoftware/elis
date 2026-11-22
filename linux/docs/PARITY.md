@@ -164,13 +164,15 @@ Legend: [x] done · [ ] todo · (fork) = fork-only feature, not in upstream docs
   Elis hook install is migrated), agent skill (Claude Code and Codex, ownership marker); no first-launch welcome.
   `elis --install agent-hooks|skill|cli|all [--home DIR]` runs them by hand. The adapters (`shared/agent-status`, the Mac's) read hook JSON with plutil, else jq, else python3. Not detected: an
   unparseable `config.toml` (no TOML parser; a top-level `hooks` key is found line by line)
-- [x] Phone relay (Elis only): Settings ▸ Connect a Phone… or `elisctl mobile serve|reset` for the Elis Mobile app
-  (`mobile/`): the control protocol over TLS, pinned by the certificate's SHA-256 and gated by a 256-bit token, paired by
-  QR code or `elis://pair` link; `session type --pane` types into either pane
+- [x] Phone relay (Elis only): Settings ▸ Connect a Phone… or `elisctl mobile serve|reset` (the Swift `elisctl` in
+  `libexec/elis`) runs master's Swift relay for the Elis Mobile app (`mobile/`): the control protocol, terminal stream,
+  direct input, Fit to phone and Chat over TLS, pinned by the certificate's SHA-256 and gated by a 256-bit token, paired
+  by QR code or `elis://pair` link; `session type --pane` types into either pane. Not ported: Bluetooth and pages on the
+  phone (refused with "Elis is too old to show pages")
 - [x] `session attach [--pane left|right] [--claim] [--json]` and `phone.*` events: attaches this terminal to a Live
   pane as a passive zmx viewer (skipping scrollback) or claiming lead (`--claim`), or prints
   `{argv, paneID, screen, remote, nonce?}` with `--json` (no `origin`; C++ `elisctl` runs the Swift `elisctl`
   installed in `libexec/elis` beside zmx; master's refusals, including daemons predating the zmx build). Relay stderr
   emits `phone.connected`, `phone.disconnected`, `phone.refused` and `phone.attached`, `phone.detached`,
   `phone.claimed`, `phone.released` (usable in `hooks.conf`; pane events update `phoneViewers`/`phoneLead`, schedule
-  `tree.changed` and clear when the relay stops; the Swift relay that prints the pane lines is Phase 5)
+  `tree.changed` and clear when the relay stops)

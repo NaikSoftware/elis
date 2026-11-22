@@ -37,8 +37,9 @@ An elis-server host is not this app: SKILL.md's "Remote windows and elis-server"
 - `keymap.conf`: `--repeat` is accepted with a diagnostic and not honoured; `global-hotkey` is skipped.
 - On Wayland `window move` is refused and `window list` omits `x`/`y`.
 - The phone: Settings ▸ Connect a Phone…, or `elisctl mobile serve [--port N] [--bind ADDR] [--host NAME]`, which
-  runs the relay and prints the pairing QR code and link; `mobile reset` replaces the token. There is no `phone …`
-  command. `session attach [--pane left|right] [--claim] [--json]` attaches to a Live pane (no `origin`).
+  runs the Mac's relay (Term, direct input, Fit to phone, Chat; no Bluetooth, and pages are refused) and prints the
+  pairing QR code and link; `mobile reset` replaces the token. There is no `phone …` command.
+  `session attach [--pane left|right] [--claim] [--json]` attaches to a Live pane (no `origin`).
 
 ## Not supported
 
