@@ -1,0 +1,1 @@
+../../../../shared/ElisCore/Tests/elisctlKitTests/MobileTransportTests.swift

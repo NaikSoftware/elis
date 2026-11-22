@@ -1,11 +1,10 @@
 #if canImport(Glibc)
 import CElisBlueZ
+import elisctlKit
 import Foundation
 import Glibc
 
 extension MobileBluetooth {
-    func makeRadio() -> any BleRadio { BlueZRadio(owner: self, queue: relay.queue) }
-
     /// Serves one accepted L2CAP channel, whose SDUs are at most `mtu` bytes. Call on `relay.queue`.
     func accept(socket fd: Int32, mtu: Int) {
         accept(SocketPipe(fd: fd, mtu: mtu, queue: relay.queue, limits: limits))
@@ -14,7 +13,7 @@ extension MobileBluetooth {
 
 /// Linux's peripheral: BlueZ over D-Bus for the advertisement and the PSM characteristic, an LE L2CAP socket for
 /// the channels. Everything runs on `queue`, the bus included.
-private final class BlueZRadio: BleRadio, @unchecked Sendable {
+final class BlueZRadio: BleRadio, @unchecked Sendable {
     private weak var owner: MobileBluetooth?
     private let queue: DispatchQueue
     private var bluez: OpaquePointer?

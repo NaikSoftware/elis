@@ -29,6 +29,8 @@ jobs:
               - "macos/**"
               # ElisCore, the agent-status package and the golden vectors the suites read
               - "shared/**"
+              # ElisBridge and the Linux elisctl helper (includes its C shims)
+              - "linux/bridge/**"
               # the agent skill and its plugin manifests: SkillInstallTests reads
               # them, so a skill- or manifest-only change must still run the suite
               - "plugins/**"
@@ -193,14 +195,14 @@ jobs:
         working-directory: macos
     steps:
       - uses: actions/checkout@v7
-      - name: Install jq, zsh, fish, tcsh, OpenSSL, libsystemd and zlib
+      - name: Install jq, zsh, fish, tcsh, openssl and zlib
         # jq: the codex status hook reads its JSON with it where plutil does not exist; the shells: tests run
         # scripts under each login shell the remote commands must survive, and server panes run zsh, fish and bash;
-        # libssl-dev and openssl: the phone relay's TLS listener links OpenSSL and makes its certificate with the CLI;
-        # libsystemd-dev and zlib1g-dev: its Bluetooth link talks to BlueZ over sd-bus and deflates with zlib
+        # openssl: the phone relay makes its certificate with the CLI;
+        # zlib1g-dev: its Bluetooth link deflates with zlib
         run: >-
           apt-get update && apt-get install -y --no-install-recommends jq zsh fish tcsh xz-utils curl ca-certificates
-          libssl-dev openssl libsystemd-dev zlib1g-dev
+          openssl zlib1g-dev
       - name: Read the pinned zmx and ghostty revisions
         id: zmx
         run: |
@@ -272,12 +274,17 @@ jobs:
         working-directory: linux/bridge
     steps:
       - uses: actions/checkout@v7
+      - name: Install OpenSSL, libsystemd and zlib
+        # the Linux elisctl's relay links OpenSSL, sd-bus and zlib, and its tests make a certificate with the CLI
+        run: apt-get update && apt-get install -y --no-install-recommends libssl-dev openssl libsystemd-dev zlib1g-dev
       - name: swift build
-        run: swift build -c release -Xswiftc -static-stdlib -Xlinker -soname=libElisBridge.so
+        run: swift build -c release -Xswiftc -static-stdlib -Xlinker -soname=libElisBridge.so --product ElisBridge
       - name: no Swift runtime needed
         run: |
           ldd .build/release/libElisBridge.so
           ! ldd .build/release/libElisBridge.so | grep -i swift
+      - name: swift test (the Linux relay's TLS listener and BlueZ pipe)
+        run: swift test
 
   build:
     name: Build app

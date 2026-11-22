@@ -44,7 +44,7 @@ struct Mobile: ParsableCommand {
             #if os(macOS)
             if let bind, IPv4Address(bind) == nil, IPv6Address(bind) == nil { throw ValidationError("--bind takes an IP address") }
             #else
-            if let bind, TLSPhoneListener.socketAddress(bind, port: port) == nil { throw ValidationError("--bind takes an IP address") }
+            if let bind, !(MobileTransports.tls?.isAddress(bind) ?? true) { throw ValidationError("--bind takes an IP address") }
             #endif
         }
 
@@ -160,8 +160,8 @@ private func quit(_ code: Int32) -> Never {
     #endif
 }
 
-struct MobileError: Error, CustomStringConvertible {
-    let description: String
-    init(_ description: String) { self.description = description }
+public struct MobileError: Error, CustomStringConvertible {
+    public let description: String
+    public init(_ description: String) { self.description = description }
 }
 #endif

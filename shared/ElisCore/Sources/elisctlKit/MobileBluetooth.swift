@@ -6,7 +6,11 @@ import Glibc
 
 /// The platform's BLE peripheral under `MobileBluetooth`: Core Bluetooth on the Mac, BlueZ on Linux.
 /// Every call, and every call it makes back, is on `relay.queue`.
-protocol BleRadio: AnyObject {
+public protocol BleRadio: AnyObject {
+    #if !os(macOS)
+    /// Reports to `owner`, on `queue`, once the radio is on, as Core Bluetooth reports after the manager exists.
+    init(owner: MobileBluetooth, queue: DispatchQueue)
+    #endif
     /// Serves `psm` in the PSM characteristic under `service` and advertises that UUID, replacing the last one.
     func advertise(service: UUID, psm: UInt16)
     /// Ends the L2CAP channel `psm` and what advertised it; open channels are not touched.
@@ -15,19 +19,19 @@ protocol BleRadio: AnyObject {
 
 /// The relay's Bluetooth transport: a BLE peripheral advertising the token's rotating service UUID, whose L2CAP
 /// channels become phones of the relay. Every mutable property is touched on `relay.queue`.
-final class MobileBluetooth: @unchecked Sendable {
-    let relay: MobileRelay
+public final class MobileBluetooth: @unchecked Sendable {
+    public let relay: MobileRelay
     private let token: String
     /// Authenticated Bluetooth phones at once; a handshake past it gets the busy frame. Links that passed the
     /// handshake but never authenticate (a replayed message 1) are the relay's unauthenticated cap's to evict.
     private let maxPhones: Int
-    let limits: BlePhoneLink.Limits
+    public let limits: BlePhoneLink.Limits
     private let status: @Sendable (String) -> Void
     private var shown: String?
     private var links: [ObjectIdentifier: BlePhoneLink] = [:]
     private var radio: (any BleRadio)?
     /// The published L2CAP channel, nil while the radio is off.
-    private(set) var psm: UInt16?
+    public private(set) var psm: UInt16?
     private var rotation: (any DispatchSourceTimer)?
     private var lock: Int32 = -1
 
@@ -60,12 +64,17 @@ final class MobileBluetooth: @unchecked Sendable {
         relay.queue.sync {
             lock = fd
             radio = makeRadio()
+            if radio == nil { off("unsupported") }
         }
         return true
     }
 
+    #if !os(macOS)
+    private func makeRadio() -> (any BleRadio)? { MobileTransports.radio?.init(owner: self, queue: relay.queue) }
+    #endif
+
     /// Serves one L2CAP channel. Call on `relay.queue`.
-    func accept(_ pipe: any BlePipe) {
+    public func accept(_ pipe: any BlePipe) {
         let link = BlePhoneLink(pipe: pipe, queue: relay.queue, mobileDir: relay.settings.mobileDir) { [weak self] in
             guard let self else { return false }
             return relay.authenticatedPhones { $0 is BlePhoneLink } < maxPhones
@@ -78,7 +87,7 @@ final class MobileBluetooth: @unchecked Sendable {
     }
 
     /// The radio went away: every Bluetooth phone is dropped, so its session gives back its grids. Call on `relay.queue`.
-    func off(_ reason: String) {
+    public func off(_ reason: String) {
         report("off (\(reason))")
         rotation?.cancel()
         rotation = nil
@@ -94,27 +103,27 @@ final class MobileBluetooth: @unchecked Sendable {
     }
 
     /// Publishing the channel failed: the radio is off for this relay. Call on `relay.queue`.
-    func failed(_ step: String, _ error: any Error) {
+    public func failed(_ step: String, _ error: any Error) {
         relay.settings.log("bluetooth \(step) failed: \(error.localizedDescription)")
         off("unsupported")
     }
 
     /// Registering or advertising failed: open channels and the PSM stay, and the next try comes in 30 s.
     /// Call on `relay.queue`.
-    func advertisingFailed(_ step: String, _ error: any Error) {
+    public func advertisingFailed(_ step: String, _ error: any Error) {
         relay.settings.log("bluetooth \(step) failed: \(error.localizedDescription)")
         report("off (unsupported)")
         schedule(after: 30)
     }
 
     /// The radio published its L2CAP channel. Call on `relay.queue`.
-    func published(_ psm: UInt16) {
+    public func published(_ psm: UInt16) {
         self.psm = psm
         advertise()
     }
 
     /// The radio advertises the last service. Call on `relay.queue`.
-    func advertised() { report("advertising") }
+    public func advertised() { report("advertising") }
 
     private func schedule(after delay: TimeInterval) {
         let rotation = DispatchSource.makeTimerSource(queue: relay.queue)
@@ -137,7 +146,7 @@ final class MobileBluetooth: @unchecked Sendable {
 }
 
 /// The bytes under a `BlePhoneLink`: Core Bluetooth's streams on the Mac, an L2CAP socket on Linux.
-protocol BlePipe: AnyObject {
+public protocol BlePipe: AnyObject {
     /// Starts reading. Both run on the relay queue; `failed` once the peer is gone or stopped reading.
     func start(received: @escaping @Sendable (Data) -> Void, failed: @escaping @Sendable () -> Void)
     /// `completion` runs on the relay queue once the bytes are written, or the pipe has shut.
@@ -148,20 +157,20 @@ protocol BlePipe: AnyObject {
 
 /// One L2CAP channel as a relay phone: the Noise handshake, then sealed frames of the line stream.
 /// Protocol state lives on `queue`; the bytes go through `pipe`.
-final class BlePhoneLink: PhoneTransportConnection, @unchecked Sendable {
-    struct Limits: Sendable {
+public final class BlePhoneLink: PhoneTransportConnection, @unchecked Sendable {
+    public struct Limits: Sendable {
         /// Output not yet written; past it the phone is not reading and is dropped.
-        var maxPending = 8 << 20
+        public var maxPending = 8 << 20
         /// How long a close waits for queued output to drain.
-        var flushTimeout: TimeInterval = 5
+        public var flushTimeout: TimeInterval = 5
         /// The spike saw an L2CAP stream stop reporting space mid-transfer, so pending output is also retried on a
         /// timer (the Mac's streams only).
-        var pumpInterval: TimeInterval = 0.02
+        public var pumpInterval: TimeInterval = 0.02
     }
 
-    private(set) var peerLabel = "bt"
-    var onReceive: ((Data) -> Void)?
-    var onClose: (() -> Void)?
+    public private(set) var peerLabel = "bt"
+    public var onReceive: ((Data) -> Void)?
+    public var onClose: (() -> Void)?
     var onEnd: ((BlePhoneLink) -> Void)?
     private let pipe: any BlePipe
     private let queue: DispatchQueue
@@ -186,7 +195,7 @@ final class BlePhoneLink: PhoneTransportConnection, @unchecked Sendable {
 
     // MARK: relay queue
 
-    func send(_ data: Data, completion: @escaping () -> Void) {
+    public func send(_ data: Data, completion: @escaping () -> Void) {
         guard !ended, var sealing = keys else { return later(completion) }
         var wire = Data()
         do {
@@ -203,7 +212,7 @@ final class BlePhoneLink: PhoneTransportConnection, @unchecked Sendable {
         pipe.write(wire, completion: completion)
     }
 
-    func close() {
+    public func close() {
         guard !ended else { return }
         ended = true
         onEnd?(self)

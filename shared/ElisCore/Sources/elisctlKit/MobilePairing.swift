@@ -128,13 +128,14 @@ enum MobilePairing {
         return (identity, SHA256.hash(data: der).map { String(format: "%02x", $0) }.joined())
     }
     #else
-    /// The OpenSSL context serving the certificate and key, and the lowercase hex SHA-256 of the certificate DER.
-    static func identity(in dir: String) throws -> (PhoneTLSIdentity, String) {
+    /// The registered listener's identity for the certificate and key, and the lowercase hex SHA-256 of the certificate DER.
+    static func identity(in dir: String) throws -> (any PhoneTLSIdentity, String) {
+        guard let tls = MobileTransports.tls else { throw MobileError("this elisctl has no TLS listener") }
         let unreadable = MobileError("the certificate in \(dir) is unreadable; delete cert.pem and key.pem to make a new one")
         guard let certPEM = try? String(contentsOfFile: dir + "/cert.pem", encoding: .utf8) else { throw unreadable }
         let base64 = certPEM.split(separator: "\n").filter { !$0.hasPrefix("-----") }.joined()
         guard let der = Data(base64Encoded: base64),
-              let identity = OpenSSLIdentity(certificate: dir + "/cert.pem", key: dir + "/key.pem") else { throw unreadable }
+              let identity = tls.init(certificate: dir + "/cert.pem", key: dir + "/key.pem") else { throw unreadable }
         return (identity, SHA256.hash(data: der).map { String(format: "%02x", $0) }.joined())
     }
     #endif

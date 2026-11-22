@@ -4,7 +4,7 @@ import ElisCore
 
 /// One phone's byte stream, whatever carries it. Callbacks and completions run on the relay's queue, and every
 /// method is called there, so a connection may deliver as soon as it is created on that queue.
-protocol PhoneTransportConnection: AnyObject {
+public protocol PhoneTransportConnection: AnyObject {
     /// Names the phone in relay log lines: the IP for TLS, `bt:<4 hex>` for Bluetooth.
     var peerLabel: String { get }
     /// `completion` runs once the bytes are handed off or the connection failed.
@@ -23,14 +23,14 @@ extension PhoneTransportConnection {
 /// Everything the relay does for one phone: the auth line, token re-checks, the serial forward queue and grid
 /// claims. Every mutable property is touched on `queue` only. Requests run in order on the phone's own serial
 /// queue, because `SocketClient` blocks, and hop back to answer.
-final class PhoneSession: @unchecked Sendable {
-    struct Settings: Sendable {
+public final class PhoneSession: @unchecked Sendable {
+    public struct Settings: Sendable {
         let mobileDir: String
         let socketPath: String
         let hostName: String
         let authTimeout: TimeInterval
         let revokeInterval: TimeInterval
-        let log: @Sendable (String) -> Void
+        public let log: @Sendable (String) -> Void
     }
 
     /// The pre-auth cap: the auth line is about 60 bytes.

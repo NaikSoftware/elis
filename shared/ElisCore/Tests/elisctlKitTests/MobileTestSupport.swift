@@ -6,17 +6,41 @@ import Darwin
 import Network
 import Security
 #else
-import CElisTLS
 import Crypto
 import Glibc
+#endif
+#if ELIS_PLATFORM_ADAPTERS
+@testable import ElisLinuxRelay
 #endif
 import Foundation
 import ElisCore
 @testable import elisctlKit
 
-// Fixtures shared by the relay suites.
+// Fixtures shared by the relay suites; linux/bridge's tests build this file too, with the platform's transports.
+
+#if !os(macOS) && !ELIS_PLATFORM_ADAPTERS
+/// The shared suites' TLS listener, which never listens: their phones come in through `relay.accept`.
+private final class StubTLSIdentity: PhoneTLSIdentity, PhoneTLSListener, @unchecked Sendable {
+    let port: UInt16 = 0
+    static func isAddress(_ host: String) -> Bool { true }
+    init?(certificate: String, key: String) {}
+    func listen(port: UInt16, bind: String?, queue: DispatchQueue,
+                onConnection: @escaping @Sendable (any PhoneTransportConnection) -> Void,
+                onFailure: @escaping @Sendable (String) -> Void) throws -> any PhoneTLSListener { self }
+    func cancel() {}
+}
+#endif
 
 final class MobileFixture: @unchecked Sendable {
+    private static let transports: Void = {
+        #if ELIS_PLATFORM_ADAPTERS
+        LinuxTransports.register()
+        #elseif !os(macOS)
+        MobileTransports.tls = StubTLSIdentity.self
+        #endif
+    }()
+
+
     let mobileDir: String
     let token: String
     let identity: PhoneTLSIdentity
@@ -27,6 +51,7 @@ final class MobileFixture: @unchecked Sendable {
     private let lines = LogLines()
 
     init(maxUnauthenticated: Int = 32) throws {
+        _ = Self.transports
         mobileDir = try Self.privateDirectory()
         token = try MobilePairing.loadToken(in: mobileDir)
         try MobilePairing.ensureCertificate(in: mobileDir)
@@ -50,8 +75,6 @@ final class MobileFixture: @unchecked Sendable {
         }
         return true
     }
-
-    func connect() throws -> TLSLineClient { try TLSLineClient(port: port) }
 
     func stop() {
         relay.stop()
@@ -138,234 +161,6 @@ final class MuxReader {
         }
     }
 }
-
-#if os(macOS)
-/// A blocking line client over TLS that trusts any certificate and records the one it saw.
-final class TLSLineClient: @unchecked Sendable {
-    private let connection: NWConnection
-    private let queue = DispatchQueue(label: "mobile.test.client")
-    private let lock = NSLock()
-    private let changed = DispatchSemaphore(value: 0)
-    private var buffer = Data()
-    private var closed = false
-    private(set) var peerFingerprint: String?
-
-    init(port: UInt16) throws {
-        let tls = NWProtocolTLS.Options()
-        let fingerprintBox = FingerprintBox()
-        sec_protocol_options_set_verify_block(tls.securityProtocolOptions, { _, trust, complete in
-            let chain = SecTrustCopyCertificateChain(sec_trust_copy_ref(trust).takeRetainedValue()) as? [SecCertificate]
-            if let leaf = chain?.first {
-                fingerprintBox.value = SHA256.hash(data: SecCertificateCopyData(leaf) as Data).map { String(format: "%02x", $0) }.joined()
-            }
-            complete(true)
-        }, queue)
-        connection = NWConnection(host: "127.0.0.1", port: NWEndpoint.Port(rawValue: port)!,
-                                  using: NWParameters(tls: tls, tcp: NWProtocolTCP.Options()))
-        let ready = DispatchSemaphore(value: 0)
-        connection.stateUpdateHandler = { [weak self] state in
-            switch state {
-            case .ready: ready.signal()
-            case .failed, .cancelled, .waiting: self?.markClosed(); ready.signal()
-            default: break
-            }
-        }
-        connection.start(queue: queue)
-        guard ready.wait(timeout: .now() + 30) == .success, connection.state == .ready else {
-            connection.cancel()
-            throw CocoaError(.fileReadUnknown)
-        }
-        peerFingerprint = fingerprintBox.value
-        receive()
-    }
-
-    deinit { connection.cancel() }
-
-    func close() { connection.cancel() }
-
-    private func receive() {
-        connection.receive(minimumIncompleteLength: 1, maximumLength: 65536) { [weak self] data, _, done, error in
-            guard let self else { return }
-            lock.withLock { if let data { buffer.append(data) } }
-            changed.signal()
-            if done || error != nil { markClosed() } else { receive() }
-        }
-    }
-
-    private func markClosed() {
-        lock.withLock { closed = true }
-        changed.signal()
-    }
-
-    func send(_ text: String, newline: Bool = true) {
-        connection.send(content: Data((newline ? text + "\n" : text).utf8), completion: .idempotent)
-    }
-
-    func readJSON(timeout: TimeInterval = 30) -> [String: Any]? {
-        let deadline = Date().addingTimeInterval(timeout)
-        while true {
-            let line: Data? = lock.withLock {
-                guard let newline = buffer.firstIndex(of: 0x0A) else { return nil }
-                let line = buffer[buffer.startIndex..<newline]
-                buffer = Data(buffer[buffer.index(after: newline)...])
-                return Data(line)
-            }
-            if let line { return (try? JSONSerialization.jsonObject(with: line)) as? [String: Any] }
-            if lock.withLock({ closed }) || changed.wait(timeout: .now() + deadline.timeIntervalSinceNow) == .timedOut { return nil }
-        }
-    }
-
-    func waitClosed(timeout: TimeInterval = 30) -> Bool {
-        let deadline = Date().addingTimeInterval(timeout)
-        while !lock.withLock({ closed }) {
-            if changed.wait(timeout: .now() + deadline.timeIntervalSinceNow) == .timedOut { return false }
-        }
-        return true
-    }
-}
-#else
-/// A blocking line client over TLS that trusts any certificate and records the one it saw.
-final class TLSLineClient: @unchecked Sendable {
-    private let fd: Int32
-    private let context: OpaquePointer
-    private let tls: OpaquePointer
-    /// OpenSSL takes one call at a time on a connection; reads poll outside it.
-    private let io = NSLock()
-    private let lock = NSLock()
-    private let changed = DispatchSemaphore(value: 0)
-    private var buffer = Data()
-    private var closed = false
-    private(set) var peerFingerprint: String?
-
-    /// `reading: false` leaves every byte in the socket until `startReading()`.
-    init(port: UInt16, reading: Bool = true) throws {
-        let fd = socket(AF_INET, Int32(SOCK_STREAM.rawValue), 0)
-        self.fd = fd
-        var address = sockaddr_in()
-        address.sin_family = sa_family_t(AF_INET)
-        address.sin_port = port.bigEndian
-        inet_pton(AF_INET, "127.0.0.1", &address.sin_addr)
-        let connected = withUnsafePointer(to: &address) {
-            $0.withMemoryRebound(to: sockaddr.self, capacity: 1) { Glibc.connect(fd, $0, socklen_t(MemoryLayout<sockaddr_in>.size)) }
-        }
-        _ = fcntl(fd, F_SETFL, fcntl(fd, F_GETFL) | O_NONBLOCK)
-        guard connected == 0, let context = elis_tls_client_context() else {
-            Glibc.close(fd)
-            throw CocoaError(.fileReadUnknown)
-        }
-        self.context = context
-        guard let tls = elis_tls_new(context, fd, 0) else {
-            elis_tls_context_free(context)
-            Glibc.close(fd)
-            throw CocoaError(.fileReadUnknown)
-        }
-        self.tls = tls
-        let deadline = Date().addingTimeInterval(30)
-        while true {
-            let step = elis_tls_handshake(tls)
-            if step == 1 { break }
-            guard step != ELIS_TLS_FAILED, Date() < deadline else { throw CocoaError(.fileReadUnknown) }
-            wait(for: step == ELIS_TLS_WANT_WRITE ? POLLOUT : POLLIN)
-        }
-        var der = [UInt8](repeating: 0, count: 16384)
-        let length = elis_tls_peer_certificate(tls, &der, der.count)
-        if length > 0, length <= der.count {
-            peerFingerprint = SHA256.hash(data: der[0..<length]).map { String(format: "%02x", $0) }.joined()
-        }
-        if reading { startReading() }
-    }
-
-    func startReading() {
-        Thread { [weak self] in
-            while let self, self.readOnce() {}
-        }.start()
-    }
-
-    /// The first `count` bytes, or nil once closed or past the timeout.
-    func waitBytes(_ count: Int, timeout: TimeInterval = 30) -> Data? {
-        let deadline = Date().addingTimeInterval(timeout)
-        while true {
-            if let bytes: Data = lock.withLock({ buffer.count >= count ? Data(buffer.prefix(count)) : nil }) { return bytes }
-            if lock.withLock({ closed }) || changed.wait(timeout: .now() + deadline.timeIntervalSinceNow) == .timedOut { return nil }
-        }
-    }
-
-    deinit {
-        elis_tls_free(tls)
-        elis_tls_context_free(context)
-        Glibc.close(fd)
-    }
-
-    func close() {
-        io.withLock { elis_tls_shutdown(tls) }
-        Glibc.shutdown(fd, Int32(SHUT_RDWR))
-        markClosed()
-    }
-
-    private func wait(for events: Int32) {
-        var poller = pollfd(fd: fd, events: Int16(events), revents: 0)
-        _ = poll(&poller, 1, 50)
-    }
-
-    private func readOnce() -> Bool {
-        if lock.withLock({ closed }) { return false }
-        var chunk = [UInt8](repeating: 0, count: 65536)
-        let count = io.withLock { elis_tls_read(tls, &chunk, chunk.count) }
-        if count > 0 {
-            lock.withLock { buffer.append(contentsOf: chunk[0..<count]) }
-            changed.signal()
-        } else if count == Int(ELIS_TLS_WANT_READ) || count == Int(ELIS_TLS_WANT_WRITE) {
-            wait(for: POLLIN)
-        } else {
-            markClosed()
-            return false
-        }
-        return true
-    }
-
-    private func markClosed() {
-        lock.withLock { closed = true }
-        changed.signal()
-    }
-
-    func send(_ text: String, newline: Bool = true) {
-        let bytes = Array((newline ? text + "\n" : text).utf8)
-        var sent = 0
-        while sent < bytes.count, !lock.withLock({ closed }) {
-            let count = bytes.withUnsafeBytes { raw in io.withLock { elis_tls_write(tls, raw.baseAddress! + sent, bytes.count - sent) } }
-            if count > 0 {
-                sent += count
-            } else if count == Int(ELIS_TLS_WANT_WRITE) || count == Int(ELIS_TLS_WANT_READ) {
-                wait(for: POLLOUT)
-            } else {
-                return
-            }
-        }
-    }
-
-    func readJSON(timeout: TimeInterval = 30) -> [String: Any]? {
-        let deadline = Date().addingTimeInterval(timeout)
-        while true {
-            let line: Data? = lock.withLock {
-                guard let newline = buffer.firstIndex(of: 0x0A) else { return nil }
-                let line = buffer[buffer.startIndex..<newline]
-                buffer = Data(buffer[buffer.index(after: newline)...])
-                return Data(line)
-            }
-            if let line { return (try? JSONSerialization.jsonObject(with: line)) as? [String: Any] }
-            if lock.withLock({ closed }) || changed.wait(timeout: .now() + deadline.timeIntervalSinceNow) == .timedOut { return nil }
-        }
-    }
-
-    func waitClosed(timeout: TimeInterval = 30) -> Bool {
-        let deadline = Date().addingTimeInterval(timeout)
-        while !lock.withLock({ closed }) {
-            if changed.wait(timeout: .now() + deadline.timeIntervalSinceNow) == .timedOut { return false }
-        }
-        return true
-    }
-}
-#endif
 
 /// A phone connection with no transport: the test feeds bytes in on the relay queue and reads the lines sent back.
 final class MemoryPhone: PhoneTransportConnection, @unchecked Sendable {

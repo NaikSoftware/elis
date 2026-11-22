@@ -1,5 +1,6 @@
 #if canImport(Glibc)
 import CElisTLS
+import elisctlKit
 import Foundation
 import Glibc
 
@@ -7,7 +8,7 @@ import Glibc
 // non-blocking OpenSSL, every callback on the relay queue.
 
 /// The certificate and key the listener serves, loaded once.
-final class OpenSSLIdentity: @unchecked Sendable {
+final class OpenSSLIdentity: PhoneTLSIdentity, @unchecked Sendable {
     let context: OpaquePointer
 
     init?(certificate: String, key: String) {
@@ -16,9 +17,17 @@ final class OpenSSLIdentity: @unchecked Sendable {
     }
 
     deinit { elis_tls_context_free(context) }
+
+    static func isAddress(_ host: String) -> Bool { TLSPhoneListener.socketAddress(host, port: 0) != nil }
+
+    func listen(port: UInt16, bind: String?, queue: DispatchQueue,
+                onConnection: @escaping @Sendable (any PhoneTransportConnection) -> Void,
+                onFailure: @escaping @Sendable (String) -> Void) throws -> any PhoneTLSListener {
+        try TLSPhoneListener(identity: self, port: port, bind: bind, queue: queue, onConnection: onConnection, onFailure: onFailure)
+    }
 }
 
-final class TLSPhoneListener: @unchecked Sendable {
+final class TLSPhoneListener: PhoneTLSListener, @unchecked Sendable {
     let port: UInt16
     private let source: DispatchSourceRead
 
