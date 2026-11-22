@@ -1,4 +1,4 @@
-#if os(macOS)
+#if !canImport(Musl)
 import Foundation
 import Testing
 import ElisCore
@@ -731,7 +731,7 @@ struct ForwardChildTests {
         let input = Pipe()
         process.standardInput = input
         process.standardOutput = FileHandle.nullDevice
-        try process.run()
+        try process.runWithSignals()
         return (process, input)
     }
 
@@ -757,7 +757,11 @@ final class ForwardRecorder: @unchecked Sendable {
 
     func record(_ argv: [String]) throws {
         let port = try #require(argv.last?.firstMatch(of: /127\.0\.0\.1:(\d+):/).flatMap { UInt16($0.1) })
+        #if canImport(Darwin)
         let fd = socket(AF_INET, SOCK_STREAM, 0)
+        #else
+        let fd = socket(AF_INET, Int32(SOCK_STREAM.rawValue), 0)
+        #endif
         var address = sockaddr_in()
         address.sin_family = sa_family_t(AF_INET)
         address.sin_port = port.bigEndian
