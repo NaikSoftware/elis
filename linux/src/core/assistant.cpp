@@ -139,7 +139,7 @@ static QString typeInto(const QJsonObject &peer, const QString &text, const QLis
     return QStringLiteral("window not open");
 }
 
-QJsonObject dispatch(const QJsonObject &request, const QList<Window> &windows, const QStringList &providers, AssistantSink *sink)
+QJsonObject dispatch(const QJsonObject &request, const QList<Window> &windows, const QStringList &providers, AssistantSink *sink, const Show &show)
 {
     QJsonObject step = AssistantBridge::run(request, peers(windows), QJsonArray::fromStringList(providers));
     if (step.contains("plan")) {
@@ -150,6 +150,7 @@ QJsonObject dispatch(const QJsonObject &request, const QList<Window> &windows, c
                 failures.insert(target.toObject().value("sessionID").toString(), error);
         step = AssistantBridge::finishSend(plan, failures);
     }
+    QJsonObject reply = step.value("reply").toObject();
     for (const QJsonValue &v : step.value("effects").toArray()) {
         const QJsonObject effect = v.toObject();
         const QString type = effect.value("type").toString();
@@ -161,10 +162,29 @@ QJsonObject dispatch(const QJsonObject &request, const QList<Window> &windows, c
             emitMessage(AssistantBridge::providerFailed(QStringLiteral("no assistant provider is running")), windows);
         else if (type == QLatin1String("providerChanged") && sink)
             sink->providerChanged(effect.value("provider").toString());
-        else if (type == QLatin1String("show"))
-            AssistantBridge::markSeen(); // shortcut: no chat view yet, so a show always succeeds; the Elis row's selection replaces it
+        else if (type == QLatin1String("show")) {
+            if (const QString error = show ? show(effect.value("window").toString()) : QStringLiteral("no window shows Elis"); !error.isEmpty())
+                reply = {{"ok", false}, {"error", error}};
+            else
+                AssistantBridge::markSeen();
+        }
     }
-    return step.value("reply").toObject();
+    return reply;
+}
+
+QJsonObject directory(const QList<Window> &windows, const QStringList &providers)
+{
+    QJsonArray workspaces;
+    for (const Window &w : windows)
+        for (const Workspace &ws : std::as_const(w.store->workspaces)) {
+            QJsonArray sessions;
+            for (const Session &s : ws.sessions)
+                sessions << QJsonObject{{"id", s.id}, {"name", s.displayName()}, {"agent", s.agent}, {"status", s.status}, {"tint", s.tint.color}};
+            workspaces << QJsonObject{{"id", ws.id}, {"name", ws.name}, {"window", w.id}, {"tint", ws.tint.color}, {"sessions", sessions}};
+        }
+    const QJsonObject tree{{"workspaces", workspaces}};
+    const QJsonObject stamped = AssistantBridge::stamp(tree, peers(windows), QJsonArray::fromStringList(providers));
+    return stamped.contains("error") ? tree : stamped;
 }
 
 QJsonObject stamp(const QJsonObject &treeReply, const QList<Window> &windows, const QStringList &providers)

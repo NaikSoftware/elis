@@ -848,16 +848,16 @@ private Q_SLOTS:
         store.select(a);
         w.show();
         auto *tree = w.findChild<Sidebar *>();
-        QTreeWidgetItem *wsItem = tree->topLevelItem(0), *rowA = wsItem->child(0), *rowB = wsItem->child(1);
+        QTreeWidgetItem *wsItem = tree->topLevelItem(1), *rowA = wsItem->child(0), *rowB = wsItem->child(1);
         store.select(b);
         store.setStatus(a, "blocked");
-        QCOMPARE(tree->topLevelItem(0), wsItem);
+        QCOMPARE(tree->topLevelItem(1), wsItem);
         QCOMPARE(wsItem->child(0), rowA);
         QCOMPARE(wsItem->child(1), rowB);
         QVERIFY(rowB->isSelected() && !rowA->isSelected());
         QCOMPARE(rowA->data(0, SidebarRole::Status).toString(), QStringLiteral("blocked"));
         store.addSession(ws, {}, {}); // a new row is a structural change
-        QCOMPARE(tree->topLevelItem(0)->childCount(), 3);
+        QCOMPARE(tree->topLevelItem(1)->childCount(), 3);
     }
 
     void aBlinkingGlyphKeepsFadingThroughRebuilds()
@@ -908,7 +908,7 @@ private Q_SLOTS:
         const QString a = store.addSession(ws, {}, {}), b = store.addSession(ws, {}, {});
         Sidebar tree(store);
         tree.rebuild();
-        auto *row = tree.topLevelItem(0);
+        auto *row = tree.topLevelItem(1);
         QCOMPARE(row->data(0, SidebarRole::Status).toString(), QStringLiteral("idle"));
         store.setStatus(a, "completed");
         store.setStatus(b, "active", false, true);
@@ -1180,16 +1180,16 @@ private Q_SLOTS:
             if (b->accessibleName() == QLatin1String("Toggle Workspace Filter"))
                 filter = b;
         QVERIFY(filter && !filter->isEnabled());
-        QCOMPARE(tree->topLevelItemCount(), 2);
+        QCOMPARE(tree->topLevelItemCount(), 3);
         store.focusWorkspace(a, "add");
         QVERIFY(filter->isEnabled());
-        QCOMPARE(tree->topLevelItemCount(), 2);
+        QCOMPARE(tree->topLevelItemCount(), 3);
         filter->click();
         QVERIFY(store.focusEnabled);
-        QCOMPARE(tree->topLevelItemCount(), 1);
-        QVERIFY(tree->topLevelItem(0)->data(0, SidebarRole::Focused).toBool());
+        QCOMPARE(tree->topLevelItemCount(), 2);
+        QVERIFY(tree->topLevelItem(1)->data(0, SidebarRole::Focused).toBool());
         store.setTint(a, "red");
-        QCOMPARE(tree->topLevelItem(0)->data(0, SidebarRole::TintColor).toString(), QStringLiteral("red"));
+        QCOMPARE(tree->topLevelItem(1)->data(0, SidebarRole::TintColor).toString(), QStringLiteral("red"));
     }
 
     void tintMenuListsTheMacPaletteAndAHexAsCustom()
@@ -1202,7 +1202,7 @@ private Q_SLOTS:
         store.setTint(a, "#FF8800");
         w.show();
         auto *tree = w.findChild<Sidebar *>();
-        QTreeWidgetItem *row = tree->topLevelItem(0)->child(0);
+        QTreeWidgetItem *row = tree->topLevelItem(1)->child(0);
         QCOMPARE(row->data(0, SidebarRole::TintColor).toString(), QStringLiteral("#ff8800"));
         QStringList titles;
         QTimer::singleShot(0, this, [&] {
@@ -1303,9 +1303,9 @@ private Q_SLOTS:
         tree.resize(260, 400);
         tree.show();
         auto height = [&](const QString &id) {
-            for (int i = 0; i < tree.topLevelItem(0)->childCount(); ++i)
-                if (tree.topLevelItem(0)->child(i)->data(0, SidebarRole::Id).toString() == id)
-                    return tree.visualItemRect(tree.topLevelItem(0)->child(i)).height();
+            for (int i = 0; i < tree.topLevelItem(1)->childCount(); ++i)
+                if (tree.topLevelItem(1)->child(i)->data(0, SidebarRole::Id).toString() == id)
+                    return tree.visualItemRect(tree.topLevelItem(1)->child(i)).height();
             return -1;
         };
         QTRY_COMPARE(height(a), height(b) + QFontMetrics(Sidebar::infoFont(tree.font())).height());
@@ -1337,7 +1337,7 @@ private Q_SLOTS:
         tree.rebuild();
         QVERIFY(QTest::qWaitForWindowExposed(&tree));
         QSignalSpy panel(&tree, &Sidebar::ciPanelRequested);
-        const QRect rect = tree.visualItemRect(tree.topLevelItem(0)->child(0));
+        const QRect rect = tree.visualItemRect(tree.topLevelItem(1)->child(0));
         const QRect title = tree.titleRect(tree.indexAt(rect.center()), rect);
         QTest::mouseClick(tree.viewport(), Qt::LeftButton, {}, QPoint(rect.center().x(), title.bottom() - 4)); // the line's top edge
         QCOMPARE(panel.count(), 1);
@@ -1375,7 +1375,7 @@ private Q_SLOTS:
         tree.rebuild();
         tree.resize(260, 400);
         tree.show();
-        QTreeWidgetItem *row = tree.topLevelItem(0);
+        QTreeWidgetItem *row = tree.topLevelItem(1);
         const int open = tree.visualItemRect(row).height();
         QTest::mouseClick(tree.viewport(), Qt::LeftButton, {}, tree.visualItemRect(row).center());
         QVERIFY(store.collapsed.contains(ws));
@@ -1423,23 +1423,23 @@ private Q_SLOTS:
         store.setFlag(a1, true), store.setFlag(a2, true), store.setFlag(c1, true);
         Sidebar tree(store);
         tree.setFlaggedView(true);
-        QCOMPARE(tree.topLevelItemCount(), 3); // flat: one list labelled with the workspace
-        QCOMPARE(tree.topLevelItem(0)->data(0, SidebarRole::WorkspaceLabel).toString(), QStringLiteral("alpha"));
+        QCOMPARE(tree.topLevelItemCount(), 4); // Elis, then flat: one list labelled with the workspace
+        QCOMPARE(tree.topLevelItem(1)->data(0, SidebarRole::WorkspaceLabel).toString(), QStringLiteral("alpha"));
         Settings s = store.settings;
         s.flaggedViewLayout = "plain";
         store.setSettings(s);
         tree.rebuild();
-        QVERIFY(tree.topLevelItem(0)->data(0, SidebarRole::WorkspaceLabel).toString().isEmpty());
+        QVERIFY(tree.topLevelItem(1)->data(0, SidebarRole::WorkspaceLabel).toString().isEmpty());
         s.flaggedViewLayout = "tree";
         store.setSettings(s);
         tree.rebuild();
-        QCOMPARE(tree.topLevelItemCount(), 2); // beta holds nothing flagged
-        QCOMPARE(tree.topLevelItem(0)->text(0), QStringLiteral("alpha"));
-        QCOMPARE(tree.topLevelItem(0)->childCount(), 2);
-        QCOMPARE(tree.topLevelItem(1)->child(0)->data(0, SidebarRole::Id).toString(), c1);
+        QCOMPARE(tree.topLevelItemCount(), 3); // Elis; beta holds nothing flagged
+        QCOMPARE(tree.topLevelItem(1)->text(0), QStringLiteral("alpha"));
+        QCOMPARE(tree.topLevelItem(1)->childCount(), 2);
+        QCOMPARE(tree.topLevelItem(2)->child(0)->data(0, SidebarRole::Id).toString(), c1);
         store.collapsed.insert(a); // shared with the ordinary tree
         tree.rebuild();
-        QVERIFY(!tree.topLevelItem(0)->isExpanded());
+        QVERIFY(!tree.topLevelItem(1)->isExpanded());
     }
 
     void clicksNeverDeselectTheShownSession()
@@ -1458,9 +1458,9 @@ private Q_SLOTS:
         QVERIFY(shown());
         QTest::mouseClick(tree.viewport(), Qt::LeftButton, {}, QPoint(150, 390));
         QVERIFY(shown());
-        QTest::mouseClick(tree.viewport(), Qt::LeftButton, Qt::ControlModifier, tree.visualItemRect(tree.topLevelItem(0)->child(0)).center());
+        QTest::mouseClick(tree.viewport(), Qt::LeftButton, Qt::ControlModifier, tree.visualItemRect(tree.topLevelItem(1)->child(0)).center());
         QVERIFY(shown());
-        QTest::mouseClick(tree.viewport(), Qt::LeftButton, {}, tree.visualItemRect(tree.topLevelItem(0)).topLeft() + QPoint(5, 5));
+        QTest::mouseClick(tree.viewport(), Qt::LeftButton, {}, tree.visualItemRect(tree.topLevelItem(1)).topLeft() + QPoint(5, 5));
         QVERIFY(shown());
     }
 
@@ -1487,7 +1487,7 @@ private Q_SLOTS:
         QSignalSpy spy(&tree, &Sidebar::closeRequested);
         auto click = [&](int row) {
             QTest::mouseClick(tree.viewport(), Qt::LeftButton, {},
-                              Sidebar::closeButtonRect(tree.visualItemRect(tree.topLevelItem(0)->child(row))).center());
+                              Sidebar::closeButtonRect(tree.visualItemRect(tree.topLevelItem(1)->child(row))).center());
         };
         click(1); // an active session has no close button
         QVERIFY(spy.isEmpty());

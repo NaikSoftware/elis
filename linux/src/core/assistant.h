@@ -6,6 +6,8 @@
 #include <QString>
 #include <QStringList>
 
+#include <functional>
+
 class Store;
 class Terminals;
 
@@ -47,8 +49,13 @@ struct Window {
     Terminals *terminals;
 };
 QJsonArray peers(const QList<Window> &windows); // the core's peers: every session, in sidebar order
+// performs assistant.show in a window selector ("" for the active window): its error, "" once the chat shows
+using Show = std::function<QString(const QString &window)>;
 // a send types through the target window's session.type; sink may be null
-QJsonObject dispatch(const QJsonObject &request, const QList<Window> &windows, const QStringList &providers, AssistantSink *sink);
+QJsonObject dispatch(const QJsonObject &request, const QList<Window> &windows, const QStringList &providers, AssistantSink *sink,
+                     const Show &show = {});
+// every window's workspaces (id, name, window, tint) and sessions (id, name, agent, status, tint), stamped as tree is
+QJsonObject directory(const QList<Window> &windows, const QStringList &providers);
 QJsonObject stamp(const QJsonObject &treeReply, const QList<Window> &windows, const QStringList &providers);
 // an entry as assistant.message {kind, from?, handle?, text}, through the sender's window, else the first
 void emitMessage(const QJsonObject &entry, const QList<Window> &windows);

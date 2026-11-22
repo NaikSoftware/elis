@@ -1,6 +1,7 @@
 // Control commands that drive widgets: the sidebar, pane selection/clipboard/search, zoom, the pick palette and asks.
 #include "mainwindow.h"
 
+#include "assistantview.h"
 #include "hooks.h"
 #include "konsoleprivate.h"
 #include "palette.h"
@@ -156,6 +157,8 @@ void MainWindow::emitEvent(const QString &kind, const QString &sessionId, const 
 {
     const Workspace *w = m_store.workspaceOf(sessionId);
     m_events->emitEvent(kind, w ? w->id : QString(), sessionId, payload);
+    if (kind == QLatin1String("assistant.message")) // one window carries the app-wide chat's event; every view follows
+        AssistantView::refreshAll();
 }
 
 QJsonObject MainWindow::controlExtras(const QString &id) const

@@ -1,5 +1,6 @@
 #pragma once
 
+#include "assistant.h"
 #include "control.h"
 #include "keymap.h"
 
@@ -90,6 +91,13 @@ public:
     void editFocusedWorkspaces();
     qint64 autoFollowMs() const; // 0 = disabled
     QString autoFollowTick(qint64 idleMs); // selects the oldest blocked session not yet shown once idle long enough; its id
+    // the Elis row: its chat replaces the shown session, which leaves no session selected until one is picked
+    void showAssistant();
+    bool assistantShown() const { return m_assistantShown; }
+    QList<Assistant::Window> assistantWindows() const; // the library's, else this window alone
+    QStringList assistantProviders() const;
+    QJsonObject assistantRequest(const QJsonObject &request); // an assistant.* request, as the control socket sends it
+    void goToSession(const QString &id);                      // in whichever window holds it, raised
 
 protected:
     void closeEvent(QCloseEvent *event) override;
@@ -251,6 +259,8 @@ private:
     QLabel *m_title;
     QStackedWidget *m_stack;
     QWidget *m_empty;
+    class AssistantView *m_assistantView;
+    bool m_assistantShown = false;
     QWidget *m_wash; // a TintWash over the terminal
     QHash<QString, QAction *> m_actions;
     struct Panes {

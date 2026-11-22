@@ -356,7 +356,16 @@ QJsonObject WindowLibrary::dispatch(const QJsonObject &request)
     const QList<Assistant::Window> everyWindow = assistantWindows();
     const QStringList providers = assistantProviders();
     if (cmd.startsWith(QLatin1String("assistant.")))
-        return Assistant::dispatch(request, everyWindow, providers, assistantSink);
+        return Assistant::dispatch(request, everyWindow, providers, assistantSink, [this](const QString &window) {
+            QString error;
+            const Entry *e = entry(resolve(window, &error));
+            if (!error.isEmpty())
+                return error;
+            if (!e->open || !e->window)
+                return QStringLiteral("window not open — window.select it first");
+            e->window->showAssistant();
+            return QString();
+        });
     // config the whole app shares, and the app-global restore commands, act on every open window
     static const QStringList everywhere{"keymap.reload", "hooks.reload", "theme.set", "restore.mode", "restore.capture", "restore.clear"};
     if (everywhere.contains(cmd)) {

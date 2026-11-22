@@ -1565,8 +1565,13 @@ private Q_SLOTS:
         QCOMPARE(sink.providers, QStringList{"codex"});
         const QString a = s.addSession(s.addWorkspace("elis"), "alpha", {});
         Assistant::dispatch({{"cmd", "assistant.reply"}, {"target", a}, {"args", QJsonObject{{"text", "done"}}}}, one(s, t), {}, &sink);
-        QVERIFY(Assistant::dispatch({{"cmd", "assistant.show"}}, one(s, t), {}, &sink)["ok"].toBool());
-        QCOMPARE(Assistant::stamp(call(s, t, "tree"), one(s, t), {}).value("result")["tree"]["assistant"]["unread"].toInt(), 0);
+        auto unread = [&] { return Assistant::stamp(call(s, t, "tree"), one(s, t), {}).value("result")["tree"]["assistant"]["unread"].toInt(); };
+        const QJsonObject refused = Assistant::dispatch({{"cmd", "assistant.show"}, {"args", QJsonObject{{"window", "w9"}}}}, one(s, t), {}, &sink,
+                                                        [](const QString &window) { return QStringLiteral("no such window: ") + window; });
+        QCOMPARE(refused["error"].toString(), QStringLiteral("no such window: w9"));
+        QCOMPARE(unread(), 1);
+        QVERIFY(Assistant::dispatch({{"cmd", "assistant.show"}}, one(s, t), {}, &sink, [](const QString &) { return QString(); })["ok"].toBool());
+        QCOMPARE(unread(), 0);
     }
 
     void assistantStampsTheTreeWithAppWideHandles()
