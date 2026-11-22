@@ -24,18 +24,22 @@ String _dayKey(DateTime d) => 'day-${d.toIso8601String().substring(0, 10)}';
 /// The rows for [items] (oldest first), newest first for a `reverse: true` list; a day row sits above each day's first item.
 /// A `compactSummary` right after a `compact` folds into the divider's row, keyed by the divider.
 /// Two or more consecutive tool calls share one row, keyed by the first so a poll that grows it keeps the key;
-/// an Agent call and a call in [pending] (its prompt needs the user) keep their own row.
+/// thinking between them joins the row, and an Agent call and a call in [pending] (its prompt needs the user) keep their own.
 List<ChatRow> chatRows(List<ChatItem> items, {Set<String> pending = const {}}) {
   final rows = <ChatRow>[];
   final lastStop = items.lastIndexWhere((i) => i.kind == 'interrupted');
   var run = <ChatItem>[];
   var runEnd = 0;
   void flush() {
-    if (run.length >= 2) {
-      rows.add(ChatRow('group-${run.first.uuid}', group: run, interruptedAfter: runEnd < lastStop));
+    // thinking after the run's last call is not inside it
+    final tail = run.reversed.takeWhile((i) => i.kind == 'thinking').length;
+    final calls = run.sublist(0, run.length - tail);
+    if (calls.length >= 2) {
+      rows.add(ChatRow('group-${calls.first.uuid}', group: calls, interruptedAfter: runEnd < lastStop));
     } else {
-      rows.addAll([for (final i in run) ChatRow(i.uuid, item: i)]);
+      rows.addAll([for (final i in calls) ChatRow(i.uuid, item: i)]);
     }
+    rows.addAll([for (final i in run.skip(calls.length)) ChatRow(i.uuid, item: i)]);
     run = [];
   }
 
@@ -55,6 +59,10 @@ List<ChatRow> chatRows(List<ChatItem> items, {Set<String> pending = const {}}) {
     if (i.kind == 'tool' && !i.isAgent && !pending.contains(i.id)) {
       run.add(i);
       runEnd = n;
+      continue;
+    }
+    if (i.kind == 'thinking' && run.isNotEmpty) {
+      run.add(i);
       continue;
     }
     flush();

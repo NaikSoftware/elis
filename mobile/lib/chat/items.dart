@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_markdown_plus/flutter_markdown_plus.dart';
 
+import '../notice.dart';
 import '../theme.dart';
 import 'rows.dart';
 import 'transcript.dart';
@@ -29,35 +30,44 @@ String? fencedCode(String markdown) {
   return blocks.isEmpty ? null : blocks.join('\n\n');
 }
 
-/// [exited] and [stale] turn open subagent rows to "stopped"; a non-null [promptMark] replaces a tool row's mark.
+/// [exited] and [stale] turn open subagent rows to "stopped"; a non-null [promptMark] replaces a tool row's mark;
+/// [openImage] shows a picture file of the host in the page sheet and answers the refusal.
 Widget chatRowWidget(BuildContext c, ChatRow r,
-    {required bool fresh, bool exited = false, bool stale = false, String? Function(String toolId)? promptMark}) {
-  final row = Padding(padding: const EdgeInsets.symmetric(vertical: 4), child: _row(c, r, exited || stale, promptMark));
+    {required bool fresh,
+    bool exited = false,
+    bool stale = false,
+    String? Function(String toolId)? promptMark,
+    Future<String?> Function(String path)? openImage}) {
+  final row = Padding(padding: const EdgeInsets.symmetric(vertical: 4), child: _row(c, r, exited || stale, promptMark, openImage));
   return fresh ? _FadeIn(r.key, row) : row;
 }
 
-Widget _row(BuildContext c, ChatRow r, bool gone, String? Function(String)? promptMark) {
+Widget _row(BuildContext c, ChatRow r, bool gone, String? Function(String)? promptMark, Future<String?> Function(String)? openImage) {
   if (r.day != null) {
     return Center(
         child: Text(MaterialLocalizations.of(c).formatMediumDate(r.day!), style: const TextStyle(color: C.dim, fontSize: 12)));
   }
   if (r.group.isNotEmpty) {
+    final calls = [for (final t in r.group) if (t.kind == 'tool') t];
     return _Expandable(
       key: ValueKey(r.key),
       title: Row(spacing: 8, children: [
-        Expanded(child: Text(runLabel(r.group), maxLines: 1, overflow: TextOverflow.ellipsis)),
-        if (_runMark(r.group, promptMark, stopped: r.interruptedAfter || gone) case final m) Text(m, style: m.startsWith('✗') ? const TextStyle(color: C.danger) : null),
+        Expanded(child: Text(runLabel(calls), maxLines: 1, overflow: TextOverflow.ellipsis)),
+        if (_runMark(calls, promptMark, stopped: r.interruptedAfter || gone) case final m) Text(m, style: m.startsWith('✗') ? const TextStyle(color: C.danger) : null),
       ]),
       body: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [for (final t in r.group) _toolRow(t, stopped: false, promptMark: promptMark)]),
+          children: [
+            for (final t in r.group)
+              t.kind == 'thinking' ? _thought(t) : _toolRow(c, t, stopped: false, promptMark: promptMark, openImage: openImage)
+          ]),
     );
   }
   final i = r.item!;
   return switch (i.kind) {
     'user' => _bubble(c, i),
     'text' => _menu(c, i.text ?? '', chatMarkdown(i.text ?? '')),
-    'tool' => _toolRow(i, stopped: r.interruptedAfter || gone, promptMark: promptMark),
+    'tool' => _toolRow(c, i, stopped: r.interruptedAfter || gone, promptMark: promptMark, openImage: openImage),
     'compact' => _divider('Conversation compacted', r.key, r.summary?.text),
     'compactSummary' => _divider('Conversation compacted', r.key, i.text ?? ''),
     'interrupted' => _divider('Interrupted', r.key, null),
@@ -65,7 +75,7 @@ Widget _row(BuildContext c, ChatRow r, bool gone, String? Function(String)? prom
     'hook' => _notice(i.text, warning: true),
     'notice' => _notice(i.text, warning: i.raw['level'] == 'warning'),
     'message' => _message(i),
-    'thinking' => Text(i.durationMs == null ? 'Thought' : 'Thought for ${(i.durationMs! / 1000).round()}s', style: _toolStyle),
+    'thinking' => _thought(i),
     'command' => Row(spacing: 8, children: [
         Container(
           key: Key('chip-${i.uuid}'),
@@ -83,6 +93,8 @@ Widget _row(BuildContext c, ChatRow r, bool gone, String? Function(String)? prom
     _ => Text(i.text ?? i.name ?? i.kind, style: const TextStyle(color: C.muted)),
   };
 }
+
+Widget _thought(ChatItem i) => Text(i.durationMs == null ? 'Thought' : 'Thought for ${(i.durationMs! / 1000).round()}s', style: _toolStyle);
 
 /// [bytes] as `67 B`, `12 KB` or `2.3 MB` (binary units).
 String byteSize(int bytes) => bytes < 1024
@@ -221,7 +233,10 @@ String markText(String? mark) => switch (mark) {
 const _toolStyle = TextStyle(color: C.muted, fontSize: 13);
 const _monoStyle = TextStyle(fontFamily: mono, fontFamilyFallback: monoFallback, fontSize: 12, color: C.termText);
 
-Widget _toolRow(ChatItem i, {required bool stopped, String? Function(String)? promptMark}) {
+const _pictures = {'png', 'jpg', 'jpeg', 'gif', 'webp'}; // LinkPolicy.imageExtensions, what an --image page takes
+
+Widget _toolRow(BuildContext c, ChatItem i,
+    {required bool stopped, String? Function(String)? promptMark, Future<String?> Function(String)? openImage}) {
   final agent = i.isAgent;
   final trailing = !agent
       ? _toolMark(i, promptMark)
@@ -230,9 +245,17 @@ Widget _toolRow(ChatItem i, {required bool stopped, String? Function(String)? pr
           SubagentState.stopped => 'stopped',
           SubagentState.finished => markText(i.mark ?? 'done'),
         };
-  final patch = i.patch, output = i.output;
+  final patch = i.patch, output = i.output, file = i.file;
+  final picture = file != null && openImage != null && _pictures.contains(file.split('.').last.toLowerCase());
   return _Expandable(
     key: ValueKey('tool-${i.uuid}'),
+    // a picture it read has no text to expand: the file opens instead
+    onTap: picture
+        ? () async {
+            final error = await openImage(file);
+            if (error != null && c.mounted) showNotice(c, error);
+          }
+        : null,
     title: Row(
       spacing: 8,
       children: [
@@ -245,17 +268,19 @@ Widget _toolRow(ChatItem i, {required bool stopped, String? Function(String)? pr
         Text(trailing, style: trailing.startsWith('✗') ? const TextStyle(color: C.danger) : null),
       ],
     ),
-    body: patch != null
-        ? _diff(i.file, patch)
-        : output == null
-            ? null
-            : Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(output, style: _monoStyle),
-                  if (i.clipped) const Text('Full output in Term', style: TextStyle(color: C.dim)),
-                ],
-              ),
+    body: picture
+        ? null
+        : patch != null
+            ? _diff(i.file, patch)
+            : output == null
+                ? null
+                : Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(output, style: _monoStyle),
+                      if (i.clipped) const Text('Full output in Term', style: TextStyle(color: C.dim)),
+                    ],
+                  ),
   );
 }
 
@@ -279,10 +304,11 @@ Widget _diff(String? file, List<Hunk> hunks) => Column(crossAxisAlignment: Cross
 
 /// A secondary-coloured row whose tap opens [body] under it; no [body], no tap.
 class _Expandable extends StatefulWidget {
-  const _Expandable({super.key, required this.title, this.body});
+  const _Expandable({super.key, required this.title, this.body, this.onTap});
 
   final Widget title;
   final Widget? body;
+  final VoidCallback? onTap; // a tap's action when there is no body
 
   @override
   State<_Expandable> createState() => _ExpandableState();
@@ -302,7 +328,7 @@ class _ExpandableState extends State<_Expandable> {
           GestureDetector(
             behavior: HitTestBehavior.opaque,
             onTap: body == null
-                ? null
+                ? widget.onTap
                 : () => setState(() {
                       open = !open;
                       closing = !open;
