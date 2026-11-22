@@ -205,6 +205,16 @@ Each entry separates a demonstrated cause from one that is only consistent with 
   succeeding forever.
 - **Fix.** Already on master in #949 (b8a96b1b): `OverlayRunJob.onlyZombies` treats a group of zombies as ended.
 
+### Linux `PhoneLinkPtyTests.terminateEndsAPipelineThatHoldsTheTerminal`
+
+- **Symptom.** `pid N outlived terminate()` after 15 s; the same commit passed in the run before.
+- **Runs.** Job 137203221819 (run 45020813619, PR #73).
+- **Cause, consistent with the evidence.** The class of the entry above: the terminated shell can die before it
+  reaps its `sleep`, whose zombie then sits under the container's PID 1, so `kill(pid, 0)` keeps succeeding.
+- **Fix.** In PR #73: the test counts a zombie (`/proc/<pid>/stat` state `Z`) as ended. The same PR makes
+  `PhoneLinkPresenter.tiedToInput` wait again after its trap kills the child, which `ForwardChildTests` hit the
+  same way.
+
 ### macOS watchdog hang with no test started
 
 - **Symptom.** The watchdog fires while the log's last line is a compile step.

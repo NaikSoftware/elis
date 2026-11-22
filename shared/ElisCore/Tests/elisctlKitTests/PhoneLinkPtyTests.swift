@@ -67,7 +67,7 @@ struct PhoneLinkPtyTests {
         pty.terminate()
         // onExit fires after the reader thread leaves its loop, so it also proves the reader ended
         #expect(await recorder.waitExit())
-        #expect(await eventually { kill(grandchild, 0) == -1 && errno == ESRCH }, "pid \(grandchild) outlived terminate()")
+        #expect(await eventually { Self.ended(grandchild) }, "pid \(grandchild) outlived terminate()")
         kill(grandchild, SIGKILL)
     }
 
@@ -217,6 +217,17 @@ struct PhoneLinkPtyTests {
         private var values: [Int] = []
         func add(_ count: Int) { lock.withLock { values.append(count) } }
         var counts: [Int] { lock.withLock { values } }
+    }
+
+    /// Gone, or on Linux a zombie: CI's container init never reaps the orphan the dead shell leaves.
+    private static func ended(_ pid: pid_t) -> Bool {
+        if kill(pid, 0) == -1 && errno == ESRCH { return true }
+        #if os(Linux)
+        let stat = (try? String(contentsOfFile: "/proc/\(pid)/stat", encoding: .utf8)) ?? ""
+        return stat.split(separator: ")").last?.split(separator: " ").first == "Z"
+        #else
+        return false
+        #endif
     }
 
     private func eventually(_ seconds: Double = 15, _ condition: () -> Bool) async -> Bool {
