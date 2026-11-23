@@ -1,5 +1,14 @@
-<!-- an alert's status-bar icon: the app's ">_" mark, white on transparent as Android tints it -->
-<vector xmlns:android="http://schemas.android.com/apk/res/android" android:width="24dp" android:height="24dp" android:viewportWidth="24" android:viewportHeight="24">
-    <path android:strokeColor="#FFFFFFFF" android:strokeWidth="2.4" android:strokeLineCap="round" android:strokeLineJoin="round" android:fillColor="#00000000"
-        android:pathData="M4.5,6.5L10,12L4.5,17.5M12.5,17.5H19.5"/>
+<!-- an alert's status-bar icon: the Elis dog's silhouette from ic_launcher_monochrome, eyes and nose cut out
+     (the blaze and the three dots vanish at 24dp), white on transparent as Android tints it -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android" android:width="24dp" android:height="24dp" android:viewportWidth="584" android:viewportHeight="584">
+    <group android:translateX="-221" android:translateY="-370.5">
+        <group android:translateX="512" android:translateY="630" android:scaleX="1.12" android:scaleY="1.12">
+            <group android:translateX="-512" android:translateY="-478">
+                <path android:fillColor="#FFFFFFFF" android:pathData="M416 318C370 300 310 314 288 360C266 410 270 500 300 580C330 560 350 520 356 470C362 420 380 360 416 318Z"/>
+                <path android:fillColor="#FFFFFFFF" android:pathData="M608 318C654 300 714 314 736 360C758 410 754 500 724 580C694 560 674 520 668 470C662 420 644 360 608 318Z"/>
+                <path android:fillColor="#FFFFFFFF" android:fillType="evenOdd" android:pathData="M512 270C610 270 676 320 686 400C694 470 680 540 650 610L374 610C344 540 330 470 338 400C348 320 414 270 512 270ZM414,490a24,24 0 1,0 48,0a24,24 0 1,0 -48,0zM562,490a24,24 0 1,0 48,0a24,24 0 1,0 -48,0z"/>
+                <path android:fillColor="#FFFFFFFF" android:fillType="evenOdd" android:pathData="M434 560C452 545 572 545 590 560C618 590 622 610 622 640C622 704 580 744 512 744C444 744 402 704 402 640C402 610 406 590 434 560ZM482 628C496 616 528 616 542 628C546 650 530 666 512 668C494 666 478 650 482 628Z"/>
+            </group>
+        </group>
+    </group>
 </vector>
