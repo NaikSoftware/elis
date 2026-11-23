@@ -37,9 +37,16 @@
 #include <sys/socket.h>
 #include <unistd.h>
 
-// The power manager's automatic-suspend inhibition while on; the screen still dims and locks. The service drops it when
-// this process's bus connection closes, so a crash leaves none behind. With no power manager nothing is held.
-struct SleepInhibitor {
+// A freedesktop Inhibit/UnInhibit hold while on. The service drops it when this process's bus connection closes, so a
+// crash leaves none behind. With no such service nothing is held.
+struct Inhibitor {
+    Inhibitor(QString service, QString path, QString iface)
+        : service(std::move(service))
+        , path(std::move(path))
+        , iface(std::move(iface))
+    {
+    }
+    const QString service, path, iface;
     QObject context;
     bool wanted = false, pending = false;
     std::optional<uint> cookie;
@@ -50,8 +57,6 @@ struct SleepInhibitor {
     }
     void reconcile()
     {
-        static const QString service = QStringLiteral("org.freedesktop.PowerManagement"), path = QStringLiteral("/org/freedesktop/PowerManagement/Inhibit"),
-                             iface = service + QStringLiteral(".Inhibit");
         if (pending) // its reply reconciles
             return;
         if (!wanted && cookie) {
@@ -67,7 +72,7 @@ struct SleepInhibitor {
                 pending = false;
                 const QDBusPendingReply<uint> reply = *watcher;
                 if (!reply.isValid())
-                    return qWarning("sleep inhibit: %s", qPrintable(reply.error().message())); // retried at the next false -> true
+                    return qWarning("%s: %s", qPrintable(iface), qPrintable(reply.error().message())); // retried at the next false -> true
                 cookie = reply.value();
                 reconcile();
             });
@@ -211,9 +216,16 @@ int main(int argc, char **argv)
 
     ensureProfile();
     Zmx::recordBuild(dir); // before any pane starts a daemon, which would otherwise date before the cutoff
-    SleepInhibitor inhibitor;
+    // no suspend, and no blanking or the lock after it, so an agent can still see and drive the desktop
+    Inhibitor suspendHold(QStringLiteral("org.freedesktop.PowerManagement"), QStringLiteral("/org/freedesktop/PowerManagement/Inhibit"),
+                          QStringLiteral("org.freedesktop.PowerManagement.Inhibit"));
+    Inhibitor screenHold(QStringLiteral("org.freedesktop.ScreenSaver"), QStringLiteral("/org/freedesktop/ScreenSaver"),
+                         QStringLiteral("org.freedesktop.ScreenSaver"));
     WindowLibrary library(dir);
-    library.keepAwake = [&inhibitor](bool on) { inhibitor.set(on); };
+    library.keepAwake = [&](bool on) {
+        suspendHold.set(on);
+        screenHold.set(on);
+    };
     library.load(); // the windows open at the last quit, each with its saved frame
     AssistantRunner assistant(library, dir);
     library.assistantSink = &assistant;
