@@ -850,6 +850,27 @@ private Q_SLOTS:
         QCOMPARE(termB->font().pointSizeF(), fontB);
     }
 
+    void dashboardClickOnTheShownFinishedSessionClearsItsStatus()
+    {
+        Store store;
+        MainWindow w(store, dir.filePath("dashvisit.json"));
+        w.restore({});
+        const QString ws = store.addWorkspace("w");
+        const QString a = store.addSession(ws, {}, {});
+        store.select(a);
+        w.show();
+        w.activateWindow();
+        QVERIFY(QTest::qWaitForWindowActive(&w));
+        QWidget *termA = display(w);
+        QVERIFY(termA);
+        store.setStatus(a, "completed", true);
+        w.namedAction("dashboard")->trigger();
+        QVERIFY(w.chromeState().contains("dashboardMembers"));
+        QTest::mouseClick(termA, Qt::LeftButton, {}, QPoint(20, 20));
+        QTRY_VERIFY(!w.chromeState().contains("dashboardMembers"));
+        QCOMPARE(store.session(a)->status, QStringLiteral("idle"));
+    }
+
     void windowLibraryMigratesAndEachWindowKeepsItsOwnShortcuts()
     {
         QTemporaryDir state;
@@ -2131,6 +2152,36 @@ private Q_SLOTS:
         QVERIFY(shown());
         QTest::mouseClick(tree.viewport(), Qt::LeftButton, {}, tree.visualItemRect(tree.topLevelItem(1)).topLeft() + QPoint(5, 5));
         QVERIFY(shown());
+    }
+
+    void aClickOnTheShownFinishedSessionClearsItsStatus()
+    {
+        Store store;
+        const QString ws = store.addWorkspace("w");
+        const QString s1 = store.addSession(ws, "s1", {}), s2 = store.addSession(ws, "s2", {});
+        store.select(s1);
+        Sidebar tree(store);
+        QObject::connect(&store, &Store::changed, &tree, &Sidebar::rebuild); // as MainWindow wires it
+        QObject::connect(&store, &Store::titleChanged, &tree, &Sidebar::rebuild);
+        QObject::connect(&tree, &QTreeWidget::currentItemChanged, &tree, [&](QTreeWidgetItem *item) {
+            if (item && item->data(0, SidebarRole::Kind).toInt() == SidebarRole::SessionRow)
+                store.select(item->data(0, SidebarRole::Id).toString());
+        });
+        tree.resize(300, 400);
+        tree.show();
+        tree.rebuild();
+        QVERIFY(QTest::qWaitForWindowExposed(&tree));
+        const auto row = [&](int i) { return tree.visualItemRect(tree.topLevelItem(1)->child(i)).center(); };
+        store.setStatus(s1, "completed", true);
+        store.setUnseen(s1, 2);
+        QTest::mouseClick(tree.viewport(), Qt::LeftButton, {}, row(0));
+        QCOMPARE(store.session(s1)->status, QStringLiteral("idle"));
+        QCOMPARE(store.session(s1)->unseen, 0);
+        QCOMPARE(tree.selectedSessionIds(), QStringList{s1});
+        store.setStatus(s1, "completed", true);
+        QTest::mouseClick(tree.viewport(), Qt::LeftButton, {}, row(1));
+        QCOMPARE(store.selected, s2);
+        QCOMPARE(store.session(s1)->status, QStringLiteral("idle"));
     }
 
     void aFinishedSessionsCloseButtonAsksToCloseIt()

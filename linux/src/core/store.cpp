@@ -817,17 +817,26 @@ void Store::select(const QString &id)
     auto *s = session(id);
     if (!s || selected == id)
         return;
+    const QString previous = selected;
     freshWorkspace.clear(); // a selection change ends the fresh workspace; a same-value one keeps it, as on the Mac
     if (focusEnabled && !flaggedView && !focused.contains(workspaceOf(id)->id))
         focusEnabled = false; // selecting outside the set suspends the filter, keeping the set
     selected = id;
     recent.removeAll(id);
     recent.prepend(id);
-    s->unseen = 0; // focusing a session acknowledges its notifications
-    if (s->status == QLatin1String("completed") && s->autoReset)
-        setStatus(id, QStringLiteral("idle"));
+    s->unseen = 0; // focusing a session acknowledges its notifications, repainted by selectionChanged
+    markVisited(id);
+    if (auto *p = session(previous); p && p->status == QLatin1String("completed") && p->autoReset)
+        setStatus(previous, QStringLiteral("idle")); // the one-time flash ends on the session left too, as on the Mac
     Q_EMIT selectionChanged(id);
     Q_EMIT changed();
+}
+
+void Store::markVisited(const QString &id)
+{
+    setUnseen(id, 0);
+    if (auto *s = session(id); s && s->status == QLatin1String("completed") && s->autoReset)
+        setStatus(id, QStringLiteral("idle"));
 }
 
 bool Store::setStatus(const QString &id, const QString &status, bool autoReset, bool blink, bool ifIdle)

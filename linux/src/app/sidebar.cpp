@@ -903,6 +903,10 @@ void Sidebar::mouseMoveEvent(QMouseEvent *event)
 
 void Sidebar::mouseReleaseEvent(QMouseEvent *event)
 {
+    const QTreeWidgetItem *at = itemAt(event->position().toPoint());
+    // the store rebuilds this tree on a change, so the visit runs after the release is handled
+    const QString visit = std::exchange(m_visitId, {});
+    const bool visited = !visit.isEmpty() && at && at->data(0, Id).toString() == visit;
     if (const QString id = std::exchange(m_pressedId, {}); !id.isEmpty()) {
         const bool ci = std::exchange(m_pressedCi, false);
         if (QTreeWidgetItem *item = itemAt(event->position().toPoint()); item && item->data(0, Id).toString() == id) {
@@ -911,9 +915,11 @@ void Sidebar::mouseReleaseEvent(QMouseEvent *event)
             else
                 setCurrentItem(item); // a click without a drag shows the session, on release
         }
-        return;
+    } else {
+        QTreeWidget::mouseReleaseEvent(event);
     }
-    QTreeWidget::mouseReleaseEvent(event);
+    if (visited)
+        m_store.markVisited(visit);
 }
 
 void Sidebar::leaveEvent(QEvent *event)
@@ -927,6 +933,7 @@ void Sidebar::mousePressEvent(QMouseEvent *event)
 {
     const QPoint pos = event->position().toPoint();
     QTreeWidgetItem *item = itemAt(pos);
+    m_visitId.clear();
     if (!item && m_store.flaggedView && topLevelItemCount() == 1 && event->button() == Qt::LeftButton)
         return Q_EMIT editFlaggedRequested(); // only the Elis row: the empty flagged view's link
     if (!item)
@@ -967,6 +974,8 @@ void Sidebar::mousePressEvent(QMouseEvent *event)
     // a press on the shown session's CI line opens its panel on release; on any other row it selects, so the line never steals a selection
     const QModelIndex index = indexFromItem(item);
     const bool ci = item == currentItem() && shownInfo(index) && pos.y() > titleRect(index, visualItemRect(item)).bottom() + 1 - infoLift(m_store.settings);
+    if (item == currentItem() && !ci && item->data(0, Kind).toInt() == SessionRow && event->button() == Qt::LeftButton)
+        m_visitId = item->data(0, Id).toString();
     // a plain press on another session selects on release, so a drag of it doesn't switch the terminal away first
     if (item->data(0, Kind).toInt() == SessionRow && (item != currentItem() || ci) && event->button() == Qt::LeftButton
         && !(event->modifiers() & (Qt::ControlModifier | Qt::ShiftModifier))) {

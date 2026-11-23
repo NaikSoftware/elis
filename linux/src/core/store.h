@@ -221,6 +221,7 @@ public:
     bool reorderWorkspace(const QString &id, const QString &direction);
     bool selectWorkspace(const QString &id);
     void select(const QString &id);
+    void markVisited(const QString &id); // what selecting clears, without moving the selection
     // ifIdle: applies only while the row is idle, else an ok no-op that leaves status and flags untouched (master's --if-idle)
     bool setStatus(const QString &id, const QString &status, bool autoReset = false, bool blink = false, bool ifIdle = false);
     void setFlag(const QString &id, bool flagged);
