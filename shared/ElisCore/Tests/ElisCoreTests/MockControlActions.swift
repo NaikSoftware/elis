@@ -99,6 +99,7 @@ final class MockControlActions: ControlActions {
         case sidebarViewMode(ControlSidebarViewMode)
         case flaggedViewLayout(ControlFlaggedLayoutMode)
         case sidebarDensity(ControlSidebarDensityMode)
+        case keepAwake(ControlToggleMode)
         case expand(window: String?)
         case collapse(window: String?)
         case sidebarWidth(points: Double, window: String?)
@@ -182,6 +183,7 @@ final class MockControlActions: ControlActions {
     var nextSidebarViewModeResponse = ControlResponse(ok: true)
     var nextFlaggedViewLayoutResponse = ControlResponse(ok: true)
     var nextSidebarDensityResponse = ControlResponse(ok: true)
+    var nextKeepAwakeResponse = ControlResponse(ok: true)
     var nextExpandResponse = ControlResponse(ok: true)
     var nextCollapseResponse = ControlResponse(ok: true)
     var nextSidebarWidthResponse = ControlResponse(ok: true)
@@ -734,6 +736,11 @@ final class MockControlActions: ControlActions {
     func setSidebarDensity(_ mode: ControlSidebarDensityMode) -> ControlResponse {
         calls.append(.sidebarDensity(mode))
         return nextSidebarDensityResponse
+    }
+
+    func setKeepAwake(_ mode: ControlToggleMode) -> ControlResponse {
+        calls.append(.keepAwake(mode))
+        return nextKeepAwakeResponse
     }
 
     func expandSidebar(window: String?) -> ControlResponse {

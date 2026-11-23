@@ -704,6 +704,15 @@ QJsonObject moreCommands(Store &store, Terminals &terminals, const QString &cmd,
         return workspaceGo(store, args);
     if (cmd.startsWith(QLatin1String("sidebar.")) && cmd != QLatin1String("sidebar.width"))
         return sidebarCommand(store, cmd, args);
+    if (cmd == QLatin1String("settings.keep-awake")) {
+        const QString mode = args.value("mode").toString(QStringLiteral("toggle"));
+        if (mode != QLatin1String("on") && mode != QLatin1String("off") && mode != QLatin1String("toggle"))
+            return fail(QStringLiteral("invalid keep-awake mode: %1").arg(mode));
+        Settings s = store.settings;
+        s.preventSleepWhileActive = mode == QLatin1String("toggle") ? !s.preventSleepWhileActive : mode == QLatin1String("on");
+        store.setSettings(s);
+        return ok({{"text", s.preventSleepWhileActive ? "on" : "off"}});
+    }
     if (cmd.startsWith(QLatin1String("recent.")))
         return recentCommand(store, cmd, target);
     if (cmd.startsWith(QLatin1String("msg.")))

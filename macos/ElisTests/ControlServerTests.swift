@@ -333,6 +333,31 @@ final class ControlServerTests: XCTestCase {
         store.closeOverlay(session.id)
     }
 
+    func testKeepAwakeIsSetAndReadBackOverTheSocket() async throws {
+        let library = WindowLibrary(directory: stateDir)
+        let server = makeServer(library: library)
+        server.start()
+        func tree() async throws -> ControlTree {
+            let read = await send(#"{"cmd":"tree"}"#) ?? ""
+            return try XCTUnwrap(JSONDecoder().decode(ControlResponse.self, from: Data(read.utf8)).result?.tree)
+        }
+        func text(_ line: String) async throws -> String? {
+            let reply = await send(line) ?? ""
+            return try JSONDecoder().decode(ControlResponse.self, from: Data(reply.utf8)).result?.text
+        }
+
+        let untouched = try await tree()
+        XCTAssertEqual(untouched.keepAwake, true)
+        let off = try await text(#"{"cmd":"settings.keep-awake","args":{"mode":"off"}}"#)
+        XCTAssertEqual(off, "off")
+        let changed = try await tree()
+        XCTAssertEqual(changed.keepAwake, false)
+        XCTAssertEqual(SettingsStore(directory: stateDir).load().preventSleepWhileActive, false)
+        let toggled = try await text(#"{"cmd":"settings.keep-awake"}"#)
+        XCTAssertEqual(toggled, "on")
+        XCTAssertNil(SettingsStore(directory: stateDir).load().preventSleepWhileActive)
+    }
+
     func testPolledReadsSkipTheWindowCacheRebuildOtherCommandsKeepIt() async throws {
         let library = WindowLibrary(directory: stateDir)
         let store = try XCTUnwrap(library.activeStore)

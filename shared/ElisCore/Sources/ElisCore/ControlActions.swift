@@ -157,6 +157,8 @@ public protocol ControlActions {
     func setSidebarViewMode(_ mode: ControlSidebarViewMode) -> ControlResponse
     func setFlaggedViewLayout(_ mode: ControlFlaggedLayoutMode) -> ControlResponse
     func setSidebarDensity(_ mode: ControlSidebarDensityMode) -> ControlResponse
+    /// `settings.keep-awake` sets `AppSettings.preventSleepWhileActive`; the reply's text is `on` or `off`.
+    func setKeepAwake(_ mode: ControlToggleMode) -> ControlResponse
     func expandSidebar(window: String?) -> ControlResponse
     func collapseSidebar(window: String?) -> ControlResponse
     func setSidebarWidth(_ points: Double, window: String?) -> ControlResponse

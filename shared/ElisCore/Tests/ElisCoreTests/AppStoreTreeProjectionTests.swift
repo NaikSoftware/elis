@@ -513,6 +513,12 @@ struct AppStoreTreeProjectionTests {
         #expect(store.controlTree(paneForeground: { _ in nil }, sidebarDensity: .standard).sidebarDensity == "default")
     }
 
+    @Test func controlTreeReportsThePassedKeepAwake() {
+        let store = makeStore()
+        #expect(store.controlTree().keepAwake == nil)
+        #expect(store.controlTree(paneForeground: { _ in nil }, keepAwake: false).keepAwake == false)
+    }
+
     @Test func controlTreeReportsTheSavedFlaggedOrderAndOmitsItWhenNothingIsFlagged() throws {
         let store = makeStore()
         let ws = store.addWorkspace(name: "work")

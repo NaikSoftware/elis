@@ -47,6 +47,20 @@ struct ControlProtocolSidebarTests {
         #expect(try JSONDecoder().decode(ControlTree.self, from: Data(json.utf8)).sidebarDensity == nil)
     }
 
+    @Test func treeRoundTripsWithKeepAwakeAndOmitsWhenNil() throws {
+        let response = ControlResponse(ok: true, result: ControlResult(tree: ControlTree(workspaces: [], keepAwake: false)))
+        #expect(try roundTrip(response) == response)
+
+        let json = String(decoding: try JSONEncoder().encode(ControlTree(workspaces: [])), as: UTF8.self)
+        #expect(!json.contains("keepAwake"), "a nil keepAwake must be omitted; got \(json)")
+    }
+
+    @Test func keepAwakeRequestUsesItsWireName() throws {
+        let raw = #"{"cmd":"settings.keep-awake","args":{"mode":"off"}}"#
+        let decoded = try JSONDecoder().decode(ControlRequest.self, from: Data(raw.utf8))
+        #expect(decoded == ControlRequest(cmd: .settingsKeepAwake, args: ControlArgs(mode: "off")))
+    }
+
     @Test func sidebarDensityRequestUsesItsWireName() throws {
         let raw = #"{"cmd":"sidebar.density","args":{"mode":"compact"}}"#
         let decoded = try JSONDecoder().decode(ControlRequest.self, from: Data(raw.utf8))
