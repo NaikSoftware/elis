@@ -100,6 +100,7 @@ struct ContentView: View {
         // reopening a window loads an @ObservationIgnored store, which the Dock badge's observation can't
         // see (symmetric to the willClose close poke) — recompute so a reopened window's unseen total counts.
         DockBadgeController.shared.refresh()
+        KeepAwakeController.shared.refresh()
     }
 
     /// The window id this view adopts: normally the next in the library's claim queue. When the queue is

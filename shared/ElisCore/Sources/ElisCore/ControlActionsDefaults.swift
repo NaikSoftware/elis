@@ -170,6 +170,10 @@ public extension ControlActions {
         ControlResponse(ok: false, error: ControlActionsUnsupported.message("browser.clear"))
     }
 
+    func setKeepAwake(_: ControlToggleMode) -> ControlResponse {
+        ControlResponse(ok: false, error: ControlActionsUnsupported.message("settings.keep-awake"))
+    }
+
     func linkOpenMode(_: LinkOpenMode?) -> ControlResponse {
         ControlResponse(ok: false, error: ControlActionsUnsupported.message("browser.links"))
     }

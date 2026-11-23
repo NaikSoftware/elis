@@ -824,7 +824,6 @@ void Store::select(const QString &id)
     selected = id;
     recent.removeAll(id);
     recent.prepend(id);
-    s->unseen = 0; // focusing a session acknowledges its notifications, repainted by selectionChanged
     markVisited(id);
     if (auto *p = session(previous); p && p->status == QLatin1String("completed") && p->autoReset)
         setStatus(previous, QStringLiteral("idle")); // the one-time flash ends on the session left too, as on the Mac

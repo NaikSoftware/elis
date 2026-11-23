@@ -213,7 +213,10 @@ struct WindowAccessor: NSViewRepresentable {
                     // fire — refresh explicitly. guarded on isTerminating: at quit willClose fires after
                     // applicationWillTerminate's clear() and closeWindow no-ops (stores stay loaded), so the
                     // refresh would re-pin the zeroed badge.
-                    if !library.isTerminating { DockBadgeController.shared.refresh() }
+                    if !library.isTerminating {
+                        DockBadgeController.shared.refresh()
+                        KeepAwakeController.shared.refresh()
+                    }
                 }
             }
             titlebarObservers.append(closeToken)
