@@ -166,6 +166,7 @@ class _ChatViewState extends State<ChatView> {
   late final _scroll = _KeepController(_keepShift);
   (RenderObject, double)? _keep; // the read row and its content offset before the rows changed
   List<ChatRow> _rows = const [];
+  int _items = 0; // feed items behind [_rows]: an earlier page can join the oldest run and add no row
   Map<String, int> _index = const {};
   final Map<String, BuildContext> _built = {};
   final Set<String> _gone = {}; // rows built once: scrolling back to a fresh row does not fade it in again
@@ -186,6 +187,7 @@ class _ChatViewState extends State<ChatView> {
   void initState() {
     super.initState();
     _setRows(chatRows(feed.items, pending: {for (final p in feed.pending) p.id}));
+    _items = feed.items.length;
     _switches = feed.switches;
     feed.addListener(_changed);
     _scroll.addListener(_onScroll);
@@ -329,6 +331,8 @@ class _ChatViewState extends State<ChatView> {
     final anchor = _away ? _built[read?.$2]?.findRenderObject() : null;
     final at = _offset(anchor);
     final switched = feed.switches != _switches;
+    final grew = feed.items.length != _items;
+    _items = feed.items.length;
     _keep = anchor == null || at == null ? null : (anchor, at);
     setState(() {
       _setRows(rows);
@@ -344,7 +348,7 @@ class _ChatViewState extends State<ChatView> {
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _keep = null;
       if (!mounted || !_scroll.hasClients) return;
-      _onScroll(load: rows.length != old.length);
+      _onScroll(load: grew);
     });
   }
 

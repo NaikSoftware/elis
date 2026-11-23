@@ -301,6 +301,15 @@ void main() {
     expect(find.byKey(const Key('jumpToBottom')), findsNothing);
   });
 
+  _chatTest('anEarlierPageThatJoinsTheOldestRunKeepsPagingBack', (t, c) async {
+    await c.start([_tool('b1'), _tool('b2')], start: 50);
+    expect(c.h.held!.$1['before'], '50');
+    c.h.held!.$2.complete({'transcript': 't1', 'size': 200, 'start': 30, 'next': 50, 'items': [_tool('b0'), _tool('b00')]});
+    await t.pump();
+    await t.pump();
+    expect(c.h.held?.$1['before'], '30');
+  });
+
   _chatTest('pagingBackPrepends', (t, c) async {
     final items = _history(30);
     await c.start(items, start: 50, height: 840); // the composer's 70: the first page-back request leaves its row on screen
