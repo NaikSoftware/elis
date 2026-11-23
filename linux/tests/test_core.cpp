@@ -406,6 +406,24 @@ private Q_SLOTS:
         QCOMPARE(s.session(b)->status, QStringLiteral("idle"));
     }
 
+    void seenClearsAnAutoResetStatusWithoutSelecting()
+    {
+        Store s;
+        FakeTerminals t;
+        const QString ws = s.addWorkspace("w");
+        const QString a = s.addSession(ws, "a", {}), b = s.addSession(ws, "b", {});
+        s.select(a);
+        s.setStatus(b, "completed", true);
+        s.setUnseen(b, 2);
+        QVERIFY(call(s, t, "session.seen", b)["ok"].toBool());
+        QCOMPARE(s.session(b)->status, QStringLiteral("idle"));
+        QCOMPARE(s.session(b)->unseen, 0);
+        QCOMPARE(s.selected, a);
+        s.setStatus(b, "completed");
+        QVERIFY(call(s, t, "session.seen", b)["ok"].toBool());
+        QCOMPARE(s.session(b)->status, QStringLiteral("completed"));
+    }
+
     void statusIfIdleNeverOverwritesABusyRow()
     {
         Store s;
