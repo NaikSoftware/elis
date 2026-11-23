@@ -807,6 +807,33 @@ private Q_SLOTS:
         QCOMPARE(error, QStringLiteral("cannot delete last window"));
     }
 
+    void keepAwakeFollowsActiveAgentsInEveryOpenWindow()
+    {
+        QTemporaryDir state;
+        WindowLibrary lib(state.path());
+        QList<bool> calls;
+        lib.keepAwake = [&calls](bool on) { calls << on; };
+        lib.load();
+        Store *s1 = lib.entries()[0].store;
+        const QString a = s1->allSessions().first()->id;
+        s1->setStatus(a, "active");
+        s1->setStatus(a, "blocked");
+        QCOMPARE(calls, (QList<bool>{true, false}));
+        s1->setStatus(a, "active");
+        Settings off = s1->settings;
+        off.preventSleepWhileActive = false;
+        s1->setSettings(off);
+        off.preventSleepWhileActive = true;
+        s1->setSettings(off);
+        s1->removeSession(a);
+        QCOMPARE(calls, (QList<bool>{true, false, true, false, true, false}));
+        const QString second = lib.newWindow("second");
+        Store *s2 = lib.entries()[1].store;
+        s2->setStatus(s2->allSessions().first()->id, "active");
+        lib.close(second);
+        QTRY_COMPARE(calls, (QList<bool>{true, false, true, false, true, false, true, false}));
+    }
+
     void assistantCommandsReachEveryWindowAndStampTheTree()
     {
         QTemporaryDir state;
