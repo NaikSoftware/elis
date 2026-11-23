@@ -7,6 +7,7 @@
 #include "paths.h"
 #include "sidebar.h"
 #include "store.h"
+#include "zmx.h"
 
 #include <KConfig>
 #include <KConfigGroup>
@@ -27,11 +28,13 @@
 #include <QFileInfo>
 #include <QJsonArray>
 #include <QMenuBar>
+#include <QPointer>
 #include <QProcess>
 #include <QRegularExpression>
 #include <QSplitter>
 #include <QStandardPaths>
 #include <QStatusBar>
+#include <QTimer>
 #include <QToolBar>
 #include <QWheelEvent>
 
@@ -373,8 +376,51 @@ void MainWindow::playSound(const QString &name) const
             }
 }
 
+// Konsole hands titles over once per 20 ms, only the last of each OSC number: a re-attach's role report, followed in
+// its burst by the replayed screen's title, never arrives as one. So reports are read from the pty's bytes, through
+// Konsole::Pty, which is parentless and found from a socket event on its KPtyDevice.
+class PtyTap : public QObject
+{
+public:
+    PtyTap(KParts::ReadOnlyPart *part, PartBridge *bridge)
+        : QObject(bridge)
+        , m_part(part)
+        , m_bridge(bridge)
+    {
+        qApp->installEventFilter(this);
+    }
+
+    bool eventFilter(QObject *watched, QEvent *event) override
+    {
+        if (event->type() != QEvent::SockAct || !watched->parent())
+            return false;
+        auto *pty = qobject_cast<QProcess *>(watched->parent()->parent());
+        auto *t = qobject_cast<TerminalInterface *>(m_part.data());
+        if (pty && t && pty->inherits("Konsole::Pty") && pty->processId() > 0 && pty->processId() == t->terminalProcessId()) {
+            // connected before the device reads, so this event's bytes come too
+            connect(pty, SIGNAL(receivedData(const char *, int)), m_bridge, SLOT(ptyData(const char *, int)));
+            qApp->removeEventFilter(this);
+            deleteLater();
+        }
+        return false;
+    }
+
+private:
+    QPointer<KParts::ReadOnlyPart> m_part;
+    PartBridge *m_bridge;
+};
+
+void PartBridge::ptyData(const char *data, int length)
+{
+    // after the emission: a report can retire this part, which closes the Pty
+    for (const QString &report : Zmx::roleReports(&m_reportCarry, QByteArray(data, length)))
+        QTimer::singleShot(0, this, [this, report] { m_window->paneTitle(m_id, parent(), report); });
+}
+
 void MainWindow::watchTerminalNotifications(KParts::ReadOnlyPart *part, PartBridge *bridge)
 {
+    if (!part->property("elisZmx").toString().isEmpty())
+        new PtyTap(part, bridge);
     QObject *session = sessionOf(part);
     QObject *emulation = KonsolePrivate::emulation(session);
     if (!emulation)

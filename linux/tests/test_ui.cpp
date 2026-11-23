@@ -54,6 +54,9 @@
 #include "paneleadcover.h"
 #include "elis_bridge.h"
 #include "zmx.h"
+#include "paths.h"
+#include <QProcess>
+#include <QUuid>
 #include "konsoleprivate.h"
 #include "assistantview.h"
 #include <QAbstractItemView>
@@ -292,6 +295,84 @@ private Q_SLOTS:
         cover.apply(lead);
         QCOMPARE(title->text(), QStringLiteral("In use on your phone"));
         QCOMPARE(PaneLeadCover::title(QStringLiteral("follower"), true, true), QStringLiteral("Taking over…"));
+    }
+
+    void takeOverUncoversAPaneWhoseProgramSetATitle()
+    {
+        if (qEnvironmentVariableIsEmpty("ELIS_STATE_DIR"))
+            QSKIP("runs zmx daemons in <state>: run it through ctest, which sets a throwaway ELIS_STATE_DIR");
+        const QByteArray shell = qgetenv("SHELL");
+        qputenv("SHELL", "/bin/sh");
+        auto restoreShell = qScopeGuard([shell] { qputenv("SHELL", shell); });
+        Store store;
+        store.restoreModeAtLaunch = QStringLiteral("live");
+        MainWindow w(store, dir.filePath("takeover.json"));
+        w.restore({});
+        // the title is in the screen a re-attach replays, right behind the client's role report
+        const QString a = store.addSession(store.addWorkspace("w"), {}, {}, QStringLiteral("sleep 0.5; printf '\\033]2;agent\\033\\\\titled'; exec sleep 60"));
+        store.select(a);
+        w.show();
+        const QString pane = store.session(a)->paneId;
+        QVERIFY(!pane.isEmpty());
+        auto killDaemon = qScopeGuard([pane] { Zmx::kill(stateDir(), {pane}); });
+        QTRY_COMPARE_WITH_TIMEOUT(Zmx::lead(pane).role, QStringLiteral("leader"), 5000);
+        QTRY_VERIFY_WITH_TIMEOUT(Zmx::screen(stateDir(), pane, false, 0).value_or(QString()).contains(QLatin1String("titled")), 5000);
+
+        const QString other = QUuid::createUuid().toString(QUuid::WithoutBraces);
+        const QMap<QString, QString> set = Zmx::attach(stateDir(), other, QStringLiteral("/bin/sh"), {}, {}, false).set;
+        Zmx::forget(other);
+        QProcessEnvironment env = QProcessEnvironment::systemEnvironment();
+        for (const QString &k : env.keys())
+            if (k.startsWith(QLatin1String("ELIS_")) || k.startsWith(QLatin1String("ZMX_")))
+                env.remove(k);
+        env.insert(QStringLiteral("ZMX_DIR"), set.value(QStringLiteral("ZMX_DIR")));
+        env.insert(QStringLiteral("ZMX_MANAGED"), QStringLiteral("phone"));
+        env.insert(QStringLiteral("ZMX_MANAGED_CLAIM"), QStringLiteral("1"));
+        const auto claim = [&env, pane](QProcess &phone) { // takes the lead, as the phone's Chat does
+            phone.setProcessEnvironment(env);
+            phone.start(QStringLiteral("script"), {QStringLiteral("-qfec"), Zmx::executable() + QStringLiteral(" attach ") + Zmx::daemonName(stateDir(), pane),
+                                                   QStringLiteral("/dev/null")});
+        };
+        const auto stop = [](QProcess &phone) {
+            phone.kill();
+            phone.waitForFinished();
+        };
+        const auto shown = [&w] {
+            const QList<PaneLeadCover *> covers = w.findChildren<PaneLeadCover *>();
+            const auto it = std::find_if(covers.begin(), covers.end(), [](PaneLeadCover *c) { return c->isVisible(); });
+            return it == covers.end() ? nullptr : *it;
+        };
+        const auto leads = [&] { return Zmx::lead(pane).role == QLatin1String("leader") && !Zmx::lead(pane).reattaching && !shown(); };
+
+        QProcess first;
+        auto stopFirst = qScopeGuard([&] { stop(first); });
+        claim(first);
+        QTRY_COMPARE_WITH_TIMEOUT(Zmx::lead(pane).role, QStringLiteral("follower"), 5000);
+        QTRY_VERIFY(shown());
+        QEventLoop loop; // the app's own: the report that retires the part arrives in a pass of it
+        QTimer poll;
+        connect(&poll, &QTimer::timeout, &loop, [&] {
+            if (leads())
+                loop.quit();
+        });
+        poll.start(50);
+        QTimer::singleShot(0, &loop, [&] { stop(first); }); // the phone leaves: the pane leads again on its own
+        QTimer::singleShot(5000, &loop, &QEventLoop::quit);
+        loop.exec();
+        QVERIFY(leads());
+
+        QProcess second;
+        auto stopSecond = qScopeGuard([&] { stop(second); });
+        claim(second);
+        QTRY_COMPARE_WITH_TIMEOUT(Zmx::lead(pane).role, QStringLiteral("follower"), 5000);
+        QTRY_VERIFY(shown());
+        QWidget *display = nullptr;
+        for (QWidget *child : shown()->parentWidget()->findChildren<QWidget *>())
+            if (child->inherits("Konsole::TerminalDisplay"))
+                display = child;
+        QVERIFY(display);
+        QTest::keyClick(display, Qt::Key_A);
+        QTRY_VERIFY_WITH_TIMEOUT(leads(), 5000);
     }
 
     void smoothWheelReplaysNotchesLineByLine()

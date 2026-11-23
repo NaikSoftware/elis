@@ -45,6 +45,8 @@ bool type(const QString &stateDir, const QString &paneId, const QString &text, Q
 int pacedReturn(const QString &text, QString *head);
 std::optional<QString> screen(const QString &stateDir, const QString &paneId, bool all, int lines); // nullopt: unread
 Lead report(const QString &paneId, const QString &title); // report false: an ordinary title
+// the role report titles in a pane's raw output; *carry holds a report split across reads until the next call
+QStringList roleReports(QByteArray *carry, const QByteArray &output);
 Lead lead(const QString &paneId);
 void forget(const QString &paneId);
 QJsonObject surface(const QJsonObject &fields); // a tree surfaces[] entry, encoded as the Mac's

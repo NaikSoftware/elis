@@ -1054,6 +1054,19 @@ private Q_SLOTS:
                  (QJsonObject{{"id", "x"}, {"kind", "right"}, {"active", false}, {"visible", false}, {"backedByZmx", false}}));
     }
 
+    void zmxRoleReportsAreReadFromRawOutput()
+    {
+        QByteArray carry;
+        QCOMPARE(Zmx::roleReports(&carry, "\x1b[2J\x1b]2;zmx-role;n1:leader:3\x1b\\hi\x1b]2;agent\a\x1b]2;zmx-role;n1:follower:4\a"),
+                 (QStringList{"zmx-role;n1:leader:3", "zmx-role;n1:follower:4"}));
+        QVERIFY(Zmx::roleReports(&carry, "x\x1b]2;zm").isEmpty());
+        QVERIFY(Zmx::roleReports(&carry, "x-role;n1:unowned:5\x1b").isEmpty());
+        QCOMPARE(Zmx::roleReports(&carry, "\\\x1b]2;title\a"), QStringList{"zmx-role;n1:unowned:5"});
+        QVERIFY(Zmx::roleReports(&carry, "\x1b]2;zmx-role;" + QByteArray(300, 'n')).isEmpty());
+        QVERIFY(carry.isEmpty()); // too long to be a report
+        QVERIFY(Zmx::roleReports(&carry, ":leader:6\x1b\\").isEmpty());
+    }
+
     void sessionAttachRefusesInTheMacsOrder()
     {
         Store s;
