@@ -4,6 +4,7 @@
 #include <QJsonObject>
 #include <QPointer>
 #include <QSet>
+#include <QTextCursor>
 #include <QWidget>
 
 class MainWindow;
@@ -27,8 +28,7 @@ public:
     // window shows it in front (active, not minimized), as a session's notifications do
     static void refreshAll();
     void focusComposer();
-    QStringList tags() const { return m_tags; }
-    void addTag(const QString &tag);
+    QStringList tags() const; // the message's tags that name a session, a workspace or @all, in order
 
 Q_SIGNALS:
     void changed(); // the app-wide chat moved on: the window repaints its Elis row
@@ -45,11 +45,15 @@ private:
     void openProviders();
     void complete();
     void send();
-    void syncSend(); // the send button follows the message and the tags
+    void syncSend(); // the send button follows the message
     QPoint onScreen(QPoint at, const QSize &size) const; // a popup's top-left, kept on the window's screen
-    bool dropTags(const class QMimeData *mime);
-    QWidget *chip(const QString &tag, bool removable);
+    bool dropTags(const class QMimeData *mime, const QTextCursor &at);
+    QTextCursor landing(QObject *watched, QPointF pos) const;
+    void insertTags(const QStringList &tags, QTextCursor at);
+    QWidget *chip(const QString &tag);
     QColor tagColor(const QString &tag) const;
+    QColor tagTint(const QString &tag, const QColor &under) const; // invalid for a word that names nothing
+    QString tagged(const QString &body) const; // the message as rich text, its tags marked
     QString tagOf(const QString &sessionId) const;
 
     MainWindow &m_window;
@@ -61,8 +65,8 @@ private:
     QWidget *m_empty = nullptr;
     QLabel *m_working = nullptr;
     class QScrollArea *m_scroll = nullptr;
-    QWidget *m_chips = nullptr;
-    QStringList m_tags;
+    QSet<QString> m_known; // lower-cased tags that name something
+    class QSyntaxHighlighter *m_spacing = nullptr;
     QPlainTextEdit *m_editor = nullptr;
     QCompleter *m_completer = nullptr;
     QStandardItemModel *m_candidates = nullptr;

@@ -30,6 +30,7 @@
 #include <QScrollBar>
 #include <QStandardItemModel>
 #include <QStatusBar>
+#include <QSyntaxHighlighter>
 #include <QTextBlock>
 #include <QTimer>
 #include <QToolButton>
@@ -92,26 +93,60 @@ QLabel *caption(const QString &s)
     return l;
 }
 
-QFrame *card()
-{
-    auto *f = new QFrame;
-    f->setObjectName(QStringLiteral("card"));
-    f->setStyleSheet(QStringLiteral("QFrame#card{border:1px solid %1;border-radius:12px;background:%2;}").arg(css(ink(0.14)), css(ink(0.04))));
-    return f;
-}
-
-class Chip : public QLabel
+// a session name cut with an ellipsis to the room its row leaves
+class Elided : public QLabel
 {
 public:
-    std::function<void()> removed;
-    using QLabel::QLabel;
+    Elided(const QString &s, const QColor &color) : QLabel(s), m_color(color) { }
+    QSize minimumSizeHint() const override { return {0, QLabel::minimumSizeHint().height()}; }
 
 protected:
-    void mousePressEvent(QMouseEvent *) override
+    void paintEvent(QPaintEvent *) override
     {
-        if (removed)
-            removed();
+        QPainter p(this);
+        p.setPen(m_color);
+        p.drawText(contentsRect(), Qt::AlignLeft | Qt::AlignVCenter, fontMetrics().elidedText(text(), Qt::ElideRight, contentsRect().width()));
     }
+
+private:
+    QColor m_color;
+};
+
+// a tag is a word that starts with @; only one naming a session, a workspace or @all is marked
+const QRegularExpression &tagPattern()
+{
+    static const QRegularExpression pattern(QStringLiteral("(?<!\\S)@[\\w:-]+"));
+    return pattern;
+}
+
+// widens the spaces around each tag, so its backdrop has room for padding
+class TagSpacing : public QSyntaxHighlighter
+{
+public:
+    std::function<bool(const QString &)> known;
+    using QSyntaxHighlighter::QSyntaxHighlighter;
+
+protected:
+    void highlightBlock(const QString &line) override
+    {
+        QHash<int, int> pads; // a space's index, the tags beside it: one between two tags pads both
+        for (auto it = tagPattern().globalMatch(line); it.hasNext();) {
+            const QRegularExpressionMatch m = it.next();
+            if (!known(m.captured()))
+                continue;
+            for (qsizetype at : {m.capturedStart() - 1, m.capturedEnd()})
+                if (at >= 0 && at < line.size() && line.at(at) == QLatin1Char(' '))
+                    ++pads[int(at)];
+        }
+        for (auto it = pads.cbegin(); it != pads.cend(); ++it) {
+            QTextCharFormat wide;
+            wide.setFontWordSpacing(it.value() * TagPad);
+            setFormat(it.key(), 1, wide);
+        }
+    }
+
+public:
+    static constexpr int TagPad = 4;
 };
 
 // The message box's keys live here, not in an event filter: QCompleter passes its popup's keys to the widget's event()
@@ -120,10 +155,48 @@ class ComposerEdit : public QPlainTextEdit
 {
 public:
     std::function<void()> send;
-    std::function<bool()> untag; // Backspace at the start: true when it took the last tag
+    std::function<QColor(const QString &)> color; // the tag's session colour, invalid for a word that names nothing
     QCompleter *completer = nullptr;
 
 protected:
+    // each tag on a rounded backdrop in the card chips' colours, one per line it spans; a char format's background
+    // cannot be rounded
+    void paintEvent(QPaintEvent *event) override
+    {
+        QPainter p(viewport());
+        p.setRenderHint(QPainter::Antialiasing);
+        for (QTextBlock b = firstVisibleBlock(); b.isValid(); b = b.next()) {
+            const QRectF block = blockBoundingGeometry(b).translated(contentOffset());
+            if (block.top() > event->rect().bottom())
+                break;
+            const QTextLayout *layout = b.layout();
+            for (auto it = tagPattern().globalMatch(b.text()); it.hasNext();) {
+                const QRegularExpressionMatch m = it.next();
+                QColor fill = color(m.captured()), edge = fill;
+                if (!fill.isValid())
+                    continue;
+                fill.setAlphaF(0.22);
+                edge.setAlphaF(0.45);
+                p.setBrush(fill);
+                p.setPen(QPen(edge, 1));
+                for (int i = 0; i < layout->lineCount(); ++i) {
+                    const QTextLine line = layout->lineAt(i);
+                    const int from = qMax(int(m.capturedStart()), line.textStart());
+                    const int to = qMin(int(m.capturedEnd()), line.textStart() + line.textLength());
+                    if (from >= to)
+                        continue;
+                    const qreal left = line.cursorToX(from), right = line.cursorToX(to);
+                    // the line box has its spare room above the ascenders: one line high, 1 px lower, centres the glyphs
+                    const int pad = TagSpacing::TagPad;
+                    p.drawRoundedRect(QRectF(block.left() + left - pad, block.top() + line.y() + 1, right - left + 2 * pad, line.height())
+                                          .adjusted(0.5, 0.5, -0.5, -0.5), 5, 5);
+                }
+            }
+        }
+        p.end();
+        QPlainTextEdit::paintEvent(event);
+    }
+
     void keyPressEvent(QKeyEvent *key) override
     {
         const bool enter = key->key() == Qt::Key_Return || key->key() == Qt::Key_Enter;
@@ -134,8 +207,6 @@ protected:
             return insertPlainText(QStringLiteral("\n"));
         if (enter && !(key->modifiers() & ~Qt::KeypadModifier))
             return send();
-        if (key->key() == Qt::Key_Backspace && textCursor().position() == 0 && !textCursor().hasSelection() && untag())
-            return;
         QPlainTextEdit::keyPressEvent(key);
     }
 };
@@ -380,7 +451,7 @@ AssistantView::AssistantView(MainWindow &window, Store &store)
     });
     main->addWidget(m_scroll, 1);
 
-    // the composer: tag chips and the message, then the provider picker and send
+    // the composer: the message with its tags in place, then the provider picker and send
     auto *composer = new QFrame;
     composer->setObjectName(QStringLiteral("composer"));
     composer->setStyleSheet(QStringLiteral("QFrame#composer{border:1px solid %1;border-radius:14px;background:%2;}")
@@ -388,44 +459,32 @@ AssistantView::AssistantView(MainWindow &window, Store &store)
     composer->setAcceptDrops(true);
     composer->installEventFilter(this);
     auto *box = new QVBoxLayout(composer);
-    box->setContentsMargins(14, 10, 14, 10);
+    box->setContentsMargins(11, 7, 11, 10); // with the message's margin, the text sits where it did
     box->setSpacing(8);
-    auto *top = new QHBoxLayout;
-    top->setSpacing(6);
-    m_chips = new QWidget;
-    auto *chips = new QHBoxLayout(m_chips);
-    chips->setContentsMargins(0, 0, 0, 0);
-    chips->setSpacing(6);
-    m_chips->hide();
-    top->addWidget(m_chips, 0, Qt::AlignTop);
     auto *editor = new ComposerEdit;
     editor->send = [this] { send(); };
-    editor->untag = [this] {
-        if (m_tags.isEmpty())
-            return false;
-        for (QObject *o : m_chips->children())
-            if (auto *c = dynamic_cast<Chip *>(o); c && c->text().startsWith(m_tags.last() + QLatin1Char(' ')))
-                c->removed();
-        return true;
-    };
+    editor->color = [this](const QString &tag) { return m_known.contains(tag.toLower()) ? tagColor(tag) : QColor(); };
+    auto *spacing = new TagSpacing(editor->document());
+    spacing->known = [this](const QString &tag) { return m_known.contains(tag.toLower()); };
+    m_spacing = spacing;
     m_editor = editor;
     m_editor->setObjectName(QStringLiteral("assistantComposer"));
     m_editor->setPlaceholderText(tr("Message Elis…  @ to tag, or drag a row from the sidebar"));
     m_editor->setFrameShape(QFrame::NoFrame);
     m_editor->setStyleSheet(QStringLiteral("QPlainTextEdit{background:transparent;}"));
     m_editor->setTabChangesFocus(true);
-    m_editor->document()->setDocumentMargin(1);
+    m_editor->document()->setDocumentMargin(TagSpacing::TagPad); // room for a tag's backdrop at the edge
     m_editor->viewport()->installEventFilter(this); // drops land on the viewport
     auto fit = [this] {
         const int lines = qBound(1, int(m_editor->document()->documentLayout()->documentSize().height()), 8);
-        m_editor->setFixedHeight(lines * m_editor->fontMetrics().lineSpacing() + 6);
+        m_editor->setFixedHeight(lines * m_editor->fontMetrics().lineSpacing() + 9);
         m_editor->setVerticalScrollBarPolicy(lines == 8 ? Qt::ScrollBarAsNeeded : Qt::ScrollBarAlwaysOff);
     };
     connect(m_editor->document(), &QTextDocument::contentsChanged, this, fit);
     fit();
-    top->addWidget(m_editor, 1);
-    box->addLayout(top);
+    box->addWidget(m_editor);
     auto *bottom = new QHBoxLayout;
+    bottom->setContentsMargins(3, 0, 3, 0); // the frame's 11 px plus 3: the row keeps its 14 px inset
     bottom->setSpacing(8);
     m_provider = new QToolButton;
     m_provider->setObjectName(QStringLiteral("assistantProvider"));
@@ -488,8 +547,7 @@ AssistantView::AssistantView(MainWindow &window, Store &store)
         QTextCursor c = m_editor->textCursor();
         c.movePosition(QTextCursor::Left, QTextCursor::KeepAnchor, int(m_completer->completionPrefix().size()));
         c.removeSelectedText();
-        m_editor->setTextCursor(c);
-        addTag(index.data(Qt::UserRole).toString());
+        insertTags({index.data(Qt::UserRole).toString()}, c);
     });
     connect(m_editor, &QPlainTextEdit::textChanged, this, &AssistantView::complete);
 
@@ -538,6 +596,56 @@ void AssistantView::loadDirectory()
             m_sessions.insert(s["id"].toString(), session);
         }
     }
+    QSet<QString> known{QStringLiteral("@all")};
+    for (const QJsonObject &w : std::as_const(m_workspaces))
+        if (!w["handle"].toString().isEmpty())
+            known << QStringLiteral("@ws:") + w["handle"].toString().toLower();
+    for (auto it = m_sessions.cbegin(); it != m_sessions.cend(); ++it)
+        known << tagOf(it.key()).toLower();
+    if (known != m_known) {
+        m_known = known;
+        if (m_spacing)
+            m_spacing->rehighlight(); // relays out, which repaints the backdrops
+    }
+}
+
+// a over b, opaque
+static QColor blend(const QColor &a, const QColor &b, qreal alpha)
+{
+    return QColor::fromRgbF(a.redF() * alpha + b.redF() * (1 - alpha), a.greenF() * alpha + b.greenF() * (1 - alpha),
+                            a.blueF() * alpha + b.blueF() * (1 - alpha));
+}
+
+// opaque: a translucent background is painted per text run, and runs overlap by a pixel inside the tag
+// shortcut: it assumes an opaque window behind the bubble; with window transparency the tag shows a shade darker
+QColor AssistantView::tagTint(const QString &tag, const QColor &under) const
+{
+    return m_known.contains(tag.toLower()) ? blend(tagColor(tag), under, 0.3) : QColor();
+}
+
+QString AssistantView::tagged(const QString &body) const
+{
+    const QColor bubble = blend(accent(), QApplication::palette().color(QPalette::Base), 0.16);
+    QString html;
+    qsizetype at = 0;
+    for (auto it = tagPattern().globalMatch(body); it.hasNext();) {
+        const QRegularExpressionMatch m = it.next();
+        if (const QColor tint = tagTint(m.captured(), bubble); tint.isValid()) {
+            html += body.mid(at, m.capturedStart() - at).toHtmlEscaped();
+            html += QStringLiteral("<span style=\"background-color:%1\">%2</span>").arg(css(tint), m.captured().toHtmlEscaped());
+            at = m.capturedEnd();
+        }
+    }
+    return QStringLiteral("<div style=\"white-space:pre-wrap\">%1</div>").arg(html + body.mid(at).toHtmlEscaped());
+}
+
+QStringList AssistantView::tags() const
+{
+    QStringList found;
+    for (auto it = tagPattern().globalMatch(m_editor->toPlainText()); it.hasNext();)
+        if (const QString t = it.next().captured(); m_known.contains(t.toLower()) && !found.contains(t))
+            found << t;
+    return found;
 }
 
 void AssistantView::refresh()
@@ -585,9 +693,9 @@ QColor AssistantView::tagColor(const QString &tag) const
     return c.isValid() ? c : accent();
 }
 
-QWidget *AssistantView::chip(const QString &tag, bool removable)
+QWidget *AssistantView::chip(const QString &tag)
 {
-    auto *c = new Chip(removable ? tag + QStringLiteral("  ×") : tag);
+    auto *c = new QLabel(tag);
     const QColor color = tagColor(tag);
     QColor fill = color, edge = color;
     fill.setAlphaF(0.22);
@@ -595,35 +703,30 @@ QWidget *AssistantView::chip(const QString &tag, bool removable)
     c->setFont(mono(font()));
     c->setStyleSheet(QStringLiteral("QLabel{background:%1;border:1px solid %2;border-radius:6px;padding:1px 7px;color:%3;}").arg(css(fill), css(edge), css(ink())));
     c->setSizePolicy(QSizePolicy::Fixed, QSizePolicy::Fixed);
-    if (removable) {
-        c->setToolTip(tr("Remove"));
-        c->setCursor(Qt::PointingHandCursor);
-        c->removed = [this, tag] {
-            m_tags.removeAll(tag);
-            for (QObject *o : m_chips->children())
-                if (auto *l = qobject_cast<QLabel *>(o); l && l->text().startsWith(tag + QLatin1Char(' ')))
-                    l->deleteLater();
-            m_chips->setVisible(!m_tags.isEmpty());
-            syncSend();
-        };
-    }
     return c;
 }
 
-void AssistantView::addTag(const QString &tag)
+void AssistantView::insertTags(const QStringList &tags, QTextCursor at)
 {
-    if (tag.isEmpty() || m_tags.contains(tag))
+    if (tags.isEmpty())
         return;
-    m_tags << tag;
-    loadDirectory(); // the chip's colour
-    m_chips->layout()->addWidget(chip(tag, true));
-    m_chips->show();
-    syncSend();
+    const QTextDocument *doc = m_editor->document();
+    const QChar before = at.position() ? doc->characterAt(at.position() - 1) : QChar(u' ');
+    const bool spaced = doc->characterAt(at.position()) == QLatin1Char(' ');
+    QString words = tags.join(QLatin1Char(' '));
+    if (!before.isSpace())
+        words.prepend(QLatin1Char(' '));
+    if (!spaced)
+        words += QLatin1Char(' '); // typing goes on after the tag, and the completion does not reopen on it
+    at.insertText(words);
+    if (spaced)
+        at.movePosition(QTextCursor::NextCharacter);
+    m_editor->setTextCursor(at);
 }
 
 void AssistantView::syncSend()
 {
-    m_send->setEnabled(!m_tags.isEmpty() || !m_editor->toPlainText().trimmed().isEmpty());
+    m_send->setEnabled(!m_editor->toPlainText().trimmed().isEmpty());
 }
 
 void AssistantView::append(const QJsonObject &e)
@@ -631,11 +734,6 @@ void AssistantView::append(const QJsonObject &e)
     const QString kind = e["kind"].toString(), body = e["text"].toString();
     QWidget *w = nullptr;
     if (kind == QLatin1String("user")) {
-        // the leading tags as chips, as the composer showed them
-        QStringList words = body.split(QLatin1Char(' '));
-        QStringList tags;
-        while (!words.isEmpty() && words.first().startsWith(QLatin1Char('@')) && words.first().size() > 1)
-            tags << words.takeFirst();
         auto *bubble = new QFrame;
         bubble->setObjectName(QStringLiteral("bubble"));
         bubble->setMaximumWidth(560);
@@ -644,15 +742,10 @@ void AssistantView::append(const QJsonObject &e)
                                   .arg(css(accent(0.16)), css(accent(0.45))));
         auto *in = new QHBoxLayout(bubble);
         in->setContentsMargins(14, 10, 14, 10);
-        in->setSpacing(6);
-        for (const QString &t : std::as_const(tags))
-            in->addWidget(chip(t, false), 0, Qt::AlignTop);
-        if (!words.isEmpty()) {
-            QLabel *said = text(words.join(QLatin1Char(' ')), ink());
-            // a wrapping label asks for little width, so the bubble grows to the text's line, up to its cap
-            said->setMinimumWidth(qMin(said->fontMetrics().horizontalAdvance(said->text()) + 4, 420));
-            in->addWidget(said, 1);
-        }
+        QLabel *said = text(tagged(body), ink(), Qt::RichText); // the tags in place, marked as the composer marks them
+        // a wrapping label asks for little width, so the bubble grows to the text's line, up to its cap
+        said->setMinimumWidth(qMin(said->fontMetrics().horizontalAdvance(body) + 4, 420));
+        in->addWidget(said, 1);
         w = new QWidget;
         auto *row = new QHBoxLayout(w);
         row->setContentsMargins(0, 0, 0, 0);
@@ -661,31 +754,46 @@ void AssistantView::append(const QJsonObject &e)
     } else if (kind == QLatin1String("assistant")) {
         w = text(body, ink(0.92), Qt::MarkdownText);
     } else if (kind == QLatin1String("sent") || kind == QLatin1String("reply")) {
-        QFrame *c = card();
+        // the side tells the direction, as in a messenger: from a session on the left, to sessions on the right
+        const bool sent = kind == QLatin1String("sent");
+        auto *c = new QFrame;
+        c->setObjectName(QStringLiteral("card"));
+        c->setStyleSheet(QStringLiteral("QFrame#card{border:1px solid %1;border-radius:12px;%2:4px;background:%3;}")
+                             .arg(css(ink(0.14)), sent ? QStringLiteral("border-bottom-right-radius") : QStringLiteral("border-bottom-left-radius"),
+                                  sent ? QStringLiteral("transparent") : css(ink(0.06))));
+        c->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Preferred);
         auto *box = new QVBoxLayout(c);
-        box->setContentsMargins(14, 10, 14, 12);
+        box->setContentsMargins(14, 14, 11, 12); // the arrow's glyph sits as far in as the caption
         box->setSpacing(8);
-        auto *head = new QHBoxLayout;
-        head->setSpacing(6);
-        if (kind == QLatin1String("sent")) {
-            head->addWidget(caption(tr("Sent to")));
-            for (const QJsonValue &to : e["to"].toArray())
-                head->addWidget(chip(tagOf(to.toString()), false));
-            head->addStretch(1);
-        } else {
-            const QString from = e["from"].toString();
-            head->addWidget(chip(tagOf(from), false));
-            QLabel *name = text(m_sessions.value(from)["name"].toString(), ink(0.55));
-            name->setWordWrap(false);
-            head->addWidget(name, 1);
-            auto *go = new QLabel(QStringLiteral("<a href=\"#\" style=\"color:%1;text-decoration:none\">%2</a>").arg(accent().name(), tr("Go to session")));
+        auto *rows = new QGridLayout;
+        rows->setHorizontalSpacing(6);
+        rows->setVerticalSpacing(6);
+        rows->setColumnStretch(2, 1);
+        rows->addWidget(caption(sent ? tr("To") : tr("From")), 0, 0);
+        const QJsonArray peers = sent ? e["to"].toArray() : QJsonArray{e["from"]};
+        for (int i = 0; i < peers.size(); ++i) {
+            const QString id = peers[i].toString();
+            rows->addWidget(chip(tagOf(id)), i, 1);
+            rows->addWidget(new Elided(m_sessions.value(id)["name"].toString(), ink(0.55)), i, 2);
+            auto *go = new QToolButton;
+            go->setIcon(QIcon(sendGlyph(accent())));
+            go->setIconSize(QSize(14, 14));
+            go->setFixedSize(16, 16);
+            go->setStyleSheet(QStringLiteral("QToolButton{border:0;padding:0;border-radius:4px;}QToolButton:hover{background:%1;}").arg(css(ink(0.1))));
+            go->setFocusPolicy(Qt::NoFocus);
             go->setCursor(Qt::PointingHandCursor);
-            connect(go, &QLabel::linkActivated, this, [this, from] { m_window.goToSession(from); });
-            head->addWidget(go);
+            go->setToolTip(tr("Go to session"));
+            go->setAccessibleName(tr("Go to session"));
+            connect(go, &QToolButton::clicked, this, [this, id] { m_window.goToSession(id); });
+            rows->addWidget(go, i, 3);
         }
-        box->addLayout(head);
-        box->addWidget(text(body, kind == QLatin1String("sent") ? ink(0.7) : ink()));
-        w = c;
+        box->addLayout(rows);
+        box->addWidget(text(body, sent ? ink(0.7) : ink()));
+        w = new QWidget;
+        auto *row = new QHBoxLayout(w);
+        row->setContentsMargins(0, 0, 0, 0);
+        row->insertWidget(0, c, 4);
+        row->insertStretch(sent ? 0 : 1, 1); // a fifth of the column on the far side
     } else {
         const bool dark = QApplication::palette().color(QPalette::Window).lightness() < 128;
         w = text(body, QColor(dark ? 0xFF453A : 0xD70015)); // system red
@@ -799,38 +907,39 @@ void AssistantView::complete()
 void AssistantView::send()
 {
     const QString body = m_editor->toPlainText().trimmed();
-    if (body.isEmpty() && m_tags.isEmpty())
+    if (body.isEmpty())
         return;
-    QStringList parts = m_tags;
-    if (!body.isEmpty())
-        parts << body;
-    const QJsonObject r = m_window.assistantRequest({{"cmd", "assistant.ask"}, {"args", QJsonObject{{"text", parts.join(QLatin1Char(' '))}}}});
+    const QJsonObject r = m_window.assistantRequest({{"cmd", "assistant.ask"}, {"args", QJsonObject{{"text", body}}}});
     if (!r["ok"].toBool())
         return m_window.statusBar()->showMessage(r["error"].toString(), 4000);
     m_editor->clear();
-    m_tags.clear();
-    for (QObject *o : m_chips->children())
-        if (o->isWidgetType())
-            o->deleteLater();
-    m_chips->hide();
-    syncSend(); // the cleared message ran it while the tags were still there
 }
 
-bool AssistantView::dropTags(const QMimeData *mime)
+bool AssistantView::dropTags(const QMimeData *mime, const QTextCursor &at)
 {
     loadDirectory();
+    QStringList tags;
     if (mime->hasFormat(SidebarMime::sessions)) {
         for (const QString &id : QString::fromUtf8(mime->data(SidebarMime::sessions)).split(QLatin1Char(',')))
             if (m_sessions.contains(id))
-                addTag(tagOf(id));
-        return true;
-    }
-    if (mime->hasFormat(SidebarMime::workspace)) {
+                tags << tagOf(id);
+    } else if (mime->hasFormat(SidebarMime::workspace)) {
         if (const QString handle = m_workspaces.value(QString::fromUtf8(mime->data(SidebarMime::workspace)))["handle"].toString(); !handle.isEmpty())
-            addTag(QStringLiteral("@ws:") + handle);
-        return true;
+            tags << QStringLiteral("@ws:") + handle;
+    } else {
+        return false;
     }
-    return false;
+    insertTags(tags, at);
+    return true;
+}
+
+QTextCursor AssistantView::landing(QObject *watched, QPointF pos) const
+{
+    QTextCursor at = watched == m_editor->viewport() ? m_editor->cursorForPosition(pos.toPoint()) : m_editor->textCursor();
+    const QTextDocument *doc = m_editor->document();
+    while (!at.atEnd() && at.position() && !doc->characterAt(at.position() - 1).isSpace() && !doc->characterAt(at.position()).isSpace())
+        at.movePosition(QTextCursor::NextCharacter); // past the word the pointer splits
+    return at;
 }
 
 void AssistantView::paintEvent(QPaintEvent *event)
@@ -866,11 +975,13 @@ bool AssistantView::eventFilter(QObject *watched, QEvent *event)
         if (!drag->mimeData()->hasFormat(SidebarMime::sessions) && !drag->mimeData()->hasFormat(SidebarMime::workspace))
             return false; // text and files drop into the message as usual
         drag->acceptProposedAction(); // the sidebar offers a move and removes nothing after it, as onto a terminal
+        m_editor->setFocus(); // the caret shows where the tag lands
+        m_editor->setTextCursor(landing(watched, drag->position()));
         return true;
     }
     case QEvent::Drop: {
         auto *drop = static_cast<QDropEvent *>(event);
-        if (!dropTags(drop->mimeData()))
+        if (!dropTags(drop->mimeData(), landing(watched, drop->position())))
             return false;
         drop->acceptProposedAction();
         m_editor->setFocus();
