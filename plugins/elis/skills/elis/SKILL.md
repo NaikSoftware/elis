@@ -130,7 +130,8 @@ sidebar is currently shown — the read side of the write-only `sidebar` command
 (`tree` or `flagged` — the read side of `sidebar mode`), `linkOpenMode` (`browser`, `overlay`, `overlay95`, `overlay75` or `overlay50`, app-wide —
 the read side of `browser links`), `sidebarFlaggedLayout` (`flat`, `plain` or `tree`, app-wide —
 the read side of `sidebar flagged-layout`), `sidebarDensity` (`default` or `compact`, app-wide — the read side of
-`sidebar density`), `keepAwake` (app-wide — the read side of `settings keep-awake`), `flaggedOrder` (the window's flagged session ids in the flat list's
+`sidebar density`), `keepAwake` (app-wide — the read side of `settings keep-awake`), `launchers` (what the workspace
+"+" menu offers: `terminal` plus each agent found on the login shell's PATH, app-wide), `flaggedOrder` (the window's flagged session ids in the flat list's
 saved order — the read side of `session flag move`, omitted when nothing is flagged), `sidebarWidth` (the sidebar divider position in
 points — the read side of `sidebar width`, on `tree` only), `filePanelVisible` and `filePanelWidth` (the file panel, read sides of `filepanel` and `filepanel width`, on `tree` only), `workspaceFilter`, `quickVisible` (whether the
 quick terminal is shown — the read side of the write-only `quick` command; app-level, so every window

@@ -20,6 +20,13 @@ struct ControlProtocolSidebarTests {
         #expect(decoded.args?.mode == "flagged")
     }
 
+    @Test func launchersRoundTripOnTheTreeAndAreOmittedWhenUnset() throws {
+        var tree = ControlTree(workspaces: [])
+        #expect(!String(decoding: try JSONEncoder().encode(tree), as: UTF8.self).contains("launchers"))
+        tree.launchers = ["terminal", "claude"]
+        #expect(try JSONDecoder().decode(ControlTree.self, from: JSONEncoder().encode(tree)).launchers == ["terminal", "claude"])
+    }
+
     @Test func treeRoundTripsWithSidebarMode() throws {
         let response = ControlResponse(ok: true, result: ControlResult(tree: ControlTree(
             workspaces: [], sidebarMode: "flagged")))

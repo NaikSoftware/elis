@@ -960,13 +960,13 @@ final class ControlServer {
             liveReset: liveResetReadback(), indexUnsaved: library.indexUnsaved,
             // the mirror the sidebars render from, so the read-back names what is on screen.
             flaggedLayout: GhosttyApp.shared.flaggedViewLayout,
-            htmlZoom: HtmlOverlayRegistry.shared.zoom,
-            linkOpenMode: settingsModel.settings.effectiveLinkOpenMode,
+            htmlZoom: HtmlOverlayRegistry.shared.zoom, linkOpenMode: settingsModel.settings.effectiveLinkOpenMode,
             sidebarDensity: GhosttyApp.shared.sidebarDensity,
             keepAwake: settingsModel.settings.keepAwake
         )
         tree.remote = windowID.flatMap(library.remoteNode(for:))
         tree.phone = phoneRelay?.status.readback
+        tree.launchers = SessionLaunchers.available.map(\.rawValue)
         tree.catalogViewers = windowID.flatMap(originViewers)
         return tree
     }

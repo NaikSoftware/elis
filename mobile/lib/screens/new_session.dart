@@ -105,7 +105,7 @@ class _NewSessionSheetState extends State<NewSessionSheet> {
             crossAxisSpacing: 8,
             childAspectRatio: 1.45,
             children: [
-              for (final l in launchers)
+              for (final l in launchers.where((l) => m.launcherIds.contains(l.$1)))
                 _LauncherTile(id: l.$1, title: l.$2, selected: l.$1 == launcher, onTap: () => setState(() => launcher = l.$1)),
             ],
           ),

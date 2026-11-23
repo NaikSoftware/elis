@@ -1343,6 +1343,13 @@ private Q_SLOTS:
         QVERIFY(!host.running());
     }
 
+    void treeListsTheLaunchersThePlusMenuOffers()
+    {
+        AssistantHost host("true", "");
+        const QJsonObject tree = host.lib->dispatch({{"cmd", "tree"}}).value("result")["tree"].toObject();
+        QCOMPARE(tree["launchers"].toArray(), (QJsonArray{"terminal", "claude", "codex"}));
+    }
+
     void assistantTurnWithoutTextClearsTheWorkingState()
     {
         AssistantHost host("bash " ELIS_TEST_FIXTURES "/fake-provider.sh");

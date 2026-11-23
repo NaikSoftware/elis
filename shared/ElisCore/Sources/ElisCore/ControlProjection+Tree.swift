@@ -110,6 +110,9 @@ public struct ControlTree: Codable, Sendable, Equatable {
     public let snapshotUnsaved: Bool?
     /// assistant is the app-wide assistant chat's state, omitted on a host without one.
     public var assistant: ControlAssistantNode?
+    /// launchers are the `SessionLauncher` raw values the workspace "+" menu offers, Terminal plus the agents found
+    /// on the login shell's PATH; app-wide, omitted from a host without that menu.
+    public var launchers: [String]?
 
     public init(workspaces: [ControlWorkspaceNode], idleMs: Int? = nil, autoFollowMs: Int? = nil,
                 attentionIncludesActive: Bool? = nil, attentionNavigationAcrossWindows: Bool? = nil,

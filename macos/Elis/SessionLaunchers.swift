@@ -7,10 +7,15 @@ protocol SessionTyping: AnyObject {
     func typeLine(_ line: String, into sessionID: UUID, store: AppStore) async -> Bool
 }
 
-/// The launchers the workspace row's "+" menu offers: Terminal plus the agents found on the login shell's PATH.
+/// The launchers the workspace row's "+" menu and the phone's New session offer: Terminal plus the agents found on the
+/// login shell's PATH. A read starts a re-detection once the list is stale; the next read sees its result.
 @MainActor
 enum SessionLaunchers {
-    private(set) static var available: [SessionLauncher] = [.terminal]
+    private static var detected: [SessionLauncher] = [.terminal]
+    static var available: [SessionLauncher] {
+        refresh()
+        return detected
+    }
     private static var detectedAt: Date?
 
     /// Re-detects in the background when the cached list is older than `maxAge`; the next menu sees the result.
@@ -25,7 +30,7 @@ enum SessionLaunchers {
             let path = [shellPath, CommandPath.widened(environment["PATH"], bundledCLIDirectory: nil),
                         NSHomeDirectory() + "/.local/bin"].compactMap(\.self).joined(separator: ":")
             let found = SessionLauncher.available(path: path) { FileManager.default.isExecutableFile(atPath: $0) }
-            await MainActor.run { available = found }
+            await MainActor.run { detected = found }
         }
     }
 
