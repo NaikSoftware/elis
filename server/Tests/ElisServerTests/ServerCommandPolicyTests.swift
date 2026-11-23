@@ -34,6 +34,7 @@ struct ServerCommandPolicyTests {
         "Mac app relaunch": [.restoreMode, .restoreCapture, .restoreClear, .zmxReset, .sessionRestore],
         "makes a Mac viewer": [.zmxAttach, .zmxAttachGroup],
         "UI-test seam": [.debugAppearance],
+        "the Mac's own sleep": [.settingsKeepAwake],
         "the Mac's phone relay and the grid it forces": [.sessionGrid, .sessionScroll, .phoneStatus, .phoneEnable, .phonePort, .phoneHost, .phoneRevoke],
         "deferred to docs/backlog/server-user-event-hooks.md": [.hooksList, .hooksReload],
         "deferred to docs/backlog/assistant-remote-reply-route.md": [

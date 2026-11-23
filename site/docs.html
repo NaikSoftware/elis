@@ -1297,7 +1297,7 @@ s=$(elisctl zmx tree studio.local --json \
 <li>Where a new session opens: by default the workspace's project folder, else the current session's directory; or your home directory, or a folder you pick; and whether New Session adds it at the end of the workspace or right after the current session.</li>
 <li><strong>Restore mode</strong>: fresh shells, re-run commands, or Live sessions (<a href="#restore">Restore &amp; persistence</a>).</li>
 <li>An optional confirmation before closing a session.</li>
-<li><strong>Keep the computer awake while an agent is working</strong> (on by default): while any session's agent status is active, the computer does not suspend on its own; the screen still dims and locks, and a blocked or finished agent lets it sleep again. Available in the Linux app now; the macOS app gets it later.</li>
+<li><strong>Keep the Mac awake while an agent is working</strong> (on by default; <em>Keep the computer awake</em> on Linux): while any session's agent status is active, the computer does not sleep on its own; the display still sleeps and locks, and a blocked or finished agent lets it sleep again. Sessions attached from another computer or shown in a remote window do not count, since they run there. <code>elisctl settings keep-awake on|off|toggle</code> sets it.</li>
 <li>Whether to load your global Ghostty config (<a href="#ghostty">Ghostty config</a>).</li>
 </ul>
 <h3 id="settings-appearance">Appearance</h3>

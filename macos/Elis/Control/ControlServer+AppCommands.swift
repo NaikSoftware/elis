@@ -175,6 +175,13 @@ extension ControlServer {
         return ControlResponse(ok: true, result: ControlResult(text: settingsModel.settings.effectiveLinkOpenMode.rawValue))
     }
 
+    /// Writes through the `SettingsModel` setter the Settings toggle uses.
+    func setKeepAwake(_ mode: ControlToggleMode) -> ControlResponse {
+        let on = mode.desiredValue(current: settingsModel.settings.keepAwake)
+        settingsModel.setPreventSleepWhileActive(on)
+        return ControlResponse(ok: true, result: ControlResult(text: on ? "on" : "off"))
+    }
+
     func reloadHooks() -> ControlResponse {
         settingsModel.reloadHooks()
         return ControlResponse(ok: true, result: ControlResult(count: settingsModel.hooksDiagnostics.count))

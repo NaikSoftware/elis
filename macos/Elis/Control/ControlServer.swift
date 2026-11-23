@@ -732,7 +732,7 @@ final class ControlServer {
                 .surfaceCursor,
                 .sessionStatus, .sessionFlag, .sessionContext, .sessionTint, .workspaceTint, .workspaceFolder, .sessionSeen, .sessionRestore, .notify,
                 .fontInc, .fontDec, .fontReset, .keymapReload, .keymapList, .keymapRun, .hooksReload, .hooksList, .browserClear,
-                .browserLinks,
+                .browserLinks, .settingsKeepAwake,
                 .configReload, .themeSet, .themeList,
                 .sidebar, .sidebarMode, .sidebarFlaggedLayout, .sidebarDensity, .sidebarExpand, .sidebarCollapse,
                 .sidebarWidth, .filePanel, .filePanelWidth,
@@ -960,9 +960,9 @@ final class ControlServer {
             liveReset: liveResetReadback(), indexUnsaved: library.indexUnsaved,
             // the mirror the sidebars render from, so the read-back names what is on screen.
             flaggedLayout: GhosttyApp.shared.flaggedViewLayout,
-            htmlZoom: HtmlOverlayRegistry.shared.zoom,
-            linkOpenMode: settingsModel.settings.effectiveLinkOpenMode,
-            sidebarDensity: GhosttyApp.shared.sidebarDensity
+            htmlZoom: HtmlOverlayRegistry.shared.zoom, linkOpenMode: settingsModel.settings.effectiveLinkOpenMode,
+            sidebarDensity: GhosttyApp.shared.sidebarDensity,
+            keepAwake: settingsModel.settings.keepAwake
         )
         tree.remote = windowID.flatMap(library.remoteNode(for:))
         tree.phone = phoneRelay?.status.readback

@@ -71,8 +71,8 @@ cmake --install build && kbuildsycoca6 --noincremental
   Kate does, clipboard, drag and drop).
 - Settings (Ctrl+Shift+,) with Elis's six pages; terminal font, colour scheme and cursor apply to every open
   terminal on top of the Konsole profile. View ▸ Select Theme… previews schemes live (Enter keeps, Esc reverts).
-- While an agent's status is active, KDE does not suspend the computer on its own (Settings ▸ General, on by default);
-  the screen still dims and locks.
+- While an agent's status is active, KDE does not suspend the computer on its own (Settings ▸ General, on by default,
+  or `elisctl settings keep-awake on|off|toggle`, read back as the tree's `keepAwake`); the screen still dims and locks.
 - Glass window (Settings ▸ Appearance ▸ Window): background transparency (0–90%) while text stays solid, and KWin's
   blur behind it.
 - `keymap.conf` and `hooks.conf` in `~/.config/elis/` (or `$ELIS_STATE_DIR/config`): rebind built-ins, add custom

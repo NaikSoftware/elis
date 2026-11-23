@@ -55,7 +55,7 @@ public struct ControlDispatcher {
         case .quick, .fontInc, .fontDec, .fontReset, .keymapReload, .keymapList, .keymapRun,
                 .configReload, .notify, .themeSet, .themeList, .sidebar, .sidebarMode, .sidebarFlaggedLayout,
                 .sidebarDensity, .sidebarExpand, .sidebarCollapse, .sidebarWidth, .filePanel, .filePanelWidth, .restoreClear,
-                .restoreCapture, .version:
+                .restoreCapture, .version, .settingsKeepAwake:
             return dispatchAppCommand(request)
         case .restoreMode, .zmxList, .zmxPrune, .zmxKill, .zmxKillPane, .zmxReset, .zmxTree, .zmxAttach, .zmxAttachGroup, .zmxPresent, .zmxScreen:
             return await dispatchZmxCommand(request)
@@ -518,6 +518,11 @@ public struct ControlDispatcher {
                 return ControlResponse(ok: false, error: "invalid sidebar density: \(request.args?.mode ?? "toggle")")
             }
             return actions.setSidebarDensity(mode)
+        case .settingsKeepAwake:
+            guard let mode = ControlToggleMode.parse(request.args?.mode) else {
+                return ControlResponse(ok: false, error: "invalid keep-awake mode: \(request.args?.mode ?? "toggle")")
+            }
+            return actions.setKeepAwake(mode)
         case .sidebarExpand:
             return actions.expandSidebar(window: request.args?.window)
         case .sidebarCollapse:

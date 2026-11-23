@@ -137,6 +137,7 @@ public enum Command: String, Codable, Sendable, CaseIterable {
     case phoneRevoke = "phone.revoke"
     case browserClear = "browser.clear"
     case browserLinks = "browser.links"
+    case settingsKeepAwake = "settings.keep-awake"
     case configReload = "config.reload"
     case themeSet = "theme.set"
     case themeList = "theme.list"

@@ -33,6 +33,10 @@ public struct ControlTree: Codable, Sendable, Equatable {
     /// sidebarDensity is the app-wide row spacing, `SidebarDensity.rawValue` (`default` | `compact`), the same on
     /// every window's `tree`. The read side of `sidebar.density`.
     public let sidebarDensity: String?
+    /// Whether the app keeps the computer from idle sleep while a session's status is `active`, the effective value,
+    /// so the default reads true. APP-WIDE, the read side of `settings.keep-awake`; nil in a host-produced tree and
+    /// from an older server.
+    public let keepAwake: Bool?
     /// flaggedOrder is the window's saved flagged order as session ids, the flat and plain rows' order and the
     /// read side of `session.flag move`; omitted when nothing is flagged.
     public let flaggedOrder: [String]?
@@ -121,8 +125,9 @@ public struct ControlTree: Codable, Sendable, Equatable {
                 dashboardFontMode: String? = nil, pickPending: String? = nil, askPending: String? = nil,
                 app: AppIdentity? = nil, liveReset: ControlLiveResetReadback? = nil,
                 indexUnsaved: Bool? = nil, snapshotUnsaved: Bool? = nil, linkOpenMode: String? = nil,
-                sidebarDensity: String? = nil) {
+                sidebarDensity: String? = nil, keepAwake: Bool? = nil) {
         self.workspaces = workspaces
+        self.keepAwake = keepAwake
         self.snapshotUnsaved = snapshotUnsaved
         self.sidebarDensity = sidebarDensity
         self.linkOpenMode = linkOpenMode

@@ -344,6 +344,9 @@ struct elisApp: App {
                         // sidebar pills' Session.unseenCount summed across windows.
                         DockBadgeController.shared.library = library
                         DockBadgeController.shared.start()
+                        KeepAwakeController.shared.library = library
+                        KeepAwakeController.shared.settingsModel = settingsModel
+                        KeepAwakeController.shared.refresh()
                         // keymap parse errors / conflicts from SettingsModel init — too early to post then,
                         // before registration. launch window only: `hasReopened` is false until `reopenWindows()`.
                         if !library.hasReopened, !settingsModel.keymapDiagnostics.isEmpty {

@@ -370,7 +370,8 @@ static QJsonObject tree(Store &store, const Terminals &terminals)
             {"workspaceFilter", store.focusEnabled},
             {"sidebarMode", store.flaggedView ? "flagged" : "tree"},
             {"sidebarFlaggedLayout", store.settings.flaggedViewLayout},
-            {"sidebarDensity", store.settings.sidebarDensity}};
+            {"sidebarDensity", store.settings.sidebarDensity},
+            {"keepAwake", store.settings.preventSleepWhileActive}};
 }
 
 // on | off | toggle against the current state; "" means toggle
@@ -714,7 +715,7 @@ QJsonObject dispatch(Store &store, Terminals &terminals, const QJsonObject &requ
             if (store.settings.restoreMode != QLatin1String("rerun"))
                 return ok({{"id", id}, {"text", QStringLiteral("saved; it applies only in rerun restore mode")}});
         } else if (cmd == QLatin1String("session.seen")) {
-            store.setUnseen(id, 0);
+            store.markVisited(id);
         } else if (cmd == QLatin1String("session.companion.duplicate")) {
             const QString copy = duplicateAsCompanion(store, terminals, id, &error);
             if (copy.isEmpty())

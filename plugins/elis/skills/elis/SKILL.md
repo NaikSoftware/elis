@@ -22,6 +22,7 @@ when_to_use: >
   attach a script to a pane's terminal stream, lead or take over a pane from a script, does the phone lead a pane,
   show this on my phone, show a page where I am, show the dev server on my phone,
   message other sessions through Elis, reply to Elis, ask the Elis assistant,
+  keep the computer awake (or let it sleep) while agents work,
   the keymap editor will not open.
 allowed-tools: Bash(elisctl *)
 ---
@@ -129,8 +130,8 @@ sidebar is currently shown — the read side of the write-only `sidebar` command
 (`tree` or `flagged` — the read side of `sidebar mode`), `linkOpenMode` (`browser`, `overlay`, `overlay95`, `overlay75` or `overlay50`, app-wide —
 the read side of `browser links`), `sidebarFlaggedLayout` (`flat`, `plain` or `tree`, app-wide —
 the read side of `sidebar flagged-layout`), `sidebarDensity` (`default` or `compact`, app-wide — the read side of
-`sidebar density`), `launchers` (what the workspace "+" menu offers: `terminal` plus each agent found on the login
-shell's PATH, app-wide), `flaggedOrder` (the window's flagged session ids in the flat list's
+`sidebar density`), `keepAwake` (app-wide — the read side of `settings keep-awake`), `launchers` (what the workspace
+"+" menu offers: `terminal` plus each agent found on the login shell's PATH, app-wide), `flaggedOrder` (the window's flagged session ids in the flat list's
 saved order — the read side of `session flag move`, omitted when nothing is flagged), `sidebarWidth` (the sidebar divider position in
 points — the read side of `sidebar width`, on `tree` only), `filePanelVisible` and `filePanelWidth` (the file panel, read sides of `filepanel` and `filepanel width`, on `tree` only), `workspaceFilter`, `quickVisible` (whether the
 quick terminal is shown — the read side of the write-only `quick` command; app-level, so every window
@@ -730,6 +731,8 @@ back from the tree's top-level `sidebarMode`) · `sidebar flagged-layout [flat|p
 view as one flat list, `plain` for the same list without workspace names, or nested under workspace rows; app-wide, no `--window`, echoes the resulting layout; read
 back from `sidebarFlaggedLayout`) · `sidebar density [default|compact|toggle]` (sidebar row spacing, `compact` for
 shorter rows and a smaller indent; app-wide, no `--window`, echoes the result; read back from `sidebarDensity`) ·
+`settings keep-awake [on|off|toggle]` (keep the computer from idle sleep while an agent's status is `active`; on by
+default, app-wide, echoes the result; read back from `keepAwake`) ·
 `sidebar expand [--window W]` (expand every workspace) ·
 `sidebar collapse [--window W]` (collapse all workspaces except the active one, which stays expanded) ·
 `sidebar width <points> [--window W]` (move the divider, clamped to 160...560pt; prints the stored width

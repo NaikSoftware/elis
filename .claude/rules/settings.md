@@ -329,6 +329,11 @@ paths:
   click; nothing renders from it. Its picker sits in the General tab's Mouse section, and
   `testLinkOpenModePickerPersists` runs the same fit check. The control catalog carries it as
   `browser.links` ([[control-api]]).
+- `preventSleepWhileActive` is default-on (nil = on), read through `keepAwake`. `KeepAwakeController` holds a
+  `ProcessInfo` idle-system-sleep activity while it is on and `WindowLibrary.hasActiveLocalAgent` holds; a remote
+  window's rows and an attached row run elsewhere, so they never count. Its toggle follows the undo toggle in
+  General's Sessions section; the control catalog carries it as `settings.keep-awake`, refused on elis-server by owner decision
+  (2026-11-23). Linux holds org.freedesktop.PowerManagement's inhibition the same way.
 - `htmlOverlayZoom` is the one page zoom every HTML overlay shows at, nil = 1, stepped only by the font
   commands through `SettingsModel.stepHtmlOverlayZoom`, which saves and mirrors to `HtmlOverlayRegistry`
   without `persistAndApply`: nothing else renders it, so a keypress must not broadcast an appearance change.
