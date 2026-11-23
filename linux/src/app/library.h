@@ -8,6 +8,7 @@
 #include <QPointer>
 #include <QStringList>
 
+#include <functional>
 #include <optional>
 
 class DetectedLaunchers;
@@ -51,6 +52,8 @@ public:
     QList<Assistant::Window> assistantWindows() const; // the open ones, in library order: it sets the handles
     QStringList assistantProviders() const;            // detected at launch, never probed per request
     DetectedLaunchers *launchers;                      // the app's, unless a test gives its own before any runner
+    // told when "an open window's agent is active and preventSleepWhileActive is on" flips; set before load()
+    std::function<void(bool)> keepAwake;
 
 Q_SIGNALS:
     void changed();
@@ -64,11 +67,13 @@ private:
     QString resolve(const QString &selector, QString *error);
     void attach(Entry &e, bool minimized = false);
     void syncSettings(Store *from);
+    void syncAwake();
     QJsonObject windowCommand(const QString &cmd, const QString &target, const QJsonObject &args);
     QString path(const QString &id) const;
     QString m_dir;
     QList<Entry> m_entries;
     QPointer<MainWindow> m_active;
     bool m_quitting = false;
+    bool m_awake = false;
     QString m_closing; // the window window.close is closing
 };

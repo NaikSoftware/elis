@@ -149,6 +149,8 @@ void MainWindow::showSettings()
                             cur.newSessionPlacement, [](Settings &s, const QString &v) { s.newSessionPlacement = v; }));
     sessions->addRow(check(tr("Confirm before closing a session"), cur.confirmCloseSession, [](Settings &s, bool v) { s.confirmCloseSession = v; }));
     sessions->addRow(check(tr("Allow undo after closing sessions and workspaces"), cur.closeUndo, [](Settings &s, bool v) { s.closeUndo = v; }));
+    sessions->addRow(check(tr("Keep the computer awake while an agent is working"), cur.preventSleepWhileActive,
+                           [](Settings &s, bool v) { s.preventSleepWhileActive = v; }));
     QComboBox *restoreBox = picker({{tr("Fresh shells"), QStringLiteral("none")}, {tr("Re-run commands"), QStringLiteral("rerun")}, {tr("Live sessions"), QStringLiteral("live")}},
                                    cur.restoreMode, [](Settings &s, const QString &v) { s.restoreMode = v; });
     sessions->addRow(tr("Restore sessions"), restoreBox);

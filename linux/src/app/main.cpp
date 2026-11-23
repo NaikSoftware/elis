@@ -14,6 +14,9 @@
 #include <KConfigGroup>
 #include <KSharedConfig>
 #include <QApplication>
+#include <QDBusConnection>
+#include <QDBusPendingCallWatcher>
+#include <QDBusPendingReply>
 #include <QStandardPaths>
 #include <QDir>
 #include <QFile>
@@ -30,8 +33,47 @@
 #include <QTimer>
 
 #include <csignal>
+#include <optional>
 #include <sys/socket.h>
 #include <unistd.h>
+
+// The power manager's automatic-suspend inhibition while on; the screen still dims and locks. The service drops it when
+// this process's bus connection closes, so a crash leaves none behind. With no power manager nothing is held.
+struct SleepInhibitor {
+    QObject context;
+    bool wanted = false, pending = false;
+    std::optional<uint> cookie;
+    void set(bool on)
+    {
+        wanted = on;
+        reconcile();
+    }
+    void reconcile()
+    {
+        static const QString service = QStringLiteral("org.freedesktop.PowerManagement"), path = QStringLiteral("/org/freedesktop/PowerManagement/Inhibit"),
+                             iface = service + QStringLiteral(".Inhibit");
+        if (pending) // its reply reconciles
+            return;
+        if (!wanted && cookie) {
+            QDBusConnection::sessionBus().asyncCall(QDBusMessage::createMethodCall(service, path, iface, QStringLiteral("UnInhibit")) << *cookie);
+            cookie.reset();
+        } else if (wanted && !cookie) {
+            pending = true;
+            const QDBusMessage call = QDBusMessage::createMethodCall(service, path, iface, QStringLiteral("Inhibit")) << QStringLiteral("Elis")
+                                                                                                                       << QStringLiteral("An agent is working");
+            auto *watcher = new QDBusPendingCallWatcher(QDBusConnection::sessionBus().asyncCall(call), &context);
+            QObject::connect(watcher, &QDBusPendingCallWatcher::finished, &context, [this, watcher] {
+                watcher->deleteLater();
+                pending = false;
+                const QDBusPendingReply<uint> reply = *watcher;
+                if (!reply.isValid())
+                    return qWarning("sleep inhibit: %s", qPrintable(reply.error().message())); // retried at the next false -> true
+                cookie = reply.value();
+                reconcile();
+            });
+        }
+    }
+};
 
 // One request line in, one response line out, then the connection closes.
 static void serve(QLocalServer &server, WindowLibrary &library)
@@ -169,7 +211,9 @@ int main(int argc, char **argv)
 
     ensureProfile();
     Zmx::recordBuild(dir); // before any pane starts a daemon, which would otherwise date before the cutoff
+    SleepInhibitor inhibitor;
     WindowLibrary library(dir);
+    library.keepAwake = [&inhibitor](bool on) { inhibitor.set(on); };
     library.load(); // the windows open at the last quit, each with its saved frame
     AssistantRunner assistant(library, dir);
     library.assistantSink = &assistant;

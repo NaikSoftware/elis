@@ -39,6 +39,7 @@ WindowLibrary::WindowLibrary(const QString &stateDir)
     , m_dir(stateDir)
 {
     AssistantBridge::open(stateDir); // one chat for the app, every window's
+    connect(this, &WindowLibrary::changed, this, &WindowLibrary::syncAwake); // a window opened, closed or deleted
 }
 
 WindowLibrary::~WindowLibrary()
@@ -140,6 +141,7 @@ void WindowLibrary::attach(Entry &e, bool minimized)
         e.store->select(e.store->addSession(ws, {}, {}));
     }
     connect(e.store, &Store::settingsChanged, this, [this, store = e.store] { syncSettings(store); });
+    connect(e.store, &Store::changed, this, &WindowLibrary::syncAwake);
     e.window->installEventFilter(this);
     e.open = true;
     minimized ? e.window->showMinimized() : e.window->show();
@@ -154,6 +156,19 @@ void WindowLibrary::syncSettings(Store *from)
     for (Entry &e : m_entries)
         if (e.store && e.store != from && e.store->settings.toJson() != wanted)
             e.store->setSettings(from->settings);
+}
+
+void WindowLibrary::syncAwake()
+{
+    bool awake = false;
+    for (const Entry &e : std::as_const(m_entries))
+        if (e.store && e.store->settings.preventSleepWhileActive)
+            for (const Session *s : e.store->allSessions())
+                awake = awake || s->status == QLatin1String("active");
+    if (awake == std::exchange(m_awake, awake))
+        return;
+    if (keepAwake)
+        keepAwake(awake);
 }
 
 bool WindowLibrary::eventFilter(QObject *watched, QEvent *event)

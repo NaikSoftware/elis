@@ -310,6 +310,7 @@ private Q_SLOTS:
         a.theme = "DarkPastels";
         a.fontSize = 13;
         a.notificationsEnabled = false;
+        a.preventSleepWhileActive = false;
         a.hiddenInterfaceElements = {"split"};
         a.shownInterfaceElements = {"workspaceName"};
         const QJsonObject o = a.toJson();
@@ -317,9 +318,9 @@ private Q_SLOTS:
         const Settings b = Settings::fromJson(o);
         QCOMPARE(b.theme, a.theme);
         QCOMPARE(b.fontSize, 13.0);
-        QVERIFY(!b.notificationsEnabled && b.closeUndo);
+        QVERIFY(!b.notificationsEnabled && b.closeUndo && !b.preventSleepWhileActive);
         QVERIFY(!b.shows("split") && b.shows("sessionName") && b.shows("workspaceName") && !b.shows("customCommands"));
-        QVERIFY(Settings::fromJson({}).closeUndo); // an old file keeps the defaults
+        QVERIFY(Settings::fromJson({}).closeUndo && Settings::fromJson({}).preventSleepWhileActive); // an old file keeps the defaults
     }
     void sessionNewCreatesDefaultWorkspaceAndSelects()
     {

@@ -91,6 +91,7 @@ struct Settings {
     bool confirmCloseSession = false;
     bool closeUndo = true; // GUI closes keep a short undo grace
     bool workspaceRowClickExpands = true;
+    bool preventSleepWhileActive = true; // no automatic suspend while an agent's status is active
     // Appearance; empty / 0 = the Konsole profile's own
     QString fontFamily, theme;
     double fontSize = 0;

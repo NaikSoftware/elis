@@ -1006,7 +1006,7 @@ void Store::setSettings(const Settings &s)
     X(configDirectory) X(restoreMode) X(autoFollowAttention) X(flaggedViewLayout) X(sidebarDensity) X(sessionInfoDisplay)
 #define ELIS_SETTINGS_BOOLS(X)                                                                                                  \
     X(confirmCloseSession) X(closeUndo) X(workspaceRowClickExpands) X(notificationsEnabled) X(notificationBadgeEnabled) X(attentionIncludesActive) X(autoFollowStayOnActive) \
-        X(windowBlur)
+        X(windowBlur) X(preventSleepWhileActive)
 #define ELIS_SETTINGS_DOUBLES(X) X(fontSize) X(sidebarFontSize) X(interfaceFontSize) X(windowTransparency)
 #define ELIS_SETTINGS_LISTS(X) X(hiddenInterfaceElements) X(shownInterfaceElements)
 
