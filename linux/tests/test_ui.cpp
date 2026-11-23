@@ -65,6 +65,8 @@
 #include <QMimeData>
 #include <QPlainTextEdit>
 #include <QStackedWidget>
+#include <QTextBlock>
+#include <QTextLayout>
 
 namespace Konsole
 {
@@ -1159,12 +1161,41 @@ private Q_SLOTS:
             QVERIFY(dropped.isAccepted());
             delete mime;
         };
-        drop(sidebar->dragMime(id));
+        auto *composer = view->findChild<QPlainTextEdit *>("assistantComposer");
+        composer->setPlainText("ask");
+        drop(sidebar->dragMime(id)); // inside the word: the tag lands after it
         QCOMPARE(view->tags(), QStringList{session});
+        QCOMPARE(composer->toPlainText(), "ask " + session + " ");
         QTest::mousePress(sidebar->viewport(), Qt::LeftButton, {}, sidebar->visualItemRect(sidebar->topLevelItem(1)).center());
-        drop(sidebar->dragMime({})); // the pressed workspace header
-        QCOMPARE(view->tags(), (QStringList{session, group}));
-        QCOMPARE(view->findChild<QPlainTextEdit *>("assistantComposer")->toPlainText(), QString()); // a tag, not typed ids
+        drop(sidebar->dragMime({})); // the pressed workspace header, again after the word
+        QCOMPARE(composer->toPlainText(), "ask " + group + " " + session + " ");
+    }
+
+    void tagsStayWhereTheyAreTyped()
+    {
+        QTemporaryDir state;
+        WindowLibrary lib(state.path());
+        lib.load();
+        MainWindow *w = lib.entries()[0].window;
+        w->show();
+        w->activateWindow();
+        QVERIFY(QTest::qWaitForWindowActive(w));
+        w->showAssistant();
+        const QJsonObject tree = lib.dispatch({{"cmd", "tree"}}).value("result")["tree"].toObject();
+        const QString session = QLatin1Char('@') + tree["workspaces"][0]["sessions"][0]["handle"].toString();
+        auto *view = w->findChild<AssistantView *>();
+        auto *composer = view->findChild<QPlainTextEdit *>("assistantComposer");
+        composer->setFocus();
+        QTest::keyClicks(composer, "ask @");
+        QTest::keyClicks(composer, session.mid(1));
+        QTest::keyClick(view->findChild<QCompleter *>()->popup(), Qt::Key_Return);
+        QTest::keyClicks(composer, "about @nobody");
+        QCOMPARE(composer->toPlainText(), "ask " + session + " about @nobody");
+        QCOMPARE(view->tags(), QStringList{session}); // a word that names nothing is not a tag
+        const QList<QTextLayout::FormatRange> marks = composer->document()->firstBlock().layout()->formats();
+        QCOMPARE(marks.size(), 1);
+        QCOMPARE(marks[0].start, 4);
+        QCOMPARE(marks[0].length, session.size());
     }
 
     void atCompletionListsHandles()
@@ -1202,10 +1233,8 @@ private Q_SLOTS:
         QCOMPARE(listed(), QStringList{all.last()});
         QTest::keyClick(completer->popup(), Qt::Key_Return);
         QCOMPARE(view->tags(), QStringList{all.last()});
-        QCOMPARE(composer->toPlainText(), QStringLiteral("ask "));
-        QTest::keyClick(composer, Qt::Key_Home);
-        QTest::keyClick(composer, Qt::Key_Backspace);
-        QVERIFY(view->tags().isEmpty());
+        QCOMPARE(composer->toPlainText(), "ask " + all.last() + " ");
+        QVERIFY(!completer->popup()->isVisible());
     }
 
     void providerPickerSitsAboveTheComposerAndPicksWithKeys()

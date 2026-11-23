@@ -588,12 +588,12 @@ elisctl session overlay open --html report.html --page</code></pre>
 <h3 id="assistant-tags">Tagging sessions</h3>
 <p>Address sessions or workspaces in the message box with tags: <code>@handle</code> (a short Latin handle derived for each session and shown in <code>tree</code>), <code>@ws:&lt;workspace&gt;</code>, <code>@all</code>, or an exact session id.</p>
 <ul>
-<li>Type <code>@</code> for completion, or drag a session row or workspace header from the sidebar onto the message box.</li>
+<li>Type <code>@</code> for completion, or drag a session row or workspace header from the sidebar onto the message box. A tag stays where you type or drop it, marked in the session&rsquo;s color.</li>
 <li>Group tags (<code>@ws:&lt;workspace&gt;</code> and <code>@all</code>) reach only sessions running an agent.</li>
 <li>Sessions waiting for approval (status <code>blocked</code>) are never typed into.</li>
 </ul>
 <h3 id="assistant-replies">Delivery and replies</h3>
-<p>Messages to sessions are typed into them at once as a single line ending with <code>elisctl reply "…"</code>. Nothing is queued. Inside a session, an agent answers with <code>elisctl reply TEXT</code> or <code>--stdin</code> (using <code>ELIS_SESSION_ID</code>), and each answer appears in the chat as a card with a <strong>Go to session</strong> link.</p>
+<p>Messages to sessions are typed into them at once as a single line ending with <code>elisctl reply "…"</code>. Nothing is queued. Inside a session, an agent answers with <code>elisctl reply TEXT</code> or <code>--stdin</code> (using <code>ELIS_SESSION_ID</code>), and each answer appears in the chat as a card on the left. What Elis sends to sessions shows as a card on the right. The arrow beside a session&rsquo;s name goes to it.</p>
 <h3 id="assistant-cli">Driving Elis from scripts</h3>
 <pre class="bash"><code>elisctl assistant ask &quot;check why the tests failed&quot; --wait --timeout 60
 elisctl assistant send --to @claude-1 &quot;run the tests&quot;

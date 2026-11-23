@@ -2165,7 +2165,7 @@ prompt stalls the stream.
 - `elisctl assistant show [--window W]` (`assistant.show`) selects the pinned Elis row in the addressed window, clearing
   any selected session and clearing `unread`.
 - `elisctl reply (TEXT|--stdin)` (`assistant.reply`) runs from inside an Elis session (`ELIS_SESSION_ID`) and posts a
-  reply card with a "Go to session" link into the chat and into the live assistant stream (`[reply from @<handle> <session id>] <text>`).
+  reply card with a go-to-session arrow into the chat and into the live assistant stream (`[reply from @<handle> <session id>] <text>`).
   Prints `ok`. Fails outside a session (`elisctl reply runs inside an Elis session`) or when `--socket` targets another
   instance.
 
