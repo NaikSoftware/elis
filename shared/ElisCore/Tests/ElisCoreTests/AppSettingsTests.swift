@@ -524,6 +524,13 @@ struct AppSettingsTests {
         #expect(legacy.effectiveFlaggedViewLayout == .flat)
     }
 
+    @Test func keepAwakeDefaultsOnAndRoundTrips() throws {
+        #expect(AppSettings().keepAwake)
+        let off = try JSONDecoder().decode(AppSettings.self, from: JSONEncoder().encode(AppSettings(preventSleepWhileActive: false)))
+        #expect(!off.keepAwake)
+        #expect(AppSettings(preventSleepWhileActive: false).ghosttyConfigLines() == AppSettings().ghosttyConfigLines())
+    }
+
     @Test func sidebarDensityDefaultsToStandardResolvesTolerantlyAndIsNotAGhosttyKey() throws {
         #expect(AppSettings().effectiveSidebarDensity == .standard)
         #expect(AppSettings(sidebarDensity: "compact").ghosttyConfigLines() == AppSettings().ghosttyConfigLines())

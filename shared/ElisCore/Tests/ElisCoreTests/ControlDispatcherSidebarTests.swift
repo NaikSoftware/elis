@@ -50,6 +50,26 @@ struct ControlDispatcherSidebarTests {
         #expect(actions.calls.isEmpty)
     }
 
+    @Test(arguments: [("on", .on), ("off", .off), ("toggle", .toggle), (nil, .toggle)] as [(String?, ControlToggleMode)])
+    func keepAwakeRoutesTheParsedMode(_ raw: String?, _ mode: ControlToggleMode) async {
+        let actions = MockControlActions()
+        actions.nextKeepAwakeResponse = ControlResponse(ok: true, result: ControlResult(text: "off"))
+
+        let response = await ControlDispatcher(actions: actions).dispatch(ControlRequest(cmd: .settingsKeepAwake, args: ControlArgs(mode: raw)))
+
+        #expect(response == ControlResponse(ok: true, result: ControlResult(text: "off")))
+        #expect(actions.calls == [.keepAwake(mode)])
+    }
+
+    @Test func keepAwakeRejectsAnUnknownModeWithoutCallingActions() async {
+        let actions = MockControlActions()
+
+        let response = await ControlDispatcher(actions: actions).dispatch(ControlRequest(cmd: .settingsKeepAwake, args: ControlArgs(mode: "always")))
+
+        #expect(response == ControlResponse(ok: false, error: "invalid keep-awake mode: always"))
+        #expect(actions.calls.isEmpty)
+    }
+
     @Test func sidebarWidthRoutesPointsAndWindow() async {
         let actions = MockControlActions()
         let dispatcher = ControlDispatcher(actions: actions)

@@ -146,6 +146,8 @@ private struct GeneralSettingsView: View {
                     .accessibilityIdentifier("settings-confirm-close-session")
                 Toggle("Allow undo after closing sessions and workspaces", isOn: closeGraceUndoEnabled)
                     .accessibilityIdentifier("settings-close-grace-undo")
+                Toggle("Keep the Mac awake while an agent is working", isOn: keepAwake)
+                    .accessibilityIdentifier("settings-keep-awake")
                 Picker("Flagged view layout", selection: flaggedViewLayout) {
                     Text("Flat list").tag(FlaggedViewLayout.flat)
                     Text("Flat list, names only").tag(FlaggedViewLayout.plain)
@@ -163,6 +165,10 @@ private struct GeneralSettingsView: View {
 
     private var restoreMode: Binding<RestoreMode> {
         Binding(get: { model.settings.effectiveRestoreMode }, set: { model.setRestoreMode($0) })
+    }
+
+    private var keepAwake: Binding<Bool> {
+        Binding(get: { model.settings.keepAwake }, set: { model.setPreventSleepWhileActive($0) })
     }
 
     private var confirmCloseSession: Binding<Bool> {

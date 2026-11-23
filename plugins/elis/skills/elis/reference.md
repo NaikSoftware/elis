@@ -356,7 +356,8 @@ visible before), `sidebarMode` (`tree` or `flagged` — the sidebar view mode, t
 `sidebarFlaggedLayout` (`flat`, `plain` or `tree` — how the flagged view is arranged, the read side
 of `sidebar flagged-layout`; app-wide, so every window reports the same value, under the ordinary tree
 too), `sidebarDensity` (`default` or `compact` — the sidebar row spacing, the read side of `sidebar density`;
-app-wide), `flaggedOrder` (the window's flagged session ids in the flat list's saved order, the read side of
+app-wide), `keepAwake` (whether the computer is kept from sleeping while an agent works, app-wide — the read side of
+`settings keep-awake`), `flaggedOrder` (the window's flagged session ids in the flat list's saved order, the read side of
 `session flag move`; omitted when nothing is flagged), `sidebarWidth` (the sidebar divider position in points, the read side of
 `sidebar width`, reported here and nowhere else), `filePanelVisible` and `filePanelWidth` (the file panel's visibility and width in points, the read sides of `filepanel` and `filepanel width`, reported here and not on `window list`), `workspaceFilter` (whether the window's workspace focus filter is currently APPLIED —
 the flag half of the focus set, whose member half is each workspace node's `focused`; the read side of
@@ -2008,6 +2009,11 @@ and their indent; `default` restores the standard spacing. `toggle` is the defau
 error. APP-WIDE, the same setting as Settings ▸ Appearance ▸ Sidebar density: no `--window`, no open window
 needed, and every window's sidebar follows at once. Returns the resulting density in `result.text`; read back
 as the tree's top-level `sidebarDensity`.
+
+`elisctl settings keep-awake [on|off|toggle]` — keep the computer from sleeping on its own while any local session's
+status is `active` (on by default; the display still sleeps). `toggle` is the default; an unknown mode is an error.
+APP-WIDE, the Settings ▸ General toggle: no `--window`. Returns `on` or `off` in `result.text`; read back as the
+tree's top-level `keepAwake`. Not on elis-server.
 
 `elisctl sidebar expand [--window W]` — expand every workspace row in a window's sidebar tree.
 Defaults to the frontmost window; `--window` (id / prefix / `active`) targets any OPEN window, so a

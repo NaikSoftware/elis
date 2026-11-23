@@ -57,6 +57,13 @@ struct SidebarCommandsTests {
         #expect(throws: (any Error).self) { try Elisctl.parseAsRoot(["sidebar", "density", "compact", "--window", "w"]) }
     }
 
+    @Test func settingsKeepAwakeDefaultsToggleAndNamesAMode() throws {
+        #expect(try request(["settings", "keep-awake"]) == ControlRequest(cmd: .settingsKeepAwake, args: ControlArgs(mode: "toggle")))
+        #expect(try request(["settings", "keep-awake", "off"]) == ControlRequest(cmd: .settingsKeepAwake, args: ControlArgs(mode: "off")))
+        #expect(throws: (any Error).self) { try Elisctl.parseAsRoot(["settings", "keep-awake", "always"]) }
+        #expect(throws: (any Error).self) { try Elisctl.parseAsRoot(["settings", "keep-awake", "on", "--window", "w"]) }
+    }
+
     @Test func sidebarModeRejectsBadMode() {
         #expect(throws: (any Error).self) { try Elisctl.parseAsRoot(["sidebar", "mode", "sideways"]) }
     }

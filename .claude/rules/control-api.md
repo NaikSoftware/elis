@@ -209,7 +209,7 @@ renumbering. Do not reintroduce a count anywhere.
 - `window.new`, `.list`, `.select`, `.go`, `.close`, `.rename`, `.delete`, `.resize`, `.move`, `.zoom`,
   `.fullscreen`, `.minimize`, `.remote.open`, `.remote.dismiss`
 - `session.detach`, `session.reattach`, `workspace.detach`, `workspace.reattach`: a remote window's rows only
-- `keymap.reload`, `keymap.list`, `keymap.run`, `hooks.reload`, `hooks.list`, `browser.clear`, `browser.links`, `config.reload`, `theme.set`, `theme.list`,
+- `keymap.reload`, `keymap.list`, `keymap.run`, `hooks.reload`, `hooks.list`, `browser.clear`, `browser.links`, `settings.keep-awake`, `config.reload`, `theme.set`, `theme.list`,
   `restore.capture`,
   `restore.clear`, `restore.mode`, `version`
 - `recent.list`, `recent.open`, `recent.clear`, `session.undo`

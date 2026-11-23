@@ -283,6 +283,14 @@ public final class WindowLibrary {
         allOpenSessions().reduce(0) { $0 + $1.unseenCount }
     }
 
+    /// Whether an agent is working on THIS computer: an `active` session in an open local window. A remote window's
+    /// rows and a row attached from another host run elsewhere, so keeping this computer awake does nothing for them.
+    public var hasActiveLocalAgent: Bool {
+        openStores().filter { !isRemoteStore($0) }.contains { store in
+            store.workspaces.contains { $0.sessions.contains { $0.remoteHost == nil && $0.agentIndicator.status == .active } }
+        }
+    }
+
     /// Open-window count plus total sessions across them — the counts the quit confirmation reports.
     public func openCounts() -> (windows: Int, sessions: Int) {
         let openStores = windows.map(\.id).compactMap { stores[$0] }

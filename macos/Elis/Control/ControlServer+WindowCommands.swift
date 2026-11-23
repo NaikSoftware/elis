@@ -103,6 +103,7 @@ extension ControlServer {
             }
             // dropping a store is unobserved, so poke the Dock badge to drop this window's unseen total.
             DockBadgeController.shared.refresh()
+            KeepAwakeController.shared.refresh()
             return ControlResponse(ok: true, result: ControlResult(id: id.uuidString))
         }
     }

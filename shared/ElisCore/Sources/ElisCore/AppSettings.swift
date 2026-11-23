@@ -456,6 +456,9 @@ public struct AppSettings: Codable, Equatable, Sendable {
     /// Whether GUI closes keep a short undo grace period before final teardown; nil = on. When off they
     /// are immediate but still enter File > Open Recent.
     public var closeGraceUndoEnabled: Bool?
+    /// Whether the computer is kept from idle sleep while any local session's status is `active`; nil = on.
+    /// Resolved by `keepAwake`; set by `settings.keep-awake`.
+    public var preventSleepWhileActive: Bool?
     /// The idle timeout that auto-follows the window's selection to the oldest blocked session, an
     /// `AutoFollowAttention` raw value; nil = `off`. Per-window, drives `AppStore`'s idle controller.
     public var autoFollowAttention: String?
@@ -526,7 +529,7 @@ public struct AppSettings: Codable, Equatable, Sendable {
                 workspaceRowClickExpands: Bool? = nil,
                 newSessionDirectory: String? = nil, newSessionCustomDirectory: String? = nil,
                 newSessionPlacement: String? = nil,
-                confirmCloseSession: Bool? = nil, closeGraceUndoEnabled: Bool? = nil,
+                confirmCloseSession: Bool? = nil, closeGraceUndoEnabled: Bool? = nil, preventSleepWhileActive: Bool? = nil,
                 autoFollowAttention: String? = nil,
                 autoFollowStayOnActive: Bool? = nil, attentionIncludesActive: Bool? = nil,
                 attentionNavigationAcrossWindows: Bool? = nil, sidebarFontSize: Double? = nil,
@@ -578,6 +581,7 @@ public struct AppSettings: Codable, Equatable, Sendable {
         self.newSessionPlacement = newSessionPlacement
         self.confirmCloseSession = confirmCloseSession
         self.closeGraceUndoEnabled = closeGraceUndoEnabled
+        self.preventSleepWhileActive = preventSleepWhileActive
         self.autoFollowAttention = autoFollowAttention
         self.autoFollowStayOnActive = autoFollowStayOnActive
         self.attentionIncludesActive = attentionIncludesActive
@@ -594,6 +598,8 @@ public struct AppSettings: Codable, Equatable, Sendable {
         self.htmlOverlayZoom = htmlOverlayZoom
         self.workspaceGuideDone = workspaceGuideDone
     }
+
+    public var keepAwake: Bool { preventSleepWhileActive ?? true }
 
     /// The configured mode, including an object decoded from the legacy boolean schema.
     public var effectiveRestoreMode: RestoreMode {

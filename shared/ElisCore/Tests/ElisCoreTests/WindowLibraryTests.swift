@@ -130,6 +130,22 @@ final class WindowLibraryTests {
         #expect(library.allOpenSessions().count == 3)
     }
 
+    @Test func hasActiveLocalAgentCountsOnlyLocalActiveSessionsInOpenWindows() {
+        let library = WindowLibrary(directory: directory)
+        let second = library.newWindow(name: "work")
+        let store = try! #require(library.store(for: second.id))
+        let attached = Session(initialCwd: "/tmp", remoteHost: "other-mac")
+        store.workspaces[0].sessions.append(attached)
+        attached.agentIndicator.status = .active
+        #expect(!library.hasActiveLocalAgent)
+        store.workspaces[0].sessions[0].agentIndicator.status = .blocked
+        #expect(!library.hasActiveLocalAgent)
+        store.workspaces[0].sessions[0].agentIndicator.status = .active
+        #expect(library.hasActiveLocalAgent)
+        library.closeWindow(second.id)
+        #expect(!library.hasActiveLocalAgent)
+    }
+
     @Test func totalUnseenCountSumsEverySessionAcrossWindows() {
         let library = WindowLibrary(directory: directory)
         #expect(library.totalUnseenCount == 0)

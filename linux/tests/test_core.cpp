@@ -739,6 +739,18 @@ private Q_SLOTS:
         QCOMPARE(s.settings.sidebarDensity, QStringLiteral("default"));
     }
 
+    void keepAwakeToggleAndReadBack()
+    {
+        Store s;
+        FakeTerminals t;
+        QVERIFY(call(s, t, "tree")["result"]["tree"]["keepAwake"].toBool());
+        QCOMPARE(call(s, t, "settings.keep-awake")["result"]["text"].toString(), QStringLiteral("off")); // toggle
+        QVERIFY(!call(s, t, "tree")["result"]["tree"]["keepAwake"].toBool(true));
+        QCOMPARE(call(s, t, "settings.keep-awake", {}, {{"mode", "on"}})["result"]["text"].toString(), QStringLiteral("on"));
+        QCOMPARE(call(s, t, "settings.keep-awake", {}, {{"mode", "x"}})["error"].toString(), QStringLiteral("invalid keep-awake mode: x"));
+        QVERIFY(s.settings.preventSleepWhileActive);
+    }
+
     void workspaceFocusFilterAndSuspend()
     {
         Store s;

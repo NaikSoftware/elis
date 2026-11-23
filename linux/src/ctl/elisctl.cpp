@@ -87,6 +87,7 @@ static const char *usage = R"(usage: elisctl <command> [args] [--target T] [--so
   sidebar density [default|compact|toggle]
   sidebar expand | collapse              every workspace (collapse keeps the current one open)
   sidebar width <points>                160...560
+  settings keep-awake [on|off|toggle]   no idle sleep while an agent's status is active
   events [--kind K]... [--run ID --after SEQ] [--limit N]   follow control events (--json: one event per line)
   pick [open] [--prompt T] [--query T] [--select ID] [--allow-custom] [--follow] [--no-block]
                                         items from stdin: lines, or a JSON array of {id,label,subtitle};
@@ -604,7 +605,7 @@ int main(int argc, char **argv)
     QString cmd = pos.takeFirst();
     if (cmd == QLatin1String("reply"))
         cmd = QStringLiteral("assistant.reply");
-    else if (QStringList{"workspace", "session", "recent", "font", "keymap", "hooks", "theme", "restore", "window", "surface", "config", "msg", "assistant", "zmx", "browser", "quick"}
+    else if (QStringList{"workspace", "session", "recent", "font", "keymap", "hooks", "theme", "restore", "window", "surface", "config", "msg", "assistant", "zmx", "browser", "quick", "settings"}
                  .contains(cmd)
              && !pos.isEmpty())
         cmd += QLatin1Char('.') + pos.takeFirst();
@@ -833,7 +834,8 @@ int main(int argc, char **argv)
         return followEvents(opt.value(QStringLiteral("socket"), socketPath()), args, opt.contains(QStringLiteral("json")));
     }
     if (cmd == QLatin1String("workspace.flag") || cmd == QLatin1String("sidebar.mode") || cmd == QLatin1String("sidebar.flagged-layout")
-        || cmd == QLatin1String("sidebar.density") || cmd == QLatin1String("sidebar") || cmd == QLatin1String("surface.zoom"))
+        || cmd == QLatin1String("sidebar.density") || cmd == QLatin1String("sidebar") || cmd == QLatin1String("surface.zoom")
+        || cmd == QLatin1String("settings.keep-awake"))
         args.insert("mode", arg.isEmpty() ? QStringLiteral("toggle") : arg);
     if (cmd == QLatin1String("sidebar.width")) {
         bool number = false;

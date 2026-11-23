@@ -370,7 +370,8 @@ static QJsonObject tree(Store &store, const Terminals &terminals)
             {"workspaceFilter", store.focusEnabled},
             {"sidebarMode", store.flaggedView ? "flagged" : "tree"},
             {"sidebarFlaggedLayout", store.settings.flaggedViewLayout},
-            {"sidebarDensity", store.settings.sidebarDensity}};
+            {"sidebarDensity", store.settings.sidebarDensity},
+            {"keepAwake", store.settings.preventSleepWhileActive}};
 }
 
 // on | off | toggle against the current state; "" means toggle

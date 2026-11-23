@@ -362,6 +362,8 @@ final class SettingsModel {
     func setConfirmCloseSession(_ value: Bool?) { settings.confirmCloseSession = value; try? settingsStore.save(settings) }
     /// Persist whether GUI closes use the short undo grace period. nil = on; false = close immediately.
     func setCloseGraceUndoEnabled(_ value: Bool?) { settings.closeGraceUndoEnabled = value; try? settingsStore.save(settings) }
+    /// `KeepAwakeController` observes `settings`, so a save is all it takes.
+    func setPreventSleepWhileActive(_ on: Bool) { settings.preventSleepWhileActive = on ? nil : false; try? settingsStore.save(settings) }
     /// stepHtmlOverlayZoom moves every HTML page's zoom by a font binding action and persists it. Saves and
     /// mirrors only: no chrome or config depends on it.
     func stepHtmlOverlayZoom(_ action: String) {
