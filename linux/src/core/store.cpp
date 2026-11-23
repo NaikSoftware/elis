@@ -823,11 +823,16 @@ void Store::select(const QString &id)
     selected = id;
     recent.removeAll(id);
     recent.prepend(id);
-    s->unseen = 0; // focusing a session acknowledges its notifications
-    if (s->status == QLatin1String("completed") && s->autoReset)
-        setStatus(id, QStringLiteral("idle"));
+    markVisited(id);
     Q_EMIT selectionChanged(id);
     Q_EMIT changed();
+}
+
+void Store::markVisited(const QString &id)
+{
+    setUnseen(id, 0);
+    if (auto *s = session(id); s && s->status == QLatin1String("completed") && s->autoReset)
+        setStatus(id, QStringLiteral("idle"));
 }
 
 bool Store::setStatus(const QString &id, const QString &status, bool autoReset, bool blink, bool ifIdle)

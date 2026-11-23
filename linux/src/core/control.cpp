@@ -714,7 +714,7 @@ QJsonObject dispatch(Store &store, Terminals &terminals, const QJsonObject &requ
             if (store.settings.restoreMode != QLatin1String("rerun"))
                 return ok({{"id", id}, {"text", QStringLiteral("saved; it applies only in rerun restore mode")}});
         } else if (cmd == QLatin1String("session.seen")) {
-            store.setUnseen(id, 0);
+            store.markVisited(id);
         } else if (cmd == QLatin1String("session.companion.duplicate")) {
             const QString copy = duplicateAsCompanion(store, terminals, id, &error);
             if (copy.isEmpty())

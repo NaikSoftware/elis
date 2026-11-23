@@ -67,7 +67,7 @@ static const char *usage = R"(usage: elisctl <command> [args] [--target T] [--so
   filepanel [show|hide|toggle]          the session folder tree beside the sidebar
   filepanel width <points>              160...560
   notify <body> [--title T]             desktop notification + unseen badge on the session
-  session seen                          clear the session's unseen badge without focusing it
+  session seen                          clear the unseen badge and an --auto-reset status without focusing
   session type <text> | --stdin [--pane left|right]
   session text [--all | --lines N] [--pane left|right]   the visible screen; --all adds the scrollback;
                                         --lines: the last N non-blank rows of screen + scrollback
