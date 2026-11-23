@@ -404,6 +404,23 @@ private Q_SLOTS:
         s.setStatus(b, "completed", true);
         s.select(b);
         QCOMPARE(s.session(b)->status, QStringLiteral("idle"));
+        s.setStatus(b, "completed", true);
+        s.select(b);
+        QCOMPARE(s.session(b)->status, QStringLiteral("completed")); // a same-value selection changes nothing
+        s.markVisited(b);
+        QCOMPARE(s.session(b)->status, QStringLiteral("idle"));
+        s.setStatus(b, "completed", true);
+        s.select(a);
+        QCOMPARE(s.session(b)->status, QStringLiteral("idle")); // the session left too
+        s.setStatus(a, "completed");
+        s.markVisited(a);
+        QCOMPARE(s.session(a)->status, QStringLiteral("completed"));
+        FakeTerminals t;
+        s.setStatus(b, "completed", true);
+        s.setUnseen(b, 2);
+        QVERIFY(call(s, t, "session.seen", b, {})["ok"].toBool());
+        QCOMPARE(s.session(b)->status, QStringLiteral("idle"));
+        QCOMPARE(s.session(b)->unseen, 0);
     }
 
     void seenClearsAnAutoResetStatusWithoutSelecting()

@@ -817,6 +817,7 @@ void Store::select(const QString &id)
     auto *s = session(id);
     if (!s || selected == id)
         return;
+    const QString previous = selected;
     freshWorkspace.clear(); // a selection change ends the fresh workspace; a same-value one keeps it, as on the Mac
     if (focusEnabled && !flaggedView && !focused.contains(workspaceOf(id)->id))
         focusEnabled = false; // selecting outside the set suspends the filter, keeping the set
@@ -824,6 +825,8 @@ void Store::select(const QString &id)
     recent.removeAll(id);
     recent.prepend(id);
     markVisited(id);
+    if (auto *p = session(previous); p && p->status == QLatin1String("completed") && p->autoReset)
+        setStatus(previous, QStringLiteral("idle")); // the one-time flash ends on the session left too, as on the Mac
     Q_EMIT selectionChanged(id);
     Q_EMIT changed();
 }

@@ -818,7 +818,7 @@ void MainWindow::createMenus()
         for (Session *s : all) {
             const QString st = s->status == QLatin1String("idle") ? QString() : s->status;
             items.append({s->displayName(), m_store.workspaceOf(s->id)->name + QStringLiteral(" · ") + sessionDetail(*s),
-                          [this, id = s->id] { m_store.select(id); }, true, {}, s->id, {}, {}, st, !st.isEmpty() && s->blink, false});
+                          [this, id = s->id] { m_store.select(id); m_store.markVisited(id); }, true, {}, s->id, {}, {}, st, !st.isEmpty() && s->blink, false});
         }
         return items;
     };
@@ -867,10 +867,13 @@ void MainWindow::createMenus()
                                       if (library) {
                                           library->select(winId);
                                           for (const auto &e : library->entries())
-                                              if (e.id == winId && e.store)
+                                              if (e.id == winId && e.store) {
                                                   e.store->select(sid);
+                                                  e.store->markVisited(sid);
+                                              }
                                       } else {
                                           m_store.select(sid);
+                                          m_store.markVisited(sid);
                                       }
                                   }));
                               }
@@ -895,7 +898,7 @@ void MainWindow::createMenus()
                               }
                               for (Session *s : std::as_const(navSessions)) {
                                   const Workspace *w = m_store.workspaceOf(s->id);
-                                  search.append(sessionRow(*s, w ? w->name : QString(), [this, id = s->id] { m_store.select(id); }));
+                                  search.append(sessionRow(*s, w ? w->name : QString(), [this, id = s->id] { m_store.select(id); m_store.markVisited(id); }));
                               }
                               search.append(closed);
                               m_palette->anchor = m_pill;

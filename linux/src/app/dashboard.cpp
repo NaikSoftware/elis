@@ -120,6 +120,7 @@ void MainWindow::activateDashboardCell(int i)
     closeDashboard();
     const QString id = ref.section(QLatin1Char(':'), 0, 0);
     m_store.select(id);
+    m_store.markVisited(id); // the shown session's card acknowledges it too, as its sidebar row does
     if (QWidget *w = paneWidget(id, ref.section(QLatin1Char(':'), 1)); w && isActiveWindow())
         w->setFocus(); // that exact pane
 }
