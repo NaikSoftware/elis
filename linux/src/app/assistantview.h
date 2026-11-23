@@ -66,7 +66,7 @@ private:
     QLabel *m_working = nullptr;
     class QScrollArea *m_scroll = nullptr;
     QSet<QString> m_known; // lower-cased tags that name something
-    class QSyntaxHighlighter *m_highlighter = nullptr;
+    class QSyntaxHighlighter *m_spacing = nullptr;
     QPlainTextEdit *m_editor = nullptr;
     QCompleter *m_completer = nullptr;
     QStandardItemModel *m_candidates = nullptr;

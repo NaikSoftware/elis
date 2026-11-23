@@ -65,8 +65,6 @@
 #include <QMimeData>
 #include <QPlainTextEdit>
 #include <QStackedWidget>
-#include <QTextBlock>
-#include <QTextLayout>
 
 namespace Konsole
 {
@@ -1192,10 +1190,6 @@ private Q_SLOTS:
         QTest::keyClicks(composer, "about @nobody");
         QCOMPARE(composer->toPlainText(), "ask " + session + " about @nobody");
         QCOMPARE(view->tags(), QStringList{session}); // a word that names nothing is not a tag
-        const QList<QTextLayout::FormatRange> marks = composer->document()->firstBlock().layout()->formats();
-        QCOMPARE(marks.size(), 1);
-        QCOMPARE(marks[0].start, 4);
-        QCOMPARE(marks[0].length, session.size());
     }
 
     void atCompletionListsHandles()

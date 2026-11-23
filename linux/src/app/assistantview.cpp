@@ -119,24 +119,34 @@ const QRegularExpression &tagPattern()
     return pattern;
 }
 
-class TagHighlighter : public QSyntaxHighlighter
+// widens the spaces around each tag, so its backdrop has room for padding
+class TagSpacing : public QSyntaxHighlighter
 {
 public:
-    std::function<QColor(const QString &)> tint; // invalid for a word that names nothing
+    std::function<bool(const QString &)> known;
     using QSyntaxHighlighter::QSyntaxHighlighter;
 
 protected:
     void highlightBlock(const QString &line) override
     {
+        QHash<int, int> pads; // a space's index, the tags beside it: one between two tags pads both
         for (auto it = tagPattern().globalMatch(line); it.hasNext();) {
             const QRegularExpressionMatch m = it.next();
-            if (const QColor c = tint(m.captured()); c.isValid()) {
-                QTextCharFormat f;
-                f.setBackground(c);
-                setFormat(int(m.capturedStart()), int(m.capturedLength()), f);
-            }
+            if (!known(m.captured()))
+                continue;
+            for (qsizetype at : {m.capturedStart() - 1, m.capturedEnd()})
+                if (at >= 0 && at < line.size() && line.at(at) == QLatin1Char(' '))
+                    ++pads[int(at)];
+        }
+        for (auto it = pads.cbegin(); it != pads.cend(); ++it) {
+            QTextCharFormat wide;
+            wide.setFontWordSpacing(it.value() * TagPad);
+            setFormat(it.key(), 1, wide);
         }
     }
+
+public:
+    static constexpr int TagPad = 4;
 };
 
 // The message box's keys live here, not in an event filter: QCompleter passes its popup's keys to the widget's event()
@@ -145,9 +155,48 @@ class ComposerEdit : public QPlainTextEdit
 {
 public:
     std::function<void()> send;
+    std::function<QColor(const QString &)> color; // the tag's session colour, invalid for a word that names nothing
     QCompleter *completer = nullptr;
 
 protected:
+    // each tag on a rounded backdrop in the card chips' colours, one per line it spans; a char format's background
+    // cannot be rounded
+    void paintEvent(QPaintEvent *event) override
+    {
+        QPainter p(viewport());
+        p.setRenderHint(QPainter::Antialiasing);
+        for (QTextBlock b = firstVisibleBlock(); b.isValid(); b = b.next()) {
+            const QRectF block = blockBoundingGeometry(b).translated(contentOffset());
+            if (block.top() > event->rect().bottom())
+                break;
+            const QTextLayout *layout = b.layout();
+            for (auto it = tagPattern().globalMatch(b.text()); it.hasNext();) {
+                const QRegularExpressionMatch m = it.next();
+                QColor fill = color(m.captured()), edge = fill;
+                if (!fill.isValid())
+                    continue;
+                fill.setAlphaF(0.22);
+                edge.setAlphaF(0.45);
+                p.setBrush(fill);
+                p.setPen(QPen(edge, 1));
+                for (int i = 0; i < layout->lineCount(); ++i) {
+                    const QTextLine line = layout->lineAt(i);
+                    const int from = qMax(int(m.capturedStart()), line.textStart());
+                    const int to = qMin(int(m.capturedEnd()), line.textStart() + line.textLength());
+                    if (from >= to)
+                        continue;
+                    const qreal left = line.cursorToX(from), right = line.cursorToX(to);
+                    // the line box has its spare room above the ascenders: one line high, 1 px lower, centres the glyphs
+                    const int pad = TagSpacing::TagPad;
+                    p.drawRoundedRect(QRectF(block.left() + left - pad, block.top() + line.y() + 1, right - left + 2 * pad, line.height())
+                                          .adjusted(0.5, 0.5, -0.5, -0.5), 5, 5);
+                }
+            }
+        }
+        p.end();
+        QPlainTextEdit::paintEvent(event);
+    }
+
     void keyPressEvent(QKeyEvent *key) override
     {
         const bool enter = key->key() == Qt::Key_Return || key->key() == Qt::Key_Enter;
@@ -410,30 +459,32 @@ AssistantView::AssistantView(MainWindow &window, Store &store)
     composer->setAcceptDrops(true);
     composer->installEventFilter(this);
     auto *box = new QVBoxLayout(composer);
-    box->setContentsMargins(14, 10, 14, 10);
+    box->setContentsMargins(11, 7, 11, 10); // with the message's margin, the text sits where it did
     box->setSpacing(8);
     auto *editor = new ComposerEdit;
     editor->send = [this] { send(); };
+    editor->color = [this](const QString &tag) { return m_known.contains(tag.toLower()) ? tagColor(tag) : QColor(); };
+    auto *spacing = new TagSpacing(editor->document());
+    spacing->known = [this](const QString &tag) { return m_known.contains(tag.toLower()); };
+    m_spacing = spacing;
     m_editor = editor;
-    auto *highlighter = new TagHighlighter(m_editor->document());
-    highlighter->tint = [this](const QString &tag) { return tagTint(tag, QApplication::palette().color(QPalette::Window)); }; // the composer's fill
-    m_highlighter = highlighter;
     m_editor->setObjectName(QStringLiteral("assistantComposer"));
     m_editor->setPlaceholderText(tr("Message Elis…  @ to tag, or drag a row from the sidebar"));
     m_editor->setFrameShape(QFrame::NoFrame);
     m_editor->setStyleSheet(QStringLiteral("QPlainTextEdit{background:transparent;}"));
     m_editor->setTabChangesFocus(true);
-    m_editor->document()->setDocumentMargin(1);
+    m_editor->document()->setDocumentMargin(TagSpacing::TagPad); // room for a tag's backdrop at the edge
     m_editor->viewport()->installEventFilter(this); // drops land on the viewport
     auto fit = [this] {
         const int lines = qBound(1, int(m_editor->document()->documentLayout()->documentSize().height()), 8);
-        m_editor->setFixedHeight(lines * m_editor->fontMetrics().lineSpacing() + 6);
+        m_editor->setFixedHeight(lines * m_editor->fontMetrics().lineSpacing() + 9);
         m_editor->setVerticalScrollBarPolicy(lines == 8 ? Qt::ScrollBarAsNeeded : Qt::ScrollBarAlwaysOff);
     };
     connect(m_editor->document(), &QTextDocument::contentsChanged, this, fit);
     fit();
     box->addWidget(m_editor);
     auto *bottom = new QHBoxLayout;
+    bottom->setContentsMargins(3, 0, 3, 0); // the frame's 11 px plus 3: the row keeps its 14 px inset
     bottom->setSpacing(8);
     m_provider = new QToolButton;
     m_provider->setObjectName(QStringLiteral("assistantProvider"));
@@ -553,8 +604,8 @@ void AssistantView::loadDirectory()
         known << tagOf(it.key()).toLower();
     if (known != m_known) {
         m_known = known;
-        if (m_highlighter)
-            m_highlighter->rehighlight();
+        if (m_spacing)
+            m_spacing->rehighlight(); // relays out, which repaints the backdrops
     }
 }
 
