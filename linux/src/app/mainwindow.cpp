@@ -237,6 +237,31 @@ static void endForegroundJob(KParts::ReadOnlyPart *part)
         QTimer::singleShot(2000, [job] { ::kill(-job, SIGKILL); }); // the hangup first, as a closed terminal sends
 }
 
+// Konsole::Session is owned by Konsole's session manager, not the part; it registers on the
+// in-process bus as /Sessions/N, and the shell pid ties it to the part.
+static QObject *sessionOf(KParts::ReadOnlyPart *part)
+{
+    auto *t = qobject_cast<TerminalInterface *>(part);
+    const int pid = t ? t->terminalProcessId() : -1;
+    for (int n = 1; pid > 0 && n < 4096; ++n) {
+        QObject *o = QDBusConnection::sessionBus().objectRegisteredAt(QStringLiteral("/Sessions/%1").arg(n));
+        int sessionPid = -1;
+        if (o && QMetaObject::invokeMethod(o, "processId", Q_RETURN_ARG(int, sessionPid)) && sessionPid == pid)
+            return o;
+    }
+    return nullptr;
+}
+
+// A deleted part closes its session from its view's destructor, and the session outlives the view until a later
+// pass: output the client wrote meanwhile (a demoted zmx client's ESC[16t) then crashes Konsole, which reads the
+// view's font. Closed first, the session ends with its view and the part deletes itself.
+void retirePart(KParts::ReadOnlyPart *part)
+{
+    QObject *session = sessionOf(part);
+    if (!session || !QMetaObject::invokeMethod(session, "close"))
+        part->deleteLater();
+}
+
 static int foregroundPid(KParts::ReadOnlyPart *part)
 {
     auto *t = qobject_cast<TerminalInterface *>(part);
@@ -1259,7 +1284,7 @@ void MainWindow::takeOver(const QString &id, KParts::ReadOnlyPart *part, bool cl
         p.split->setSizes(sizes);
     }
     old->hide();
-    part->deleteLater(); // the cover asking for this is still on the stack
+    retirePart(part); // the cover asking for this is still on the stack
     if (!right)
         m_sessions.remove(id);
     if (focused)
@@ -1508,23 +1533,12 @@ void MainWindow::paneTitle(const QString &id, QObject *part, const QString &titl
 
 QObject *MainWindow::konsoleSession(const QString &id)
 {
-    // Konsole::Session is owned by Konsole's session manager, not the part; it registers on the
-    // in-process bus as /Sessions/N, and the shell pid ties it to our part.
     if (auto cached = m_sessions.value(id))
         return cached;
-    auto *t = terminal(id);
-    if (!t)
-        return nullptr;
-    const int pid = t->terminalProcessId();
-    for (int n = 1; n < 4096; ++n) {
-        QObject *o = QDBusConnection::sessionBus().objectRegisteredAt(QStringLiteral("/Sessions/%1").arg(n));
-        int sessionPid = -1;
-        if (o && QMetaObject::invokeMethod(o, "processId", Q_RETURN_ARG(int, sessionPid)) && sessionPid == pid) {
-            m_sessions.insert(id, o);
-            return o;
-        }
-    }
-    return nullptr;
+    QObject *o = sessionOf(m_panes.value(id).main);
+    if (o)
+        m_sessions.insert(id, o);
+    return o;
 }
 
 bool MainWindow::type(const QString &sessionId, const QString &pane, const QString &text, QString *error)

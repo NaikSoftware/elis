@@ -16,7 +16,11 @@
 #include <QFile>
 #include <KActionCollection>
 #include <KPageDialog>
+#include <KParts/PartLoader>
 #include <KParts/ReadOnlyPart>
+#include <kde_terminal_interface.h>
+#include <QEventLoop>
+#include <QThread>
 #include <QLineEdit>
 #include <QListWidget>
 #include <QDialog>
@@ -249,6 +253,27 @@ private Q_SLOTS:
         r = call("phone.enable", {{"mode", "off"}});
         QVERIFY(!std::as_const(r)["result"]["phone"]["on"].toBool() && !std::as_const(r)["result"]["phone"]["listening"].toBool());
         QVERIFY(!std::as_const(r)["result"]["phone"].toObject().contains("bluetooth"));
+    }
+
+    void retiredPartNeverParsesWithoutItsView()
+    {
+        QWidget host;
+        auto loaded = KParts::PartLoader::instantiatePart<KParts::ReadOnlyPart>(KPluginMetaData(QStringLiteral("kf6/parts/konsolepart")), &host, &host);
+        QVERIFY2(loaded, qPrintable(loaded.errorString));
+        QPointer<KParts::ReadOnlyPart> part = loaded.plugin;
+        auto *t = qobject_cast<TerminalInterface *>(part);
+        host.show();
+        // the cell size query a demoted zmx client sends when a takeover attaches beside it
+        t->startProgram(QStringLiteral("/bin/sh"), {QStringLiteral("sh"), QStringLiteral("-c"), QStringLiteral("sleep 0.2; printf '\\033[16t'; exec sleep 30")});
+        QTRY_VERIFY(t->terminalProcessId() > 0);
+        QEventLoop loop; // the app's own: the pass after the retirement deletes before it reads the pending query
+        QTimer::singleShot(0, &loop, [&] {
+            QThread::msleep(500);
+            retirePart(part);
+        });
+        QTimer::singleShot(1500, &loop, &QEventLoop::quit);
+        loop.exec();
+        QVERIFY(!part);
     }
 
     void paneLeadCoverNamesPhoneWhenPhoneLeads()

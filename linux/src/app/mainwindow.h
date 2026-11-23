@@ -29,6 +29,7 @@ class PartBridge;
 namespace KParts { class ReadOnlyPart; }
 
 QWidget *terminalDisplay(KParts::ReadOnlyPart *part); // the part's Konsole::TerminalDisplay
+void retirePart(KParts::ReadOnlyPart *part); // drops a part whose pane lives on in another one
 void zoomFontTo(QWidget *display, double points);
 Qt::KeyboardModifiers linkClickModifiers(Qt::KeyboardModifiers modifiers, bool tracking, bool release);
 
