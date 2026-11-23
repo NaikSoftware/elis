@@ -328,20 +328,43 @@ private Q_SLOTS:
         env.insert(QStringLiteral("ZMX_DIR"), set.value(QStringLiteral("ZMX_DIR")));
         env.insert(QStringLiteral("ZMX_MANAGED"), QStringLiteral("phone"));
         env.insert(QStringLiteral("ZMX_MANAGED_CLAIM"), QStringLiteral("1"));
-        QProcess phone; // claims the lead, as the phone's Chat does
-        phone.setProcessEnvironment(env);
-        phone.start(QStringLiteral("script"), {QStringLiteral("-qfec"), Zmx::executable() + QStringLiteral(" attach ") + Zmx::daemonName(stateDir(), pane),
-                                               QStringLiteral("/dev/null")});
-        auto stopPhone = qScopeGuard([&phone] {
+        const auto claim = [&env, pane](QProcess &phone) { // takes the lead, as the phone's Chat does
+            phone.setProcessEnvironment(env);
+            phone.start(QStringLiteral("script"), {QStringLiteral("-qfec"), Zmx::executable() + QStringLiteral(" attach ") + Zmx::daemonName(stateDir(), pane),
+                                                   QStringLiteral("/dev/null")});
+        };
+        const auto stop = [](QProcess &phone) {
             phone.kill();
             phone.waitForFinished();
-        });
-        QTRY_COMPARE_WITH_TIMEOUT(Zmx::lead(pane).role, QStringLiteral("follower"), 5000);
+        };
         const auto shown = [&w] {
             const QList<PaneLeadCover *> covers = w.findChildren<PaneLeadCover *>();
             const auto it = std::find_if(covers.begin(), covers.end(), [](PaneLeadCover *c) { return c->isVisible(); });
             return it == covers.end() ? nullptr : *it;
         };
+        const auto leads = [&] { return Zmx::lead(pane).role == QLatin1String("leader") && !Zmx::lead(pane).reattaching && !shown(); };
+
+        QProcess first;
+        auto stopFirst = qScopeGuard([&] { stop(first); });
+        claim(first);
+        QTRY_COMPARE_WITH_TIMEOUT(Zmx::lead(pane).role, QStringLiteral("follower"), 5000);
+        QTRY_VERIFY(shown());
+        QEventLoop loop; // the app's own: the report that retires the part arrives in a pass of it
+        QTimer poll;
+        connect(&poll, &QTimer::timeout, &loop, [&] {
+            if (leads())
+                loop.quit();
+        });
+        poll.start(50);
+        QTimer::singleShot(0, &loop, [&] { stop(first); }); // the phone leaves: the pane leads again on its own
+        QTimer::singleShot(5000, &loop, &QEventLoop::quit);
+        loop.exec();
+        QVERIFY(leads());
+
+        QProcess second;
+        auto stopSecond = qScopeGuard([&] { stop(second); });
+        claim(second);
+        QTRY_COMPARE_WITH_TIMEOUT(Zmx::lead(pane).role, QStringLiteral("follower"), 5000);
         QTRY_VERIFY(shown());
         QWidget *display = nullptr;
         for (QWidget *child : shown()->parentWidget()->findChildren<QWidget *>())
@@ -349,9 +372,7 @@ private Q_SLOTS:
                 display = child;
         QVERIFY(display);
         QTest::keyClick(display, Qt::Key_A);
-        QTRY_VERIFY_WITH_TIMEOUT(!Zmx::lead(pane).reattaching, 5000);
-        QCOMPARE(Zmx::lead(pane).role, QStringLiteral("leader"));
-        QTRY_VERIFY(!shown());
+        QTRY_VERIFY_WITH_TIMEOUT(leads(), 5000);
     }
 
     void smoothWheelReplaysNotchesLineByLine()

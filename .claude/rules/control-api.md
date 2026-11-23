@@ -2759,6 +2759,8 @@ the spec `docs/superpowers/specs/2026-11-20-phone-chat-mode-design.md` owns the 
   attachment and the daemon unsets it before spawning the shell, so neither a program printing the title
   nor a report from a surface the pane already replaced is accepted; a program that enables
   `title-report` can read it back and forge its OWN pane's role, which is accepted.
+- The Linux app reads the reports from the pty bytes (`PtyTap` in `linux/src/app/config.cpp`), since Konsole
+  delivers one title per OSC number per 20 ms and a re-attach's replayed title overwrites its report.
 - A static `title` in the user's ghostty config makes libghostty drop every OSC title, the reports
   included, while the daemon goes on enforcing a role the app never learned: a follower's
   `session.type` would answer ok for input the daemon drops. `GhosttyApp.clearStaticTitle` therefore
