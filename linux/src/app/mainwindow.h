@@ -202,6 +202,7 @@ private:
     void paneExited(const QString &id, KParts::ReadOnlyPart *part);
     void leadReport(const QString &id, KParts::ReadOnlyPart *part, const QString &title); // a zmx role report
     void takeOver(const QString &id, KParts::ReadOnlyPart *part, bool claim); // a fresh attach in the pane's slot
+    void captionFromProgram(const QString &id); // the main part's caption is its program's title
     void swapPanes(const QString &id);
     void newCompanion(const QString &parentId);
     void duplicateCompanion(const QString &id);
@@ -304,9 +305,11 @@ public Q_SLOTS:
     void overrideShortcut(QKeyEvent *event, bool &override);
     void sessionAttribute(int what, const QString &text); // OSC 9 from the emulation
     void osc777(const QStringList &params);
+    void ptyData(const char *data, int length); // Konsole::Pty's raw output, for zmx role reports
 
 private:
     MainWindow *m_window;
     Store &m_store;
     QString m_id;
+    QByteArray m_reportCarry;
 };

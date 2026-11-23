@@ -256,6 +256,26 @@ Lead report(const QString &paneId, const QString &title)
     return leadFrom(taken(elis_zmx_lead_report(json({{"pane", paneId}, {"title", title}}).constData())));
 }
 
+QStringList roleReports(QByteArray *carry, const QByteArray &output)
+{
+    static const QByteArray start = "\x1b]2;zmx-role;";
+    carry->append(output);
+    QStringList titles;
+    qsizetype from = 0, at;
+    while ((at = carry->indexOf(start, from)) >= 0) {
+        const qsizetype bel = carry->indexOf('\a', at), st = carry->indexOf("\x1b\\", at);
+        const qsizetype end = bel < 0 ? st : st < 0 ? bel : qMin(bel, st);
+        if (end < 0)
+            break;
+        titles << QString::fromUtf8(carry->mid(at + 4, end - at - 4));
+        from = end + 1;
+    }
+    // an unfinished report, or a tail that may begin one; a report is short, so a longer one is not a report
+    const qsizetype keep = at >= 0 ? at : qMax(from, carry->size() - start.size() + 1);
+    *carry = carry->size() - keep > 256 ? QByteArray() : carry->mid(keep);
+    return titles;
+}
+
 Lead lead(const QString &paneId)
 {
     return leadFrom(taken(elis_zmx_lead_state(paneId.toUtf8().constData())));

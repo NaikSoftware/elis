@@ -1146,9 +1146,7 @@ void MainWindow::createTerminal(const QString &id)
     });
     m_panes.insert(id, p);
     replay(id, p.main, false);
-    if (QObject *ks = konsoleSession(id))
-        for (int context : {0, 1}) // local and remote: caption = the title the program set (%w), not "dir : process"
-            QMetaObject::invokeMethod(ks, "setTabTitleFormat", Q_ARG(int, context), Q_ARG(QString, QStringLiteral("%w")));
+    captionFromProgram(id);
     m_stack->addWidget(p.view);
     applyLayout(id);
     prime(p.view);
@@ -1285,10 +1283,19 @@ void MainWindow::takeOver(const QString &id, KParts::ReadOnlyPart *part, bool cl
     }
     old->hide();
     retirePart(part); // the cover asking for this is still on the stack
-    if (!right)
+    if (!right) {
         m_sessions.remove(id);
+        captionFromProgram(id);
+    }
     if (focused)
         fresh->widget()->setFocus();
+}
+
+void MainWindow::captionFromProgram(const QString &id)
+{
+    if (QObject *ks = konsoleSession(id))
+        for (int context : {0, 1}) // local and remote: caption = the title the program set (%w), not "dir : process"
+            QMetaObject::invokeMethod(ks, "setTabTitleFormat", Q_ARG(int, context), Q_ARG(QString, QStringLiteral("%w")));
 }
 
 void MainWindow::newCompanion(const QString &parentId)
