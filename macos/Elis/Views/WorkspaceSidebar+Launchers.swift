@@ -22,7 +22,6 @@ extension WorkspaceSidebar.Coordinator {
     /// click time — reused cells target the right one.
     @objc func addSessionButtonClicked(_ sender: NSButton) {
         guard let workspaceID = clickedWorkspace(sender) else { return }
-        SessionLaunchers.refresh()
         let menu = NSMenu()
         for launcher in SessionLaunchers.available {
             let item = NSMenuItem(title: launcher.title, action: #selector(menuLaunch(_:)), keyEquivalent: "")

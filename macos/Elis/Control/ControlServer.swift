@@ -966,6 +966,7 @@ final class ControlServer {
         )
         tree.remote = windowID.flatMap(library.remoteNode(for:))
         tree.phone = phoneRelay?.status.readback
+        tree.launchers = SessionLaunchers.available.map(\.rawValue)
         tree.catalogViewers = windowID.flatMap(originViewers)
         return tree
     }

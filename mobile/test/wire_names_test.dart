@@ -17,7 +17,7 @@ const wire = {
   'elisctlKit/PhoneLinkSession.swift': ['present', 'forward'],
   'elisctlKit/PhoneLinkPresenter+Forward.swift': ['forward'],
   'ElisCore/PhoneLink/PhoneLinkMessages.swift': ['type', 'target', 'page'],
-  'ElisCore/ControlProjection+Tree.swift': ['workspaces', 'id', 'name', 'open', 'active'],
+  'ElisCore/ControlProjection+Tree.swift': ['workspaces', 'id', 'name', 'open', 'active', 'launchers'],
   'ElisCore/ControlProjection.swift': [
     'id', 'name', 'status', 'agent', 'foreground', 'cwd', 'parent', 'context', 'tint', 'unseen', 'flagged', 'active',
     'statusBlink', 'hasSplit', 'split', 'collapsed', 'rememberedFolder', 'sessions', 'agentSessionId', 'remoteHost',

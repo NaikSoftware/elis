@@ -2,6 +2,7 @@ import 'package:elis_mobile/client.dart';
 import 'package:elis_mobile/main.dart';
 import 'package:elis_mobile/model.dart';
 import 'package:elis_mobile/screens/home.dart';
+import 'package:elis_mobile/screens/new_session.dart';
 import 'package:elis_mobile/theme.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -36,6 +37,15 @@ Future<void> pumpHome(WidgetTester t, ElisModel m) async {
 }
 
 void main() {
+  testWidgets('New session offers only the launchers the computer found', (t) async {
+    final m = model()..launcherIds = ['terminal', 'codex'];
+    await t.pumpWidget(MaterialApp(theme: buildTheme(), home: Scaffold(body: Builder(builder: (c) => NewSessionSheet(model: m, host: c)))));
+    expect(find.text('Terminal'), findsOneWidget);
+    expect(find.text('Codex'), findsOneWidget);
+    expect(find.text('Claude Code'), findsNothing);
+    expect(find.text('Antigravity'), findsNothing);
+  });
+
   testWidgets('a folded parent hides its companions and marks a blocked one', (t) async {
     final m = model();
     await pumpHome(t, m);

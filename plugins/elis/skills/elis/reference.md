@@ -356,7 +356,8 @@ visible before), `sidebarMode` (`tree` or `flagged` — the sidebar view mode, t
 `sidebarFlaggedLayout` (`flat`, `plain` or `tree` — how the flagged view is arranged, the read side
 of `sidebar flagged-layout`; app-wide, so every window reports the same value, under the ordinary tree
 too), `sidebarDensity` (`default` or `compact` — the sidebar row spacing, the read side of `sidebar density`;
-app-wide), `flaggedOrder` (the window's flagged session ids in the flat list's saved order, the read side of
+app-wide), `launchers` (the workspace "+" menu's choices: `terminal` plus each of `claude`, `codex`, `opencode` and
+`antigravity` found on the login shell's PATH; app-wide, and the phone's New session offers the same), `flaggedOrder` (the window's flagged session ids in the flat list's saved order, the read side of
 `session flag move`; omitted when nothing is flagged), `sidebarWidth` (the sidebar divider position in points, the read side of
 `sidebar width`, reported here and nowhere else), `filePanelVisible` and `filePanelWidth` (the file panel's visibility and width in points, the read sides of `filepanel` and `filepanel width`, reported here and not on `window list`), `workspaceFilter` (whether the window's workspace focus filter is currently APPLIED —
 the flag half of the focus set, whose member half is each workspace node's `focused`; the read side of

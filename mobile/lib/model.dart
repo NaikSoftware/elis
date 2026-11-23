@@ -209,6 +209,7 @@ class ElisModel extends ChangeNotifier {
   List<AgWindow> windows = [];
   String? windowId; // null = the frontmost window
   List<Workspace> workspaces = [];
+  List<String> launcherIds = const ['terminal']; // what the computer's "+" menu offers
   bool loaded = false;
   final _alerts = StreamController<Alert>.broadcast();
   Stream<Alert> get alerts => _alerts.stream;
@@ -336,6 +337,7 @@ class ElisModel extends ChangeNotifier {
       // shortcut: `origin` is omitted for elis-server and also before a Mac origin answers; upgrade if Mac rows show early
       final server = remote is Map && remote['origin'] != 'mac';
       workspaces = [for (final m in (tree?['workspaces'] as List? ?? const [])) Workspace(m as Map, server: server)];
+      launcherIds = (tree?['launchers'] as List?)?.cast<String>() ?? const ['terminal'];
       loaded = true;
       if (background) Watch.clear(Watch.posted.read(sessions));
       if (!_disposed) notifyListeners();

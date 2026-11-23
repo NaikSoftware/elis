@@ -1463,7 +1463,9 @@ QJsonObject MainWindow::chromeState() const
                     {"filePanelVisible", !m_filePanel->isHidden()},
                     {"filePanelWidth", m_filePanelWidth},
                     {"idleMs", m_idle.elapsed()},
-                    {"phone", PhoneRelay::instance()->readback()}};
+                    {"phone", PhoneRelay::instance()->readback()},
+                    {"launchers", QJsonArray::fromStringList(availableLaunchers())}}; // what the "+" menu offers, for the phone
+    DetectedLaunchers::instance()->refresh();
     if (const qint64 follow = autoFollowMs())
         out.insert("autoFollowMs", follow);
     if (m_assistantShown)
@@ -1766,7 +1768,7 @@ void MainWindow::launch(const QString &launcherId, const QString &workspaceId)
 
 QStringList MainWindow::availableLaunchers() const
 {
-    return DetectedLaunchers::instance()->ids();
+    return assistantLaunchers()->ids();
 }
 
 void MainWindow::launcherMenu(const QString &workspaceId, const QPoint &globalPos)
