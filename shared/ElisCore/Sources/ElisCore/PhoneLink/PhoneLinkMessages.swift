@@ -9,9 +9,12 @@ public struct PhoneLinkOpen: Codable, Equatable, Sendable {
     public var rows: UInt16?
     /// A `forward` channel's page, by the origin's page id.
     public var page: String?
+    /// An `upload` channel's file name and byte count.
+    public var name: String?
+    public var size: Int?
 
     public init(type: String, target: String, pane: String? = nil, claim: Bool? = nil, cols: UInt16? = nil, rows: UInt16? = nil,
-                page: String? = nil) {
+                page: String? = nil, name: String? = nil, size: Int? = nil) {
         self.type = type
         self.target = target
         self.pane = pane
@@ -19,6 +22,8 @@ public struct PhoneLinkOpen: Codable, Equatable, Sendable {
         self.cols = cols
         self.rows = rows
         self.page = page
+        self.name = name
+        self.size = size
     }
 }
 
@@ -42,8 +47,13 @@ public struct PhoneLinkLead: Codable, Equatable, Sendable {
 
 public struct PhoneLinkClose: Codable, Equatable, Sendable {
     public var reason: String
+    /// The host path of a finished upload.
+    public var path: String?
 
-    public init(reason: String) { self.reason = reason }
+    public init(reason: String, path: String? = nil) {
+        self.reason = reason
+        self.path = path
+    }
 }
 
 public extension PhoneLinkFrame {
