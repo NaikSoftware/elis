@@ -254,7 +254,7 @@ final class RawStubServer: @unchecked Sendable {
     /// Each `events.read`'s `after`, nil for the bootstrap read.
     private var eventReads: [UInt64?] = []
     private var failNextRead = false
-    private var attachGate: DispatchSemaphore?
+    private var gates: [String: DispatchSemaphore] = [:]
     private var attachPick: (@Sendable ([String: Any]) -> ControlResponse?)?
     private var raw: [String: String] = [:]
     private var streamCmds: Set<String> = []
@@ -291,8 +291,12 @@ final class RawStubServer: @unchecked Sendable {
     func answerAttach(by pick: @escaping @Sendable ([String: Any]) -> ControlResponse?) { lock.withLock { attachPick = pick } }
 
     /// `session.attach` answers only after `releaseAttach()`, or after 30 s.
-    func holdAttach() { lock.withLock { attachGate = DispatchSemaphore(value: 0) } }
-    func releaseAttach() { lock.withLock { () -> DispatchSemaphore? in defer { attachGate = nil }; return attachGate }?.signal() }
+    func holdAttach() { hold("session.attach") }
+    func releaseAttach() { release("session.attach") }
+
+    /// `cmd` answers only after `release(cmd)`, or after 30 s.
+    func hold(_ cmd: String) { lock.withLock { gates[cmd] = DispatchSemaphore(value: 0) } }
+    func release(_ cmd: String) { lock.withLock { gates.removeValue(forKey: cmd) }?.signal() }
 
     func requests() -> [String] { lock.withLock { received } }
     func eventReadCursors() -> [UInt64?] { lock.withLock { eventReads } }
@@ -393,7 +397,7 @@ final class RawStubServer: @unchecked Sendable {
             lock.withLock { streams.append(stream) }
             return true
         }
-        if cmd == "session.attach", let gate = lock.withLock({ attachGate }) { _ = gate.wait(timeout: .now() + 30) }
+        if let gate = lock.withLock({ gates[cmd] }) { _ = gate.wait(timeout: .now() + 30) }
         if let text = lock.withLock({ raw[cmd] }) {
             let data = Data(text.utf8)
             data.withUnsafeBytes { _ = UnixSocket.write(conn, $0.baseAddress!, data.count) }
