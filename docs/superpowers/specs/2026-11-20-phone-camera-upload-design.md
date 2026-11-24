@@ -1,6 +1,6 @@
 # Camera photo into the session
 
-Date: 2026-11-20. Status: draft; open questions below need the owner before planning.
+Date: 2026-11-20. Status: superseded by `2026-11-24-phone-chat-attachments-design.md`.
 Builds on `2026-11-20-phone-pages-design.md` (part 3 there).
 
 ## Intent
