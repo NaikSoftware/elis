@@ -101,6 +101,19 @@ void main() {
     expect(find.byKey(const Key('tag-@side-filter')), findsNothing);
   });
 
+  testWidgets('field chips stay while the keyboard composes', (t) async {
+    await pump(t);
+    final c = t.widget<TextField>(find.byKey(const Key('composer'))).controller!;
+    c.value = const TextEditingValue(text: '@side-filter push', composing: TextRange(start: 13, end: 17));
+    final spans = <TextSpan>[];
+    c.buildTextSpan(context: t.element(find.byKey(const Key('composer'))), withComposing: true).visitChildren((s) {
+      if (s is TextSpan && s.text != null) spans.add(s);
+      return true;
+    });
+    expect(spans.firstWhere((s) => s.text == '@side-filter').style!.background, isNotNull);
+    expect(spans.firstWhere((s) => s.text == 'push').style!.decoration, TextDecoration.underline);
+  });
+
   testWidgets('send calls ask and clears', (t) async {
     await pump(t);
     expect(t.widget<FilledButton>(find.byKey(const Key('send'))).onPressed, isNull);

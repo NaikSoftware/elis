@@ -72,15 +72,31 @@ class _TagController extends TextEditingController {
 
   @override
   TextSpan buildTextSpan({required BuildContext context, TextStyle? style, required bool withComposing}) {
-    if (withComposing && value.isComposingRangeValid) return super.buildTextSpan(context: context, style: style, withComposing: withComposing);
-    return TextSpan(
-        style: style,
-        children: _split(
-            text,
-            tint,
-            (t, c) => TextSpan(
-                text: t, style: TextStyle(fontFamily: mono, fontSize: 12, color: C.text, background: Paint()..color = c.withValues(alpha: .22)))));
+    final spans = _split(
+        text,
+        tint,
+        (t, c) => TextSpan(
+            text: t, style: TextStyle(fontFamily: mono, fontSize: 12, color: C.text, background: Paint()..color = c.withValues(alpha: .22))));
+    // the keyboard keeps a composing word while typing: underline it inside the chip split rather than drop the chips
+    return TextSpan(style: style, children: withComposing && value.isComposingRangeValid ? _underlined(spans, value.composing) : spans);
   }
+}
+
+/// [spans] (all plain `TextSpan`s) cut at [r]'s ends, the part inside [r] underlined.
+List<InlineSpan> _underlined(List<InlineSpan> spans, TextRange r) {
+  final out = <InlineSpan>[];
+  var at = 0;
+  for (final s in spans.cast<TextSpan>()) {
+    final a = at, b = at += s.text!.length;
+    final cuts = {a, r.start.clamp(a, b), r.end.clamp(a, b), b}.toList()..sort();
+    for (var i = 0; i + 1 < cuts.length; i++) {
+      final inside = cuts[i] >= r.start && cuts[i + 1] <= r.end;
+      out.add(TextSpan(
+          text: s.text!.substring(cuts[i] - a, cuts[i + 1] - a),
+          style: inside ? (s.style ?? const TextStyle()).copyWith(decoration: TextDecoration.underline) : s.style));
+    }
+  }
+  return out;
 }
 
 /// The Elis chat's composer: `@` completion, tag chips and the provider chip over the session chat's field.
