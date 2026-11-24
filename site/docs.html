@@ -2576,7 +2576,7 @@ elisctl session tint clear --target &quot;$ELIS_SESSION_ID&quot;</code></pre>
 <li>A model call or a finished tool reports active, <code>ask_question</code> and <code>ask_permission</code> report blocked, and the end of a turn reports completed. A turn that ends while background work still runs stays active.</li>
 <li>agy has no event for its own command or edit approval prompt, so that prompt does not turn the row blocked.</li>
 <li>Headless runs (<code>agy -p</code>) and an agy started by Claude Code report nothing, so they never overwrite the pane's status.</li>
-<li>A running agy picks up the plugin at its next turn. If you set up the <code>antigravity-agent-status</code> cookbook recipe before, remove its <code>elis-status</code> block from <code>~/.gemini/config/hooks.json</code>.</li>
+<li>A running agy picks up the plugin at its next turn. If you set up the former <code>antigravity-agent-status</code> cookbook recipe, remove its <code>elis-status</code> block from <code>~/.gemini/config/hooks.json</code>.</li>
 </ul>
 <h4 id="status-opencode">OpenCode</h4>
 <p>The installer runs <code>opencode --version</code> and installs the matching plugin. It finds OpenCode on your interactive login shell's PATH (<code>$SHELL</code>, or <code>/bin/zsh</code> when unset). If the version cannot be told, it asks you to choose v1 or v2, or to skip OpenCode. Nothing else is needed: no npm dependencies, no configuration edits. Restart OpenCode after installing.</p>

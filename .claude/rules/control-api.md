@@ -78,7 +78,7 @@ paths:
   agy loads any folder there with no registration, a running agy at its next turn. Each existing file must carry
   its marker (`plugin.json` the name, `hooks.json` the adapter) or the folder is user-owned. A hook command that
   fails denies the tool, so each ends `|| true`: the plugin outlives a removed package. `elis-antigravity-status.sh` prints nothing: on agy 1.5.15 a PreToolUse
-  printing `{}` denies the tool and `allow` (the `antigravity-agent-status` recipe's answer) auto-approves it.
+  printing `{}` denies the tool and `allow` auto-approves it.
 - Install Pi only when `~/.pi/agent` exists. Start is active; settle only after retries, compaction, and
   queued continuations. Pi exposes no reliable blocked event, so never infer it from prose.
 - Install OpenCode only when its config exists; v1 exports only `ElisStatusPlugin`, as the legacy loader
