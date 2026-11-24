@@ -29,7 +29,7 @@ struct AgentHooksFilesTests {
 
         let outcome = try files.install()
 
-        #expect(outcome == AgentHooksFiles.Outcome(settingsSkipped: false, codex: .merged, pi: .noPi))
+        #expect(outcome == AgentHooksFiles.Outcome(settingsSkipped: false, codex: .merged, pi: .noPi, antigravity: .noAntigravity))
         for wrapper in [AgentHooksInstall.wrapperName, AgentHooksInstall.codexWrapperName] {
             #expect(try read(home, ".config/elis/agent-status/\(wrapper)").contains(toolPath))
         }
@@ -135,6 +135,31 @@ struct AgentHooksFilesTests {
 
         #expect(outcome.pi == .installed)
         #expect(try read(home, ".pi/agent/extensions/elis-status.ts").contains(AgentHooksInstall.piExtensionMarker))
+    }
+
+    @Test func installsAntigravityPluginWhenAgyHasRun() throws {
+        let home = try makeHome()
+        defer { try? FileManager.default.removeItem(at: home) }
+        try FileManager.default.createDirectory(at: home.appendingPathComponent(".gemini/antigravity-cli"), withIntermediateDirectories: true)
+        let files = AgentHooksFiles(source: scripts, home: home, toolPath: toolPath)
+
+        #expect(try files.install().antigravity == .installed)
+        #expect(try read(home, ".gemini/config/plugins/elis-status/plugin.json").contains(AgentHooksInstall.antigravityPluginMarker))
+        #expect(try read(home, ".gemini/config/plugins/elis-status/hooks.json").contains("elis-antigravity-status.sh"))
+        #expect(try files.install().antigravity == .alreadyConfigured)
+    }
+
+    @Test func leavesAUserOwnedAntigravityPluginAlone() throws {
+        let home = try makeHome()
+        defer { try? FileManager.default.removeItem(at: home) }
+        let plugin = home.appendingPathComponent(".gemini/config/plugins/elis-status")
+        try FileManager.default.createDirectory(at: home.appendingPathComponent(".gemini/antigravity-cli"), withIntermediateDirectories: true)
+        try FileManager.default.createDirectory(at: plugin, withIntermediateDirectories: true)
+        try #"{"name": "mine"}"#.write(to: plugin.appendingPathComponent("plugin.json"), atomically: true, encoding: .utf8)
+
+        #expect(try AgentHooksFiles(source: scripts, home: home, toolPath: toolPath).install().antigravity == .userOwned)
+        #expect(try read(home, ".gemini/config/plugins/elis-status/plugin.json") == #"{"name": "mine"}"#)
+        #expect(!FileManager.default.fileExists(atPath: plugin.appendingPathComponent("hooks.json").path))
     }
 
     @Test func openCodePluginNeedsItsConfigDirectory() throws {

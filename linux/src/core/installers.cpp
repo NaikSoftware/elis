@@ -336,6 +336,33 @@ Report agentHooks(const QString &home, const QString &bundle, const QString &eli
         warn |= pi == Plugin::UserOwned || pi == Plugin::Unreadable || pi == Plugin::WriteFailed;
     }
 
+    QString agyLine;
+    const QString agyDir = home + QStringLiteral("/.gemini/config/plugins/elis-status");
+    if (!QFileInfo(home + QStringLiteral("/.gemini/antigravity-cli")).isDir()) {
+        agyLine = QStringLiteral("No ~/.gemini/antigravity-cli found, so the Antigravity CLI status plugin was skipped. Run agy once, then run elis --install agent-hooks.");
+    } else {
+        // a plugin is ours when each of its files carries our marker: plugin.json the name, hooks.json the adapter
+        QString foreign;
+        Plugin agy = readText(agyDir + QStringLiteral("/hooks.json"), &foreign) == Read::Ok && !foreign.contains(QLatin1String("elis-antigravity-status.sh"))
+            ? Plugin::UserOwned
+            : installOwned(bundle + QStringLiteral("/antigravity/plugin.json"), agyDir + QStringLiteral("/plugin.json"),
+                                  QStringLiteral("\"name\": \"elis-status\""));
+        if (agy == Plugin::Installed || agy == Plugin::AlreadyConfigured) {
+            const Plugin hooks = installOwned(bundle + QStringLiteral("/antigravity/hooks.json"), agyDir + QStringLiteral("/hooks.json"),
+                                              QStringLiteral("elis-antigravity-status.sh"));
+            if (hooks != Plugin::AlreadyConfigured)
+                agy = hooks;
+        }
+        static const QHash<Plugin, QString> lines{
+            {Plugin::Installed, "Antigravity CLI status plugin installed to ~/.gemini/config/plugins/elis-status."},
+            {Plugin::AlreadyConfigured, "Antigravity CLI status plugin is already current at ~/.gemini/config/plugins/elis-status."},
+            {Plugin::UserOwned, "~/.gemini/config/plugins/elis-status is user-owned, so Elis left it untouched."},
+            {Plugin::Unreadable, "~/.gemini/config/plugins/elis-status exists but could not be read, so Elis left it untouched."},
+            {Plugin::WriteFailed, "The Antigravity CLI status plugin couldn't be written to ~/.gemini/config/plugins/elis-status (check permissions), so it was skipped."}};
+        agyLine = lines.value(agy);
+        warn |= agy == Plugin::UserOwned || agy == Plugin::Unreadable || agy == Plugin::WriteFailed;
+    }
+
     QString openCodeLine;
     const QString legacy = home + QStringLiteral("/.config/opencode");
     if (openCode.version == 0) {
@@ -401,6 +428,7 @@ Report agentHooks(const QString &home, const QString &bundle, const QString &eli
                                        "again, or add the hooks manually."),
                codexLine,
                piLine,
+               agyLine,
                openCodeLine,
                QStringLiteral("The source line was added to ~/.zshrc, ~/.bashrc (and ~/.config/fish/config.fish if fish is installed)."),
                QString(),

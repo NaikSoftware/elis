@@ -139,7 +139,7 @@ ctrl+alt+shift), next to plain `ctrl`, `shift`, `alt` and `super`.
 The first launch of an installed Elis, and the first launch after an update or a move to another prefix, installs
 three extras in the background (log: `~/.local/share/elis/extras-install.log`). The agent status hooks: the status
 package goes to `~/.config/elis/agent-status` and is wired into Claude Code (`~/.claude/settings.json`), Codex
-(`~/.codex/config.toml`), Pi, OpenCode and your shell rc files; each file it edits is backed up as `.bak`, and running it
+(`~/.codex/config.toml`), Pi, OpenCode, Antigravity CLI (`~/.gemini/config/plugins/elis-status`) and your shell rc files; each file it edits is backed up as `.bak`, and running it
 again changes nothing. The agent skill (which teaches Claude Code and Codex to drive Elis) goes into
 `~/.claude/skills` and `~/.codex/skills`. `elisctl` is linked into `~/.local/bin` unless one is already there. A
 build-tree run installs nothing. By hand: `elis --install agent-hooks|skill|cli|all [--home DIR]`
