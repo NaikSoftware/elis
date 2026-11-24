@@ -172,7 +172,7 @@ void MainWindow::emitEvent(const QString &kind, const QString &sessionId, const 
 {
     const Workspace *w = m_store.workspaceOf(sessionId);
     m_events->emitEvent(kind, w ? w->id : QString(), sessionId, payload);
-    if (kind == QLatin1String("assistant.message")) // one window carries the app-wide chat's event; every view follows
+    if (kind == QLatin1String("assistant.message") || kind == QLatin1String("assistant.cleared")) // one window carries the app-wide chat's event; every view follows
         AssistantView::refreshAll();
 }
 

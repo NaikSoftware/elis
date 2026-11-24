@@ -251,7 +251,17 @@ struct ControlDispatcherAssistantTests {
         #expect(response?.ok == true && chat.unread == 0 && actions.seenRepaints == 1 && actions.showWindows.isEmpty)
     }
 
-    @Test(arguments: [Command.assistantAsk, .assistantSend, .assistantReply, .assistantRead, .assistantProvider, .assistantShow, .assistantSeen])
+    @Test func clearEmptiesTheChatAndTellsTheHost() async {
+        let (actions, chat) = (actions(), AssistantChat())
+        chat.append(.user, text: "x", now: 0)
+
+        let response = await dispatch(.assistantClear, actions: actions, chat: chat)
+
+        #expect(response?.ok == true && chat.entries(last: nil).isEmpty && actions.clears == 1)
+    }
+
+    @Test(arguments: [Command.assistantAsk, .assistantSend, .assistantReply, .assistantRead, .assistantProvider, .assistantShow, .assistantSeen,
+                      .assistantClear])
     func everyAssistantCommandRefusesOnAHostWithoutSupport(cmd: Command) async {
         var args = ControlArgs(text: "hi", recipients: ["claude-1"])
         args.provider = "claude"

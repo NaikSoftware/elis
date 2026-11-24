@@ -62,6 +62,15 @@ void AssistantRunner::providerChanged(const QString &provider)
     pump();
 }
 
+void AssistantRunner::cleared()
+{
+    stop(false); // a stream provider still holds the forgotten conversation
+    m_queue.clear();
+    m_busy = false;
+    m_text.clear();
+    m_recap = false;
+}
+
 void AssistantRunner::pump()
 {
     if (m_busy || m_queue.isEmpty() || !m_launchers.detected() || (m_provider.isEmpty() && !launch()))

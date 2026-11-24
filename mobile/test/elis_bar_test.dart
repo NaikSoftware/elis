@@ -77,6 +77,30 @@ void main() {
     await t.pumpWidget(const SizedBox());
   });
 
+  testWidgets('clear asks first and is disabled on an empty chat', (t) async {
+    final m = _Model();
+    await _home(t, m);
+    await t.tap(find.byKey(_ask));
+    await t.pumpAndSettle();
+    expect(t.widget<IconButton>(find.byKey(const Key('assistant-clear'))).onPressed, isNull);
+    m.transcript = [
+      {'id': 'e1', 'kind': 'user', 'text': 'hi', 'ts': 1.0},
+    ];
+    await m.readAssistant();
+    await t.pumpAndSettle();
+    await t.tap(find.byKey(const Key('assistant-clear')));
+    await t.pumpAndSettle();
+    await t.tap(find.text('Cancel'));
+    await t.pumpAndSettle();
+    expect(m.assistantCalls, isNot(contains('assistant.clear')));
+    await t.tap(find.byKey(const Key('assistant-clear')));
+    await t.pumpAndSettle();
+    await t.tap(find.widgetWithText(FilledButton, 'Clear'));
+    await t.pumpAndSettle();
+    expect(m.assistantCalls.skipWhile((c) => c != 'assistant.clear').take(2), ['assistant.clear', 'assistant.read']);
+    await t.pumpWidget(const SizedBox());
+  });
+
   testWidgets('bar shows unread', (t) async {
     await _home(t, _Model(unread: 2));
     expect(find.descendant(of: find.byKey(_ask), matching: find.byType(UnreadBadge)), findsOneWidget);
@@ -282,6 +306,19 @@ void main() {
     await t.pumpAndSettle();
     expect(m.assistantOpen, isTrue);
     expect(t.getRect(surface).top, top);
+  });
+
+  testWidgets('dragging down on an empty chat closes the sheet', (t) async {
+    final m = _Model();
+    await _bar(t, m);
+    await t.tap(find.byKey(_ask));
+    await t.pumpAndSettle();
+    final empty = find.byKey(const Key('assistant-empty'));
+    expect(empty, findsOneWidget);
+    await t.timedDragFrom(t.getCenter(empty), const Offset(0, 140), const Duration(milliseconds: 400));
+    await t.pumpAndSettle();
+    expect(m.assistantOpen, isFalse);
+    expect(find.byType(ElisSheet), findsNothing);
   });
 
   testWidgets('Ask Elis is a screen reader button', (t) async {

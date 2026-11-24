@@ -27,6 +27,8 @@ public extension ControlActions {
 
     func assistantSeen() {}
 
+    func assistantCleared() {}
+
     func showAssistant(window _: String?) -> ControlResponse {
         ControlResponse(ok: false, error: ControlActionsUnsupported.message("assistant.show"))
     }

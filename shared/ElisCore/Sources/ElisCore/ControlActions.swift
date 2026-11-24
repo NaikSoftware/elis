@@ -357,5 +357,7 @@ public protocol ControlActions {
     func assistantProviderChanged(_ provider: SessionLauncher)
     /// assistantSeen repaints the Elis row after `assistant.seen` cleared the unread count.
     func assistantSeen()
+    /// assistantCleared stops the provider and drops its queued inputs, so the next input starts a fresh conversation.
+    func assistantCleared()
     func showAssistant(window: String?) -> ControlResponse
 }

@@ -14,6 +14,8 @@ public enum AssistantEffect: Sendable, Equatable {
     case show(window: String?)
     /// seen follows the chat already marked seen: the host repaints its unread badge.
     case seen
+    /// cleared follows the chat already emptied: the host stops its provider and emits `assistant.cleared`.
+    case cleared
 }
 
 public struct AssistantSendPlan: Sendable, Codable, Equatable {
@@ -58,6 +60,9 @@ public struct AssistantCommands {
         case .assistantSeen:
             chat.markSeen()
             return .reply(ControlResponse(ok: true), effects: [.seen])
+        case .assistantClear:
+            chat.clear()
+            return .reply(ControlResponse(ok: true), effects: [.cleared])
         case .assistantRead:
             if let last = args.last, last < 1 { return failure("assistant.read: --last must be positive") }
             return success(ControlAssistantResult(entries: chat.entries(last: args.last)))

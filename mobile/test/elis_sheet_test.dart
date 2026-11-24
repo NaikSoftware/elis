@@ -243,4 +243,20 @@ void main() {
     await pump(t);
     expect(find.text('Elis is working…'), findsOneWidget);
   });
+
+  testWidgets('shows an empty state until the chat has entries, and again after clearing', (t) async {
+    await pump(t);
+    expect(find.byKey(const Key('assistant-empty')), findsOneWidget);
+    expect(find.byType(AppMark), findsOneWidget);
+    expect(find.text('Elis'), findsOneWidget);
+    expect(find.text('Ask about your sessions. Tag one with @.'), findsOneWidget);
+    m.assistantEntries = [_e('user', 'hello')];
+    m.changed();
+    await t.pump();
+    expect(find.byKey(const Key('assistant-empty')), findsNothing);
+    m.assistantEntries = [];
+    m.changed();
+    await t.pump();
+    expect(find.byKey(const Key('assistant-empty')), findsOneWidget);
+  });
 }

@@ -77,6 +77,22 @@ void main() {
     m.dispose();
   });
 
+  test('assistant.cleared event re-reads an open transcript', () async {
+    final m = CallLog()..assistantOpen = true;
+    m.onEvent({'kind': 'assistant.cleared'});
+    await pumpEventQueue();
+    expect(m.assistantCalls, ['assistant.read', 'assistant.seen']);
+    m.dispose();
+  });
+
+  test('clearAssistant clears app-wide and re-reads at once', () async {
+    final m = CallLog();
+    expect(await m.clearAssistant(), isNull);
+    expect(m.assistantCalls, ['assistant.clear', 'assistant.read']);
+    expect(m.calls.first.$3, isFalse);
+    m.dispose();
+  });
+
   test('a failed read marks nothing seen', () async {
     final m = CallLog()
       ..assistantOpen = true

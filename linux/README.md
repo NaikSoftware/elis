@@ -156,7 +156,7 @@ and `ELISCTL`, so
 `active`; `--window` picks a window other than the frontmost. `elisctl --help` lists the commands; the wire format is Elis's (one JSON request line, one response
 line) on `<state dir>/elis.sock`. The state dir is `~/.local/share/elis`, or `ELIS_STATE_DIR`.
 Beyond sessions and workspaces it streams events (`elisctl events`), shows pickers and questions (`pick`, `ask`),
-passes messages between panes (`msg`, addressed by `ELIS_PANE_ID`), drives the pinned Elis assistant chat and sends tagged messages to sessions (`assistant ask|send|read|provider|show|seen`, and `reply` from inside a session), reads a pane's screen or scrollback
+passes messages between panes (`msg`, addressed by `ELIS_PANE_ID`), drives the pinned Elis assistant chat and sends tagged messages to sessions (`assistant ask|send|read|provider|show|seen|clear`, and `reply` from inside a session), reads a pane's screen or scrollback
 (`session text --all`), types into either pane (`session type --pane right`), zooms a pane's font
 (`font inc|dec|reset`), attaches a terminal to a Live pane (`session attach [--claim]`), sets a pane's grid apart from its window (`session grid <cols>x<rows>`, `--reset`), and wheels a pane as a mouse
 would (`session scroll <lines>`). Commands for features Elis

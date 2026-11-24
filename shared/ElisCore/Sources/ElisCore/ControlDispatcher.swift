@@ -101,7 +101,8 @@ public struct ControlDispatcher {
             return dispatchAskCommand(request)
         case .msgSend, .msgRead, .msgAck:
             return dispatchMessageCommand(request)
-        case .assistantAsk, .assistantSend, .assistantReply, .assistantRead, .assistantProvider, .assistantShow, .assistantSeen:
+        case .assistantAsk, .assistantSend, .assistantReply, .assistantRead, .assistantProvider, .assistantShow, .assistantSeen,
+             .assistantClear:
             return await dispatchAssistantCommand(request)
         case .sessionHudOpen, .sessionHudUpdate, .sessionHudClose:
             return dispatchHudCommand(request)

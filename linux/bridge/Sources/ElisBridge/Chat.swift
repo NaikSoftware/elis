@@ -63,6 +63,8 @@ private struct Effect: Encodable {
             self.window = window
         case .seen:
             type = "seen"
+        case .cleared:
+            type = "cleared"
         }
     }
 }
@@ -90,7 +92,7 @@ private func refused(_ message: String) -> String {
 private func failed(_ message: String) -> String { json(["error": message]) }
 
 private let commands: Set<Command> = [.assistantShow, .assistantProvider, .assistantAsk, .assistantSend, .assistantReply,
-                                      .assistantRead, .assistantSeen]
+                                      .assistantRead, .assistantSeen, .assistantClear]
 
 /// Listed is a list the host passes, where the JSON text `null` means it cannot list it; anything else that does not
 /// decode fails the init.

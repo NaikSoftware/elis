@@ -58,8 +58,9 @@ char *elis_zmx_screen(const char *output, int lines); // zmx screen's reply as t
 char *elis_assistant_open(const char *stateDir); // {}; <stateDir>/assistant/chat.jsonl, the same path again a no-op
 // requestJSON is an assistant.* request. {"reply":<response>,"effects":[effect]}, or
 // {"plan":{targets,line,body,cut,skipped,skippedIDs,handles}} for the host to type and pass to finish_send. An effect is
-// {"type":"input","entry","streamText"}, {"type":"sent","entry"}, {"type":"providerChanged","provider"} or
-// {"type":"show","window"?}; the host performs a show and calls elis_assistant_mark_seen only when it succeeded.
+// {"type":"input","entry","streamText"}, {"type":"sent","entry"}, {"type":"providerChanged","provider"}, {"type":"seen"},
+// {"type":"cleared"} (the host stops its provider) or {"type":"show","window"?}; the host performs a show and calls
+// elis_assistant_mark_seen only when it succeeded.
 // A refusal is {"reply":{"ok":false,"error"},"effects":[]}.
 char *elis_assistant_run(const char *requestJSON, const char *peersJSON, const char *providersJSON);
 // A typed plan's outcome, failuresJSON {sessionID: typing error}: {"reply","effects"} as run's.

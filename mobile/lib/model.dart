@@ -389,6 +389,13 @@ class ElisModel extends ChangeNotifier {
 
   Future<String?> setProvider(String name) => act('assistant.provider', args: {'provider': name}, windowed: false);
 
+  /// Empties the chat on the computer and re-reads it at once, not at the next event poll.
+  Future<String?> clearAssistant() async {
+    final error = await act('assistant.clear', windowed: false);
+    if (error == null) await readAssistant();
+    return error;
+  }
+
   /// Re-reads the transcript and marks it seen, only while the sheet is on screen and the app in front.
   Future<void> rereadAssistant() async {
     if (!assistantOpen || background) return;
@@ -458,7 +465,7 @@ class ElisModel extends ChangeNotifier {
   void _onEvent(Map<String, dynamic> e) {
     _events.add(e);
     // closed, the badge counts it from the tree
-    if (e['kind'] == 'assistant.message') unawaited(rereadAssistant());
+    if (e['kind'] == 'assistant.message' || e['kind'] == 'assistant.cleared') unawaited(rereadAssistant());
     if (background && e['kind'] == 'session.closed') Watch.clear(Watch.posted.closed(e['session'] as String? ?? ''));
     final a = Alert.of(e);
     if (a == null) return;

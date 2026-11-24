@@ -45,6 +45,7 @@ private:
     void openProviders();
     void complete();
     void send();
+    void clear(); // asks first: the transcript cannot be restored
     void syncSend(); // the send button follows the message
     QPoint onScreen(QPoint at, const QSize &size) const; // a popup's top-left, kept on the window's screen
     bool dropTags(const class QMimeData *mime, const QTextCursor &at);
@@ -70,7 +71,7 @@ private:
     QPlainTextEdit *m_editor = nullptr;
     QCompleter *m_completer = nullptr;
     QStandardItemModel *m_candidates = nullptr;
-    QToolButton *m_provider = nullptr, *m_send = nullptr;
+    QToolButton *m_provider = nullptr, *m_clear = nullptr, *m_send = nullptr;
     QList<QPair<QString, QString>> m_providerRows; // provider id, title
     QString m_currentProvider;
     QPointer<class DetectedLaunchers> m_watched; // whose detection repaints the picker
