@@ -2213,6 +2213,7 @@ private Q_SLOTS:
         QVERIFY(QFile::link(home + "/real-settings.json", settings)); // a dotfiles-managed link
         spit(home + "/.codex/config.toml", "model = \"o3\"\nnotify = [\"/x/codex-notify.sh\"]\n\n[profiles.a]\nmodel = \"x\"\n");
         QDir().mkpath(home + "/.pi/agent");
+        QDir().mkpath(home + "/.gemini/antigravity-cli");
         QDir().mkpath(home + "/.config/opencode");
         spit(home + "/.bashrc", "export A=1");
 
@@ -2238,6 +2239,7 @@ private Q_SLOTS:
         QVERIFY(toml.contains("[[hooks.Stop.hooks]]") && toml.contains("elis-codex-status.sh' stop\""));
         QVERIFY(toml.contains("[profiles.a]"));
         QVERIFY(QFileInfo::exists(home + "/.pi/agent/extensions/elis-status.ts"));
+        QVERIFY(slurp(home + "/.gemini/config/plugins/elis-status/hooks.json").contains("elis-antigravity-status.sh"));
         QVERIFY(QFileInfo::exists(home + "/.config/opencode/plugins/elis-status.js"));
 
         const QString before = slurp(settings), rc = slurp(home + "/.bashrc");
@@ -2248,6 +2250,7 @@ private Q_SLOTS:
         QCOMPARE(slurp(home + "/.codex/config.toml"), toml);
         QVERIFY(r.text().contains("Codex lifecycle hooks are already present"));
         QVERIFY(r.text().contains("Pi lifecycle extension is already current"));
+        QVERIFY(r.text().contains("Antigravity CLI status plugin is already current"));
 
         // v2 replaces the v1 plugin we own
         QDir().mkpath(home + "/oc2");
@@ -2263,11 +2266,14 @@ private Q_SLOTS:
         spit(home + "/.claude/settings.json", "[1, 2]");
         spit(home + "/.codex/config.toml", "[hooks]\nfoo = 1\n");
         spit(home + "/.pi/agent/extensions/elis-status.ts", "// my own\n");
+        QDir().mkpath(home + "/.gemini/antigravity-cli");
+        spit(home + "/.gemini/config/plugins/elis-status/plugin.json", "{\"name\": \"mine\"}");
         const Install::Report r = Install::agentHooks(home, QStringLiteral(ELIS_SOURCE_AGENT_STATUS), {}, {0, {}});
         QVERIFY(r.warning);
         QCOMPARE(slurp(home + "/.claude/settings.json"), QStringLiteral("[1, 2]"));
         QCOMPARE(slurp(home + "/.codex/config.toml"), QStringLiteral("[hooks]\nfoo = 1\n"));
         QCOMPARE(slurp(home + "/.pi/agent/extensions/elis-status.ts"), QStringLiteral("// my own\n"));
+        QVERIFY(!QFileInfo::exists(home + "/.gemini/config/plugins/elis-status/hooks.json"));
         QVERIFY(r.text().contains("NOT added") && r.text().contains("already defines its own hooks") && r.text().contains("user-owned"));
         QVERIFY(r.text().contains("OpenCode status plugin installation was skipped."));
         QCOMPARE(Install::agentHooks(home, home + "/nowhere", {}, {}).error, QStringLiteral("The agent-status scripts are not bundled in this build."));

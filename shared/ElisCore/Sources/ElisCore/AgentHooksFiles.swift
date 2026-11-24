@@ -43,6 +43,17 @@ public struct AgentHooksFiles {
         }
     }
 
+    public enum AntigravityResult: Equatable, Sendable {
+        case installed, alreadyConfigured, userOwned, unreadable, writeFailed, noAntigravity
+
+        public var isWarning: Bool {
+            switch self {
+            case .userOwned, .unreadable, .writeFailed: true
+            case .installed, .alreadyConfigured, .noAntigravity: false
+            }
+        }
+    }
+
     /// OpenCodeResult is the OpenCode plugin's outcome; only version-specific results carry a version.
     public enum OpenCodeResult: Equatable, Sendable {
         case installed(AgentHooksInstall.OpenCode.Version, path: String)
@@ -68,8 +79,9 @@ public struct AgentHooksFiles {
         public let settingsSkipped: Bool
         public let codex: CodexResult
         public let pi: PiResult
+        public let antigravity: AntigravityResult
 
-        public var isWarning: Bool { settingsSkipped || codex.isWarning || pi.isWarning }
+        public var isWarning: Bool { settingsSkipped || codex.isWarning || pi.isWarning || antigravity.isWarning }
     }
 
     public let source: URL
@@ -102,7 +114,8 @@ public struct AgentHooksFiles {
         try appendShellRC()
         let codex = try mergeCodexConfig(jqAvailable: jqAvailable)
         let pi = try installPiExtension()
-        return Outcome(settingsSkipped: settingsSkipped, codex: codex, pi: pi)
+        let antigravity = try installAntigravityPlugin()
+        return Outcome(settingsSkipped: settingsSkipped, codex: codex, pi: pi, antigravity: antigravity)
     }
 
     private func copyScripts() throws {
@@ -203,6 +216,38 @@ public struct AgentHooksFiles {
             try fm.createDirectory(at: target.deletingLastPathComponent(), withIntermediateDirectories: true)
             let mode = AgentHooksInstall.posixMode(ofFile: (Self.symlinkTarget(of: target) ?? target).path)
             try writePreservingSymlink(contents, to: target, posixMode: mode)
+        } catch {
+            return .writeFailed
+        }
+        return .installed
+    }
+
+    // Pi's ownership rule over a plugin folder: its plugin.json decides for both files
+    private func installAntigravityPlugin() throws -> AntigravityResult {
+        let fm = FileManager.default
+        guard fm.fileExists(atPath: home.appendingPathComponent(".gemini/antigravity-cli").path) else { return .noAntigravity }
+        let source = destination.appendingPathComponent(AgentHooksInstall.antigravityPluginRelativePath)
+        let wanted = try AgentHooksInstall.antigravityPluginFiles.map { name in
+            let url = source.appendingPathComponent(name)
+            guard let text = try? String(contentsOf: url, encoding: .utf8) else {
+                throw Failure(message: "The Antigravity status plugin is missing \(name) in the scripts.")
+            }
+            return (name: name, text: text)
+        }
+        guard wanted[0].text.contains(AgentHooksInstall.antigravityPluginMarker) else {
+            throw Failure(message: "The Antigravity status plugin is missing its ownership marker.")
+        }
+        let folder = URL(fileURLWithPath: AgentHooksInstall.antigravityPluginPath(home: home.path))
+        var existing: [String?] = []
+        for file in wanted {
+            do { existing.append(try Self.readExisting(at: folder.appendingPathComponent(file.name))) } catch { return .unreadable }
+        }
+        if let manifest = existing[0], !manifest.contains(AgentHooksInstall.antigravityPluginMarker) { return .userOwned }
+        if existing[0] == nil, existing[1] != nil { return .userOwned }
+        guard existing != wanted.map(\.text) else { return .alreadyConfigured }
+        do {
+            try fm.createDirectory(at: folder, withIntermediateDirectories: true)
+            for file in wanted { try writePreservingSymlink(file.text, to: folder.appendingPathComponent(file.name)) }
         } catch {
             return .writeFailed
         }
@@ -339,6 +384,28 @@ extension AgentHooksFiles.PiResult {
             return "Pi's lifecycle extension couldn't be written to ~/.pi/agent/extensions/ (check that directory's permissions), so it was skipped."
         case .noPi:
             return "No ~/.pi/agent found, so Pi's lifecycle extension was skipped. Start Pi once, then Elis retries on its next update."
+        }
+    }
+}
+
+extension AgentHooksFiles.AntigravityResult {
+    /// text is the one-line report of this outcome; a running agy picks up a new plugin at its next turn.
+    public var text: String {
+        let path = "~/.gemini/config/plugins/elis-status"
+        switch self {
+        case .installed:
+            return "Antigravity CLI status plugin installed to \(path)."
+        case .alreadyConfigured:
+            return "Antigravity CLI status plugin is already current at \(path)."
+        case .userOwned:
+            return "\(path) is user-owned, so Elis left it untouched."
+        case .unreadable:
+            return "\(path) exists but could not be read, so Elis left it untouched."
+        case .writeFailed:
+            return "The Antigravity CLI status plugin couldn't be written to \(path) (check permissions), so it was skipped."
+        case .noAntigravity:
+            return "No ~/.gemini/antigravity-cli found, so the Antigravity CLI status plugin was skipped. "
+                + "Run agy once, then Elis retries on its next update."
         }
     }
 }

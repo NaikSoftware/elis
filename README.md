@@ -12,7 +12,7 @@ A tabbed terminal loses track of five agents in five projects.
 Elis keeps them in one tree:
 
 - **Workspaces.** A workspace holds the sessions of one project and remembers its project folder. A new session opens there.
-- **Agent status.** Claude Code, Codex, Pi, OpenCode and other agents report their state onto their session's row. A working agent shows a slow wave across its row; a blocked one asks for you.
+- **Agent status.** Claude Code, Codex, Pi, OpenCode, Antigravity CLI and other agents report their state onto their session's row. A working agent shows a slow wave across its row; a blocked one asks for you.
 - **Session switcher.** Click the session title in the title bar or press ⌃P. Search every session, see the ones that need you, and reopen recently closed ones.
 - **File panel.** A directory tree of the session's folder beside the terminal, with a context menu, clipboard, and drag and drop. Drag a file or a session into an agent's prompt to give it the path or the session's id.
 - **Live sessions.** Quit, update or relaunch the app while your agents keep running, mid-turn included. The next launch reattaches to them with their screen state.

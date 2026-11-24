@@ -276,6 +276,8 @@ prompt itself as an Elis bug.
 Elis installs the hooks on the first launch after each update. For shell-integrated agents, start a fresh shell
 so the installer-added `source` line takes effect. For Pi, restart it or run `/reload` so it loads
 `~/.pi/agent/extensions/elis-status.ts`; the extension installs only after Pi has created `~/.pi/agent`.
+For Antigravity CLI, the `elis-status` plugin goes to `~/.gemini/config/plugins/elis-status` only after agy has
+created `~/.gemini/antigravity-cli`; `agy plugin list` shows it, and its approval prompts never report blocked.
 For OpenCode, restart it to load `~/.config/opencode/plugins/elis-status.js` (v1) or
 `~/.config/opencode/plugins/elis-v2/tui.js` (v2).
 The installer detects the major via `opencode --version` in your interactive login shell; failed detection offers a manual choice.

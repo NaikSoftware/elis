@@ -32,6 +32,17 @@ public enum AgentHooksInstall {
     /// extension, preserving a user-authored integration.
     public static let piExtensionMarker = "// elis-pi-status-extension"
 
+    /// The bundled Antigravity CLI plugin folder in the agent-status package; agy loads every folder under
+    /// `~/.gemini/config/plugins` with no registration, and its hooks call the package's agy adapter.
+    public static let antigravityPluginRelativePath = "antigravity"
+    static let antigravityPluginFiles = ["plugin.json", "hooks.json"]
+    /// Ownership sentinel in the plugin's `plugin.json`; a same-named plugin without it is user-owned.
+    public static let antigravityPluginMarker = #""name": "elis-status""#
+
+    public static func antigravityPluginPath(home: String) -> String {
+        home + "/.gemini/config/plugins/elis-status"
+    }
+
     /// The bundled v1 plugin's path relative to the agent-status package.
     public static let opencodePluginRelativePath = OpenCode.relativePath(version: .v1)
     /// Ownership sentinel identifying an elis-managed OpenCode v1 plugin.

@@ -40,7 +40,7 @@ paths:
   admin prompt. Host-free `CLIInstall` owns paths/quoting; app code owns filesystem/auth.
 - `ExtrasAutoInstaller` runs the CLI, hooks and skill installers once per build (version, commit and bundle
   path, kept in UserDefaults), Release only, alerting only when the user must act.
-- Agent Hooks installation copies generic, Claude, Codex, Pi, OpenCode, and shell assets under
+- Agent Hooks installation copies generic, Claude, Codex, Pi, OpenCode, Antigravity CLI and shell assets under
   `~/.config/elis/agent-status`, baking the bundled CLI. Marker merges are idempotent and preserve
   unrelated config; unreadable config is never treated as absent.
 - Claude maps prompt/tool work to `active --blink`, Stop to `completed --auto-reset`, and a permission
@@ -74,6 +74,10 @@ paths:
   instead, `informativeText` being plain unselectable text that renders no link. Keep the button second so
   OK stays the default and Return still dismisses. That docs section carries a copy of `codexHooksBlock`
   and drifts from it silently.
+- Install the agy plugin `~/.gemini/config/plugins/elis-status` only when `~/.gemini/antigravity-cli` exists;
+  agy loads any folder there with no registration, a running agy at its next turn. Its `plugin.json` marker
+  decides ownership for both files. `elis-antigravity-status.sh` prints nothing: on agy 1.5.15 a PreToolUse
+  printing `{}` denies the tool and `allow` (the `antigravity-agent-status` recipe's answer) auto-approves it.
 - Install Pi only when `~/.pi/agent` exists. Start is active; settle only after retries, compaction, and
   queued continuations. Pi exposes no reliable blocked event, so never infer it from prose.
 - Install OpenCode only when its config exists; v1 exports only `ElisStatusPlugin`, as the legacy loader
