@@ -104,9 +104,14 @@ void main() {
       await h.opened();
       expect(_claims(h), isEmpty);
       expect(_modeIcon(t), (Icons.terminal, 'Chat — switch to Term'));
+      final chatBar = t.getRect(find.byType(AppBar));
+      final chatStatus = t.getRect(find.byKey(const Key('status')));
       await _tapKey(t, 'modeButton');
       expect(_chat(), isFalse);
       expect(_modeIcon(t), (Icons.chat_bubble_outline, 'Term — switch to Chat'));
+      expect(t.getRect(find.byType(AppBar)), chatBar);
+      expect(t.getRect(find.byKey(const Key('status'))).center.dy, chatStatus.center.dy);
+      expect(find.descendant(of: find.byType(AppBar), matching: find.byKey(const Key('termSubtitle'))), findsOneWidget);
       expect(find.byKey(const Key('term')), findsOneWidget);
       expect(_claims(h), hasLength(1)); // Term's claim on OPENED, on the next frame
       await _tapKey(t, 'modeButton');
@@ -513,6 +518,12 @@ void main() {
       expect(find.descendant(of: find.byType(AppBar), matching: find.byKey(const Key('via'))), findsNothing);
       expect(find.descendant(of: find.byType(ChatView), matching: find.byKey(const Key('via'))), findsNothing);
       expect(find.byKey(const Key('via')), findsOneWidget); // over the Chat view, not in it
+      final title = t.getRect(find.byType(ChatTitle));
+      final dot = t.getRect(find.byKey(const Key('status')));
+      final mode = t.getRect(find.byKey(const Key('modeButton')));
+      expect(dot.left, greaterThanOrEqualTo(title.right));
+      expect(dot.left - title.right, lessThanOrEqualTo(12));
+      expect(dot.right, lessThanOrEqualTo(mode.left));
       await expectLater(find.byType(Scaffold), matchesGoldenFile('goldens/session_chat${split ? '_split' : ''}.png'));
       await h.stop();
     });
