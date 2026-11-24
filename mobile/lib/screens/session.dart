@@ -772,25 +772,32 @@ class _SessionScreenState extends State<SessionScreen> {
     final chat = _inChat;
     final options = chat ? const <PromptOption>[] : promptOptions(_termShown ? t!.snapshot!.lines.map((l) => l.text).join('\n') : text);
     _answersShown = options.isNotEmpty;
+    final titleRow = Row(mainAxisSize: MainAxisSize.min, children: [
+      Flexible(
+        child: chat
+            ? ChatTitle(feed: _chatFeed, s: s)
+            : Text(s.name, style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w600), overflow: TextOverflow.ellipsis),
+      ),
+      Padding(
+        padding: const EdgeInsets.only(left: 8),
+        child: Semantics(
+            key: const Key('status'), container: true, label: statusLabel(s.status), child: StatusShape(s.status, size: 10, blink: s.blink)),
+      ),
+    ]);
     return Scaffold(
       appBar: AppBar(
         titleSpacing: 0,
         title: chat
-            ? ChatTitle(feed: _chatFeed, s: s)
+            ? titleRow
             : Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-          Text(s.name, style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w600), overflow: TextOverflow.ellipsis),
-          Text([s.shortCwd, if (s.agent.isNotEmpty) s.agent].join(' · '),
-              style: const TextStyle(fontSize: 12, color: C.muted, fontFamily: mono), overflow: TextOverflow.ellipsis),
-        ]),
+                titleRow,
+                Text([s.shortCwd, if (s.agent.isNotEmpty) s.agent].join(' · '),
+                    style: const TextStyle(fontSize: 12, color: C.muted, fontFamily: mono), overflow: TextOverflow.ellipsis),
+              ]),
         actions: [
           _modeButton(s),
           if (s.hasSplit) _paneButton(),
           if (_pages?.page case final p? when p.hidden) PageChip(title: p.title, onTap: () => _pages!.setHidden(p, false)),
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 6),
-            child: Semantics(
-                key: const Key('status'), label: statusLabel(s.status), child: StatusShape(s.status, size: 10, blink: s.blink)),
-          ),
           IconButton(
             key: const Key('sessionMenu'),
             tooltip: 'Session actions',

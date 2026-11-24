@@ -513,6 +513,12 @@ void main() {
       expect(find.descendant(of: find.byType(AppBar), matching: find.byKey(const Key('via'))), findsNothing);
       expect(find.descendant(of: find.byType(ChatView), matching: find.byKey(const Key('via'))), findsNothing);
       expect(find.byKey(const Key('via')), findsOneWidget); // over the Chat view, not in it
+      final title = t.getRect(find.byType(ChatTitle));
+      final dot = t.getRect(find.byKey(const Key('status')));
+      final mode = t.getRect(find.byKey(const Key('modeButton')));
+      expect(dot.left, greaterThanOrEqualTo(title.right));
+      expect(dot.left - title.right, lessThanOrEqualTo(12));
+      expect(dot.right, lessThanOrEqualTo(mode.left));
       await expectLater(find.byType(Scaffold), matchesGoldenFile('goldens/session_chat${split ? '_split' : ''}.png'));
       await h.stop();
     });
