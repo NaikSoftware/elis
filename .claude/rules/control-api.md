@@ -164,7 +164,7 @@ paths:
   the decoded struct drops every field the CLI build does not model (#625), so no CLI path prints JSON from
   the model; the pick/ask `--no-block` id object, their result payloads, `events`' per-event lines and
   `session wait`'s `{id, status}` object are the deliberate exceptions, each printing its own nested object
-  rather than the response.
+  rather than the response, and `session upload` always prints one `ControlResponse` JSON line.
 - Human output shows IDs only for created session/workspace/window, retains them in JSON, uses
   `result.affected` for session counts and for `zmx.prune`'s killed-daemon count, and reserves
   `result.count` for diagnostics/search.

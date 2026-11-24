@@ -713,6 +713,7 @@ private Q_SLOTS:
     void sessionUploadReservesUnderTheStateDir()
     {
         QTemporaryDir state;
+        const bool wasSet = qEnvironmentVariableIsSet("ELIS_STATE_DIR");
         const QByteArray old = qgetenv("ELIS_STATE_DIR");
         qputenv("ELIS_STATE_DIR", state.path().toUtf8());
         Store s;
@@ -720,7 +721,10 @@ private Q_SLOTS:
         const QString id = s.addSession(s.addWorkspace("w"), {}, {});
         const QJsonObject r = call(s, t, "session.upload", id, {{"name", "a b.txt"}, {"size", 3}});
         const QString path = r["result"]["upload"]["path"].toString();
-        qputenv("ELIS_STATE_DIR", old);
+        if (wasSet)
+            qputenv("ELIS_STATE_DIR", old);
+        else
+            qunsetenv("ELIS_STATE_DIR");
         QVERIFY2(r.value("ok").toBool(), qPrintable(r.value("error").toString()));
         QVERIFY(path.startsWith(state.path() + "/uploads/" + id + "/"));
         QVERIFY(path.endsWith("-a_b.txt"));

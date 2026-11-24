@@ -116,7 +116,7 @@ class ChatComposerState extends State<ChatComposer> {
     for (final a in _chips) {
       a.channel?.cancel();
     }
-    if (_chips.isNotEmpty) clearPicked();
+    dropPicked([for (final a in _chips) a.file]);
     widget.gate.removeListener(_onGate);
     _field.dispose();
     _focus.dispose();
@@ -190,7 +190,7 @@ class ChatComposerState extends State<ChatComposer> {
       if (r.ok && _field.text.trimRight() == text) _field.clear();
       if (r.ok && chips.isNotEmpty) {
         _chips.removeWhere(chips.contains);
-        if (_chips.isEmpty) clearPicked();
+        dropPicked([for (final a in chips) a.file]);
       }
       if (offer) {
         _offer = text;
@@ -227,7 +227,7 @@ class ChatComposerState extends State<ChatComposer> {
   void _remove(_Attachment a) {
     a.channel?.cancel();
     setState(() => _chips.remove(a));
-    if (_chips.isEmpty) clearPicked();
+    dropPicked([a.file]);
   }
 
   /// The field's Send and the offer's Replace: uploads the chips not yet on the host, one at a time, then sends
@@ -277,11 +277,13 @@ class ChatComposerState extends State<ChatComposer> {
 
   String? get _attachBlocked => widget.attachBlocked ?? AttachBlocks.tooOld[widget.session];
 
-  Widget _attach(bool held) => IconButton(
+  Widget _attach(bool held, String? blocked) => IconButton(
         key: const Key('attach'),
-        tooltip: _attachBlocked ?? 'Attach files',
+        tooltip: _attachBlocked ?? blocked ?? 'Attach files',
         icon: const Icon(Icons.attach_file),
-        onPressed: held || _picking || _uploading || widget.gate.running || widget.upload == null || _attachBlocked != null ? null : _pick,
+        onPressed: held || blocked != null || _picking || _uploading || widget.gate.running || widget.upload == null || _attachBlocked != null
+            ? null
+            : _pick,
       );
 
   Widget _chip(_Attachment a) {
@@ -420,7 +422,7 @@ class ChatComposerState extends State<ChatComposer> {
                   sendIcon: queue ? Icons.schedule : Icons.arrow_forward,
                   reason: reason,
                   enabled: held == null && !_uploading,
-                  leading: _attach(held != null),
+                  leading: _attach(held != null, blocked),
                   accessory: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
                     // Claude Code's mode cycle; agy's modes differ
                     if (s?.agy != true)

@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:io';
 
 import 'package:file_picker/file_picker.dart';
 
@@ -27,8 +28,12 @@ Future<List<PickedFile>> pickFiles() async => [
             size: f.lengthSync() ?? await f.length() ?? (throw UploadFailed('cannot read ${f.name}'))),
     ];
 
-/// Drops the picker's cached copies, every one of them: call it only when no chip is left.
-void clearPicked() => unawaited(Future.sync(FilePicker.clearTemporaryFiles).catchError((Object _) {}));
+/// Deletes the picker's cached copies of [files], ignoring errors: another composer's picks stay.
+void dropPicked(Iterable<PickedFile> files) {
+  for (final f in files) {
+    unawaited(File(f.path).delete().then<void>((_) {}, onError: (Object _) {}));
+  }
+}
 
 /// The prompt line: [text] trimmed, then ` Attached: '<p1>' '<p2>'`; host names never hold a quote.
 String attachedLine(String text, List<String> paths) {

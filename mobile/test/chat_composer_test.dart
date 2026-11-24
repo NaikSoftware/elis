@@ -709,6 +709,19 @@ void main() {
       expect(find.text('file too large (max 20 MiB)'), findsOneWidget);
     });
 
+    testWidgets('removingAChipDeletesOnlyItsCachedFile', (t) async {
+      final dir = Directory.systemTemp.createTempSync('elis_pick');
+      addTearDown(() => dir.deleteSync(recursive: true));
+      final files = [for (final n in ['a.png', 'b.txt']) File('${dir.path}/$n')..writeAsStringSync('x')];
+      final c = _C(t, _g('idle-placeholder-45'))
+        ..picks = [for (final f in files) PickedFile(name: f.uri.pathSegments.last, path: f.path, size: 1)];
+      await c.pump();
+      await c.attach();
+      await c.unchip('a.png');
+      await t.runAsync(() => Future<void>.delayed(const Duration(milliseconds: 50)));
+      expect([for (final f in files) f.existsSync()], [false, true]);
+    });
+
     testWidgets('picksPastTheTenthAreDropped', (t) async {
       final c = _C(t, _g('idle-placeholder-45'))
         ..picks = [for (var i = 0; i < 11; i++) PickedFile(name: 'f$i.txt', path: '/p/f$i.txt', size: 1)];
@@ -728,6 +741,15 @@ void main() {
         ..attachBlocked = 'Sending from the phone is not verified on remote sessions yet';
       await c.pump();
       expect((c.attachEnabled, c.attachTip), (false, 'Sending from the phone is not verified on remote sessions yet'));
+    });
+
+    testWidgets('attachIsOffWhileSendingIsBlocked', (t) async {
+      final c = _C(t, _g('dialog-bash-45'))..disabledBy = 'Agent exited';
+      await c.pump();
+      expect((c.attachEnabled, c.attachTip), (false, 'Agent exited'));
+      c.disabledBy = null;
+      await c.pump();
+      expect((c.attachEnabled, c.attachTip), (false, 'Claude shows a dialog'));
     });
 
     testWidgets('sendPastesTheTextAndTheHostPaths', (t) async {

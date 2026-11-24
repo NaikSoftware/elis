@@ -798,7 +798,7 @@ error keeps those names for compatibility.
   `upload.session` instead, and the file goes there over ssh. Errors: `file too large (max 20 MiB)`,
   `upload ended after K of N bytes`, `file changed while sending` (each leaves no file), `cannot upload to a remote row
   from here`, `the Elis on this host is too old for session.upload`; a page session refuses it. No tree read-back.
-  Elis removes the folders of sessions not open, saved or in Recent Closed, and files older than 7 days, at launch.
+  Old uploads are swept at launch (retention: `site/commands.html`).
 - `session transcript [--pane left|right] [--pane-id TOKEN] [--after N | --before N] [--transcript ID] [--max-bytes N] [--target] [--window W]`:
   a page of the Claude Code or agy (Antigravity CLI) conversation running in the session, read from its transcript file. `--pane` defaults to the
   node's `agentPane`; `scratch` is refused. Human output prints the title, model and permission mode, one
