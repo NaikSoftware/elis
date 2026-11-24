@@ -341,8 +341,11 @@ Report agentHooks(const QString &home, const QString &bundle, const QString &eli
     if (!QFileInfo(home + QStringLiteral("/.gemini/antigravity-cli")).isDir()) {
         agyLine = QStringLiteral("No ~/.gemini/antigravity-cli found, so the Antigravity CLI status plugin was skipped. Run agy once, then run elis --install agent-hooks.");
     } else {
-        // plugin.json carries the marker and decides for the folder: hooks.json is written only into a plugin we own
-        Plugin agy = installOwned(bundle + QStringLiteral("/antigravity/plugin.json"), agyDir + QStringLiteral("/plugin.json"),
+        // a plugin is ours when each of its files carries our marker: plugin.json the name, hooks.json the adapter
+        QString foreign;
+        Plugin agy = readText(agyDir + QStringLiteral("/hooks.json"), &foreign) == Read::Ok && !foreign.contains(QLatin1String("elis-antigravity-status.sh"))
+            ? Plugin::UserOwned
+            : installOwned(bundle + QStringLiteral("/antigravity/plugin.json"), agyDir + QStringLiteral("/plugin.json"),
                                   QStringLiteral("\"name\": \"elis-status\""));
         if (agy == Plugin::Installed || agy == Plugin::AlreadyConfigured) {
             const Plugin hooks = installOwned(bundle + QStringLiteral("/antigravity/hooks.json"), agyDir + QStringLiteral("/hooks.json"),

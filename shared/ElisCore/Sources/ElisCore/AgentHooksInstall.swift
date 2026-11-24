@@ -36,6 +36,7 @@ public enum AgentHooksInstall {
     /// `~/.gemini/config/plugins` with no registration, and its hooks call the package's agy adapter.
     public static let antigravityPluginRelativePath = "antigravity"
     static let antigravityPluginFiles = ["plugin.json", "hooks.json"]
+    static let antigravityWrapperName = "elis-antigravity-status.sh"
     /// Ownership sentinel in the plugin's `plugin.json`; a same-named plugin without it is user-owned.
     public static let antigravityPluginMarker = #""name": "elis-status""#
 

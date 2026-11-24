@@ -3,7 +3,7 @@
     "PreInvocation": [
       {
         "type": "command",
-        "command": "\"$HOME/.config/elis/agent-status/elis-antigravity-status.sh\" invocation",
+        "command": "\"$HOME/.config/elis/agent-status/elis-antigravity-status.sh\" invocation 2>/dev/null || true",
         "timeout": 5
       }
     ],
@@ -13,7 +13,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "\"$HOME/.config/elis/agent-status/elis-antigravity-status.sh\" ask",
+            "command": "\"$HOME/.config/elis/agent-status/elis-antigravity-status.sh\" ask 2>/dev/null || true",
             "timeout": 5
           }
         ]
@@ -25,7 +25,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "\"$HOME/.config/elis/agent-status/elis-antigravity-status.sh\" tool-done",
+            "command": "\"$HOME/.config/elis/agent-status/elis-antigravity-status.sh\" tool-done 2>/dev/null || true",
             "timeout": 5
           }
         ]
@@ -34,7 +34,7 @@
     "Stop": [
       {
         "type": "command",
-        "command": "\"$HOME/.config/elis/agent-status/elis-antigravity-status.sh\" stop",
+        "command": "\"$HOME/.config/elis/agent-status/elis-antigravity-status.sh\" stop 2>/dev/null || true",
         "timeout": 5
       }
     ]

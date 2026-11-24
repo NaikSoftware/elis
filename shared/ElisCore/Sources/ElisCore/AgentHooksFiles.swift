@@ -222,7 +222,7 @@ public struct AgentHooksFiles {
         return .installed
     }
 
-    // Pi's ownership rule over a plugin folder: its plugin.json decides for both files
+    // Pi's ownership rule over a plugin folder: each existing file must carry its marker
     private func installAntigravityPlugin() throws -> AntigravityResult {
         let fm = FileManager.default
         guard fm.fileExists(atPath: home.appendingPathComponent(".gemini/antigravity-cli").path) else { return .noAntigravity }
@@ -243,7 +243,7 @@ public struct AgentHooksFiles {
             do { existing.append(try Self.readExisting(at: folder.appendingPathComponent(file.name))) } catch { return .unreadable }
         }
         if let manifest = existing[0], !manifest.contains(AgentHooksInstall.antigravityPluginMarker) { return .userOwned }
-        if existing[0] == nil, existing[1] != nil { return .userOwned }
+        if let hooks = existing[1], !hooks.contains(AgentHooksInstall.antigravityWrapperName) { return .userOwned }
         guard existing != wanted.map(\.text) else { return .alreadyConfigured }
         do {
             try fm.createDirectory(at: folder, withIntermediateDirectories: true)

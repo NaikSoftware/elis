@@ -66,6 +66,7 @@ struct AntigravityStatusHookTests {
         #expect(commands.count == 4)
         for command in commands {
             #expect(command.contains("$HOME/.config/elis/agent-status/elis-antigravity-status.sh"))
+            #expect(command.hasSuffix("|| true\",")) // a failing hook command makes agy deny the tool
         }
         let plugin = try String(contentsOf: Self.agentStatus.appendingPathComponent("antigravity/plugin.json"), encoding: .utf8)
         #expect(plugin.contains(AgentHooksInstall.antigravityPluginMarker))
