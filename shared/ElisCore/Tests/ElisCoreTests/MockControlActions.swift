@@ -1131,6 +1131,9 @@ final class MockControlActions: ControlActions {
     func assistantProviders() -> [SessionLauncher]? { providers }
     func assistantProviderChanged(_ provider: SessionLauncher) { changedProviders.append(provider) }
 
+    var seenRepaints = 0
+    func assistantSeen() { seenRepaints += 1 }
+
     func showAssistant(window: String?) -> ControlResponse {
         showWindows.append(window)
         return nextShowAssistantResponse

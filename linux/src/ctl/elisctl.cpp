@@ -107,6 +107,7 @@ static const char *usage = R"(usage: elisctl <command> [args] [--target T] [--so
   assistant read [--last N]
   assistant provider [NAME]
   assistant show [--window W]
+  assistant seen
   reply <text>|--stdin                   reply to the assistant from inside an Elis session ($ELIS_SESSION_ID)
   keymap reload | list                  re-read keymap.conf; show what each built-in and custom command is bound to
   keymap run <name>                     start a custom command for the target session
@@ -425,6 +426,15 @@ static int runAssistant(const QString &cmd, const QStringList &pos, const QHash<
             return die(error);
         const QJsonObject resp = QJsonDocument::fromJson(line).object();
         if (const int rc = emitAssistantReply(line, resp, json); rc >= 0)
+            return rc;
+        return puts("ok"), 0;
+    }
+
+    if (cmd == QLatin1String("assistant.seen")) {
+        const QByteArray line = roundTrip(path, {{"cmd", "assistant.seen"}}, &error);
+        if (line.isEmpty())
+            return die(error);
+        if (const int rc = emitAssistantReply(line, QJsonDocument::fromJson(line).object(), json); rc >= 0)
             return rc;
         return puts("ok"), 0;
     }

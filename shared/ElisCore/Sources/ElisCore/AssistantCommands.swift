@@ -12,6 +12,8 @@ public enum AssistantEffect: Sendable, Equatable {
     case providerChanged(SessionLauncher)
     /// show is the host's to perform; it marks the chat seen only when its show succeeded.
     case show(window: String?)
+    /// seen follows the chat already marked seen: the host repaints its unread badge.
+    case seen
 }
 
 public struct AssistantSendPlan: Sendable, Codable, Equatable {
@@ -53,6 +55,9 @@ public struct AssistantCommands {
         case .assistantAsk: return ask(args)
         case .assistantSend: return send(args, directory: AssistantDirectory(peers))
         case .assistantReply: return reply(request.target, args, directory: AssistantDirectory(peers))
+        case .assistantSeen:
+            chat.markSeen()
+            return .reply(ControlResponse(ok: true), effects: [.seen])
         case .assistantRead:
             if let last = args.last, last < 1 { return failure("assistant.read: --last must be positive") }
             return success(ControlAssistantResult(entries: chat.entries(last: args.last)))

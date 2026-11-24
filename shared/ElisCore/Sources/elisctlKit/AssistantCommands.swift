@@ -28,7 +28,7 @@ struct Assistant: ParsableCommand {
     static let configuration = CommandConfiguration(
         commandName: "assistant",
         abstract: "Talk to the Elis assistant and message agent sessions.",
-        subcommands: [Ask.self, Send.self, Read.self, Provider.self, Show.self]
+        subcommands: [Ask.self, Send.self, Read.self, Provider.self, Show.self, Seen.self]
     )
 
     static func formatEntry(_ entry: AssistantEntry, timeZone: TimeZone = .current) -> String {
@@ -244,6 +244,15 @@ extension Assistant {
 
         func makeRequest() throws -> ControlRequest {
             ControlRequest(cmd: .assistantShow, args: options.withWindow())
+        }
+    }
+
+    struct Seen: RequestCommand {
+        static let configuration = CommandConfiguration(abstract: "Mark the Elis assistant chat seen without showing it.")
+        @OptionGroup var options: ClientOptions
+
+        func makeRequest() -> ControlRequest {
+            ControlRequest(cmd: .assistantSeen)
         }
     }
 }

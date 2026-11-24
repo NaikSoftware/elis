@@ -3,6 +3,7 @@
 #include "hooks.h"
 
 #include "assistant.h"
+#include "assistantview.h"
 #include "control.h"
 #include "detectedlaunchers.h"
 #include "zmx.h"
@@ -372,8 +373,8 @@ QJsonObject WindowLibrary::dispatch(const QJsonObject &request)
     const QStringList providers = assistantProviders();
     if (cmd == QLatin1String("assistant.provider") && args.contains("provider") && !launchers->detected())
         return fail(QStringLiteral("agents are still being detected; try again in a moment"));
-    if (cmd.startsWith(QLatin1String("assistant.")))
-        return Assistant::dispatch(request, everyWindow, providers, assistantSink, [this](const QString &window) {
+    if (cmd.startsWith(QLatin1String("assistant."))) {
+        const QJsonObject reply = Assistant::dispatch(request, everyWindow, providers, assistantSink, [this](const QString &window) {
             QString error;
             const Entry *e = entry(resolve(window, &error));
             if (!error.isEmpty())
@@ -383,6 +384,10 @@ QJsonObject WindowLibrary::dispatch(const QJsonObject &request)
             e->window->showAssistant();
             return QString();
         });
+        if (cmd == QLatin1String("assistant.seen") && reply.value("ok").toBool())
+            AssistantView::refreshAll();
+        return reply;
+    }
     // config the whole app shares, and the app-global restore commands, act on every open window
     static const QStringList everywhere{"keymap.reload", "hooks.reload", "theme.set", "restore.mode", "restore.capture", "restore.clear"};
     if (everywhere.contains(cmd)) {

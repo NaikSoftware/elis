@@ -85,7 +85,15 @@ struct AssistantCommandsCoreTests {
         #expect(response.ok && effects == [.show(window: "w1")])
     }
 
-    @Test(arguments: [Command.assistantAsk, .assistantSend, .assistantReply, .assistantRead])
+    @Test func seenClearsUnreadAndRepliesWithTheSeenEffect() throws {
+        let chat = AssistantChat()
+        chat.append(.reply, text: "done", from: "shell1-uuid", now: 0)
+        #expect(chat.unread == 1)
+        let (response, effects) = try reply(run(.assistantSeen, ControlArgs(), chat: chat))
+        #expect(response.ok && effects == [.seen] && chat.unread == 0)
+    }
+
+    @Test(arguments: [Command.assistantAsk, .assistantSend, .assistantReply, .assistantRead, .assistantSeen])
     func nilPeersRefuse(cmd: Command) throws {
         let (response, effects) = try reply(run(cmd, target: "shell1-uuid", ControlArgs(text: "hi", recipients: ["zsh"]),
                                                 chat: AssistantChat(), peers: .some(nil)))

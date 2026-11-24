@@ -1117,6 +1117,23 @@ private Q_SLOTS:
         QCOMPARE(closed["error"].toString(), QStringLiteral("window not open — window.select it first"));
     }
 
+    void assistantSeenClearsTheRowWithoutShowingTheChat()
+    {
+        QTemporaryDir state;
+        WindowLibrary lib(state.path());
+        lib.load();
+        MainWindow *w = lib.entries()[0].window;
+        w->show();
+        auto *tree = w->findChild<Sidebar *>();
+        const QString id = lib.entries()[0].store->allSessions().first()->id;
+        auto unread = [&] { return tree->topLevelItem(0)->data(0, SidebarRole::Unseen).toInt(); };
+        QVERIFY(lib.dispatch({{"cmd", "assistant.reply"}, {"target", id}, {"args", QJsonObject{{"text", "done"}}}})["ok"].toBool());
+        QTRY_COMPARE(unread(), 1);
+        QVERIFY(lib.dispatch({{"cmd", "assistant.seen"}})["ok"].toBool());
+        QTRY_COMPARE(unread(), 0);
+        QVERIFY(!w->assistantShown());
+    }
+
     void aReplyBehindAnotherWindowStaysUnreadUntilTheChatIsInFront()
     {
         QTemporaryDir state;

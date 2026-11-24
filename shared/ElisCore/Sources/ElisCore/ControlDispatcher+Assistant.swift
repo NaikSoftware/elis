@@ -40,6 +40,7 @@ extension ControlDispatcher {
             case let .input(entry, streamText): actions.assistantInput(entry, streamText: streamText)
             case let .sent(entry): actions.assistantSent(entry)
             case let .providerChanged(provider): actions.assistantProviderChanged(provider)
+            case .seen: actions.assistantSeen()
             case let .show(window):
                 let response = actions.showAssistant(window: window)
                 if response.ok { chat.markSeen() }

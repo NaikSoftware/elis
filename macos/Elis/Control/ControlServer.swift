@@ -760,7 +760,7 @@ final class ControlServer {
             preconditionFailure("ask command returned nil from ControlDispatcher")
         case .msgSend, .msgRead, .msgAck:
             preconditionFailure("msg command returned nil from ControlDispatcher")
-        case .assistantAsk, .assistantSend, .assistantReply, .assistantRead, .assistantProvider, .assistantShow:
+        case .assistantAsk, .assistantSend, .assistantReply, .assistantRead, .assistantProvider, .assistantShow, .assistantSeen:
             preconditionFailure("assistant command returned nil from ControlDispatcher")
         case .sessionHudOpen, .sessionHudUpdate, .sessionHudClose:
             preconditionFailure("hud command returned nil from ControlDispatcher")

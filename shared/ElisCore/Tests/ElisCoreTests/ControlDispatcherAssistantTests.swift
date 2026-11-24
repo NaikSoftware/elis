@@ -242,7 +242,16 @@ struct ControlDispatcherAssistantTests {
         #expect(actions.showWindows == ["w1", "w1"])
     }
 
-    @Test(arguments: [Command.assistantAsk, .assistantSend, .assistantReply, .assistantRead, .assistantProvider, .assistantShow])
+    @Test func seenClearsUnreadAndRepaintsWithoutShowing() async {
+        let (actions, chat) = (actions(), AssistantChat())
+        chat.append(.reply, text: "x", from: "shell1-uuid", now: 0)
+
+        let response = await dispatch(.assistantSeen, actions: actions, chat: chat)
+
+        #expect(response?.ok == true && chat.unread == 0 && actions.seenRepaints == 1 && actions.showWindows.isEmpty)
+    }
+
+    @Test(arguments: [Command.assistantAsk, .assistantSend, .assistantReply, .assistantRead, .assistantProvider, .assistantShow, .assistantSeen])
     func everyAssistantCommandRefusesOnAHostWithoutSupport(cmd: Command) async {
         var args = ControlArgs(text: "hi", recipients: ["claude-1"])
         args.provider = "claude"
