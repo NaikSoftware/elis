@@ -1292,8 +1292,9 @@ void MainWindow::takeOver(const QString &id, KParts::ReadOnlyPart *part, bool cl
         fresh->widget()->show();
     } else {
         p.split->insertWidget(at, fresh->widget());
-        fresh->widget()->setVisible(old->isVisible());
+        fresh->widget()->setVisible(!old->isHidden()); // isVisible() is false for every session not shown now
         p.split->setSizes(sizes);
+        prime(p.view, fresh->widget());
     }
     old->hide();
     retirePart(part); // the cover asking for this is still on the stack
