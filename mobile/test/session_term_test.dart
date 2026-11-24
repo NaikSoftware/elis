@@ -1701,13 +1701,13 @@ void main() {
     (String?, bool) shown() =>
         (t.widget<IconButton>(button).tooltip, t.widget<Transform>(find.descendant(of: button, matching: find.byType(Transform))).transform.storage[0] < 0);
     expect(find.descendant(of: find.byType(AppBar), matching: button), findsOneWidget);
-    expect(shown(), ('Left pane — switch to Right', false));
+    expect(shown(), ('Left pane — switch to Right', true));
     await t.pump(const Duration(milliseconds: 300));
     await expectLater(find.byType(Scaffold), matchesGoldenFile('goldens/session_split.png'));
     await t.tap(button);
     await t.pump();
     await h.opened();
-    expect(shown(), ('Right pane — switch to Left', true));
+    expect(shown(), ('Right pane — switch to Left', false));
     expect(_watches(h).last['pane'], 'right');
     await h.stop();
   });
