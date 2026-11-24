@@ -109,6 +109,10 @@ final class SessionAgentMonitor {
             ? pids.lazy.compactMap { ClaudeHome.sessionJSON(pid: $0, directory: directory) }
                 .first { SessionLauncher.claudeSessionID(json: $0) != nil }
             : nil
-        return AgentPaneSample(pane: pane, agent: agent, claudeSessionJSON: json)
+        let antigravity = AntigravityHome.directory()
+        let conversation = agent == .antigravity
+            ? pids.lazy.compactMap { AntigravityHome.conversationID(pid: $0, directory: antigravity) }.first
+            : nil
+        return AgentPaneSample(pane: pane, agent: agent, claudeSessionJSON: json, antigravityConversation: conversation)
     }
 }

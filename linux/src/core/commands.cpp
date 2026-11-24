@@ -91,7 +91,8 @@ static QJsonObject sessionTranscript(Store &store, Terminals &terminals, const Q
     if (pane.isEmpty())
         pane = s->agentPane.isEmpty() ? QStringLiteral("left") : s->agentPane;
     const bool claude = s->agent == QLatin1String("claude");
-    if ((!claude && s->agent != QLatin1String("antigravity")) || s->agentSessionId.isEmpty() || pane != s->agentPane)
+    // agy before its first prompt has no conversation: its empty id reads as `transcript not found` (Session.transcriptSource)
+    if ((!claude && s->agent != QLatin1String("antigravity")) || (claude && s->agentSessionId.isEmpty()) || pane != s->agentPane)
         return fail(QStringLiteral("no adapter"));
     const QString dir = claude ? claudeHome(qEnvironmentVariable("CLAUDE_CONFIG_DIR"), QDir::homePath()) : antigravityHome(QDir::homePath());
     s_deferred = [args, agent = s->agent, dir, conversation = s->agentSessionId, pane] {

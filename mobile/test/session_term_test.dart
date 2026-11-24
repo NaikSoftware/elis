@@ -569,6 +569,30 @@ void main() {
     await h.stop();
   });
 
+  testWidgets('agentOnMainScreenShowsTheTerminal', (t) async {
+    final h = Harness(t, treeOf());
+    await h.start();
+    await h.opened();
+    h.vts.single.alt = false;
+    h.r.send(frame(LinkKind.data, 2, utf8.encode('\$ ')));
+    await t.pump();
+    await t.pump();
+    expect(find.byType(TerminalView), findsNothing);
+    expect(find.byKey(const Key('screen')), findsOneWidget);
+
+    await h.retree(treeOf(session: {'agent': 'antigravity', 'agentPane': 'left'}));
+    expect(find.byType(TerminalView), findsOneWidget);
+    expect(find.byKey(const Key('screen')), findsNothing);
+
+    final texts = h.r.texts;
+    await h.retree(treeOf());
+    await t.pump();
+    expect(find.byType(TerminalView), findsNothing);
+    expect(find.byKey(const Key('screen')), findsOneWidget);
+    expect(h.r.texts, greaterThan(texts));
+    await h.stop();
+  });
+
   testWidgets('anIdleStreamStopsTheHistoryPoll', (t) async {
     final h = Harness(t, treeOf());
     Future<void> wait(int seconds) async {
