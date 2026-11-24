@@ -5,6 +5,7 @@ import 'dart:convert';
 import 'package:flutter/widgets.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 
+import 'assistant/assistant_model.dart';
 import 'ble_transport.dart';
 import 'client.dart';
 import 'link/mux.dart';
@@ -30,6 +31,7 @@ String agentOf(List<String> argv) {
 class Session {
   Session(Map m, this.workspaceId, this.workspaceName, {this.server = false})
       : id = m['id'] ?? '',
+        handle = m['handle'] ?? '',
         name = (m['name'] as String?)?.isNotEmpty == true ? m['name'] : 'New session',
         status = m['status'] ?? 'idle',
         agent = (m['agent'] as String?)?.isNotEmpty == true ? m['agent'] : agentOf((m['foreground'] as List?)?.cast<String>() ?? const []),
@@ -60,6 +62,7 @@ class Session {
   final String agentSessionId, agentPane, remoteHost;
   final bool remote;
   final bool server; // in an elis-server window, not a row attached from another Mac
+  final String handle;
   final String id, name, status, agent, cwd, parent, context, tint, workspaceId, workspaceName;
   final int unseen;
   final bool flagged, active, blink, hasSplit, split, collapsed;
@@ -72,13 +75,14 @@ class Session {
 class Workspace {
   Workspace(Map m, {bool server = false})
       : id = m['id'] ?? '',
+        handle = m['handle'] ?? '',
         name = m['name'] ?? '',
         folder = m['rememberedFolder'] ?? '',
         tint = m['tint'] ?? '',
         active = m['active'] == true,
         sessions = [for (final s in (m['sessions'] as List? ?? const [])) Session(s as Map, m['id'] ?? '', m['name'] ?? '', server: server)];
 
-  final String id, name, folder, tint;
+  final String id, handle, name, folder, tint;
   final bool active;
   final List<Session> sessions;
 }
@@ -211,6 +215,9 @@ class ElisModel extends ChangeNotifier {
   List<Workspace> workspaces = [];
   List<String> launcherIds = const ['terminal']; // what the computer's "+" menu offers
   bool loaded = false;
+  AssistantState? assistant; // null on a host without the assistant
+  List<AssistantEntry> assistantEntries = [];
+  bool assistantOpen = false; // set by the sheet: a message that arrives meanwhile is read at once
   final _alerts = StreamController<Alert>.broadcast();
   Stream<Alert> get alerts => _alerts.stream;
   final _events = StreamController<Map<String, dynamic>>.broadcast();
@@ -338,6 +345,7 @@ class ElisModel extends ChangeNotifier {
       final server = remote is Map && remote['origin'] != 'mac';
       workspaces = [for (final m in (tree?['workspaces'] as List? ?? const [])) Workspace(m as Map, server: server)];
       launcherIds = (tree?['launchers'] as List?)?.cast<String>() ?? const ['terminal'];
+      assistant = tree?['assistant'] is Map ? AssistantState.fromJson(tree!['assistant'] as Map) : null;
       loaded = true;
       if (background) Watch.clear(Watch.posted.read(sessions));
       if (!_disposed) notifyListeners();
@@ -346,6 +354,32 @@ class ElisModel extends ChangeNotifier {
       if (!_disposed) notifyListeners();
     } on TimeoutException {
       // the next event or poll retries
+    }
+  }
+
+  Future<void> readAssistant({int last = 100}) async {
+    try {
+      final r = await call('assistant.read', args: {'last': last});
+      assistantEntries = [for (final e in ((r['assistant'] as Map?)?['entries'] as List? ?? const [])) AssistantEntry.fromJson(e as Map)];
+      if (!_disposed) notifyListeners();
+    } on ElisError {
+      // the next event retries
+    } on TimeoutException {
+      // the next event retries
+    }
+  }
+
+  Future<String?> askAssistant(String text) => act('assistant.ask', args: {'text': text});
+
+  Future<String?> setProvider(String name) => act('assistant.provider', args: {'provider': name});
+
+  Future<void> markAssistantSeen() async {
+    try {
+      await call('assistant.seen');
+    } on ElisError {
+      // best effort
+    } on TimeoutException {
+      // best effort
     }
   }
 
@@ -392,8 +426,14 @@ class ElisModel extends ChangeNotifier {
     }
   }
 
+  @visibleForTesting
+  void onEvent(Map<String, dynamic> e) => _onEvent(e);
+
   void _onEvent(Map<String, dynamic> e) {
     _events.add(e);
+    if (e['kind'] == 'assistant.message') {
+      readAssistant().then((_) => assistantOpen ? markAssistantSeen() : null);
+    }
     if (background && e['kind'] == 'session.closed') Watch.clear(Watch.posted.closed(e['session'] as String? ?? ''));
     final a = Alert.of(e);
     if (a == null) return;
