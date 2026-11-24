@@ -309,6 +309,8 @@ struct EventCommandsTests {
             timeZone: TimeZone(secondsFromGMT: 0)!
         )
         #expect(assistant == "00:00:00 assistant.message kind=reply from=claude-1 done")
+        #expect(EventFormatter.human(ControlEvent(seq: 24, ts: 0, kind: .assistantCleared, payload: ControlEventPayload()),
+                                     timeZone: TimeZone(secondsFromGMT: 0)!) == "00:00:00 assistant.cleared")
 
         for event in events {
             let line = try EventFormatter.json(event)

@@ -111,7 +111,7 @@ enum EventFormatter {
         case .remoteOpened, .remoteClosed:
             return "\(time) \(event.kind.rawValue) \(name) host=\(event.payload.host ?? "")"
                 + " remote-session-id=\(event.payload.remoteSessionID ?? "-")"
-        case .appLaunched:
+        case .appLaunched, .assistantCleared:
             return "\(time) \(event.kind.rawValue)"
         case .phoneConnected, .phoneDisconnected, .phoneRefused:
             return "\(time) \(event.kind.rawValue) ip=\(event.payload.ip ?? "-")"

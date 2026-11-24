@@ -41,6 +41,7 @@ public:
     virtual ~AssistantSink() = default;
     virtual void enqueue(const QString &streamText) = 0;
     virtual void providerChanged(const QString &provider) = 0;
+    virtual void cleared() { } // the chat was emptied: drop the queue and the provider's conversation
 };
 
 // assistant.* for a host of windows; their order sets the handles, so keep it stable (the library's)

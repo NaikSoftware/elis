@@ -118,6 +118,18 @@ public final class AssistantChat {
 
     public func markSeen() { unread = 0 }
 
+    /// clear empties the transcript and forgets every conversation; the provider choice stays.
+    public func clear() {
+        all = []
+        marks = [:]
+        unread = 0
+        pending = 0
+        resume = [:]
+        fileLines = 0
+        tornTail = false
+        if let file { try? Data().write(to: file) }
+    }
+
     public func markSkipped(_ sessionIDs: [String]) { sessionIDs.forEach { marks[$0] = .notDelivered } }
 
     private func save(_ data: Data?, as pathExtension: String) {

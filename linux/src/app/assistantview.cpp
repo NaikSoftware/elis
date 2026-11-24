@@ -20,6 +20,7 @@
 #include <QKeyEvent>
 #include <QLabel>
 #include <QMouseEvent>
+#include <QMessageBox>
 #include <QMimeData>
 #include <QPaintEvent>
 #include <QPainter>
@@ -500,6 +501,17 @@ AssistantView::AssistantView(MainWindow &window, Store &store)
     note->setStyleSheet(QStringLiteral("color:%1;").arg(css(ink(0.55))));
     bottom->addWidget(note);
     bottom->addStretch(1);
+    m_clear = new QToolButton;
+    m_clear->setObjectName(QStringLiteral("assistantClear"));
+    m_clear->setToolTip(tr("Clear chat"));
+    m_clear->setAccessibleName(tr("Clear chat"));
+    m_clear->setIcon(QIcon::fromTheme(QStringLiteral("edit-delete")));
+    m_clear->setIconSize(QSize(18, 18));
+    m_clear->setFixedSize(34, 34);
+    m_clear->setFocusPolicy(Qt::NoFocus);
+    m_clear->setStyleSheet(QStringLiteral("QToolButton{border:0;border-radius:9px;}QToolButton:hover{background:%1;}").arg(css(ink(0.1))));
+    connect(m_clear, &QToolButton::clicked, this, &AssistantView::clear);
+    bottom->addWidget(m_clear);
     m_send = new QToolButton;
     m_send->setObjectName(QStringLiteral("assistantSend"));
     m_send->setToolTip(tr("Send"));
@@ -667,6 +679,7 @@ void AssistantView::refresh()
         if (!m_shown.contains(e["id"].toString()))
             append(e.toObject());
     m_empty->setVisible(m_shown.isEmpty());
+    m_clear->setEnabled(!m_shown.isEmpty());
     m_working->setVisible(m_directory.value("assistant")["running"].toBool());
     rebuildProviders();
 }
@@ -913,6 +926,15 @@ void AssistantView::send()
     if (!r["ok"].toBool())
         return m_window.statusBar()->showMessage(r["error"].toString(), 4000);
     m_editor->clear();
+}
+
+void AssistantView::clear()
+{
+    if (QMessageBox::question(this, tr("Clear Chat"), tr("Clear the Elis chat? Elis also forgets the conversation."))
+        != QMessageBox::Yes)
+        return;
+    if (const QJsonObject r = m_window.assistantRequest({{"cmd", "assistant.clear"}}); !r["ok"].toBool())
+        m_window.statusBar()->showMessage(r["error"].toString(), 4000);
 }
 
 bool AssistantView::dropTags(const QMimeData *mime, const QTextCursor &at)

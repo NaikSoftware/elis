@@ -108,6 +108,7 @@ static const char *usage = R"(usage: elisctl <command> [args] [--target T] [--so
   assistant provider [NAME]
   assistant show [--window W]
   assistant seen
+  assistant clear                       empty the chat; the provider starts a fresh conversation
   reply <text>|--stdin                   reply to the assistant from inside an Elis session ($ELIS_SESSION_ID)
   keymap reload | list                  re-read keymap.conf; show what each built-in and custom command is bound to
   keymap run <name>                     start a custom command for the target session
@@ -430,8 +431,8 @@ static int runAssistant(const QString &cmd, const QStringList &pos, const QHash<
         return puts("ok"), 0;
     }
 
-    if (cmd == QLatin1String("assistant.seen")) {
-        const QByteArray line = roundTrip(path, {{"cmd", "assistant.seen"}}, &error);
+    if (cmd == QLatin1String("assistant.seen") || cmd == QLatin1String("assistant.clear")) {
+        const QByteArray line = roundTrip(path, {{"cmd", cmd}}, &error);
         if (line.isEmpty())
             return die(error);
         if (const int rc = emitAssistantReply(line, QJsonDocument::fromJson(line).object(), json); rc >= 0)
@@ -469,7 +470,7 @@ static QString eventLine(const QJsonObject &e)
     const QJsonObject p = e.value("payload").toObject();
     const QString kind = e.value("kind").toString(), name = p.value("name").toString(e.value("window").toString(QStringLiteral("-")));
     QString line = QDateTime::fromMSecsSinceEpoch(qint64(e.value("ts").toDouble() * 1000)).toString(QStringLiteral("HH:mm:ss ")) + kind;
-    if (kind == QLatin1String("app.launched"))
+    if (kind == QLatin1String("app.launched") || kind == QLatin1String("assistant.cleared"))
         return line;
     if (kind == QLatin1String("assistant.message")) {
         const QString msgKind = p.value("kind").toString();

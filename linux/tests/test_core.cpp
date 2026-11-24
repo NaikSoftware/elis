@@ -77,6 +77,8 @@ public:
     QStringList inputs, providers;
     void enqueue(const QString &streamText) override { inputs << streamText; }
     void providerChanged(const QString &provider) override { providers << provider; }
+    int clears = 0;
+    void cleared() override { ++clears; }
 };
 
 // ControlDispatcherTranscriptTests' fixture: a Claude directory holding projects/-proj/c1.jsonl and a session running
@@ -1716,6 +1718,21 @@ private Q_SLOTS:
         QCOMPARE(t.events.size(), 3);
         QCOMPARE(t.events[1].value("payload")["text"].toString(), QStringLiteral("no sink"));
         QCOMPARE(t.events[2]["payload"].toObject(), (QJsonObject{{"kind", "error"}, {"text", "no assistant provider is running"}}));
+        QVERIFY(!Assistant::stamp(call(s, t, "tree"), one(s, t), {}).value("result")["tree"]["assistant"]["running"].toBool());
+    }
+
+    void assistantClearEmptiesTheChatTellsTheSinkAndEmits()
+    {
+        QTemporaryDir dir;
+        AssistantBridge::open(dir.path());
+        Store s;
+        FakeTerminals t;
+        FakeSink sink;
+        Assistant::dispatch({{"cmd", "assistant.ask"}, {"args", QJsonObject{{"text", "hi"}}}}, one(s, t), {}, &sink);
+        QVERIFY(Assistant::dispatch({{"cmd", "assistant.clear"}}, one(s, t), {}, &sink)["ok"].toBool());
+        QCOMPARE(sink.clears, 1);
+        QCOMPARE(t.events.last()["kind"].toString(), QStringLiteral("assistant.cleared"));
+        QVERIFY(Assistant::dispatch({{"cmd", "assistant.read"}}, one(s, t), {}, &sink).value("result")["assistant"]["entries"].toArray().isEmpty());
         QVERIFY(!Assistant::stamp(call(s, t, "tree"), one(s, t), {}).value("result")["tree"]["assistant"]["running"].toBool());
     }
 

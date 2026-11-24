@@ -179,7 +179,7 @@ class _ElisComposerState extends State<ElisComposer> {
                 mono: false,
                 hint: 'Message Elis… @ to tag',
                 fill: C.bg,
-                accessory: a == null || a.providers.isEmpty ? null : _provider(a),
+                accessory: a == null ? null : _accessory(a, offline),
               ),
             ),
           );
@@ -260,22 +260,37 @@ class _ElisComposerState extends State<ElisComposer> {
     if (name != null && name != widget.model.assistant?.provider) unawaited(reportOf(context, widget.model.setProvider(name)));
   }
 
-  Widget _provider(AssistantState a) {
+  Future<void> _clear() async {
+    if (!await confirm(context, 'Clear chat', 'Clear the Elis chat? Elis also forgets the conversation.', 'Clear')) return;
+    if (mounted) unawaited(reportOf(context, widget.model.clearAssistant()));
+  }
+
+  Widget _accessory(AssistantState a, bool offline) {
     final p = a.provider;
     return Padding(
       padding: const EdgeInsets.only(bottom: 6),
       child: Row(children: [
-        Builder(
-          builder: (chip) => ActionChip(
-            key: const Key('provider-chip'),
-            avatar: p == null ? null : AgentLogo(p, size: 16),
-            label: Row(mainAxisSize: MainAxisSize.min, children: [
-              Text(p == null ? 'Provider' : agentNames[p] ?? p, style: const TextStyle(fontSize: 12)),
-              Icon(_picking ? Icons.expand_less : Icons.expand_more, size: 16, color: C.muted),
-            ]),
-            visualDensity: VisualDensity.compact,
-            onPressed: () => _pick(chip, a),
+        if (a.providers.isNotEmpty)
+          Builder(
+            builder: (chip) => ActionChip(
+              key: const Key('provider-chip'),
+              avatar: p == null ? null : AgentLogo(p, size: 16),
+              label: Row(mainAxisSize: MainAxisSize.min, children: [
+                Text(p == null ? 'Provider' : agentNames[p] ?? p, style: const TextStyle(fontSize: 12)),
+                Icon(_picking ? Icons.expand_less : Icons.expand_more, size: 16, color: C.muted),
+              ]),
+              visualDensity: VisualDensity.compact,
+              onPressed: () => _pick(chip, a),
+            ),
           ),
+        const Spacer(),
+        IconButton(
+          key: const Key('assistant-clear'),
+          tooltip: 'Clear chat',
+          icon: const Icon(Icons.delete_outline, size: 20),
+          color: C.muted,
+          visualDensity: VisualDensity.compact,
+          onPressed: offline || widget.model.assistantEntries.isEmpty ? null : _clear,
         ),
       ]),
     );

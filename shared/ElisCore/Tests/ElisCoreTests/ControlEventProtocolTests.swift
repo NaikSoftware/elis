@@ -43,6 +43,7 @@ struct ControlEventProtocolTests {
             ControlEvent(seq: 21, ts: 21.5, kind: .phoneReleased, payload: ControlEventPayload(paneID: "tok")),
             ControlEvent(seq: 22, ts: 22.5, kind: .assistantMessage,
                          payload: ControlEventPayload(from: "sess-1", kind: "reply", handle: "claude-1", text: "done")),
+            ControlEvent(seq: 23, ts: 23.5, kind: .assistantCleared),
         ]
 
         let data = try JSONEncoder().encode(events)
@@ -93,6 +94,7 @@ struct ControlEventProtocolTests {
             ControlEvent(seq: 21, ts: 21.5, kind: .phoneReleased, payload: ControlEventPayload(paneID: "tok")),
             ControlEvent(seq: 22, ts: 22.5, kind: .assistantMessage,
                          payload: ControlEventPayload(from: "sess-1", kind: "reply", handle: "claude-1", text: "done")),
+            ControlEvent(seq: 23, ts: 23.5, kind: .assistantCleared),
         ]
         let expected = [
             ##"{"kind":"status","payload":{"blink":true,"color":"#aabbcc","name":"api","pane":"right","##
@@ -118,6 +120,7 @@ struct ControlEventProtocolTests {
             ##"{"kind":"phone.claimed","payload":{"ip":"10.0.0.5","paneID":"tok"},"seq":20,"ts":20.5}"##,
             ##"{"kind":"phone.released","payload":{"paneID":"tok"},"seq":21,"ts":21.5}"##,
             ##"{"kind":"assistant.message","payload":{"from":"sess-1","handle":"claude-1","kind":"reply","text":"done"},"seq":22,"ts":22.5}"##,
+            ##"{"kind":"assistant.cleared","payload":{},"seq":23,"ts":23.5}"##,
         ]
 
         #expect(try events.map(canonicalJSON) == expected)

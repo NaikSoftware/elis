@@ -1386,6 +1386,29 @@ private Q_SLOTS:
         QVERIFY(!completer->popup()->isVisible());
     }
 
+    void clearButtonFollowsWhetherTheChatHasEntries()
+    {
+        struct Quiet : AssistantSink {
+            void enqueue(const QString &) override { }
+            void providerChanged(const QString &) override { }
+        } sink;
+        QTemporaryDir state;
+        DetectedLaunchers launchers;
+        WindowLibrary lib(state.path());
+        lib.launchers = &launchers;
+        lib.assistantSink = &sink;
+        lib.load();
+        MainWindow *w = lib.entries()[0].window;
+        w->show();
+        w->showAssistant();
+        auto *clear = w->findChild<QToolButton *>("assistantClear");
+        QTRY_VERIFY(clear->isVisible() && !clear->isEnabled());
+        QVERIFY(lib.dispatch({{"cmd", "assistant.ask"}, {"args", QJsonObject{{"text", "hi"}}}})["ok"].toBool());
+        QTRY_VERIFY(clear->isEnabled());
+        QVERIFY(lib.dispatch({{"cmd", "assistant.clear"}})["ok"].toBool());
+        QTRY_VERIFY(!clear->isEnabled());
+    }
+
     void providerPickerSitsAboveTheComposerAndPicksWithKeys()
     {
         struct Quiet : AssistantSink {
@@ -1495,6 +1518,33 @@ private Q_SLOTS:
         const QString answer = host.texts("assistant")[1];
         QVERIFY2(answer.endsWith("\n\none") && answer.contains("user: zero") && !answer.contains("user: one"), qPrintable(answer));
         QVERIFY(!host.running());
+    }
+
+    void assistantClearMidTurnStopsTheProviderAndStartsAfresh()
+    {
+        AssistantHost host("bash " ELIS_TEST_FIXTURES "/fake-provider.sh");
+        auto pidOf = [](const QString &reply) { return reply.section(QLatin1Char(' '), 1, 1).chopped(1).toInt(); };
+        QVERIFY(host.ask("zero")["ok"].toBool());
+        QTRY_COMPARE_WITH_TIMEOUT(host.texts("assistant").size(), 1, 5000);
+        const int first = pidOf(host.texts("assistant")[0]);
+        QSignalSpy events(host.lib->active()->events(), &EventSource::event);
+        QVERIFY(host.ask("one")["ok"].toBool());
+        QVERIFY(host.ask("two")["ok"].toBool());
+        QVERIFY(host.lib->dispatch({{"cmd", "assistant.clear"}})["ok"].toBool());
+        QVERIFY(host.lib->dispatch({{"cmd", "assistant.read"}}).value("result")["assistant"]["entries"].toArray().isEmpty());
+        QVERIFY(!host.running());
+        QTRY_COMPARE_WITH_TIMEOUT(::kill(first, 0), -1, 5000);
+        QVERIFY(std::any_of(events.cbegin(), events.cend(),
+                            [](const QList<QVariant> &e) { return e.first().toJsonObject().value("kind") == QLatin1String("assistant.cleared"); }));
+        QFile resume(host.state.filePath("assistant/chat.jsonl.resume"));
+        QVERIFY(resume.open(QIODevice::ReadOnly));
+        QVERIFY(QJsonDocument::fromJson(resume.readAll()).object().isEmpty());
+        QTest::qWait(500); // the cut turn's answer would have landed by now
+        QVERIFY(host.texts("assistant").isEmpty());
+        QVERIFY(host.ask("three")["ok"].toBool());
+        QTRY_COMPARE_WITH_TIMEOUT(host.texts("assistant").size(), 1, 5000);
+        const QString answer = host.texts("assistant")[0];
+        QVERIFY2(answer.endsWith(": three") && pidOf(answer) != first, qPrintable(answer));
     }
 
     void assistantErrorTurnKeepsTheQueue()

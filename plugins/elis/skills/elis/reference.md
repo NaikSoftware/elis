@@ -93,6 +93,7 @@ The event kinds and payloads are:
   `assistant`, `sent`, `reply`, `error`), optional `from` (session id) and `handle` (sender handle), and
   `text`. The human line reads `HH:MM:SS assistant.message kind=KIND from=SENDER TEXT` (whitespace folded,
   text capped at 80 characters).
+- `assistant.cleared`: the Elis assistant chat was cleared. No payload; the human line reads `HH:MM:SS assistant.cleared`.
 
 Every event has `seq` (app-wide sequence), `ts` (Unix timestamp), `kind`, optional
 `window`/`workspace`/`session` ids, and `payload`. Human mode prints one compact line. `--json` emits
@@ -2166,6 +2167,8 @@ prompt stalls the stream.
   any selected session and clearing `unread`.
 - `elisctl assistant seen` (`assistant.seen`) clears `unread` without selecting the Elis row; it takes no window or
   target, and the unread badge on every window's row repaints.
+- `elisctl assistant clear` (`assistant.clear`) empties the transcript, marks and `unread`, drops queued inputs and stops
+  the provider, so the next message starts a fresh conversation; the provider choice stays. It takes no window or target.
 - `elisctl reply (TEXT|--stdin)` (`assistant.reply`) runs from inside an Elis session (`ELIS_SESSION_ID`) and posts a
   reply card with a go-to-session arrow into the chat and into the live assistant stream (`[reply from @<handle> <session id>] <text>`).
   Prints `ok`. Fails outside a session (`elisctl reply runs inside an Elis session`) or when `--socket` targets another
@@ -2174,7 +2177,7 @@ prompt stalls the stream.
 Read back in `tree`: top-level `assistant` (`{provider?, providers, running, unread}`), `assistantShown` (`true` when
 open), `handle` on every workspace and session, and `assistantMark` (`waiting`, `replied`, or `not-delivered`) on
 sessions (cleared when the user posts the next message). Events emit `assistant.message` (`kind`, `from`, `handle`,
-`text`).
+`text`) and `assistant.cleared`.
 
 ## font
 

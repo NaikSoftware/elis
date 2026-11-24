@@ -755,14 +755,14 @@ the batch in one step. Mail is in memory only and is dropped when the pane close
 `pendingMessages` on the tree surface and the `message` event. See [reference.md](reference.md#msg).
 
 **assistant & reply** — `assistant ask TEXT [--wait [--timeout N]]` · `assistant send --to TAG... TEXT|--stdin` ·
-`assistant read [--last N]` · `assistant provider [NAME]` · `assistant show [--window W]` · `assistant seen` · `reply TEXT|--stdin` —
+`assistant read [--last N]` · `assistant provider [NAME]` · `assistant show [--window W]` · `assistant seen` · `assistant clear` · `reply TEXT|--stdin` —
 drive the pinned **Elis** system chat (available in the Linux app now; macOS gets it later). Providers (`claude`,
 `codex`, `antigravity`, `opencode`) run in full-auto permission mode; other sessions'
 replies reach Elis in order, each after its current turn; switching applies from the next message. `send` tags `@handle`, `@ws:<workspace>`,
 `@all` (agent sessions only), or an exact session id, skips `blocked` sessions, types one line ending in
 `elisctl reply "…"`, and fails if nothing is delivered; `--wait --timeout N` exits 124. `reply` uses `ELIS_SESSION_ID`
 and posts a reply card. Read back `assistant` (`{provider?, providers, running, unread}`), `handle`, `assistantMark`
-and `assistantShown` in `tree`, and the `assistant.message` event. See [reference.md](reference.md#assistant).
+and `assistantShown` in `tree`, and the `assistant.message`/`assistant.cleared` events; `clear` empties the chat and starts a fresh conversation. See [reference.md](reference.md#assistant).
 
 **font** — `font inc|dec|reset [--pane left|right|scratch]` — change a session pane's font size (omitted/`left` = main pane, `right` = the split pane, `scratch` = the scratch terminal). Read the resulting size back from `tree` (`fontSize`/`splitFontSize`/`scratchFontSize` per pane). A pane under an HTML overlay zooms the page instead, read back as `htmlOverlays[].zoom`.
 

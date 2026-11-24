@@ -125,6 +125,9 @@ struct AssistantCommandsTests {
         let seen = try parseAssistant(["seen"], as: Assistant.Seen.self)
         #expect(seen.makeRequest() == ControlRequest(cmd: .assistantSeen))
         #expect(throws: (any Error).self) { try parseAssistant(["seen", "--window", "w1"], as: Assistant.Seen.self) }
+
+        let clear = try parseAssistant(["clear"], as: Assistant.Clear.self)
+        #expect(clear.makeRequest() == ControlRequest(cmd: .assistantClear))
     }
 
     @Test func replyBuildsRequestInsideSessionAndParsesStdinMutuallyExclusive() throws {

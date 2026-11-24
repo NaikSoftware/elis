@@ -23,6 +23,7 @@ public enum ControlEventKind: String, Codable, CaseIterable, Sendable, Equatable
     case phoneClaimed = "phone.claimed"
     case phoneReleased = "phone.released"
     case assistantMessage = "assistant.message"
+    case assistantCleared = "assistant.cleared"
 }
 
 /// Kind-specific event data. Optional fields keep the encoded payload compact while preserving one

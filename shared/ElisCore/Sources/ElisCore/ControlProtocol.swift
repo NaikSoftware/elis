@@ -157,6 +157,7 @@ public enum Command: String, Codable, Sendable, CaseIterable {
     case assistantProvider = "assistant.provider"
     case assistantShow = "assistant.show"
     case assistantSeen = "assistant.seen"
+    case assistantClear = "assistant.clear"
     case restoreClear = "restore.clear"
     case version = "version"
     case restoreCapture = "restore.capture"

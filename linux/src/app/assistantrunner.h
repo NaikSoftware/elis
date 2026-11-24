@@ -23,6 +23,7 @@ public:
     ~AssistantRunner() override;
     void enqueue(const QString &streamText) override;
     void providerChanged(const QString &provider) override;
+    void cleared() override;
 
 private:
     void pump();

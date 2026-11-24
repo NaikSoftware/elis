@@ -172,7 +172,12 @@ QJsonObject dispatch(const QJsonObject &request, const QList<Window> &windows, c
             emitMessage(AssistantBridge::providerFailed(QStringLiteral("no assistant provider is running")), windows);
         else if (type == QLatin1String("providerChanged") && sink)
             sink->providerChanged(effect.value("provider").toString());
-        else if (type == QLatin1String("show")) {
+        else if (type == QLatin1String("cleared")) {
+            if (sink)
+                sink->cleared();
+            if (!windows.isEmpty())
+                windows.first().terminals->emitEvent(QStringLiteral("assistant.cleared"), QString(), {});
+        } else if (type == QLatin1String("show")) {
             if (const QString error = show ? show(effect.value("window").toString()) : QStringLiteral("no window shows Elis"); !error.isEmpty())
                 reply = {{"ok", false}, {"error", error}};
             else
