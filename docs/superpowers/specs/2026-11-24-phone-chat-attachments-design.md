@@ -24,7 +24,9 @@ reads them with its own file tools.
    - At its next launch, each host removes every upload folder whose session is not open, not in a saved window and
      not in Recent Closed.
    - It also removes files older than 7 days in every folder.
-   - A Recent Closed reopen keeps the session id, so a plain close deletes nothing.
+   - A Recent Closed reopen keeps the session id, so a plain close deletes nothing. The Mac already does this. The
+     Linux app mints a new id on reopen today, and this work makes it keep the old one.
+   - When the host cannot list every saved window, it skips removing folders and only prunes by age.
 3. **Rows attached from another Mac.** This work verifies Chat Send on those rows and lifts its `checks.attached` gate.
    Attachments then work there the same as everywhere else.
 
@@ -57,8 +59,12 @@ Host file names are reduced to `[A-Za-z0-9._-]`, so a quote never appears inside
 - The mux has no half-close, so the byte count decides completion.
 - A phone link carries one upload at a time.
 
-**Host command.** `session.upload {target, name, size}` reserves a destination and writes nothing.
-- A local row answers `upload.path`, set to `<stateDir>/uploads/<sessionID>/<yyyyMMdd-HHmmss>-<name>` and made unique.
+- An empty file completes right after OPENED. A stream shorter or longer than `size` fails as
+  `file changed while sending` and leaves no file.
+
+**Host command.** `session.upload {target, name, size}` reserves a destination.
+- A local row answers `upload.path`, set to `<stateDir>/uploads/<sessionID>/<yyyyMMdd-HHmmss>-<name>`. The name is
+  claimed atomically as an empty placeholder, so two uploads of the same name never share a file.
 - A remote row answers `upload.host` and `upload.session`: its origin host and the origin's session id.
 - The command changes no model state, so it has no tree read-back. The written file is the result.
 
@@ -67,7 +73,9 @@ Host file names are reduced to `[A-Za-z0-9._-]`, so a quote never appears inside
 - **Remote row.** It runs `ssh -T <host> elisctl session upload --target <session> --name <name> --size <n>` and pipes
   the bytes to its stdin. The far `elisctl` reserves the path on its own app, writes the file the same way, and prints
   one JSON line.
-- A cancel, a lost link or a short stream removes the `.part` file.
+- A cancel, a lost link or a short stream removes the `.part` file and the placeholder.
+- The relay reports a host as too old only when the far `elisctl` lacks the subcommand (exit 64, no output) or the app
+  does not know `session.upload`. An unreachable host is a transient `<host> gave no answer`.
 
 **`elisctl session upload`.** It reads exactly `--size` bytes from stdin into the reserved path. It always prints one
 JSON line: `{"ok":true,"result":{"upload":{"path":…}}}` or an error. Scripts and the relay both reach a host this way.
@@ -77,9 +85,15 @@ JSON line: `{"ok":true,"result":{"upload":{"path":…}}}` or an error. Scripts a
 | Case | Text |
 | --- | --- |
 | Over the cap | `file too large (max 20 MiB)` |
+| More than 10 picks | `at most 10 files per message` (extra picks are dropped) |
 | A second upload on the same link | `an upload is already running` |
 | A page row, or an unknown target | the existing page refusal, or the existing resolve error |
-| A host without `session.upload`, or a relay that answers `unsupported channel type` | the phone shows `Update Elis on the computer to attach files` |
+| The local app or relay predates uploads | `Update Elis on the computer to attach files` |
+| A remote host predates uploads | `Update Elis on <host> to attach files` |
+| A remote host does not answer | `<host> gave no answer (<ssh error>)` |
+
+After an `Update Elis on …` refusal, the attach button for that session stays disabled until the phone reconnects. Its
+tooltip gives the reason.
 
 ## Known limits
 
