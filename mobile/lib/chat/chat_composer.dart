@@ -287,7 +287,7 @@ class ChatComposerState extends State<ChatComposer> {
   Widget _chip(_Attachment a) {
     final f = a.file;
     return InputChip(
-      key: Key('attachment-${f.name}'),
+      key: ObjectKey(a), // two picks can share a name
       visualDensity: VisualDensity.compact,
       label: Stack(clipBehavior: Clip.none, children: [
         ConstrainedBox(

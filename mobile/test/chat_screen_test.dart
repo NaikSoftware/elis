@@ -340,7 +340,7 @@ void main() {
     expect(r, isNot(same(first)));
     await h.opened();
     await _show(h, 'idle-placeholder-45');
-    expect(find.byKey(const Key('attachment-a.png')), findsOneWidget);
+    expect(find.widgetWithText(InputChip, 'a.png'), findsOneWidget);
     expect((attach().onPressed != null, attach().tooltip), (true, 'Attach files'));
     await t.enterText(find.byKey(const Key('composer')), 'fix this');
     await t.pump();

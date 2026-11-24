@@ -179,7 +179,7 @@ class _C {
   IconButton get _attach => t.widget<IconButton>(find.byKey(const Key('attach')));
   bool get attachEnabled => _attach.onPressed != null;
   String? get attachTip => _attach.tooltip;
-  Finder chip(String name) => find.byKey(Key('attachment-$name'));
+  Finder chip(String name) => find.widgetWithText(InputChip, name);
   ChatComposerState get state => t.state<ChatComposerState>(find.byType(ChatComposer));
 
   Future<void> attach() async {
@@ -687,6 +687,17 @@ void main() {
       await c.unchip('a.png');
       expect(c.chip('a.png'), findsNothing);
       expect(c.chip('b.txt'), findsOneWidget);
+    });
+
+    testWidgets('twoPicksWithOneNameAreTwoChips', (t) async {
+      final c = _C(t, _g('idle-placeholder-45'))..picks = const [_a, PickedFile(name: 'a.png', path: '/q/a.png', size: 3)];
+      await c.pump();
+      await c.attach();
+      expect(c.chip('a.png'), findsNWidgets(2));
+      await t.tap(find.descendant(of: c.chip('a.png').first, matching: find.byType(Icon)));
+      await t.pump();
+      expect(c.chip('a.png'), findsOneWidget);
+      expect(find.descendant(of: c.chip('a.png'), matching: find.textContaining('3 B')), findsOneWidget);
     });
 
     testWidgets('aFileOverTheCapIsNotAdded', (t) async {
