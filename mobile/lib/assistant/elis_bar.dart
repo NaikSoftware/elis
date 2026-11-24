@@ -7,30 +7,39 @@ import 'elis_sheet.dart';
 const _curve = Cubic(.2, 0, 0, 1);
 const _gap = 12.0, _row = 52.0, _newWidth = 164.0, _sheetTop = 72.0;
 
-/// The Sessions screen's bottom row: Ask Elis, which grows into the Elis chat, beside New session.
+/// The Sessions screen's bottom row over [child]: Ask Elis, which grows into the Elis chat, beside New session.
 class ElisBar extends StatefulWidget {
-  const ElisBar({super.key, required this.model, required this.onNewSession, required this.openSession});
+  const ElisBar({super.key, required this.model, required this.onNewSession, required this.openSession, required this.child});
   final ElisModel model;
   final VoidCallback? onNewSession; // null hides New session
   final void Function(Session) openSession;
+  final Widget child; // the list: faded above the row, and inert while the sheet is open
 
   @override
   State<ElisBar> createState() => _ElisBarState();
 }
 
 class _ElisBarState extends State<ElisBar> with SingleTickerProviderStateMixin {
-  late final _c = AnimationController(vsync: this, duration: const Duration(milliseconds: 380));
-  late final _t = CurvedAnimation(parent: _c, curve: _curve, reverseCurve: _curve.flipped);
+  late final AnimationController _c;
+  late final CurvedAnimation _t;
   bool _open = false;
   double _drag = 0;
 
   ElisModel get m => widget.model;
-  bool get _canAsk => m.assistant != null && m.state == LinkState.connected;
+  // a dropped link keeps an open sheet and its draft; only a loaded tree without the assistant closes it
+  bool get _canAsk => (m.assistant != null && m.state == LinkState.connected) || _open || !_c.isDismissed;
+
+  @override
+  void initState() {
+    super.initState();
+    _c = AnimationController(vsync: this, duration: const Duration(milliseconds: 380));
+    _t = CurvedAnimation(parent: _c, curve: _curve, reverseCurve: _curve.flipped);
+  }
 
   @override
   void didUpdateWidget(ElisBar old) {
     super.didUpdateWidget(old);
-    if (!_canAsk) _close(animate: false);
+    if (m.state == LinkState.connected && m.loaded && m.assistant == null) _close(animate: false);
   }
 
   @override
@@ -73,8 +82,7 @@ class _ElisBarState extends State<ElisBar> with SingleTickerProviderStateMixin {
 
   @override
   Widget build(BuildContext context) {
-    final canAsk = _canAsk, onNew = widget.onNewSession;
-    if (!canAsk && onNew == null) return const SizedBox.shrink();
+    final onNew = widget.onNewSession;
     final pad = MediaQuery.paddingOf(context);
     return PopScope(
       canPop: !_open,
@@ -84,23 +92,45 @@ class _ElisBarState extends State<ElisBar> with SingleTickerProviderStateMixin {
         final slot = Rect.fromLTRB(_gap, bottom - _row, onNew == null ? w - _gap : w - _gap - _newWidth - 8, bottom);
         final sheet = Rect.fromLTRB(0, pad.top + _sheetTop, w, h);
         final content = _content(pad.bottom);
+        // always masked, never rewrapped, so the list keeps its scroll state when the row comes and goes
+        final list = ShaderMask(
+          blendMode: BlendMode.dstIn,
+          shaderCallback: (r) => _canAsk || onNew != null
+              ? LinearGradient(
+                  begin: Alignment.topCenter,
+                  end: Alignment.bottomCenter,
+                  colors: const [Colors.black, Colors.black, Colors.transparent],
+                  stops: [0, ((slot.top - 24) / h).clamp(0, 1), (slot.top / h).clamp(0, 1)],
+                ).createShader(r)
+              : const LinearGradient(colors: [Colors.black, Colors.black]).createShader(r),
+          child: widget.child,
+        );
         return AnimatedBuilder(
           animation: _c,
           builder: (context, _) {
             final v = _c.value, t = _t.value;
+            // keyed: the surface holds the draft and must not be rebuilt when a sibling comes or goes
             return Stack(children: [
+              Positioned.fill(key: const ValueKey('list'), child: ExcludeFocus(excluding: _open, child: list)),
               if (v > 0)
                 Positioned.fill(
-                  child: GestureDetector(
-                    onTap: _close,
-                    child: ColoredBox(color: Colors.black.withValues(alpha: .54 * Curves.ease.transform((v / .79).clamp(0, 1)))),
+                  key: const ValueKey('scrim'),
+                  child: BlockSemantics(
+                    child: Semantics(
+                      label: 'Close Elis',
+                      child: GestureDetector(
+                        onTap: _close,
+                        child: ColoredBox(color: Colors.black.withValues(alpha: .54 * Curves.ease.transform((v / .79).clamp(0, 1)))),
+                      ),
+                    ),
                   ),
                 ),
               if (onNew != null)
                 Positioned(
+                  key: const ValueKey('new'),
                   right: _gap,
                   bottom: _gap + pad.bottom,
-                  width: canAsk ? _newWidth : w - 2 * _gap,
+                  width: _canAsk ? _newWidth : w - 2 * _gap,
                   height: _row,
                   child: Transform.translate(
                     offset: Offset((_newWidth + _gap + 8) * t, 0), // off the screen's edge, as the mockup's 184 px
@@ -110,7 +140,8 @@ class _ElisBarState extends State<ElisBar> with SingleTickerProviderStateMixin {
                     ),
                   ),
                 ),
-              if (canAsk) Positioned.fromRect(rect: Rect.lerp(slot, sheet, t)!, child: _surface(t, v, slot.size, sheet.size, content)),
+              if (_canAsk)
+                Positioned.fromRect(key: const ValueKey('surface'), rect: Rect.lerp(slot, sheet, t)!, child: _surface(t, v, slot.size, sheet.size, content)),
             ]);
           },
         );

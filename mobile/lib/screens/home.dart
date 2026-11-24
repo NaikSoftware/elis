@@ -274,8 +274,11 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
             wave.value = 0;
           }
           return Scaffold(
-            body: Stack(children: [
-              SafeArea(
+            body: ElisBar(
+              model: m,
+              onNewSession: m.state == LinkState.connected && m.workspaces.isNotEmpty ? () => showNewSession(context, m) : null,
+              openSession: (s) => open(s.id),
+              child: SafeArea(
                 child: RefreshIndicator(
                   onRefresh: m.refresh,
                   child: CustomScrollView(slivers: [
@@ -284,18 +287,11 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
                     if (m.state == LinkState.connected && !m.loaded)
                       const SliverFillRemaining(child: Center(child: CircularProgressIndicator())),
                     if (m.loaded) ..._body(all, needs),
-                    const SliverToBoxAdapter(child: SizedBox(height: 76)),
+                    const SliverToBoxAdapter(child: SizedBox(height: 88)), // the bar row (64) and its fade (24)
                   ]),
                 ),
               ),
-              Positioned.fill(
-                child: ElisBar(
-                  model: m,
-                  onNewSession: m.state == LinkState.connected && m.workspaces.isNotEmpty ? () => showNewSession(context, m) : null,
-                  openSession: (s) => open(s.id),
-                ),
-              ),
-            ]),
+            ),
           );
         },
       );

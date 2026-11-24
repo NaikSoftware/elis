@@ -11,7 +11,7 @@ import 'package:flutter/semantics.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 class _Model extends ElisModel {
-  _Model({bool assistant = true, int unread = 0}) : super(Pairing(name: 'MacBook', host: '10.0.0.2', port: 1, token: 't', fingerprint: 'f')) {
+  _Model({bool assistant = true, int unread = 0, int extra = 0}) : super(Pairing(name: 'MacBook', host: '10.0.0.2', port: 1, token: 't', fingerprint: 'f')) {
     state = LinkState.connected;
     loaded = true;
     workspaces = [
@@ -20,11 +20,14 @@ class _Model extends ElisModel {
         'name': 'elis',
         'sessions': [
           {'id': 's1', 'handle': 'side-filter', 'name': 'Sidebar filter', 'agent': 'claude'},
+          for (var i = 0; i < extra; i++) {'id': 'x$i', 'name': 'extra $i', 'flagged': true},
         ],
       }),
     ];
     if (assistant) this.assistant = AssistantState.fromJson({'provider': 'codex', 'providers': ['codex'], 'unread': unread});
   }
+
+  void changed() => notifyListeners(); // ignore: invalid_use_of_protected_member, invalid_use_of_visible_for_testing_member
 
   final calls = <String>[];
   List<Map> transcript = [];
@@ -60,7 +63,7 @@ Future<void> _bar(WidgetTester t, ElisModel m, {void Function(Session)? openSess
   await t.pumpWidget(MaterialApp(
     theme: buildTheme(),
     builder: (c, child) => MediaQuery(data: MediaQuery.of(c).copyWith(disableAnimations: reduceMotion), child: child!),
-    home: Scaffold(body: Stack(children: [Positioned.fill(child: ElisBar(model: m, onNewSession: () {}, openSession: openSession ?? (_) {}))])),
+    home: Scaffold(body: Stack(children: [Positioned.fill(child: ElisBar(model: m, onNewSession: () {}, openSession: openSession ?? (_) {}, child: const SizedBox()))])),
   ));
 }
 
@@ -203,5 +206,63 @@ void main() {
     await t.pumpAndSettle();
     final popup = find.ancestor(of: find.byKey(const Key('tag-@all')), matching: find.byType(ListView));
     expect(t.getRect(popup).top, greaterThanOrEqualTo(t.getRect(find.byType(ElisSheet)).top + 36));
+  });
+
+  testWidgets('a dropped link keeps the open sheet and its draft', (t) async {
+    final m = _Model();
+    await _home(t, m);
+    await t.tap(find.byKey(_ask));
+    await t.pumpAndSettle();
+    await t.enterText(find.byKey(const Key('composer')), 'draft');
+    m.state = LinkState.connecting;
+    m.changed();
+    await t.pump(const Duration(seconds: 1)); // the connecting spinner never settles
+    expect(find.byType(ElisSheet), findsOneWidget);
+    expect(t.widget<TextField>(find.byKey(const Key('composer'))).controller!.text, 'draft');
+    expect(m.assistantOpen, isTrue);
+    await t.pumpWidget(const SizedBox());
+  });
+
+  testWidgets('a loaded tree without the assistant closes the sheet', (t) async {
+    final m = _Model();
+    await _home(t, m);
+    await t.tap(find.byKey(_ask));
+    await t.pumpAndSettle();
+    m.assistant = null;
+    m.changed();
+    await t.pumpAndSettle();
+    expect(find.byType(ElisSheet), findsNothing);
+    expect(find.byKey(_ask), findsNothing);
+    expect(m.assistantOpen, isFalse);
+    await t.pumpWidget(const SizedBox());
+  });
+
+  testWidgets('the open sheet hides the list from screen readers', (t) async {
+    final h = t.ensureSemantics();
+    await _home(t, _Model());
+    expect(find.semantics.byLabel(RegExp('Sidebar filter')), findsOne);
+    await t.tap(find.byKey(_ask));
+    await t.pumpAndSettle();
+    expect(find.semantics.byLabel(RegExp('Sidebar filter')), findsNothing);
+    expect(find.semantics.byLabel('Close Elis'), findsAtLeast(1));
+    h.dispose();
+    await t.pumpWidget(const SizedBox());
+  });
+
+  testWidgets('the last row clears the fade above the bar', (t) async {
+    await _home(t, _Model(extra: 30));
+    await t.ensureVisible(find.byKey(const Key('filter-flagged')));
+    await t.tap(find.byKey(const Key('filter-flagged'))); // a filtered list ends at its last row, with no card around it
+    await t.pump();
+    await t.drag(find.byType(CustomScrollView), const Offset(0, -6000));
+    await t.pumpAndSettle();
+    expect(t.getRect(find.byKey(const Key('row-x29'))).bottom, lessThanOrEqualTo(844 - 64 - 24));
+    await t.pumpWidget(const SizedBox());
+  });
+
+  testWidgets('a bar that never showed disposes cleanly', (t) async {
+    await _home(t, _Model(assistant: false)..state = LinkState.offline);
+    expect(find.byKey(_new), findsNothing);
+    await t.pumpWidget(const SizedBox());
   });
 }
