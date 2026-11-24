@@ -99,7 +99,11 @@ ThemeData buildTheme() {
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(24))),
         showDragHandle: true,
         dragHandleColor: Color(0xFF3A3D4A)),
-    dialogTheme: const DialogThemeData(backgroundColor: C.surface, surfaceTintColor: Colors.transparent),
+    dialogTheme: const DialogThemeData(
+        backgroundColor: C.surface,
+        surfaceTintColor: Colors.transparent,
+        insetPadding: EdgeInsets.symmetric(horizontal: 24, vertical: 24),
+        constraints: BoxConstraints(minWidth: 280, maxWidth: 560)),
     popupMenuTheme: const PopupMenuThemeData(color: C.surface2, surfaceTintColor: Colors.transparent),
     inputDecorationTheme: InputDecorationTheme(
       filled: true,
