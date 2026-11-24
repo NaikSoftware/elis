@@ -37,8 +37,8 @@ class ChatPromptContext {
 /// The card for the dialog on screen, or null for the panel sheet.
 typedef PromptCardBuilder = Widget? Function(BuildContext context, ChatPromptContext c);
 
-String _errorText(TranscriptError error) =>
-    error == TranscriptError.notFound ? 'Claude\'s transcript was not found.' : 'Claude\'s transcript could not be read.';
+String _errorText(TranscriptError error, String agent) =>
+    error == TranscriptError.notFound ? "$agent's transcript was not found." : "$agent's transcript could not be read.";
 
 void _noKey(String? seq, VtKey? key, int mods) {}
 void _noAnswer(String key) {}
@@ -136,12 +136,17 @@ class ChatView extends StatefulWidget {
       this.prompts,
       this.onKey = _noKey,
       this.onAnswer = _noAnswer,
-      this.openImage});
+      this.openImage,
+      this.agent = 'Claude'});
 
-  static const exitedText = 'Claude exited', staleText = 'Reconnecting…';
+  static const staleText = 'Reconnecting…';
 
   /// Why every Chat write is blocked; the screen's [WriteGate] returns it.
-  static String? blockedReason({required bool exited, required bool stale}) => exited ? exitedText : stale ? staleText : null;
+  static String? blockedReason({required bool exited, required bool stale, String agent = 'Claude'}) =>
+      exited ? '$agent exited' : stale ? staleText : null;
+
+  /// The agent's short name in Chat's messages: Claude or Antigravity.
+  final String agent;
 
   final TranscriptFeed feed;
   final Grid? Function() grid;
@@ -457,7 +462,7 @@ class _ChatViewState extends State<ChatView> {
                 screen: ClaudeScreen.read(g), grid: g, pending: feed.pending, gate: widget.gate, remote: widget.s.remote, server: widget.s.server, openPanel: _openPanel))
         : null;
     final panel = live && (_panelForced || (_counts && card == null));
-    final held = card != null ? 'Answer the prompt above' : panel ? 'Claude shows a panel' : null;
+    final held = card != null ? 'Answer the prompt above' : panel ? '${widget.agent} shows a panel' : null;
     final n = _index[_sticky], sticky = n == null ? null : _rows[n];
     final todos = _todoStrip();
     final state = _state();
@@ -465,12 +470,12 @@ class _ChatViewState extends State<ChatView> {
       if (widget.exited)
         ListTile(
             key: const Key('chatExited'),
-            title: const Text(ChatView.exitedText),
+            title: Text('${widget.agent} exited'),
             trailing: TextButton(onPressed: widget.onTerm, child: const Text('Term'))),
       if (_error case final e? when state == null)
         ListTile(
             key: const Key('chatError'),
-            title: Text(_errorText(e)),
+            title: Text(_errorText(e, widget.agent)),
             trailing: TextButton(key: const Key('chatErrorRetry'), onPressed: feed.pollNow, child: const Text('Retry'))),
       if (widget.stale) const Padding(padding: EdgeInsets.all(8), child: Text(ChatView.staleText, style: TextStyle(color: C.muted))),
       if (sticky != null)
@@ -577,7 +582,7 @@ extension on _ChatViewState {
         child: SingleChildScrollView(
           padding: const EdgeInsets.all(24),
           child: Column(mainAxisSize: MainAxisSize.min, spacing: 12, children: [
-            Text(_errorText(error), textAlign: TextAlign.center, style: const TextStyle(color: C.muted)),
+            Text(_errorText(error, widget.agent), textAlign: TextAlign.center, style: const TextStyle(color: C.muted)),
             Row(mainAxisSize: MainAxisSize.min, spacing: 8, children: [
               OutlinedButton(key: const Key('chatRetry'), onPressed: feed.retry, child: const Text('Retry')),
               OutlinedButton(key: const Key('chatTerm'), onPressed: widget.onTerm, child: const Text('Term')),
@@ -612,7 +617,8 @@ extension on _ChatViewState {
                 remote: widget.s.remote,
                 server: widget.s.server,
                 gate: widget.gate,
-                disabledBy: ChatView.blockedReason(exited: widget.exited, stale: widget.stale),
+                agent: widget.agent,
+                disabledBy: ChatView.blockedReason(exited: widget.exited, stale: widget.stale, agent: widget.agent),
                 held: held,
                 onOpen: onOpen,
                 // like any chat: what the user sent shows at the newest end
@@ -627,9 +633,10 @@ extension on _ChatViewState {
         child: SingleChildScrollView(
           padding: const EdgeInsets.all(24),
           child: Column(mainAxisSize: MainAxisSize.min, spacing: 12, children: [
-            const Text('Claude is ready', style: TextStyle(fontSize: 16, color: C.muted)),
+            Text('${widget.agent} is ready', style: const TextStyle(fontSize: 16, color: C.muted)),
             Wrap(spacing: 8, children: [
-              for (final c in ['help', 'model', 'usage'])
+              // Claude Code's commands; the host lists none for agy
+              for (final c in widget.agent == 'Claude' ? ['help', 'model', 'usage'] : const <String>[])
                 OutlinedButton(
                     key: Key('emptyCommand-$c'),
                     onPressed: () => _composer.currentState?.insert('/$c '),

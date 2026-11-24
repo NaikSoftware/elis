@@ -793,10 +793,10 @@ error keeps those names for compatibility.
   read IS an error (`failed to read surface buffer`). Pipe the text into `grep`/`fzf` to extract URLs,
   paths, etc.
 - `session transcript [--pane left|right] [--pane-id TOKEN] [--after N | --before N] [--transcript ID] [--max-bytes N] [--target] [--window W]`:
-  a page of the Claude Code conversation running in the session, read from its transcript file. `--pane` defaults to the
+  a page of the Claude Code or agy (Antigravity CLI) conversation running in the session, read from its transcript file. `--pane` defaults to the
   node's `agentPane`; `scratch` is refused. Human output prints the title, model and permission mode, one
   `kind  text` line per item, then `next N`; `--json` prints the page:
-  `transcript` (the Claude session id), `size`, `start`, `next`, `reset` (omitted when false), `items`, `pending`
+  `transcript` (the Claude session id or agy conversation id), `size`, `start`, `next`, `reset` (omitted when false), `items`, `pending`
   (open tool calls, omitted when none), `meta` (`title`, `lastPrompt`, `permissionMode`, `pr`, `model`, `todos`,
   `queued`, `agents`, …), `commands` (slash commands, on a tail page) and `skipped` (undecodable lines, omitted at 0).
   `meta.agents` lists the session's subagents and teammates: the running ones in launch order, then the three most
@@ -814,7 +814,7 @@ error keeps those names for compatibility.
   conversation, never a prompt the user typed: `channel` (`session`, `teammate`, `task`), `from`, `summary`, `text`
   (the body without its tags), and for a task `id` (the tool call it reports on) and `status`. A `tool` item has `name`, `arg`, `mark` (`running`, `ok`, `exit N`, `+N −M`, …), `output` or
   `patch` clipped at 4 KiB (`clipped`), `isError`, and `rejected` when the user refused the prompt.
-  `--max-bytes` lowers the 49152-byte page budget. Errors: `no adapter` (the pane runs no Claude Code),
+  `--max-bytes` lowers the 49152-byte page budget. Errors: `no adapter` (the pane runs neither Claude Code nor agy),
   `transcript not found`. It works on rows attached from another Mac and on elis-server rows; a host predating
   it answers `the Elis on HOST is too old for session.transcript`. A page session refuses it.
 - `session search [needle] [--next|--prev|--close] [--target] [--window W]` — search the target

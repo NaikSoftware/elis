@@ -15,8 +15,11 @@ class ModePicks {
       mode == null ? _picks.remove(sessionId) : _picks[sessionId] = mode;
 }
 
+/// The agents whose transcript `session.transcript` reads.
+const chatAgents = {'claude', 'antigravity'};
+
 bool chatAvailable(Session s, String pane) =>
-    s.liveAgent == 'claude' && s.agentSessionId.isNotEmpty && s.agentPane == pane && !ModePicks.tooOld.contains(s.id);
+    chatAgents.contains(s.liveAgent) && s.agentSessionId.isNotEmpty && s.agentPane == pane && !ModePicks.tooOld.contains(s.id);
 
 ViewMode shownMode(Session s, String pane) =>
     chatAvailable(s, pane) && ModePicks.of(s.id) != ViewMode.term ? ViewMode.chat : ViewMode.term;

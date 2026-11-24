@@ -36,5 +36,14 @@ class Grid {
     return b.toString().replaceAll('\u00a0', ' ').trimRight();
   }
 
-  bool get blank => rows.every((r) => r.text.isEmpty);
+  /// Row [r] with faint or coloured cells as spaces, trailing blanks trimmed: text typed in the default colour.
+  String plain(int r) {
+    final b = StringBuffer();
+    for (final c in rows[r].cells) {
+      if (!c.spacer) b.write(c.text.isEmpty || c.faint || (colours && c.fg != null) ? ' ' : c.text);
+    }
+    return b.toString().replaceAll(' ', ' ').trimRight();
+  }
+
+  bool get blank =>rows.every((r) => r.text.isEmpty);
 }

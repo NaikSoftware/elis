@@ -8,11 +8,14 @@
 
 // ClaudeHome.directory: configDir (CLAUDE_CONFIG_DIR) when it is absolute, else <home>/.claude
 QString claudeHome(const QString &configDir, const QString &home);
+// AntigravityHome.directory: agy's data directory, <home>/.gemini/antigravity-cli
+QString antigravityHome(const QString &home);
 
 // The Mac's argument check: {"ok":true,"result":{"pane":…}} with the pane asked for (absent: the agent's pane), or
 // its refusal.
 QJsonObject transcriptArguments(const QJsonObject &args);
 
-// One page of the Claude session sessionId under claudeDirectory as the Mac's whole reply. Blocks on file reads, and
-// ElisCore traps when it runs on the process's main thread: call it from a worker.
-QJsonObject transcriptPage(const QJsonObject &args, const QString &claudeDirectory, const QString &sessionId, const QString &pane);
+// One page of agent's ("claude" or "antigravity") conversation sessionId under directory as the Mac's whole reply.
+// Blocks on file reads, and ElisCore traps when it runs on the process's main thread: call it from a worker.
+QJsonObject transcriptPage(const QJsonObject &args, const QString &agent, const QString &directory, const QString &sessionId,
+                           const QString &pane);

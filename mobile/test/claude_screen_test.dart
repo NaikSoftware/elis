@@ -168,4 +168,19 @@ void main() {
     final s = ClaudeScreen.read(gridFromAnsi(rows.join('\n')));
     expect((s.working, s.busy, s.idle), (null, false, true));
   });
+
+  test('antigravityPlaceholderIsNoDraft', () {
+    final s = _s('agy-idle-70');
+    expect((s.agy, s.name, s.bottomStack, s.idle, s.draft, s.mode), (true, 'Antigravity', true, true, '', null));
+    expect(s.input, startsWith('Accept-edits mode'));
+  });
+  test('antigravityDraftIsAdoptable', () => expect(_s('agy-draft-70').draft, 'hello there'));
+  test('antigravityBusyReadsItsSpinner', () {
+    final s = _s('agy-busy-70');
+    expect((s.busy, s.dialog, s.draft, s.working), (true, false, '', 'Running command...'));
+  });
+  test('antigravityPermissionDialogIsADialog', () {
+    final s = _s('agy-dialog-70');
+    expect((s.dialog, s.bottomStack, s.idle), (true, false, false));
+  });
 }

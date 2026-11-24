@@ -220,7 +220,7 @@ It prints the QR code and the link; Ctrl+C stops it. Nothing listens unless one 
 - The relay also offers Bluetooth, as the Mac does, so the phone works without Wi-Fi: BlueZ advertises a service UUID that rotates every 15 minutes and the phone opens an LE L2CAP channel,
   encrypted with a key from the pairing token. Its stderr reports `bluetooth: advertising` or `bluetooth: off (<reason>)`;
   `--no-bluetooth` turns it off. One relay per state directory advertises.
-- A pane running Claude Code opens in Chat, as on the Mac, read from its transcript (`session transcript`).
+- A pane running Claude Code or agy opens in Chat, read from its transcript (`session transcript`).
   Pages on the phone are Mac-only for now (page overlays are not ported to Linux).
 
 ## Credits and license
