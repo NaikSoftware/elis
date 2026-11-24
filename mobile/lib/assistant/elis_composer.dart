@@ -162,7 +162,6 @@ class _ElisComposerState extends State<ElisComposer> {
           final query = _focus.hasFocus && v.selection.isCollapsed ? tagQuery(v.text, v.selection.baseOffset) : null;
           final tags = query == null ? const <TagCandidate>[] : tagCandidates(query, widget.model.workspaces);
           final a = widget.model.assistant;
-          // as the session chat's: the reason shows once there is something to send
           final offline = widget.model.state != LinkState.connected;
           return OverlayPortal(
             controller: _portal,
@@ -174,7 +173,7 @@ class _ElisComposerState extends State<ElisComposer> {
                 controller: _field,
                 focus: _focus,
                 onSend: v.text.trim().isEmpty || _sending || offline ? null : _send,
-                reason: offline && v.text.trim().isNotEmpty ? 'Not connected' : null,
+                reason: offline ? 'Not connected' : null,
                 maxLines: 6,
                 autocorrect: true,
                 mono: false,

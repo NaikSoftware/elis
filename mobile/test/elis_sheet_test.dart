@@ -163,6 +163,7 @@ void main() {
   testWidgets('offline, the composer says why it cannot send', (t) async {
     m.state = LinkState.connecting;
     await pump(t);
+    expect(find.text('Not connected'), findsOneWidget);
     await t.enterText(find.byKey(const Key('composer')), 'hello');
     await t.pump();
     expect(find.text('Not connected'), findsOneWidget);
