@@ -1429,6 +1429,8 @@ private Q_SLOTS:
         qputenv("HOME", home);
         QCOMPARE(r["result"]["transcript"].toString(), QStringLiteral("a1"));
         QCOMPARE(r["result"]["items"][0]["text"].toString(), QStringLiteral("hi agy"));
+        f.s.setAgentSessionId(f.id, QString()); // agy before its first prompt
+        QCOMPARE(f.error({}), QStringLiteral("transcript not found"));
     }
 
     void readerRunsOffTheMainThread()

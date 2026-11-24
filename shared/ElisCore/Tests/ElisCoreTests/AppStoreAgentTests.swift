@@ -101,12 +101,16 @@ struct AppStoreAgentTests {
         store.applyAgentSamples([AgentPaneSample(pane: .right, agent: .antigravity, claudeSessionJSON: nil)],
                                 focused: .right, forSession: session.id)
         #expect(session.agentSessionID == nil)
+        // agy before its first prompt: read as a conversation not written yet
+        #expect(session.transcriptSource(token: nil, pane: nil, claudeDirectory: "/c", antigravityDirectory: "/g")
+            == .success(ControlTranscriptSource(claudeSessionID: "", pane: .right, claudeDirectory: "/g", agent: .antigravity)))
     }
 
-    #if os(Linux)
     @Test func antigravityConversationIsThePresenceLockTheProcessHolds() throws {
-        let directory = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString).path
-        defer { try? FileManager.default.removeItem(atPath: directory) }
+        let made = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString).path
+        try FileManager.default.createDirectory(atPath: made, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(atPath: made) }
+        let directory = try #require(realpath(made, nil).map { String(cString: $0) }) // a Mac's /var is /private/var
         #expect(AntigravityHome.conversationID(pid: getpid(), directory: directory) == nil)
         try FileManager.default.createDirectory(atPath: directory + "/presence", withIntermediateDirectories: true)
         FileManager.default.createFile(atPath: directory + "/presence/a1-b2.lock", contents: nil)
@@ -115,7 +119,6 @@ struct AppStoreAgentTests {
 
         #expect(AntigravityHome.conversationID(pid: getpid(), directory: directory) == "a1-b2")
     }
-    #endif
 
     @Test func runningAgentChangePublishesAndSchedulesTree() throws {
         var events: [ControlEventKind] = []

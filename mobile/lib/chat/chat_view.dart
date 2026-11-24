@@ -570,11 +570,11 @@ class _ChatViewState extends State<ChatView> {
 /// What shows in place of the list, or null for the list; an exited Claude keeps its history.
 extension on _ChatViewState {
   // a failed poll over history: the feed keeps polling, so the list stays and a banner says so;
-  // a running Claude writes its transcript only with its first message, so until then it is empty, not missing
+  // a running agent writes its transcript only with its first message, so until then it is empty, not missing
   TranscriptError? get _error => switch (feed.error) {
         _ when widget.exited => null,
         TranscriptError.hostTooOld => null,
-        TranscriptError.notFound when _rows.isEmpty && widget.s.agentSessionId.isNotEmpty => null,
+        TranscriptError.notFound when _rows.isEmpty && (widget.s.agentSessionId.isNotEmpty || widget.s.liveAgent == 'antigravity') => null,
         final e => e,
       };
 

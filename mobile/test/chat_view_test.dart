@@ -67,12 +67,13 @@ class _Chat {
       bool exited = false,
       bool stale = false,
       bool running = false,
+      Map<String, dynamic> session = const {},
       double height = 800}) async {
     t.view.physicalSize = Size(400, height);
     t.view.devicePixelRatio = 1;
     addTearDown(t.view.reset);
     final s = Session(
-        {'id': 's1', 'name': 'Session one', 'cwd': '/work/elis', if (running) ...{'agent': 'claude', 'agentSessionId': 'a1'}}, 'w', 'W');
+        {'id': 's1', 'name': 'Session one', 'cwd': '/work/elis', if (running) ...{'agent': 'claude', 'agentSessionId': 'a1'}, ...session}, 'w', 'W');
     final gate = WriteGate(
         grids: ChangeNotifier(), grid: () => null, writer: () => throw UnimplementedError(), remote: () => false, blocked: () => null);
     await t.pumpWidget(MaterialApp(
@@ -87,6 +88,7 @@ class _Chat {
             s: s,
             exited: exited,
             stale: stale,
+            agent: s.liveAgent == 'antigravity' ? 'Antigravity' : 'Claude',
             onTerm: () => terms++),
       ),
     ));
@@ -575,6 +577,21 @@ void main() {
       expect(find.byKey(const Key('chatUnreadable')), findsNothing);
       expect(find.byKey(const Key('chatError')), findsNothing);
       expect(find.text('Claude is ready'), findsOneWidget);
+      expect(t.widget<TextField>(find.byKey(const Key('composer'))).enabled, isNot(false));
+      await c.tick();
+      await c.reply([_text('a1')]);
+      expect(_row('a1'), findsOneWidget);
+    });
+
+    _chatTest('notFoundWhileAntigravityRunsWithoutIdIsEmptyAndKeepsPolling', (t, c) async {
+      await c.start(null, session: const {'agent': 'antigravity'});
+      await t.pump();
+      c.h.held!.$2.completeError(Exception('transcript not found'));
+      await t.pump();
+      await t.pump();
+      expect(find.byKey(const Key('chatUnreadable')), findsNothing);
+      expect(find.byKey(const Key('chatError')), findsNothing);
+      expect(find.text('Antigravity is ready'), findsOneWidget);
       expect(t.widget<TextField>(find.byKey(const Key('composer'))).enabled, isNot(false));
       await c.tick();
       await c.reply([_text('a1')]);

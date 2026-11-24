@@ -56,7 +56,7 @@ class _SessionScreenState extends State<SessionScreen> {
   final vScroll = ScrollController();
   String pane = 'left';
   bool scrollback = false, sending = false;
-  bool? _alt; // the screen the last frame showed; scrollback follows each switch
+  bool? _live; // whether the last pick chose the live terminal; scrollback follows each switch
   String text = '';
   String? error;
   Future<void>? _fitCall; // the fit call in flight and the re-runs it chains
@@ -317,7 +317,7 @@ class _SessionScreenState extends State<SessionScreen> {
       t.removeListener(_onTerm);
       t.close(); // CLOSE: the Mac's viewer count drops; a resume opens a fresh channel
       term = null;
-      _alt = null; // the next stream picks the view again
+      _live = null; // the next stream picks the view again
     }
     if (want && term == null) term = TermSession(m.mux!, widget.sessionId, pane, vt: widget.vt)..addListener(_onTerm);
   }
@@ -361,7 +361,7 @@ class _SessionScreenState extends State<SessionScreen> {
       t.removeListener(_onTerm);
       if (_claimed == t) _coveredTries = 3;
       term = null;
-      _alt = null; // the next stream picks the view again
+      _live = null; // the next stream picks the view again
       _claimed = null;
       _typeAll(t.takeUnsent(), t.pane); // input queued for a lead that will not come: never lost silently
       if (reason == 'Disconnected' || reason == revokedMessage) {
@@ -401,7 +401,7 @@ class _SessionScreenState extends State<SessionScreen> {
       }
       if (t.inputLost case final lost?) report(context, lost);
       if (_leadResize?.isActive != true) _resizeLead(); // the screen changed while the claim waited for its LEAD
-      if (text.isNotEmpty && _termShown && t.snapshot!.altScreen) {
+      if (text.isNotEmpty && _termShown && (t.snapshot!.altScreen || _agentInPane(s))) {
         text = ''; // shown from now on; a fallback later starts from a fresh read, not this one
       }
     }
@@ -534,12 +534,16 @@ class _SessionScreenState extends State<SessionScreen> {
   // without a terminal stream there is no screen to follow: the history, always
   bool get _history => scrollback || term == null;
 
-  // the main screen (a shell, a command printing lines) shows its history; a full-screen program shows Term.
+  bool _agentInPane(Session? s) => s != null && s.liveAgent.isNotEmpty && s.agentPane == pane;
+
+  // an alternate-screen program or an agent in this pane shows Term; a plain shell's main screen keeps its history.
   // Called from build, before anything reads [scrollback]: the frame that shows the switch already picks.
-  void _pickView(VtSnapshot? snap) {
-    if (snap == null || snap.altScreen == _alt) return;
-    _alt = snap.altScreen;
-    scrollback = !snap.altScreen;
+  void _pickView(Session s, VtSnapshot? snap) {
+    if (snap == null) return;
+    final live = snap.altScreen || _agentInPane(s);
+    if (live == _live) return;
+    _live = live;
+    scrollback = !live;
     WidgetsBinding.instance.addPostFrameCallback((_) => _load());
   }
 
@@ -768,7 +772,7 @@ class _SessionScreenState extends State<SessionScreen> {
     final s = this.s;
     if (s == null) return Scaffold(appBar: AppBar(), body: const Center(child: CircularProgressIndicator()));
     final t = term;
-    _pickView(t?.frame); // a reset's main screen is not the program's
+    _pickView(s, t?.frame); // a reset's main screen is not the program's
     final chat = _inChat;
     final options = chat ? const <PromptOption>[] : promptOptions(_termShown ? t!.snapshot!.lines.map((l) => l.text).join('\n') : text);
     _answersShown = options.isNotEmpty;

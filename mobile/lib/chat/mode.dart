@@ -19,7 +19,7 @@ class ModePicks {
 const chatAgents = {'claude', 'antigravity'};
 
 bool chatAvailable(Session s, String pane) =>
-    chatAgents.contains(s.liveAgent) && s.agentSessionId.isNotEmpty && s.agentPane == pane && !ModePicks.tooOld.contains(s.id);
+    chatAgents.contains(s.liveAgent) && (s.agentSessionId.isNotEmpty || s.liveAgent == 'antigravity') && s.agentPane == pane && !ModePicks.tooOld.contains(s.id);
 
 ViewMode shownMode(Session s, String pane) =>
     chatAvailable(s, pane) && ModePicks.of(s.id) != ViewMode.term ? ViewMode.chat : ViewMode.term;

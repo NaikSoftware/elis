@@ -63,6 +63,7 @@ extension AppStore {
 
 extension Session {
     /// transcriptSource names the Claude or agy transcript `pane` runs, the agent's pane by default; any other pane is refused.
+    /// An agy pane before its first prompt has no conversation yet, so its empty id reads as `transcript not found`.
     public func transcriptSource(token: String?, pane: StatusPane?, claudeDirectory: String = ClaudeHome.directory(),
                                  antigravityDirectory: String = AntigravityHome.directory())
         -> Result<ControlTranscriptSource, ControlTranscriptRefusal> {
@@ -71,7 +72,8 @@ extension Session {
         case .unknownToken(let token): return .failure(ControlTranscriptRefusal(message: "unknown pane id: \(token)"))
         case .pane(let addressed): resolved = addressed ?? agentPane ?? .left
         }
-        guard let agent = runningAgent, [.claude, .antigravity].contains(agent), let id = agentSessionID, resolved == agentPane
+        guard let agent = runningAgent, [.claude, .antigravity].contains(agent),
+              let id = agentSessionID ?? (agent == .antigravity ? "" : nil), resolved == agentPane
         else { return .failure(.noAdapter) }
         return .success(ControlTranscriptSource(claudeSessionID: id, pane: resolved,
                                                 claudeDirectory: agent == .claude ? claudeDirectory : antigravityDirectory, agent: agent))
