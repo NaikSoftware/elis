@@ -670,6 +670,14 @@ private Q_SLOTS:
         QCOMPARE(commandTitle({"python3", "-m", "http.server"}), QStringLiteral("http.server"));
         QCOMPARE(commandTitle({"sh", "-c", "printf hi; sleep 3"}), QStringLiteral("sh"));
         QCOMPARE(commandTitle({"-bash"}), QStringLiteral("bash"));
+        QVERIFY(isInteractiveShell({"/bin/bash"}));
+        QVERIFY(isInteractiveShell({"-zsh"}));
+        QVERIFY(isInteractiveShell({"/usr/bin/fish", "-il"}));
+        QVERIFY(!isInteractiveShell({"/usr/bin/fish", "-c", "claude"}));
+        QVERIFY(!isInteractiveShell({"/bin/zsh", "-lic", "claude"}));
+        QVERIFY(!isInteractiveShell({"/usr/bin/fish", "--command", "claude"}));
+        QVERIFY(!isInteractiveShell({"/usr/local/bin/claude"}));
+        QVERIFY(!isInteractiveShell({}));
         QCOMPARE(availableLaunchers("/a:/b", [](const QString &f) { return f == "/b/claude"; }), QStringList({"terminal", "claude"}));
         QCOMPARE(Store::stripTitleSpinner(QString::fromUtf8("✳ Claude Code")), QStringLiteral("Claude Code"));
         QCOMPARE(Store::stripTitleSpinner(QString::fromUtf8("⠋ build")), QStringLiteral("build"));

@@ -81,6 +81,27 @@ QString commandTitle(QStringList argv)
     return program;
 }
 
+bool isInteractiveShell(QStringList argv)
+{
+    if (argv.isEmpty())
+        return false;
+    if (argv[0].startsWith(QLatin1Char('-')))
+        argv[0] = argv[0].mid(1);
+    const QString program = argv[0].section(QLatin1Char('/'), -1);
+    static const QStringList shells{"sh", "bash", "zsh", "fish", "dash", "ash", "ksh", "mksh", "csh", "tcsh", "nu", "elvish", "xonsh"};
+    const QString userShell = qEnvironmentVariable("SHELL").section(QLatin1Char('/'), -1);
+    if (!shells.contains(program) && (userShell.isEmpty() || program != userShell))
+        return false;
+    for (int i = 1; i < argv.size(); ++i) {
+        const QString &a = argv[i];
+        if (a == QLatin1String("--"))
+            break;
+        if (a == QLatin1String("--command") || (a.startsWith(QLatin1Char('-')) && !a.startsWith(QLatin1String("--")) && a.contains(QLatin1Char('c'))))
+            return false;
+    }
+    return true;
+}
+
 QString antigravityTitle(const QString &fdDir, const QString &dataDir)
 {
     QString id;

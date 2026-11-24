@@ -221,10 +221,21 @@ static int shellPid(KParts::ReadOnlyPart *part)
     return zmx.isEmpty() ? t->terminalProcessId() : Zmx::shellPid(stateDir(), zmx);
 }
 
-// Konsole's foregroundProcessId lags a command starting; the shell's tty says who is in front right now
-static int freshForegroundPid(KParts::ReadOnlyPart *part)
+static QStringList procArgv(int pid)
 {
-    return Zmx::foregroundPid(shellPid(part));
+    if (pid <= 0)
+        return {};
+    QFile f(QStringLiteral("/proc/%1/cmdline").arg(pid));
+    return f.open(QIODevice::ReadOnly) ? QString::fromUtf8(f.readAll()).split(QChar(0), Qt::SkipEmptyParts) : QStringList();
+}
+
+// a session started with --command (or a surviving zmx daemon running one) has no interactive shell prompt
+static bool isCommandPane(const Session *s, int shell)
+{
+    if (s && !s->command.isEmpty())
+        return true;
+    const QStringList argv = procArgv(shell);
+    return !argv.isEmpty() && !isInteractiveShell(argv);
 }
 
 // a foreground job ignoring SIGHUP (nohup, a trap) must not outlive its closed pane; a live pane's kill ends its own
@@ -1533,12 +1544,13 @@ void MainWindow::paneTitle(const QString &id, QObject *part, const QString &titl
         return leadReport(id, p, title);
     if (!p || p != m_panes.value(id).main)
         return;
-    const int fg = freshForegroundPid(p);
-    if (fg <= 0 || fg == shellPid(p))
+    const int shell = shellPid(p), fg = Zmx::foregroundPid(shell);
+    const bool commandPane = isCommandPane(m_store.session(id), shell);
+    if (!commandPane && (fg <= 0 || fg == shell))
         m_shellTitle.insert(id, title);
     else if (!title.trimmed().isEmpty() && title != m_shellTitle.value(id)) {
         m_store.setTitle(id, title);
-        m_titlePid.insert(id, fg); // the sampler leaves a program's own title alone
+        m_titlePid.insert(id, fg > 0 ? fg : -1); // the sampler leaves a program's own title alone
         m_commandTitle.remove(id);
     }
 }
@@ -1847,15 +1859,25 @@ void MainWindow::sampleAgents()
         } else if (pick) { // another agent: the id no longer names what the session runs
             m_store.setAgentSessionId(s->id, QString());
         }
-        m_store.setBusy(s->id, fg > 0 && fg != shellPid(part));
-        // a plain command names the session while it runs (an agent names itself); idle, the folder does
         const int shell = shellPid(part);
-        if (fg > 0 && fg != shell && agent.isEmpty() && !argvs.isEmpty() && fg != m_titlePid.value(s->id)) {
-            const QString name = commandTitle(argvs.first());
-            m_store.setTitle(s->id, name);
-            m_titlePid.insert(s->id, fg);
-            m_commandTitle.insert(s->id, name);
-        } else if ((fg <= 0 || fg == shell) && !s->title.isEmpty()
+        const bool commandPane = isCommandPane(s, shell);
+        const bool busy = fg > 0 && (fg != shell || commandPane);
+        m_store.setBusy(s->id, busy);
+        // a plain command names the session while it runs (an agent names itself); idle, the folder does
+        if (busy && agent.isEmpty() && !argvs.isEmpty()) {
+            const int prevTitlePid = m_titlePid.value(s->id);
+            if (commandPane && prevTitlePid < 0) {
+                m_titlePid.insert(s->id, fg); // paneTitle already named this command before zmx listed its pid
+            } else if (fg != prevTitlePid) {
+                QStringList target = argvs.first();
+                for (int i = 0; i + 1 < argvs.size() && target.contains(QLatin1String("-c")); ++i)
+                    target = argvs[i + 1];
+                const QString name = commandTitle(target);
+                m_store.setTitle(s->id, name);
+                m_titlePid.insert(s->id, fg);
+                m_commandTitle.insert(s->id, name);
+            }
+        } else if (!busy && !s->title.isEmpty()
                    // after a restart only the argv captured at quit tells a command's name from a program's title
                    && (s->title == m_commandTitle.value(s->id) || s->title == commandTitle(s->foreground))) {
             m_store.setTitle(s->id, QString());

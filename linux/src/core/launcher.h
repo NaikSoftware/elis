@@ -24,6 +24,8 @@ QString agentForGroup(const QList<QStringList> &group);
 // is http.server); inline code (`sh -c ...`) names the interpreter.
 // shortcut: wrappers name themselves (`sudo htop` is sudo, `npm run dev` is npm); unwrap them if that reads badly.
 QString commandTitle(QStringList argv);
+// Whether a process argv is an interactive shell (not a -c/--command invocation or another program).
+bool isInteractiveShell(QStringList argv);
 // The title agy (Antigravity) gave the conversation a process holds open: agy sets no terminal title, but locks
 // <dataDir>/presence/<id>.lock and keeps each conversation's title in <dataDir>/conversation_summaries.db.
 // `fdDir` is the process's /proc/<pid>/fd; "" when it is not agy or the model has not titled the conversation yet.
