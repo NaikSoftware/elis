@@ -37,7 +37,7 @@ class Composer extends StatelessWidget {
   Widget build(BuildContext context) {
     final send = enabled ? onSend : null;
     final row = Row(children: [
-      ?leading,
+      if (leading case final l?) ...[l, const SizedBox(width: 8)],
       Expanded(
         child: TextField(
           key: const Key('composer'),
@@ -49,12 +49,13 @@ class Composer extends StatelessWidget {
           textInputAction: TextInputAction.send,
           onSubmitted: (_) => send?.call(),
           autocorrect: autocorrect,
-          style: TextStyle(fontFamily: mono ? theme.mono : null, fontSize: 13),
+          style: TextStyle(fontFamily: mono ? theme.mono : null, fontSize: 13, color: enabled ? null : C.muted),
           decoration: InputDecoration(
             hintText: hint,
             fillColor: fill,
             border: OutlineInputBorder(borderRadius: BorderRadius.circular(14), borderSide: const BorderSide(color: C.line)),
             enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(14), borderSide: const BorderSide(color: C.line)),
+            disabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(14), borderSide: const BorderSide(color: C.line)),
           ),
         ),
       ),

@@ -277,7 +277,7 @@ class ChatComposerState extends State<ChatComposer> {
           Positioned(
             left: 0,
             right: 0,
-            bottom: -4,
+            bottom: -2,
             child: LinearProgressIndicator(value: f.size == 0 ? 0 : min(1, a.sent / f.size), minHeight: 2, backgroundColor: C.line),
           ),
       ]),
@@ -406,11 +406,12 @@ class ChatComposerState extends State<ChatComposer> {
                           remote: widget.remote,
                           server: widget.server,
                           disabledBy: widget.disabledBy,
-                          checks: widget.checks),
+                          checks: widget.checks,
+                          gap: _chips.isEmpty ? 6 : 2),
                     if (_chips.isNotEmpty)
                       Padding(
                         padding: const EdgeInsets.only(bottom: 6),
-                        child: Wrap(spacing: 8, runSpacing: 6, children: [for (final a in _chips) _chip(a)]),
+                        child: Wrap(spacing: 8, runSpacing: 2, children: [for (final a in _chips) _chip(a)]),
                       ),
                     if (_offer != null) _offerRow(),
                     if (held != null)
@@ -506,7 +507,8 @@ class ModeChip extends StatefulWidget {
       required this.remote,
       this.server = false,
       this.disabledBy,
-      this.checks = _checks});
+      this.checks = _checks,
+      this.gap = 6});
 
   final ClaudeScreen? screen;
   final TranscriptMeta? meta;
@@ -514,6 +516,7 @@ class ModeChip extends StatefulWidget {
   final bool remote, server;
   final String? disabledBy;
   final Checks checks;
+  final double gap; // below the chip
 
   @override
   State<ModeChip> createState() => ModeChipState();
@@ -624,7 +627,7 @@ class ModeChipState extends State<ModeChip> {
         !widget.gate.running;
     final shells = s?.shells ?? 0;
     return Padding(
-      padding: const EdgeInsets.only(bottom: 6),
+      padding: EdgeInsets.only(bottom: widget.gap),
       child: Row(children: [
         ActionChip(
           key: const Key('mode-chip'),

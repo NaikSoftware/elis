@@ -109,6 +109,7 @@ ThemeData buildTheme() {
       enabledBorder: border(C.line),
       border: border(C.line),
       focusedBorder: border(C.accent),
+      disabledBorder: border(C.line),
     ),
     filledButtonTheme: FilledButtonThemeData(
         style: FilledButton.styleFrom(
