@@ -331,6 +331,10 @@ public extension ControlActions {
         .tooOld
     }
 
+    func uploadDestination(_: String?, window _: String?, name _: String, size _: Int) -> ControlResponse {
+        ControlResponse(ok: false, error: "the Elis on this host is too old for session.upload")
+    }
+
     func sessionAttach(target _: String?, pane _: StatusPane, paneID _: String?, window _: String?) async -> ControlResponse {
         ControlResponse(ok: false, error: "session.attach is not supported by this host")
     }

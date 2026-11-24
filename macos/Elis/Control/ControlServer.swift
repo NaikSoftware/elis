@@ -643,7 +643,7 @@ final class ControlServer {
     }
 
     // these polling reads cannot change window nodes; skip the AppKit rebuild
-    nonisolated private static func leavesWindowsUnchanged(_ cmd: Command) -> Bool { [.eventsRead, .msgRead, .sessionTranscript].contains(cmd) }
+    nonisolated private static func leavesWindowsUnchanged(_ cmd: Command) -> Bool { [.eventsRead, .msgRead, .sessionTranscript, .sessionUpload].contains(cmd) }
 
     /// Read bytes from `conn` up to (and excluding) the first newline. Returns nil on EOF-before-newline, a
     /// read error, the `maxLineBytes` cap, or the `readDeadlineSeconds` overall cap.
@@ -743,7 +743,7 @@ final class ControlServer {
                 .sessionOverlayResult, .sessionOverlaySubmit, .sessionOverlayCopy, .sessionOverlayText,
                 .sessionOverlayHide, .sessionOverlayShow, .sessionOverlayToggle, .sessionOverlayFollow, .sessionOverlaySearch,
                 .sessionOverlayChanges, .sessionOverlayFiles, .sessionOverlayWrap,
-                .sessionBackground, .sessionText, .sessionTranscript, .sessionGrid, .sessionScroll, .sessionAttach, .quick, .quickType, .quickText,
+                .sessionBackground, .sessionText, .sessionTranscript, .sessionUpload, .sessionGrid, .sessionScroll, .sessionAttach, .quick, .quickType, .quickText,
                 .windowNew, .windowList, .windowSelect, .windowGo,
                 .windowClose, .windowRename, .windowDelete, .windowResize, .windowMove, .windowZoom,
                 .windowFullscreen, .windowMinimize, .windowRemoteOpen, .windowRemoteDismiss,

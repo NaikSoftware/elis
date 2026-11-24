@@ -113,6 +113,11 @@ struct elisApp: App {
                                                  flaggedLayout: launchSettings.effectiveFlaggedViewLayout)
         spawnRegistry = SpawnRegistry(pacer: pacer)
         let library = restored.library
+        // before any window mounts, so no session made after `keep` was read can lose its folder
+        if !Self.isHostedUnitTest {
+            UploadStorage.sweep(stateDir: stateDirectory, keep: UploadStorage.keep(claims: library.paneClaims(), recent: library.recentClosedItems),
+                                now: Date())
+        }
         zmxForegroundResolver = restored.foregroundResolver
         launchContext = restored.spawnContext
         _library = State(initialValue: library)
