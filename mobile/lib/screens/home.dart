@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 
+import '../assistant/elis_bar.dart';
 import '../ble_transport.dart';
 import '../client.dart';
 import '../main.dart';
@@ -273,28 +274,22 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
             wave.value = 0;
           }
           return Scaffold(
-            floatingActionButton: m.state == LinkState.connected && m.workspaces.isNotEmpty
-                ? FloatingActionButton.extended(
-                    key: const Key('newSession'),
-                    onPressed: () => showNewSession(context, m),
-                    backgroundColor: C.text,
-                    foregroundColor: C.bg,
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
-                    icon: const Icon(Icons.add),
-                    label: const Text('New session', style: TextStyle(fontWeight: FontWeight.w600, fontSize: 15)),
-                  )
-                : null,
-            body: SafeArea(
-              child: RefreshIndicator(
-                onRefresh: m.refresh,
-                child: CustomScrollView(slivers: [
-                  SliverToBoxAdapter(child: _header(all)),
-                  if (m.state != LinkState.connected) SliverToBoxAdapter(child: _offline()),
-                  if (m.state == LinkState.connected && !m.loaded)
-                    const SliverFillRemaining(child: Center(child: CircularProgressIndicator())),
-                  if (m.loaded) ..._body(all, needs),
-                  const SliverToBoxAdapter(child: SizedBox(height: 96)),
-                ]),
+            body: ElisBar(
+              model: m,
+              onNewSession: m.state == LinkState.connected && m.workspaces.isNotEmpty ? () => showNewSession(context, m) : null,
+              openSession: (s) => open(s.id),
+              child: SafeArea(
+                child: RefreshIndicator(
+                  onRefresh: m.refresh,
+                  child: CustomScrollView(slivers: [
+                    SliverToBoxAdapter(child: _header(all)),
+                    if (m.state != LinkState.connected) SliverToBoxAdapter(child: _offline()),
+                    if (m.state == LinkState.connected && !m.loaded)
+                      const SliverFillRemaining(child: Center(child: CircularProgressIndicator())),
+                    if (m.loaded) ..._body(all, needs),
+                    const SliverToBoxAdapter(child: SizedBox(height: 88)), // the bar row (64) and its fade (24)
+                  ]),
+                ),
               ),
             ),
           );
@@ -606,16 +601,7 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
                 ]),
               ),
               if (s.flagged) const Padding(padding: EdgeInsets.only(left: 10), child: Lucide(lucideFlag, size: 14, color: C.indigo)),
-              if (s.unseen > 0)
-                Container(
-                  margin: const EdgeInsets.only(left: 10),
-                  constraints: const BoxConstraints(minWidth: 20),
-                  height: 20,
-                  padding: const EdgeInsets.symmetric(horizontal: 5),
-                  alignment: Alignment.center,
-                  decoration: BoxDecoration(color: C.unseen, borderRadius: BorderRadius.circular(10)),
-                  child: Text('${s.unseen}', style: const TextStyle(fontSize: 11.5, fontWeight: FontWeight.w700, color: Colors.white)),
-                ),
+              if (s.unseen > 0) Padding(padding: const EdgeInsets.only(left: 10), child: UnreadBadge(s.unseen)),
               if (hiddenBlocked)
                 Semantics(
                   label: 'A hidden companion is blocked',

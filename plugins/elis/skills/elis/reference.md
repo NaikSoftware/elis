@@ -2164,6 +2164,8 @@ prompt stalls the stream.
   or selects `NAME` from the next message onward (`current: NAME|none`, `available: ...`).
 - `elisctl assistant show [--window W]` (`assistant.show`) selects the pinned Elis row in the addressed window, clearing
   any selected session and clearing `unread`.
+- `elisctl assistant seen` (`assistant.seen`) clears `unread` without selecting the Elis row; it takes no window or
+  target, and the unread badge on every window's row repaints.
 - `elisctl reply (TEXT|--stdin)` (`assistant.reply`) runs from inside an Elis session (`ELIS_SESSION_ID`) and posts a
   reply card with a go-to-session arrow into the chat and into the live assistant stream (`[reply from @<handle> <session id>] <text>`).
   Prints `ok`. Fails outside a session (`elisctl reply runs inside an Elis session`) or when `--socket` targets another

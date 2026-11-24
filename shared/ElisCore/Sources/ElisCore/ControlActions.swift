@@ -353,5 +353,7 @@ public protocol ControlActions {
     /// assistantProviders lists the assistant CLIs installed here; nil on a host without the assistant.
     func assistantProviders() -> [SessionLauncher]?
     func assistantProviderChanged(_ provider: SessionLauncher)
+    /// assistantSeen repaints the Elis row after `assistant.seen` cleared the unread count.
+    func assistantSeen()
     func showAssistant(window: String?) -> ControlResponse
 }

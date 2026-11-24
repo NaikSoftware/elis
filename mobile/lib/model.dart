@@ -5,6 +5,7 @@ import 'dart:convert';
 import 'package:flutter/widgets.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 
+import 'assistant/assistant_model.dart';
 import 'ble_transport.dart';
 import 'client.dart';
 import 'link/mux.dart';
@@ -30,6 +31,7 @@ String agentOf(List<String> argv) {
 class Session {
   Session(Map m, this.workspaceId, this.workspaceName, {this.server = false})
       : id = m['id'] ?? '',
+        handle = m['handle'] ?? '',
         name = (m['name'] as String?)?.isNotEmpty == true ? m['name'] : 'New session',
         status = m['status'] ?? 'idle',
         agent = (m['agent'] as String?)?.isNotEmpty == true ? m['agent'] : agentOf((m['foreground'] as List?)?.cast<String>() ?? const []),
@@ -60,6 +62,7 @@ class Session {
   final String agentSessionId, agentPane, remoteHost;
   final bool remote;
   final bool server; // in an elis-server window, not a row attached from another Mac
+  final String handle;
   final String id, name, status, agent, cwd, parent, context, tint, workspaceId, workspaceName;
   final int unseen;
   final bool flagged, active, blink, hasSplit, split, collapsed;
@@ -72,13 +75,14 @@ class Session {
 class Workspace {
   Workspace(Map m, {bool server = false})
       : id = m['id'] ?? '',
+        handle = m['handle'] ?? '',
         name = m['name'] ?? '',
         folder = m['rememberedFolder'] ?? '',
         tint = m['tint'] ?? '',
         active = m['active'] == true,
         sessions = [for (final s in (m['sessions'] as List? ?? const [])) Session(s as Map, m['id'] ?? '', m['name'] ?? '', server: server)];
 
-  final String id, name, folder, tint;
+  final String id, handle, name, folder, tint;
   final bool active;
   final List<Session> sessions;
 }
@@ -211,6 +215,9 @@ class ElisModel extends ChangeNotifier {
   List<Workspace> workspaces = [];
   List<String> launcherIds = const ['terminal']; // what the computer's "+" menu offers
   bool loaded = false;
+  AssistantState? assistant; // null on a host without the assistant
+  List<AssistantEntry> assistantEntries = [];
+  bool assistantOpen = false; // set by the sheet: a message that arrives meanwhile is read at once
   final _alerts = StreamController<Alert>.broadcast();
   Stream<Alert> get alerts => _alerts.stream;
   final _events = StreamController<Map<String, dynamic>>.broadcast();
@@ -250,6 +257,7 @@ class ElisModel extends ChangeNotifier {
     seen = DateTime.now();
     Watch.check();
     start();
+    unawaited(rereadAssistant()); // the background read nothing for an open sheet; a reconnect re-reads after its refresh
   }
 
   void _background() {
@@ -270,7 +278,10 @@ class ElisModel extends ChangeNotifier {
         final mx = await Mux.upgrade(c);
         if (gen != _generation) return c.close();
         // rows can be lost (`{"dropped":N}`, `{"gap":true}`), tree rows among them: re-read the tree
-        mx?.events.where(rereadsTree).listen((_) => scheduleRefresh(Duration.zero));
+        mx?.events.where(rereadsTree).listen((_) {
+          scheduleRefresh(Duration.zero);
+          unawaited(rereadAssistant());
+        });
         _c = c;
         via = c.via;
         error = null;
@@ -282,6 +293,7 @@ class ElisModel extends ChangeNotifier {
         // only now: a screen that saw the mux earlier would open panes from the tree of the link before
         mux = mx;
         if (!_disposed) notifyListeners();
+        unawaited(rereadAssistant());
         unawaited(_eventLoop(gen));
         await _c!.closed;
       } catch (e) {
@@ -315,9 +327,9 @@ class ElisModel extends ChangeNotifier {
   }
 
   /// Run a command, then refresh the tree; the error text on failure, null on success.
-  Future<String?> act(String cmd, {String? target, Map<String, dynamic>? args}) async {
+  Future<String?> act(String cmd, {String? target, Map<String, dynamic>? args, bool windowed = true}) async {
     try {
-      await call(cmd, target: target, args: args);
+      await call(cmd, target: target, args: args, windowed: windowed);
       scheduleRefresh(const Duration(milliseconds: 150));
       return null;
     } on ElisError catch (e) {
@@ -338,14 +350,58 @@ class ElisModel extends ChangeNotifier {
       final server = remote is Map && remote['origin'] != 'mac';
       workspaces = [for (final m in (tree?['workspaces'] as List? ?? const [])) Workspace(m as Map, server: server)];
       launcherIds = (tree?['launchers'] as List?)?.cast<String>() ?? const ['terminal'];
+      assistant = tree?['assistant'] is Map ? AssistantState.fromJson(tree!['assistant'] as Map) : null;
+      _pollRunning();
       loaded = true;
       if (background) Watch.clear(Watch.posted.read(sessions));
       if (!_disposed) notifyListeners();
     } on ElisError catch (e) {
       error = e.message;
       if (!_disposed) notifyListeners();
+      // a failed read must not end the poll that shows Elis working; a closed link's reconnect refreshes instead
+      if (e.message != 'Not connected' && e.message != 'Disconnected') _pollRunning();
     } on TimeoutException {
-      // the next event or poll retries
+      _pollRunning(); // the next event or poll retries
+    }
+  }
+
+  void _pollRunning() {
+    if (assistant?.running == true && !_disposed) scheduleRefresh(const Duration(seconds: 2));
+  }
+
+  /// Whether the transcript was read; a failure keeps the old one for the next event to retry.
+  Future<bool> readAssistant({int last = 100}) async {
+    try {
+      final r = await call('assistant.read', args: {'last': last}, windowed: false);
+      assistantEntries = [for (final e in ((r['assistant'] as Map?)?['entries'] as List? ?? const [])) AssistantEntry.fromJson(e as Map)];
+      if (!_disposed) notifyListeners();
+      return true;
+    } on ElisError {
+      return false;
+    } on TimeoutException {
+      return false;
+    }
+  }
+
+  Future<String?> askAssistant(String text) => act('assistant.ask', args: {'text': text}, windowed: false);
+
+  Future<String?> setProvider(String name) => act('assistant.provider', args: {'provider': name}, windowed: false);
+
+  /// Re-reads the transcript and marks it seen, only while the sheet is on screen and the app in front.
+  Future<void> rereadAssistant() async {
+    if (!assistantOpen || background) return;
+    // a failed read showed nothing new, so nothing is marked seen
+    if (await readAssistant() && assistantOpen && !background) await markAssistantSeen();
+  }
+
+  Future<void> markAssistantSeen() async {
+    try {
+      await call('assistant.seen', windowed: false);
+      scheduleRefresh();
+    } on ElisError {
+      // best effort
+    } on TimeoutException {
+      // best effort
     }
   }
 
@@ -381,19 +437,26 @@ class ElisModel extends ChangeNotifier {
         if (e.message == 'Disconnected' || e.message == 'Not connected') return;
         _run = null; // "event run changed" (the app restarted) or "event cursor expired": start over
         scheduleRefresh(Duration.zero);
+        unawaited(rereadAssistant());
         await Future.delayed(const Duration(seconds: 1));
       } on TimeoutException {
         await Future.delayed(const Duration(seconds: 1));
       } catch (_) {
         _run = null; // a malformed reply: start over rather than stop watching
         scheduleRefresh(Duration.zero);
+        unawaited(rereadAssistant());
         await Future.delayed(const Duration(seconds: 1));
       }
     }
   }
 
+  @visibleForTesting
+  void onEvent(Map<String, dynamic> e) => _onEvent(e);
+
   void _onEvent(Map<String, dynamic> e) {
     _events.add(e);
+    // closed, the badge counts it from the tree
+    if (e['kind'] == 'assistant.message') unawaited(rereadAssistant());
     if (background && e['kind'] == 'session.closed') Watch.clear(Watch.posted.closed(e['session'] as String? ?? ''));
     final a = Alert.of(e);
     if (a == null) return;

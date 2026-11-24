@@ -755,7 +755,7 @@ the batch in one step. Mail is in memory only and is dropped when the pane close
 `pendingMessages` on the tree surface and the `message` event. See [reference.md](reference.md#msg).
 
 **assistant & reply** — `assistant ask TEXT [--wait [--timeout N]]` · `assistant send --to TAG... TEXT|--stdin` ·
-`assistant read [--last N]` · `assistant provider [NAME]` · `assistant show [--window W]` · `reply TEXT|--stdin` —
+`assistant read [--last N]` · `assistant provider [NAME]` · `assistant show [--window W]` · `assistant seen` · `reply TEXT|--stdin` —
 drive the pinned **Elis** system chat (available in the Linux app now; macOS gets it later). Providers (`claude`,
 `codex`, `antigravity`, `opencode`) run in full-auto permission mode; other sessions'
 replies reach Elis in order, each after its current turn; switching applies from the next message. `send` tags `@handle`, `@ws:<workspace>`,
