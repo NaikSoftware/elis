@@ -789,9 +789,16 @@ void main() {
     final h = Harness(t, treeOf());
     await h.start();
     await h.opened();
-    expect(find.byKey(const Key('status')), findsOneWidget);
+    final status = find.byKey(const Key('status'));
+    expect(status, findsOneWidget);
     expect(find.text('Idle'), findsNothing);
     expect(find.bySemanticsLabel('Idle'), findsOneWidget);
+    final title = t.getRect(find.text('shell'));
+    final dot = t.getRect(status);
+    final mode = t.getRect(find.byKey(const Key('modeButton')));
+    expect(dot.left, greaterThanOrEqualTo(title.right));
+    expect(dot.left - title.right, lessThanOrEqualTo(12));
+    expect(dot.right, lessThanOrEqualTo(mode.left));
     await h.stop();
   });
 
