@@ -36,6 +36,9 @@
 #include <numeric>
 #include <memory>
 #include <signal.h>
+#include <fcntl.h>
+#include <sys/ioctl.h>
+#include <unistd.h>
 #include <QPointer>
 #include <QTemporaryDir>
 #include <QToolButton>
@@ -374,6 +377,77 @@ private Q_SLOTS:
         QVERIFY(display);
         QTest::keyClick(display, Qt::Key_A);
         QTRY_VERIFY_WITH_TIMEOUT(leads(), 5000);
+    }
+
+    void takeOverOfASessionNotShownKeepsItsPaneSizedAndShown()
+    {
+        if (qEnvironmentVariableIsEmpty("ELIS_STATE_DIR"))
+            QSKIP("runs zmx daemons in <state>: run it through ctest, which sets a throwaway ELIS_STATE_DIR");
+        const QByteArray shell = qgetenv("SHELL");
+        qputenv("SHELL", "/bin/sh");
+        auto restoreShell = qScopeGuard([shell] { qputenv("SHELL", shell); });
+        Store store;
+        store.restoreModeAtLaunch = QStringLiteral("live");
+        MainWindow w(store, dir.filePath("takeover-hidden.json"));
+        w.restore({});
+        const QString ws = store.addWorkspace("w");
+        const QString a = store.addSession(ws, {}, {}, QStringLiteral("exec sleep 60"));
+        const QString b = store.addSession(ws, {}, {}, QStringLiteral("exec sleep 60"));
+        store.select(b);
+        w.show();
+        const QString pane = store.session(a)->paneId;
+        auto killDaemons = qScopeGuard([&store, pane, b] { Zmx::kill(stateDir(), {pane, store.session(b)->paneId}); });
+        QTRY_COMPARE_WITH_TIMEOUT(Zmx::lead(pane).role, QStringLiteral("leader"), 5000);
+
+        const QString other = QUuid::createUuid().toString(QUuid::WithoutBraces);
+        const QMap<QString, QString> set = Zmx::attach(stateDir(), other, QStringLiteral("/bin/sh"), {}, {}, false).set;
+        Zmx::forget(other);
+        QProcessEnvironment env = QProcessEnvironment::systemEnvironment();
+        for (const QString &k : env.keys())
+            if (k.startsWith(QLatin1String("ELIS_")) || k.startsWith(QLatin1String("ZMX_")))
+                env.remove(k);
+        env.insert(QStringLiteral("ZMX_DIR"), set.value(QStringLiteral("ZMX_DIR")));
+        env.insert(QStringLiteral("ZMX_MANAGED"), QStringLiteral("phone"));
+        env.insert(QStringLiteral("ZMX_MANAGED_CLAIM"), QStringLiteral("1"));
+        QProcess phone;
+        phone.setProcessEnvironment(env);
+        auto stopPhone = qScopeGuard([&phone] {
+            phone.kill();
+            phone.waitForFinished();
+        });
+        phone.start(QStringLiteral("script"), {QStringLiteral("-qfec"), Zmx::executable() + QStringLiteral(" attach ") + Zmx::daemonName(stateDir(), pane),
+                                               QStringLiteral("/dev/null")});
+        QTRY_COMPARE_WITH_TIMEOUT(Zmx::lead(pane).role, QStringLiteral("follower"), 5000);
+        const auto paneShown = [&w, pane]() -> KParts::ReadOnlyPart * {
+            for (auto *part : w.findChildren<KParts::ReadOnlyPart *>())
+                if (part->property("elisPaneId").toString() == pane && part->widget() && !part->widget()->isHidden())
+                    return part;
+            return nullptr;
+        };
+        const auto retaken = [&] { return Zmx::lead(pane).role == QLatin1String("leader") && !Zmx::lead(pane).reattaching; };
+        QEventLoop loop; // the app's own: the report that retires the part arrives in a pass of it
+        QTimer poll;
+        connect(&poll, &QTimer::timeout, &loop, [&] {
+            if (retaken())
+                loop.quit();
+        });
+        poll.start(50);
+        QTimer::singleShot(0, &loop, [&] { phone.kill(); }); // the phone leaves: the pane takes the lead back on its own
+        QTimer::singleShot(5000, &loop, &QEventLoop::quit);
+        loop.exec();
+        QVERIFY(retaken());
+
+        KParts::ReadOnlyPart *fresh = paneShown();
+        QVERIFY(fresh);
+        const int pid = qobject_cast<TerminalInterface *>(fresh)->terminalProcessId();
+        const int fd = ::open(qPrintable(QStringLiteral("/proc/%1/fd/0").arg(pid)), O_RDONLY | O_NOCTTY);
+        QVERIFY(fd >= 0);
+        winsize size{};
+        ::ioctl(fd, TIOCGWINSZ, &size);
+        ::close(fd);
+        QVERIFY2(size.ws_row > 0 && size.ws_col > 0, "the attach client's pty has no size, so zmx lays the program out at its default");
+        store.select(a);
+        QTRY_VERIFY(fresh->widget()->isVisible());
     }
 
     void commandSessionNamesItselfWithoutBeingSelected()
