@@ -100,6 +100,30 @@ struct ClaudeTranscriptTests {
         #expect(poll.next == fixture.size && !poll.reset && poll.commands == nil)
     }
 
+    @Test func midTurnQueuedFollowUpTransitionsFromQueueToUserItem() throws {
+        let fixture = try Fixture([
+            user("u1", parent: nil, "start"),
+            toolUse("a1", parent: "u1", id: "t1"),
+            #"{"type":"queue-operation","operation":"enqueue","timestamp":"T","sessionId":"s1","content":"follow up"}"#,
+        ])
+        let first = try fixture.page()
+        #expect(first.meta.queued == ["follow up"])
+        #expect(first.items.map(\.kind) == ["user", "tool"])
+        try fixture.append(lines: [
+            toolResult("r1", parent: "a1", id: "t1"),
+            #"{"type":"queue-operation","operation":"remove","timestamp":"T","sessionId":"s1","content":"follow up","reason":"absorbed_mid_turn"}"#,
+            #"{"type":"attachment","uuid":"q1","parentUuid":"r1","isSidechain":false,"timestamp":"T","# +
+                #""attachment":{"type":"queued_command","prompt":"follow up","commandMode":"prompt","origin":{"kind":"human"},"humanTurn":true}}"#,
+            text("a2", parent: "q1", message: "m2", "got it"),
+        ])
+        let poll = try fixture.page(after: first.next)
+        #expect(poll.meta.queued == nil)
+        let followUp = try #require(poll.items.first { $0.uuid == "q1" })
+        #expect(followUp.kind == "user" && followUp.text == "follow up" && followUp.promptSource == "queued" && followUp.origin == "human")
+        let full = try fixture.page()
+        #expect(full.items.map(\.uuid) == ["u1", "a1", "q1", "a2"])
+    }
+
     @Test func appendBetweenPollsIsNeverHalfRead() throws {
         let fixture = try Fixture(users(1, bytes: 5))
         let tail = try fixture.page()

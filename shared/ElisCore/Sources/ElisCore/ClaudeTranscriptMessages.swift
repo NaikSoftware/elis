@@ -25,7 +25,7 @@ enum ClaudeTranscriptMessages {
     private static func message(channel: String, attributes: [String: String], body: String) -> ControlTranscriptItem? {
         var item = ControlTranscriptItem(kind: "message", uuid: "", at: 0)
         item.channel = channel
-        item.from = channel == "teammate" ? attributes["teammate_id"] : attributes["name"] ?? attributes["from"]
+        item.from = channel == "teammate" ? attributes["teammate_id"] : attributes["name"] ?? attributes["from-name"] ?? attributes["from"]
         item.summary = attributes["summary"]
         item.agentColor = attributes["color"]
         item.text = body

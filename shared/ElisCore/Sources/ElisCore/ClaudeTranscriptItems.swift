@@ -21,7 +21,7 @@ enum ClaudeTranscriptItems {
         case "user": made = userItems(record)
         case "assistant": made = assistantItems(record, result: result, spilled: spilled)
         case "system": made = systemItems(record)
-        case "attachment": made = hookItems(record)
+        case "attachment": made = attachmentItems(record)
         default: made = []
         }
         let time = record["timestamp"] as? String
@@ -42,27 +42,38 @@ enum ClaudeTranscriptItems {
         return item
     }
 
+    private static func contentBlocks(_ content: Any?) -> [[String: Any]] {
+        content.flatMap { $0 as? String }.map { [["type": "text", "text": $0]] } ?? content as? [[String: Any]] ?? []
+    }
+
     private static func userItems(_ record: [String: Any]) -> [ControlTranscriptItem] {
         let content = (record["message"] as? [String: Any])?["content"]
-        let blocks = content.flatMap { $0 as? String }.map { [["type": "text", "text": $0]] } ?? content as? [[String: Any]] ?? []
-        if record["isMeta"] as? Bool == true {
-            // a cross-session message is the one meta record shown
-            guard (record["origin"] as? [String: Any])?["kind"] as? String == "peer" else { return [] }
-            return blocks.flatMap { ClaudeTranscriptMessages.items($0["text"] as? String ?? "") ?? [] }
-        }
-        if record["isCompactSummary"] as? Bool == true {
+        let isMeta = record["isMeta"] as? Bool == true
+        if !isMeta, record["isCompactSummary"] as? Bool == true {
+            let blocks = contentBlocks(content)
             return [item("compactSummary", text: blocks.compactMap { $0["text"] as? String }.joined(separator: "\n"))]
+        }
+        return promptItems(content: content, isMeta: isMeta, promptSource: record["promptSource"] as? String,
+                           origin: (record["origin"] as? [String: Any])?["kind"] as? String)
+    }
+
+    private static func promptItems(content: Any?, isMeta: Bool, promptSource: String?, origin: String?) -> [ControlTranscriptItem] {
+        let blocks = contentBlocks(content)
+        if isMeta {
+            // a cross-session message is the one meta record shown
+            guard origin == "peer" else { return [] }
+            return blocks.flatMap { ClaudeTranscriptMessages.items($0["text"] as? String ?? "") ?? [] }
         }
         return blocks.flatMap { block -> [ControlTranscriptItem] in
             switch block["type"] as? String {
-            case "text": return textItems(block["text"] as? String ?? "", record: record)
+            case "text": return textItems(block["text"] as? String ?? "", promptSource: promptSource, origin: origin)
             case "image": return [imageItem(block)]
             default: return []
             }
         }
     }
 
-    private static func textItems(_ text: String, record: [String: Any]) -> [ControlTranscriptItem] {
+    private static func textItems(_ text: String, promptSource: String?, origin: String?) -> [ControlTranscriptItem] {
         let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
         if trimmed.hasPrefix("[Request interrupted") { return [item("interrupted")] }
         if let messages = ClaudeTranscriptMessages.items(trimmed) { return messages }
@@ -70,8 +81,8 @@ enum ClaudeTranscriptItems {
         let typed = stripping("system-reminder", from: text).trimmingCharacters(in: .whitespacesAndNewlines)
         guard !typed.isEmpty else { return [] }
         var user = item("user", text: typed)
-        user.promptSource = record["promptSource"] as? String
-        user.origin = (record["origin"] as? [String: Any])?["kind"] as? String
+        user.promptSource = promptSource
+        user.origin = origin
         return [user]
     }
 
@@ -149,11 +160,18 @@ enum ClaudeTranscriptItems {
         }
     }
 
-    private static func hookItems(_ record: [String: Any]) -> [ControlTranscriptItem] {
+    private static func attachmentItems(_ record: [String: Any]) -> [ControlTranscriptItem] {
         guard let attachment = record["attachment"] as? [String: Any],
-              (attachment["type"] as? String)?.hasPrefix("hook_") == true,
-              let exitCode = attachment["exitCode"] as? Int, exitCode != 0
+              let type = attachment["type"] as? String
         else { return [] }
+        // Mid-turn queued follow-ups, task notifications and peer messages land here instead of as `user` records.
+        if type == "queued_command" {
+            let origin = (attachment["origin"] as? [String: Any])?["kind"] as? String
+            let isHuman = origin == "human" || attachment["humanTurn"] as? Bool == true
+            return promptItems(content: attachment["prompt"], isMeta: attachment["isMeta"] as? Bool == true,
+                               promptSource: isHuman ? "queued" : nil, origin: origin)
+        }
+        guard type.hasPrefix("hook_"), let exitCode = attachment["exitCode"] as? Int, exitCode != 0 else { return [] }
         let body = ["stderr", "stdout", "content"].lazy.compactMap { attachment[$0] as? String }.first { !$0.isEmpty } ?? ""
         let name = attachment["hookName"] as? String
         return [item("hook", text: name.map { "\($0): \(body)" } ?? body)]

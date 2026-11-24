@@ -437,6 +437,7 @@ Records kept as items:
 | `assistant` `isApiErrorMessage`, `isAbortedMidStream` | `error`, `interrupted` |
 | `system` `compact_boundary`, `informational` (warning), `away_summary`, `stop_hook_summary` with errors | `compact`, `notice`, `hook` |
 | `attachment` `hook_*` with a non-zero `exitCode` | `hook` |
+| `attachment` `queued_command` (mid-turn absorbed prompts, images, task notifications, cross-session messages) | same items as `user` (`user` with `promptSource: queued`, `image`, `message`) |
 
 - Everything else is dropped, including `api-request*`, wrapper tags and unknown types; the allowlist is the only way in.
 - A `skipped` count reports lines that failed to decode, so one bad line never blanks the chat.
