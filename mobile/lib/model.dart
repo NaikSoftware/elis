@@ -322,9 +322,9 @@ class ElisModel extends ChangeNotifier {
   }
 
   /// Run a command, then refresh the tree; the error text on failure, null on success.
-  Future<String?> act(String cmd, {String? target, Map<String, dynamic>? args}) async {
+  Future<String?> act(String cmd, {String? target, Map<String, dynamic>? args, bool windowed = true}) async {
     try {
-      await call(cmd, target: target, args: args);
+      await call(cmd, target: target, args: args, windowed: windowed);
       scheduleRefresh(const Duration(milliseconds: 150));
       return null;
     } on ElisError catch (e) {
@@ -346,6 +346,7 @@ class ElisModel extends ChangeNotifier {
       workspaces = [for (final m in (tree?['workspaces'] as List? ?? const [])) Workspace(m as Map, server: server)];
       launcherIds = (tree?['launchers'] as List?)?.cast<String>() ?? const ['terminal'];
       assistant = tree?['assistant'] is Map ? AssistantState.fromJson(tree!['assistant'] as Map) : null;
+      if (assistant?.running == true) scheduleRefresh(const Duration(seconds: 2));
       loaded = true;
       if (background) Watch.clear(Watch.posted.read(sessions));
       if (!_disposed) notifyListeners();
@@ -359,7 +360,7 @@ class ElisModel extends ChangeNotifier {
 
   Future<void> readAssistant({int last = 100}) async {
     try {
-      final r = await call('assistant.read', args: {'last': last});
+      final r = await call('assistant.read', args: {'last': last}, windowed: false);
       assistantEntries = [for (final e in ((r['assistant'] as Map?)?['entries'] as List? ?? const [])) AssistantEntry.fromJson(e as Map)];
       if (!_disposed) notifyListeners();
     } on ElisError {
@@ -369,13 +370,14 @@ class ElisModel extends ChangeNotifier {
     }
   }
 
-  Future<String?> askAssistant(String text) => act('assistant.ask', args: {'text': text});
+  Future<String?> askAssistant(String text) => act('assistant.ask', args: {'text': text}, windowed: false);
 
-  Future<String?> setProvider(String name) => act('assistant.provider', args: {'provider': name});
+  Future<String?> setProvider(String name) => act('assistant.provider', args: {'provider': name}, windowed: false);
 
   Future<void> markAssistantSeen() async {
     try {
-      await call('assistant.seen');
+      await call('assistant.seen', windowed: false);
+      scheduleRefresh();
     } on ElisError {
       // best effort
     } on TimeoutException {

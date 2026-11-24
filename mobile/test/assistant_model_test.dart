@@ -1,17 +1,18 @@
 import 'package:elis_mobile/client.dart';
 import 'package:elis_mobile/model.dart';
+import 'package:fake_async/fake_async.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 class CallLog extends ElisModel {
   CallLog() : super(Pairing(name: 'MacBook', host: '10.0.0.2', port: 1, token: 't', fingerprint: 'f')) {
     state = LinkState.connected;
   }
-  final calls = <(String, Map<String, dynamic>?)>[];
+  final calls = <(String, Map<String, dynamic>?, bool)>[];
   Map<String, dynamic> tree = {};
 
   @override
   Future<Map<String, dynamic>> call(String cmd, {String? target, Map<String, dynamic>? args, bool windowed = true}) async {
-    calls.add((cmd, args));
+    calls.add((cmd, args, windowed));
     return switch (cmd) {
       'window.list' => {'windows': []},
       'tree' => {'tree': tree},
@@ -64,6 +65,60 @@ void main() {
     await Future(() {});
     await Future(() {});
     expect(m.calls.last.$1, 'assistant.seen');
+  });
+
+  test('polls tree while running', () {
+    fakeAsync((async) {
+      final m = CallLog()
+        ..tree = {
+          'assistant': {'providers': [], 'running': true, 'unread': 0},
+        };
+      int trees() => m.calls.where((c) => c.$1 == 'tree').length;
+      m.refresh();
+      async.flushMicrotasks();
+      expect(trees(), 1);
+      async.elapse(const Duration(seconds: 2));
+      async.flushMicrotasks();
+      expect(trees(), 2);
+    });
+  });
+
+  test('stops polling tree once the turn is no longer running', () {
+    fakeAsync((async) {
+      final m = CallLog()
+        ..tree = {
+          'assistant': {'providers': [], 'running': false, 'unread': 0},
+        };
+      int trees() => m.calls.where((c) => c.$1 == 'tree').length;
+      m.refresh();
+      async.flushMicrotasks();
+      async.elapse(const Duration(seconds: 4));
+      async.flushMicrotasks();
+      expect(trees(), 1);
+    });
+  });
+
+  test('markAssistantSeen re-reads the tree so unread is not stale', () {
+    fakeAsync((async) {
+      final m = CallLog();
+      m.markAssistantSeen();
+      async.flushMicrotasks();
+      expect(m.calls.map((c) => c.$1), ['assistant.seen']);
+      async.elapse(const Duration(milliseconds: 250));
+      async.flushMicrotasks();
+      expect(m.calls.map((c) => c.$1), ['assistant.seen', 'window.list', 'tree']);
+    });
+  });
+
+  test('assistant requests are app-wide, not window-addressed', () async {
+    final m = CallLog();
+    await m.readAssistant();
+    await m.askAssistant('hi');
+    await m.setProvider('claude');
+    await m.markAssistantSeen();
+    final assistant = m.calls.where((c) => c.$1.startsWith('assistant.'));
+    expect(assistant.map((c) => c.$1), ['assistant.read', 'assistant.ask', 'assistant.provider', 'assistant.seen']);
+    expect(assistant.every((c) => c.$3 == false), isTrue);
   });
 
   test('askAssistant sends text verbatim', () async {
