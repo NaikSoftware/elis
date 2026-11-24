@@ -62,11 +62,14 @@ class ClaudeScreen {
       final next = g.text(r + 1);
       if (!rule(r) || !(next.startsWith('❯') || next.startsWith('!') || next == '>' || next.startsWith('> '))) continue;
       for (var b = r + 2; b < n; b++) {
-        if (rule(b)) {
+        if (!rule(b)) continue;
+        final agy = next.startsWith('>');
+        // agy's box closes above its one footer row; a dialog below a prompt echo (`> …`) closes higher
+        if (!agy || [for (var f = b + 1; f < n; f++) g.text(f)].where((t) => t.trim().isNotEmpty).length <= 1) {
           (top, bottom) = (r, b);
-          s.agy = next.startsWith('>');
-          break;
+          s.agy = agy;
         }
+        break;
       }
     }
     final above = top < 0 ? n : top;

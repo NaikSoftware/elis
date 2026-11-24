@@ -179,4 +179,8 @@ void main() {
     final s = _s('agy-busy-70');
     expect((s.busy, s.dialog, s.draft, s.working), (true, false, '', 'Running command...'));
   });
+  test('antigravityPermissionDialogIsADialog', () {
+    final s = _s('agy-dialog-70');
+    expect((s.dialog, s.bottomStack, s.idle), (true, false, false));
+  });
 }
