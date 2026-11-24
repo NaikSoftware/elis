@@ -71,6 +71,7 @@ static const char *usage = R"(usage: elisctl <command> [args] [--target T] [--so
   session type <text> | --stdin [--pane left|right]
   session text [--all | --lines N] [--pane left|right]   the visible screen; --all adds the scrollback;
                                         --lines: the last N non-blank rows of screen + scrollback
+  session upload --name NAME --size BYTES [--target T]   reserve a path and write stdin there
   session transcript [--pane left|right] [--pane-id ID] [--after N | --before N] [--transcript ID] [--max-bytes N]
                                         a page of the Claude Code conversation the pane runs; pass next as --after
                                         for what was appended, start as --before for older items
@@ -558,8 +559,9 @@ int main(int argc, char **argv)
 {
     QCoreApplication app(argc, argv);
     const bool attach = argc >= 3 && std::strcmp(argv[1], "session") == 0 && std::strcmp(argv[2], "attach") == 0;
+    const bool upload = argc >= 3 && std::strcmp(argv[1], "session") == 0 && std::strcmp(argv[2], "upload") == 0;
     const bool phone = argc >= 2 && std::strcmp(argv[1], "phone") == 0;
-    if (attach || phone || (argc >= 2 && std::strcmp(argv[1], "mobile") == 0)) {
+    if (attach || upload || phone || (argc >= 2 && std::strcmp(argv[1], "mobile") == 0)) {
         // the Swift elisctl owns attach, mobile and phone (the Mac's parsing, output and `link --qr`); both sides get
         // the state dir explicitly (paths.h and ControlResolve differ)
         const QString dir = QCoreApplication::applicationDirPath();
@@ -578,7 +580,7 @@ int main(int argc, char **argv)
             execArgs.push_back(argv[i]);
         }
         // only the commands that reach the app take --socket; mobile reset touches the state dir alone
-        if (!hasSocket && (attach || (argc >= 3 && (phone || std::strcmp(argv[2], "serve") == 0)))) {
+        if (!hasSocket && (attach || upload || (argc >= 3 && (phone || std::strcmp(argv[2], "serve") == 0)))) {
             execArgs.push_back(const_cast<char *>("--socket"));
             execArgs.push_back(const_cast<char *>(sock.constData()));
         }

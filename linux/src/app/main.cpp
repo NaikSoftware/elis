@@ -9,6 +9,7 @@
 #include "phone.h"
 #include "smoothwheel.h"
 #include "store.h"
+#include "upload.h"
 
 #include <KConfig>
 #include <KConfigGroup>
@@ -236,6 +237,8 @@ int main(int argc, char **argv)
             Zmx::reap(dir, e.store->restoreModeAtLaunch, library.paneIds());
             break;
         }
+
+    uploadSweep(dir, library.sessionIds());
 
     QLocalServer server;
     QLocalServer::removeServer(socketPath()); // safe: the lock says no live instance owns it

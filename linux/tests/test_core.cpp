@@ -699,6 +699,36 @@ private Q_SLOTS:
         QVERIFY(s.session(a)->splitVisible);
     }
 
+    void reopenClosedKeepsTheSessionId()
+    {
+        Store s;
+        const QString ws = s.addWorkspace("w");
+        s.addSession(ws, {}, {});
+        const QString b = s.addSession(ws, "pinned", QDir::tempPath());
+        s.removeSession(b);
+        QCOMPARE(s.reopenClosed(), b);
+        QVERIFY(s.session(b));
+    }
+
+    void sessionUploadReservesUnderTheStateDir()
+    {
+        QTemporaryDir state;
+        const QByteArray old = qgetenv("ELIS_STATE_DIR");
+        qputenv("ELIS_STATE_DIR", state.path().toUtf8());
+        Store s;
+        FakeTerminals t;
+        const QString id = s.addSession(s.addWorkspace("w"), {}, {});
+        const QJsonObject r = call(s, t, "session.upload", id, {{"name", "a b.txt"}, {"size", 3}});
+        const QString path = r["result"]["upload"]["path"].toString();
+        qputenv("ELIS_STATE_DIR", old);
+        QVERIFY2(r.value("ok").toBool(), qPrintable(r.value("error").toString()));
+        QVERIFY(path.startsWith(state.path() + "/uploads/" + id + "/"));
+        QVERIFY(path.endsWith("-a_b.txt"));
+        QVERIFY(QFileInfo::exists(path));
+        const QJsonObject big = call(s, t, "session.upload", id, {{"name", "a"}, {"size", 20971521}});
+        QCOMPARE(big.value("error").toString(), QStringLiteral("file too large (max 20 MiB)"));
+    }
+
     void reopenClosedRestoresNameDirAndPlace()
     {
         Store s;
