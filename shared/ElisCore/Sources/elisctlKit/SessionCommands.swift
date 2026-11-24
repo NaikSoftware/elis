@@ -19,7 +19,7 @@ struct Session: ParsableCommand {
                       Split.self, Swap.self, Lead.self, Scratch.self, Focus.self, Resize.self, Copy.self, Paste.self,
                       SelectAll.self,
                       Text.self, Transcript.self, Grid.self, Scroll.self, Attach.self, Status.self, Restore.self, Restart.self, FlagCommand.self, Context.self, Tint.self,
-                      Seen.self, Search.self, Background.self, Overlay.self, Hud.self, Wait.self,
+                      Seen.self, Search.self, Background.self, Overlay.self, Hud.self, Wait.self, Upload.self,
                       Collapse.self, Expand.self, Convert.self]
     )
 
