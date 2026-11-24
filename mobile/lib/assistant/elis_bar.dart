@@ -22,7 +22,7 @@ class ElisBar extends StatefulWidget {
 class _ElisBarState extends State<ElisBar> with SingleTickerProviderStateMixin {
   late final AnimationController _c;
   late final CurvedAnimation _t;
-  bool _open = false;
+  bool _open = false, _front = true;
   double _drag = 0;
 
   ElisModel get m => widget.model;
@@ -34,6 +34,21 @@ class _ElisBarState extends State<ElisBar> with SingleTickerProviderStateMixin {
     super.initState();
     _c = AnimationController(vsync: this, duration: const Duration(milliseconds: 380));
     _t = CurvedAnimation(parent: _c, curve: _curve, reverseCurve: _curve.flipped);
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    _front = ModalRoute.isCurrentOf(context) ?? true;
+    _look();
+  }
+
+  // the sheet is looked at only while open with no route (a session, a menu) over Home
+  void _look() {
+    final look = _open && _front;
+    if (look == m.assistantOpen) return;
+    m.assistantOpen = look;
+    if (look) m.rereadAssistant();
   }
 
   @override
@@ -58,19 +73,17 @@ class _ElisBarState extends State<ElisBar> with SingleTickerProviderStateMixin {
     }
   }
 
-  Future<void> _show() async {
+  void _show() {
     setState(() => _open = true);
-    m.assistantOpen = true;
     _to(1);
-    await m.readAssistant();
-    if (mounted && _open) await m.markAssistantSeen();
+    _look();
   }
 
   void _close({bool animate = true}) {
     if (!_open && _c.isDismissed) return;
     FocusManager.instance.primaryFocus?.unfocus();
     _open = false;
-    m.assistantOpen = false;
+    _look();
     _to(0, animate: animate);
     if (mounted) setState(() {});
   }

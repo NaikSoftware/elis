@@ -1,18 +1,27 @@
+import 'dart:async';
+
 import 'package:elis_mobile/client.dart';
 import 'package:elis_mobile/model.dart';
 import 'package:fake_async/fake_async.dart';
+import 'package:flutter/services.dart';
+import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 class CallLog extends ElisModel {
-  CallLog() : super(Pairing(name: 'MacBook', host: '10.0.0.2', port: 1, token: 't', fingerprint: 'f')) {
+  // the link never opens: a test that resumes stays on its stubbed calls
+  CallLog() : super(Pairing(name: 'MacBook', host: '10.0.0.2', port: 1, token: 't', fingerprint: 'f'), open: (_, {preferBluetooth = false}) => Completer<Connection>().future) {
     state = LinkState.connected;
   }
   final calls = <(String, Map<String, dynamic>?, bool)>[];
   Map<String, dynamic> tree = {};
+  Object? treeError;
+
+  Iterable<String> get assistantCalls => calls.map((c) => c.$1).where((c) => c.startsWith('assistant.'));
 
   @override
   Future<Map<String, dynamic>> call(String cmd, {String? target, Map<String, dynamic>? args, bool windowed = true}) async {
     calls.add((cmd, args, windowed));
+    if (treeError case final e? when cmd == 'tree') throw e;
     return switch (cmd) {
       'window.list' => {'windows': []},
       'tree' => {'tree': tree},
@@ -51,20 +60,63 @@ void main() {
     expect(m.assistant, isNull);
   });
 
-  test('assistant.message event re-reads the transcript', () async {
+  test('assistant.message event re-reads an open transcript and marks it seen', () async {
     final m = CallLog();
     m.onEvent({'kind': 'assistant.message'});
-    await Future(() {});
+    await pumpEventQueue();
+    expect(m.assistantCalls, isEmpty);
+    m.assistantOpen = true;
+    m.onEvent({'kind': 'assistant.message'});
+    await pumpEventQueue();
     expect(m.calls.where((c) => c.$1 == 'assistant.read').map((c) => c.$2), [
       {'last': 100},
     ]);
-    expect(m.calls.any((c) => c.$1 == 'assistant.seen'), isFalse);
     expect(m.assistantEntries.single.to, ['s1']);
-    m.assistantOpen = true;
+    expect(m.assistantCalls, ['assistant.read', 'assistant.seen']);
+    m.dispose();
+  });
+
+  test('a backgrounded app does not mark an open transcript seen', () async {
+    final m = CallLog()
+      ..assistantOpen = true
+      ..background = true;
     m.onEvent({'kind': 'assistant.message'});
-    await Future(() {});
-    await Future(() {});
-    expect(m.calls.last.$1, 'assistant.seen');
+    await pumpEventQueue();
+    expect(m.assistantCalls, isNot(contains('assistant.seen')));
+    m.dispose();
+  });
+
+  test('resume re-reads an open transcript and marks it seen', () async {
+    AndroidFlutterLocalNotificationsPlugin.registerWith(); // resume asks it whether notifications are on
+    TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+        .setMockMethodCallHandler(const MethodChannel('dexterous.com/flutter/local_notifications'), (_) async => null);
+    final m = CallLog()
+      ..assistantOpen = true
+      ..background = true;
+    m.resume();
+    await pumpEventQueue();
+    expect(m.assistantCalls, ['assistant.read', 'assistant.seen']);
+    m.dispose();
+  });
+
+  test('a failed tree read keeps polling while Elis runs', () {
+    fakeAsync((async) {
+      final m = CallLog()
+        ..tree = {
+          'assistant': {'providers': [], 'running': true, 'unread': 0},
+        };
+      int trees() => m.calls.where((c) => c.$1 == 'tree').length;
+      m.refresh();
+      async.flushMicrotasks();
+      m.treeError = TimeoutException('slow');
+      async.elapse(const Duration(seconds: 2));
+      expect(trees(), 2);
+      m.treeError = ElisError('busy');
+      async.elapse(const Duration(seconds: 2));
+      expect(trees(), 3);
+      async.elapse(const Duration(seconds: 2));
+      expect(trees(), 4);
+    });
   });
 
   test('polls tree while running', () {

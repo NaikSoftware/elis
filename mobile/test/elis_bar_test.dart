@@ -97,6 +97,25 @@ void main() {
     await t.pumpWidget(const SizedBox());
   });
 
+  testWidgets('a route over Home stops marking seen, and coming back re-reads', (t) async {
+    final m = _Model();
+    await _home(t, m);
+    await t.tap(find.byKey(_ask));
+    await t.pumpAndSettle();
+    m.calls.clear();
+    t.state<NavigatorState>(find.byType(Navigator)).push(MaterialPageRoute(builder: (_) => const Scaffold(body: Text('session'))));
+    await t.pumpAndSettle();
+    expect(m.assistantOpen, isFalse);
+    m.onEvent({'kind': 'assistant.message'});
+    await t.pump();
+    expect(m.assistantCalls, isEmpty);
+    t.state<NavigatorState>(find.byType(Navigator)).pop();
+    await t.pumpAndSettle();
+    expect(m.assistantOpen, isTrue);
+    expect(m.assistantCalls, ['assistant.read', 'assistant.seen']);
+    await t.pumpWidget(const SizedBox());
+  });
+
   testWidgets('back closes the sheet', (t) async {
     final m = _Model();
     await _home(t, m);

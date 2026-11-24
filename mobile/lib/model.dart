@@ -257,6 +257,7 @@ class ElisModel extends ChangeNotifier {
     seen = DateTime.now();
     Watch.check();
     start();
+    unawaited(rereadAssistant()); // a kept link's open sheet missed nothing it showed; a reconnect re-reads after its refresh
   }
 
   void _background() {
@@ -277,7 +278,10 @@ class ElisModel extends ChangeNotifier {
         final mx = await Mux.upgrade(c);
         if (gen != _generation) return c.close();
         // rows can be lost (`{"dropped":N}`, `{"gap":true}`), tree rows among them: re-read the tree
-        mx?.events.where(rereadsTree).listen((_) => scheduleRefresh(Duration.zero));
+        mx?.events.where(rereadsTree).listen((_) {
+          scheduleRefresh(Duration.zero);
+          unawaited(rereadAssistant());
+        });
         _c = c;
         via = c.via;
         error = null;
@@ -289,6 +293,7 @@ class ElisModel extends ChangeNotifier {
         // only now: a screen that saw the mux earlier would open panes from the tree of the link before
         mux = mx;
         if (!_disposed) notifyListeners();
+        unawaited(rereadAssistant());
         unawaited(_eventLoop(gen));
         await _c!.closed;
       } catch (e) {
@@ -346,16 +351,22 @@ class ElisModel extends ChangeNotifier {
       workspaces = [for (final m in (tree?['workspaces'] as List? ?? const [])) Workspace(m as Map, server: server)];
       launcherIds = (tree?['launchers'] as List?)?.cast<String>() ?? const ['terminal'];
       assistant = tree?['assistant'] is Map ? AssistantState.fromJson(tree!['assistant'] as Map) : null;
-      if (assistant?.running == true) scheduleRefresh(const Duration(seconds: 2));
+      _pollRunning();
       loaded = true;
       if (background) Watch.clear(Watch.posted.read(sessions));
       if (!_disposed) notifyListeners();
     } on ElisError catch (e) {
       error = e.message;
       if (!_disposed) notifyListeners();
+      // a failed read must not end the poll that shows Elis working; a closed link's reconnect refreshes instead
+      if (e.message != 'Not connected' && e.message != 'Disconnected') _pollRunning();
     } on TimeoutException {
-      // the next event or poll retries
+      _pollRunning(); // the next event or poll retries
     }
+  }
+
+  void _pollRunning() {
+    if (assistant?.running == true && !_disposed) scheduleRefresh(const Duration(seconds: 2));
   }
 
   Future<void> readAssistant({int last = 100}) async {
@@ -373,6 +384,13 @@ class ElisModel extends ChangeNotifier {
   Future<String?> askAssistant(String text) => act('assistant.ask', args: {'text': text}, windowed: false);
 
   Future<String?> setProvider(String name) => act('assistant.provider', args: {'provider': name}, windowed: false);
+
+  /// Re-reads the transcript and marks it seen, only while the sheet is on screen and the app in front.
+  Future<void> rereadAssistant() async {
+    if (!assistantOpen || background) return;
+    await readAssistant();
+    if (assistantOpen && !background) await markAssistantSeen();
+  }
 
   Future<void> markAssistantSeen() async {
     try {
@@ -417,12 +435,14 @@ class ElisModel extends ChangeNotifier {
         if (e.message == 'Disconnected' || e.message == 'Not connected') return;
         _run = null; // "event run changed" (the app restarted) or "event cursor expired": start over
         scheduleRefresh(Duration.zero);
+        unawaited(rereadAssistant());
         await Future.delayed(const Duration(seconds: 1));
       } on TimeoutException {
         await Future.delayed(const Duration(seconds: 1));
       } catch (_) {
         _run = null; // a malformed reply: start over rather than stop watching
         scheduleRefresh(Duration.zero);
+        unawaited(rereadAssistant());
         await Future.delayed(const Duration(seconds: 1));
       }
     }
@@ -433,9 +453,8 @@ class ElisModel extends ChangeNotifier {
 
   void _onEvent(Map<String, dynamic> e) {
     _events.add(e);
-    if (e['kind'] == 'assistant.message') {
-      readAssistant().then((_) => assistantOpen ? markAssistantSeen() : null);
-    }
+    // closed, the badge counts it from the tree
+    if (e['kind'] == 'assistant.message') unawaited(rereadAssistant());
     if (background && e['kind'] == 'session.closed') Watch.clear(Watch.posted.closed(e['session'] as String? ?? ''));
     final a = Alert.of(e);
     if (a == null) return;
