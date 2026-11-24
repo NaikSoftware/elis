@@ -602,7 +602,7 @@ elisctl assistant provider
 elisctl assistant show
 elisctl assistant seen
 elisctl reply &quot;all tests pass&quot;</code></pre>
-<p><code>tree --json</code> reports top-level <code>assistant</code> (<code>provider</code>, <code>providers</code>, <code>running</code>, <code>unread</code>), <code>handle</code> on every workspace and session, <code>assistantMark</code> on sessions (<code>waiting</code>, <code>replied</code> or <code>not-delivered</code> for the current exchange), and <code>assistantShown</code> when the chat is open; <code>events</code> emits <code>assistant.message</code>. Details: <a href="commands.html#assistant">command reference</a>.</p>
+<p><code>tree --json</code> reports top-level <code>assistant</code> (<code>provider</code>, <code>providers</code>, <code>running</code>, <code>unread</code>), <code>handle</code> on every workspace and session, <code>assistantMark</code> on sessions (<code>waiting</code>, <code>replied</code> or <code>not-delivered</code> for the current exchange), and <code>assistantShown</code> when the chat is open (<code>seen</code> clears <code>unread</code> without opening the chat); <code>events</code> emits <code>assistant.message</code>. Details: <a href="commands.html#assistant">command reference</a>.</p>
 </section>
 
           <!-- TERMINALS -->

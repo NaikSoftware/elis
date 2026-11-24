@@ -124,6 +124,7 @@ struct AssistantCommandsTests {
 
         let seen = try parseAssistant(["seen"], as: Assistant.Seen.self)
         #expect(seen.makeRequest() == ControlRequest(cmd: .assistantSeen))
+        #expect(throws: (any Error).self) { try parseAssistant(["seen", "--window", "w1"], as: Assistant.Seen.self) }
     }
 
     @Test func replyBuildsRequestInsideSessionAndParsesStdinMutuallyExclusive() throws {

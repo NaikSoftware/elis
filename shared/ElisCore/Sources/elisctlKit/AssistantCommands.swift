@@ -249,7 +249,7 @@ extension Assistant {
 
     struct Seen: RequestCommand {
         static let configuration = CommandConfiguration(abstract: "Mark the Elis assistant chat seen without showing it.")
-        @OptionGroup var options: ClientOptions
+        @OptionGroup var options: BasicOptions
 
         func makeRequest() -> ControlRequest {
             ControlRequest(cmd: .assistantSeen)
