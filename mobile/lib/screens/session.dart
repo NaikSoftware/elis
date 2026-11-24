@@ -872,13 +872,13 @@ class _SessionScreenState extends State<SessionScreen> {
     );
   }
 
-  // the icon is the pane shown; a tap shows the other one
+  // the icon is the pane a tap switches to
   Widget _paneButton() {
     final left = pane == 'left';
     return IconButton(
       key: const Key('paneButton'),
       tooltip: left ? 'Left pane — switch to Right' : 'Right pane — switch to Left',
-      icon: Transform.flip(flipX: !left, child: const Icon(Icons.vertical_split)),
+      icon: Transform.flip(flipX: left, child: const Icon(Icons.vertical_split)),
       onPressed: () => _setPane(left ? 'right' : 'left'),
     );
   }
