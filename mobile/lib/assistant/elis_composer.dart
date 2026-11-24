@@ -1,6 +1,7 @@
 import 'dart:math';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/rendering.dart';
 
 import '../model.dart';
 import '../notice.dart';
@@ -150,10 +151,11 @@ class _ElisComposerState extends State<ElisComposer> {
 
   @override
   Widget build(BuildContext context) => ListenableBuilder(
-        listenable: Listenable.merge([_field, widget.model]),
+        listenable: Listenable.merge([_field, _focus, widget.model]),
         builder: (context, _) {
           final v = _field.value;
-          final query = v.selection.isCollapsed ? tagQuery(v.text, v.selection.baseOffset) : null;
+          // unfocused, as in a closing sheet, the field has no popup
+          final query = _focus.hasFocus && v.selection.isCollapsed ? tagQuery(v.text, v.selection.baseOffset) : null;
           final tags = query == null ? const <TagCandidate>[] : tagCandidates(query, widget.model.workspaces);
           final a = widget.model.assistant;
           return OverlayPortal(
@@ -222,8 +224,10 @@ class _ElisComposerState extends State<ElisComposer> {
       : LayoutBuilder(builder: (context, _) {
           final box = _box.currentContext?.findRenderObject() as RenderBox?;
           if (box == null || !box.hasSize) return const SizedBox.shrink();
-          final bar = Scaffold.maybeOf(context)?.appBarMaxHeight ?? MediaQuery.paddingOf(context).top + kToolbarHeight;
-          final room = box.localToGlobal(Offset.zero).dy - bar - 8;
+          // the sheet's column: the popup stays under its first child, the header
+          final head = _box.currentContext?.findAncestorRenderObjectOfType<RenderFlex>()?.firstChild;
+          final top = head == null ? MediaQuery.paddingOf(context).top + kToolbarHeight : head.localToGlobal(Offset(0, head.size.height)).dy;
+          final room = box.localToGlobal(Offset.zero).dy - top - 8;
           final width = box.size.width - 24; // the field and send button, inside the composer's padding
           return Align(
             alignment: Alignment.topLeft,
