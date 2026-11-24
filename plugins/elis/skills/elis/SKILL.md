@@ -466,7 +466,7 @@ omitted when expanded).
   and overrides `--pane` when it resolves, while an unknown token without `--pane` fails with
   `unknown pane id: <id>`; `--json` reports the pane read as `result.pane`; `--all` adds available scrollback (alternate-screen buffers
   have none); `--lines N` keeps the last N lines.
-- `session transcript [--after N | --before N] [--json]`: read a session's Claude conversation as items (prompts,
+- `session transcript [--after N | --before N] [--json]`: read a session's Claude or agy conversation as items (prompts,
   replies, tool calls with results), from Claude Code's transcript rather than the screen, so completed replies
   survive scrolling and redraws; page with the printed `next`. reference.md has the fields and the cursor rules.
 - `session search [needle] [--next|--prev|--close]` — search the terminal scrollback; prints the "N of M" counter.

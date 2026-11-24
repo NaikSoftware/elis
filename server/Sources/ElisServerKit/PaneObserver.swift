@@ -13,6 +13,8 @@ final class PaneObserver {
     let agentProbe: (Int32) -> AgentPaneProbe?
     /// claudeDirectory is where a Claude pane's `sessions/<pid>.json` is read.
     var claudeDirectory = ClaudeHome.directory()
+    /// antigravityDirectory is where an agy pane's `presence/<id>.lock` is matched.
+    var antigravityDirectory = AntigravityHome.directory()
     /// onRespawn hears that a parent's pane runs a fresh shell under the same daemon name.
     var onRespawn: ((_ session: UUID, _ daemon: String) -> Void)?
     /// onApplied runs after each listing is settled, which is when pane lifecycle and cwd change.
@@ -159,7 +161,8 @@ final class PaneObserver {
         guard let leader, let probe = agentProbe(leader) else { return AgentPaneSample(pane: pane, agent: nil, claudeSessionJSON: nil) }
         let agent = SessionLauncher.agent(argv: probe.argv)
         let json = agent == .claude ? ClaudeHome.sessionJSON(pid: probe.pid, directory: claudeDirectory) : nil
-        return AgentPaneSample(pane: pane, agent: agent, claudeSessionJSON: json)
+        let conversation = agent == .antigravity ? AntigravityHome.conversationID(pid: probe.pid, directory: antigravityDirectory) : nil
+        return AgentPaneSample(pane: pane, agent: agent, claudeSessionJSON: json, antigravityConversation: conversation)
     }
 
     private func updateCwd(of session: Session, role: StatusPane, leader: Int32?) {

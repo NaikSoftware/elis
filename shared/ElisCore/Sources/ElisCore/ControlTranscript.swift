@@ -203,16 +203,19 @@ public indirect enum JSONValue: Codable, Sendable, Equatable {
     }
 }
 
-/// The transcript a host found for the addressed pane; the host names its Claude directory, so tests point it at a temp dir.
+/// The transcript a host found for the addressed pane; the host names the agent's directory, so tests point it at a temp dir.
+/// For `.antigravity` the id is the agy conversation and the directory `AntigravityHome.directory()`.
 public struct ControlTranscriptSource: Sendable, Equatable {
     public var claudeSessionID: String
     public var pane: StatusPane
     public var claudeDirectory: String
+    public var agent: SessionLauncher
 
-    public init(claudeSessionID: String, pane: StatusPane, claudeDirectory: String) {
+    public init(claudeSessionID: String, pane: StatusPane, claudeDirectory: String, agent: SessionLauncher = .claude) {
         self.claudeSessionID = claudeSessionID
         self.pane = pane
         self.claudeDirectory = claudeDirectory
+        self.agent = agent
     }
 }
 

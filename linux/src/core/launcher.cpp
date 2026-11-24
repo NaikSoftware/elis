@@ -102,17 +102,20 @@ bool isInteractiveShell(QStringList argv)
     return true;
 }
 
-QString antigravityTitle(const QString &fdDir, const QString &dataDir)
+QString antigravityConversation(const QString &fdDir, const QString &dataDir)
 {
-    QString id;
     const QString presence = QDir(dataDir).absoluteFilePath(QStringLiteral("presence")) + QLatin1Char('/');
     for (const QString &fd : QDir(fdDir).entryList(QDir::AllEntries | QDir::System | QDir::NoDotAndDotDot)) {
         const QString target = QFile::symLinkTarget(fdDir + QLatin1Char('/') + fd);
-        if (target.startsWith(presence) && target.endsWith(QLatin1String(".lock"))) {
-            id = QFileInfo(target).completeBaseName();
-            break;
-        }
+        if (target.startsWith(presence) && target.endsWith(QLatin1String(".lock")))
+            return QFileInfo(target).completeBaseName();
     }
+    return {};
+}
+
+QString antigravityTitle(const QString &fdDir, const QString &dataDir)
+{
+    const QString id = antigravityConversation(fdDir, dataDir);
     if (id.isEmpty())
         return {};
     const QString connection = QStringLiteral("elis-antigravity");

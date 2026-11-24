@@ -86,6 +86,37 @@ struct AppStoreAgentTests {
         #expect(session.agentSessionID == nil)
     }
 
+    @Test func antigravityRecordsItsConversationAndNamesItsTranscript() throws {
+        let (store, session) = try session()
+        store.applyAgentSamples([AgentPaneSample(pane: .left, agent: .claude, claudeSessionJSON: Self.json("c1"))],
+                                focused: .left, forSession: session.id)
+
+        store.applyAgentSamples([AgentPaneSample(pane: .right, agent: .antigravity, claudeSessionJSON: nil, antigravityConversation: "a1")],
+                                focused: .right, forSession: session.id)
+
+        #expect(session.agentSessionID == "a1")
+        #expect(session.transcriptSource(token: nil, pane: nil, claudeDirectory: "/c", antigravityDirectory: "/g")
+            == .success(ControlTranscriptSource(claudeSessionID: "a1", pane: .right, claudeDirectory: "/g", agent: .antigravity)))
+
+        store.applyAgentSamples([AgentPaneSample(pane: .right, agent: .antigravity, claudeSessionJSON: nil)],
+                                focused: .right, forSession: session.id)
+        #expect(session.agentSessionID == nil)
+    }
+
+    #if os(Linux)
+    @Test func antigravityConversationIsThePresenceLockTheProcessHolds() throws {
+        let directory = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString).path
+        defer { try? FileManager.default.removeItem(atPath: directory) }
+        #expect(AntigravityHome.conversationID(pid: getpid(), directory: directory) == nil)
+        try FileManager.default.createDirectory(atPath: directory + "/presence", withIntermediateDirectories: true)
+        FileManager.default.createFile(atPath: directory + "/presence/a1-b2.lock", contents: nil)
+        let lock = try #require(FileHandle(forReadingAtPath: directory + "/presence/a1-b2.lock"))
+        defer { try? lock.close() }
+
+        #expect(AntigravityHome.conversationID(pid: getpid(), directory: directory) == "a1-b2")
+    }
+    #endif
+
     @Test func runningAgentChangePublishesAndSchedulesTree() throws {
         var events: [ControlEventKind] = []
         let directory = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)

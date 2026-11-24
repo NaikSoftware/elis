@@ -1165,6 +1165,7 @@ s=$(elisctl zmx tree studio.local --json \
           <section id="phone-chat" class="doc-v2" style="scroll-margin-top: 88px; padding-top: 56px">
 <h2>Chat on the phone</h2>
 <p>A pane running Claude Code can show on the phone as a chat instead of a terminal. Chat builds the conversation from Claude Code's transcript file and reads Claude's live screen only for what the file does not hold: the working line, the statusline, the mode and any open dialog.</p>
+<p>A pane running the Antigravity CLI (<code>agy</code>) gets Chat too, from agy's conversation log, once agy has its first prompt: prompts, replies, thinking and tool calls with their output, the working line with <strong>Stop</strong>, agy's footer as the statusline, and the composer. Prompt cards, the mode chip and the <code>/</code> menu are Claude Code's; agy's dialogs open the panel sheet. Elis finds agy's conversation on Linux and elis-server hosts; on a Mac an agy pane shows Term for now.</p>
 <h3 id="phone-chat-modes">Switch between Chat and Term</h3>
 <p>The mode button in the session's app bar shows the mode a tap switches to: a terminal in Chat, a chat bubble in Term. Chat is available while Claude Code runs in the pane; otherwise the button is disabled, and a long press tells why. By default a pane running Claude opens in Chat and any other pane in Term. A tap keeps that choice for the session while the phone app runs; the session's ⋯ menu item <strong>Choose mode automatically</strong> goes back to the default. On a split, the pane button next to it points at the pane a tap shows, in Chat and in Term.</p>
 <h3 id="phone-chat-read">Read the conversation</h3>
@@ -2488,7 +2489,7 @@ elisctl session context --clear --target &quot;$ELIS_SESSION_ID&quot;</code></pr
 <pre class="bash"><code>elisctl session transcript --target &quot;$ID&quot;
 elisctl session transcript --after 18234 --json --target &quot;$ID&quot;</code></pre>
 <ul>
-<li>It reads the pane <code>tree</code> names in <code>agentPane</code>, the one running Claude Code, whichever pane has focus. A pane without Claude Code answers <code>no adapter</code>.</li>
+<li>It reads the pane <code>tree</code> names in <code>agentPane</code>, the one running Claude Code, whichever pane has focus. A pane running the Antigravity CLI reads agy's conversation the same way, its <code>transcript</code> the agy conversation id. Any other pane answers <code>no adapter</code>.</li>
 <li>The first form prints the newest items and a <code>next</code> offset; pass it to <code>--after</code> to read only what was added since, and a page's <code>start</code> to <code>--before</code> to read older items.</li>
 <li>It works on a session attached from another Mac and on an elis-server session, reading there. An Elis on that host too old for the command answers <code>the Elis on HOST is too old for session.transcript</code>.</li>
 </ul>

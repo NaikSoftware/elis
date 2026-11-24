@@ -186,7 +186,13 @@ class _SessionScreenState extends State<SessionScreen> {
 
   String _tooOld(Session s) => 'Update Elis on ${s.remoteHost.isEmpty ? 'the computer' : s.remoteHost}';
 
-  bool _exited(Session s) => s.liveAgent != 'claude';
+  bool _exited(Session s) => !chatAgents.contains(s.liveAgent);
+
+  // the agent Chat last showed, named in its messages after it exits
+  String _chatAgent = 'Claude';
+
+  String _agentName(Session s) =>
+      _chatAgent = switch (s.liveAgent) { 'claude' => 'Claude', 'antigravity' => 'Antigravity', _ => _chatAgent };
 
   // a Live pane that showed its terminal this visit and has no running one now
   bool get _termLost =>
@@ -195,7 +201,7 @@ class _SessionScreenState extends State<SessionScreen> {
   bool get _chatStale => _feed?.stale == true || m.state != LinkState.connected || _termLost;
 
   String? get _chatBlocked => switch (s) {
-        final s? => ChatView.blockedReason(exited: _exited(s), stale: _chatStale),
+        final s? => ChatView.blockedReason(exited: _exited(s), stale: _chatStale, agent: _agentName(s)),
         null => null,
       };
 
@@ -842,6 +848,7 @@ class _SessionScreenState extends State<SessionScreen> {
             s: s,
             exited: _exited(s),
             stale: _chatStale,
+            agent: _agentName(s),
             onTerm: () => _pickMode(ViewMode.term),
             composer: _composer,
             promptCard: promptCardBuilder(_prompts),
