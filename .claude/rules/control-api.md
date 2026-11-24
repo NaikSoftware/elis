@@ -1635,6 +1635,11 @@ the spec `docs/superpowers/specs/2026-11-20-phone-chat-mode-design.md` owns the 
   whole, and the host owns its Claude directory, which tests point at a temp dir.
   It answers `no adapter` unless the session runs Claude in the asked pane (`agentPane` by default) and knows its id.
   The `ControlActions` default refuses `the Elis on this host is too old for session.transcript`, so the fork builds.
+- An agy pane reads through `AntigravityTranscript` (`ControlTranscriptSource.agent`): the append-only
+  `<AntigravityHome>/brain/<id>/.system_generated/logs/transcript_full.jsonl`, a call's results being the next
+  `MODEL` rows in call order, under the same cursor contract. Its id is the conversation whose
+  `presence/<id>.lock` the agy process holds open (`/proc/<pid>/fd`; none before the first prompt). The Mac sampler
+  has no libproc reader yet, so a Mac host answers `no adapter` for agy.
 - The dispatcher validates first, so every host gives the same first error, then reads on
   `DispatchQueue.global`, never in a `Task`: a first scan of a large file would park a cooperative-pool thread.
 - Cursor: a tail page (no `after`/`before`) ends at the last whole line; an `after` page cut by the budget sets

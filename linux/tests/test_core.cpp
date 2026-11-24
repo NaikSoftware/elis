@@ -602,6 +602,7 @@ private Q_SLOTS:
         QCOMPARE(antigravityTitle(fds, data), QString()); // no presence lock among the fds: not agy
         QVERIFY(QFile::link(lock.fileName(), fds + "/40"));
         QCOMPARE(antigravityTitle(fds, data), QString()); // agy, but no store yet
+        QCOMPARE(antigravityConversation(fds, data), id);
         {
             QSqlDatabase db = QSqlDatabase::addDatabase("QSQLITE", "fixture");
             db.setDatabaseName(data + "/conversation_summaries.db");
@@ -1408,6 +1409,26 @@ private Q_SLOTS:
         f.s.setAgentSessionId(f.id, QString());
         QCOMPARE(f.error({}), QStringLiteral("no adapter"));
         QCOMPARE(dispatch(f.s, f.t, {{"cmd", "session.transcript"}, {"target", "nope"}}).value("ok").toBool(), false);
+    }
+
+    void antigravityReadsItsConversation()
+    {
+        TranscriptFixture f;
+        const QByteArray home = qgetenv("HOME");
+        qputenv("HOME", f.root.path().toUtf8());
+        const QString log = f.root.filePath(".gemini/antigravity-cli/brain/a1/.system_generated/logs/transcript_full.jsonl");
+        QVERIFY(QDir().mkpath(QFileInfo(log).path()));
+        QFile file(log);
+        QVERIFY(file.open(QIODevice::WriteOnly));
+        file.write(R"({"step_index":0,"source":"USER_EXPLICIT","type":"USER_INPUT","status":"DONE","created_at":"T","content":"<USER_REQUEST>\nhi agy\n</USER_REQUEST>"})"
+                   "\n");
+        file.close();
+        f.s.setAgent(f.id, QStringLiteral("antigravity"));
+        f.s.setAgentSessionId(f.id, QStringLiteral("a1"));
+        const QJsonObject r = f.read();
+        qputenv("HOME", home);
+        QCOMPARE(r["result"]["transcript"].toString(), QStringLiteral("a1"));
+        QCOMPARE(r["result"]["items"][0]["text"].toString(), QStringLiteral("hi agy"));
     }
 
     void readerRunsOffTheMainThread()

@@ -16,7 +16,6 @@ import 'write_gate.dart';
 
 const _checks = checks; // the field below shadows the constant in its own default
 const _instant = {'model', 'effort', 'fast', 'status', 'tasks', 'usage'}; // run at once, never queued
-const _changed = "Claude's input changed on the computer";
 
 /// [all] matching [typed] (with or without its `/`): prefix matches first, then substring ones, ignoring case.
 List<SlashCommand> slashMatches(List<SlashCommand> all, String typed) {
@@ -51,6 +50,7 @@ class ChatComposer extends StatefulWidget {
       this.held,
       this.onOpen,
       this.onSending,
+      this.agent = 'Claude',
       this.checks = _checks});
 
   final TranscriptFeed feed;
@@ -62,6 +62,7 @@ class ChatComposer extends StatefulWidget {
   final String? held; // a prompt or panel owns Claude's input: the composer is disabled with this line
   final VoidCallback? onOpen; // shows the hidden panel again
   final VoidCallback? onSending; // a send the gate takes
+  final String agent; // named in the composer's messages
   final Checks checks;
 
   @override
@@ -75,6 +76,8 @@ class ChatComposerState extends State<ChatComposer> {
   String? _adopted; // the draft taken from Claude's row, which Send clears there first
   bool _seen = false, _sending = false, _running = false, _stopRun = false, _readopt = false;
   String? _offer, _offerDraft; // the text a changed row stopped, and that row
+
+  String get _changed => "${widget.agent}'s input changed on the computer";
 
   @override
   void initState() {
@@ -138,12 +141,12 @@ class ChatComposerState extends State<ChatComposer> {
       widget.disabledBy ??
       widget.checks.writeBlockedOn(remote: widget.remote, server: widget.server) ??
       (s != null && s.dialog
-          ? 'Claude shows a dialog'
+          ? '${widget.agent} shows a dialog'
           : s == null || !s.bottomStack
-              ? "Waiting for Claude's screen"
+              ? "Waiting for ${widget.agent}'s screen"
               // a polled colourless grid can miss a dialog raised since: its typed digit or Enter would answer it
               : !widget.colours && s.busy
-                  ? 'Claude is working: this pane sends only while Claude is idle'
+                  ? '${widget.agent} is working: this pane sends only while ${widget.agent} is idle'
                   : null);
 
   /// Sends [text] to Claude through the gate; the field clears when it held [text].
@@ -176,7 +179,7 @@ class ChatComposerState extends State<ChatComposer> {
   Future<void> _live(GateSequence q, String text, bool replace) async {
     final draft = ClaudeScreen.read(q.grid).draft;
     if (draft.isNotEmpty) {
-      if (!replace && norm(draft) != norm(_adopted ?? '')) throw const GateStop(GateOutcome.mismatch, _changed);
+      if (!replace && norm(draft) != norm(_adopted ?? '')) throw GateStop(GateOutcome.mismatch, _changed);
       await _clear(q);
     }
     final c = widget.checks;
@@ -218,9 +221,9 @@ class ChatComposerState extends State<ChatComposer> {
   // check 5: one press per visual row plus one per newline, so it repeats until the row reads empty
   Future<void> _clear(GateSequence q) async {
     final key = widget.checks.clearInput;
-    if (key == null) throw const GateStop(GateOutcome.mismatch, "Claude's input is not empty");
+    if (key == null) throw GateStop(GateOutcome.mismatch, "${widget.agent}'s input is not empty");
     for (var n = 0; ClaudeScreen.read(q.grid).draft.isNotEmpty; n++) {
-      if (n == 40) throw const GateStop(GateOutcome.mismatch, "Claude's input did not clear");
+      if (n == 40) throw GateStop(GateOutcome.mismatch, "${widget.agent}'s input did not clear");
       q.addSteps(1);
       String? before;
       await q.send(GateStep(KeyWrite(key.$1, key.$2), ready: (g) {
@@ -306,7 +309,7 @@ class ChatComposerState extends State<ChatComposer> {
       );
 
   Widget _offerRow() => Row(children: [
-        const Expanded(child: Text(_changed, style: TextStyle(fontSize: 12, color: C.muted))),
+        Expanded(child: Text(_changed, style: const TextStyle(fontSize: 12, color: C.muted))),
         TextButton(onPressed: () => send(_offer!, replace: true), child: const Text('Replace')),
         TextButton(onPressed: () => setState(() => _offer = null), child: const Text('Keep')),
       ]);

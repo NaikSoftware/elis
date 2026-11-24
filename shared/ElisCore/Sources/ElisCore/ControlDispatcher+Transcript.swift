@@ -60,7 +60,10 @@ extension ControlDispatcher {
     nonisolated public static func transcriptResponse(_ source: ControlTranscriptSource, _ arguments: ClaudeTranscriptArguments) -> ControlResponse {
         let request = ClaudeTranscriptRequest(sessionID: source.claudeSessionID, after: arguments.after, before: arguments.before,
                                               held: arguments.held, maxBytes: arguments.maxBytes)
-        switch ClaudeTranscript.instance(directory: source.claudeDirectory).page(request) {
+        let read = source.agent == .antigravity
+            ? AntigravityTranscript.instance(directory: source.claudeDirectory).page(request)
+            : ClaudeTranscript.instance(directory: source.claudeDirectory).page(request)
+        switch read {
         case .failure(let error): return ControlResponse(ok: false, error: error.description)
         case .success(let page):
             var result = ControlResult()

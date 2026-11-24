@@ -90,10 +90,12 @@ static QJsonObject sessionTranscript(Store &store, Terminals &terminals, const Q
     }
     if (pane.isEmpty())
         pane = s->agentPane.isEmpty() ? QStringLiteral("left") : s->agentPane;
-    if (s->agent != QLatin1String("claude") || s->agentSessionId.isEmpty() || pane != s->agentPane)
+    const bool claude = s->agent == QLatin1String("claude");
+    if ((!claude && s->agent != QLatin1String("antigravity")) || s->agentSessionId.isEmpty() || pane != s->agentPane)
         return fail(QStringLiteral("no adapter"));
-    s_deferred = [args, home = claudeHome(qEnvironmentVariable("CLAUDE_CONFIG_DIR"), QDir::homePath()), claudeId = s->agentSessionId, pane] {
-        return transcriptPage(args, home, claudeId, pane);
+    const QString dir = claude ? claudeHome(qEnvironmentVariable("CLAUDE_CONFIG_DIR"), QDir::homePath()) : antigravityHome(QDir::homePath());
+    s_deferred = [args, agent = s->agent, dir, conversation = s->agentSessionId, pane] {
+        return transcriptPage(args, agent, dir, conversation, pane);
     };
     return {{"deferred", true}};
 }

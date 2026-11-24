@@ -10,6 +10,7 @@ final _toolCall = RegExp(r'^(?:[\w.:-]+|[^(]+ \(MCP\))\(');
 final _blinkedCall = RegExp(r'^(?:[A-Z][\w.:-]*|[^(]+ \(MCP\))\(');
 final _paste = RegExp(r'^\[Pasted text #\d+( \+\d+ lines)?\]$');
 final _shells = RegExp(r'·\s*(\d+)\s*shells?');
+final _agySpinner = RegExp(r'^[⣾⣽⣻⢿⡿⣟⣯⣷]\s+(\S.*)$');
 const _modes = {
   'manual': ClaudeMode.manual,
   'acceptedits': ClaudeMode.acceptEdits,
@@ -19,10 +20,15 @@ const _modes = {
 };
 
 /// Claude Code's live state read from one grid frame; every rule compares width-agnostically.
+/// Antigravity's (`agy`) input box, a `>` row between rules, reads into the same fields ([agy]).
 class ClaudeScreen {
   ClaudeScreen._(this._blank);
 
   final bool _blank;
+  bool agy = false;
+
+  /// The agent's name for the composer's and Chat's messages.
+  String get name => agy ? 'Antigravity' : 'Claude';
   bool bottomStack = false;
   String? input;
   (int, int)? inputRows; // the input block's first row and its closing rule
@@ -50,14 +56,15 @@ class ClaudeScreen {
     final n = g.rows.length;
     bool rule(int r) => _rule.hasMatch(g.text(r).trim());
 
-    // the last rule directly followed by a `❯` (or bash-mode `!`) row at column 0, then a closing rule
+    // the last rule directly followed by a `❯` (or bash-mode `!`, or agy's `>`) row at column 0, then a closing rule
     var top = -1, bottom = -1;
     for (var r = n - 2; r >= 0 && top < 0; r--) {
       final next = g.text(r + 1);
-      if (!rule(r) || !(next.startsWith('❯') || next.startsWith('!'))) continue;
+      if (!rule(r) || !(next.startsWith('❯') || next.startsWith('!') || next == '>' || next.startsWith('> '))) continue;
       for (var b = r + 2; b < n; b++) {
         if (rule(b)) {
           (top, bottom) = (r, b);
+          s.agy = next.startsWith('>');
           break;
         }
       }
@@ -67,10 +74,11 @@ class ClaudeScreen {
     if (top >= 0) {
       s.bottomStack = true;
       s.inputRows = (top + 1, bottom);
-      String strip(String t, int i) => (i == 0 ? t.substring(1) : t).trim();
+      String strip(String t, int i) => (i == 0 && t.isNotEmpty ? t.substring(1) : t).trim();
       final rows = [for (var r = top + 1; r < bottom; r++) r];
       s.input = [for (final (i, r) in rows.indexed) strip(g.text(r), i)].join('\n').trim();
-      s.draft = [for (final (i, r) in rows.indexed) strip(g.bright(r), i)].join('\n').trim();
+      // agy draws its placeholder in a colour, not faint
+      s.draft = [for (final (i, r) in rows.indexed) strip(s.agy ? g.plain(r) : g.bright(r), i)].join('\n').trim();
       if (s.draft == 'Press up to edit queued messages') s.draft = '';
       s.pastePlaceholder = _paste.hasMatch(s.input!);
 
@@ -89,7 +97,12 @@ class ClaudeScreen {
         s.mode = _modes.entries.where((e) => k.contains(e.key)).firstOrNull?.value;
         s.shells = int.tryParse(_shells.firstMatch(m)?.group(1) ?? '') ?? 0;
       }
-      s.busy = norm([for (var r = bottom + 1; r < n; r++) g.text(r)].join()).contains('esctointerrupt');
+      s.busy = norm([for (var r = bottom + 1; r < n; r++) g.text(r)].join()).contains(s.agy ? 'esctocancel' : 'esctointerrupt');
+    }
+    if (s.agy) {
+      // agy's history and spinner rows follow none of Claude's markers below
+      if (s.busy) s.working = [for (var r = 0; r < above; r++) _agySpinner.firstMatch(g.text(r))?.group(1)].nonNulls.lastOrNull;
+      return s;
     }
 
     var prompt = -1, spin = -1, reply = -1, limit = -1;

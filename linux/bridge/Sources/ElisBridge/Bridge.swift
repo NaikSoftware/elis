@@ -35,16 +35,17 @@ public func elisTranscriptArguments(_ argsJSON: UnsafePointer<CChar>) -> UnsafeM
     }
 }
 
-/// One `session.transcript` page of the Claude session `sessionID` under `claudeDirectory`; blocks on file reads.
+/// One `session.transcript` page of `agent`'s conversation `sessionID` under `directory`; blocks on file reads.
 @_cdecl("elis_transcript_read")
-public func elisTranscriptRead(_ argsJSON: UnsafePointer<CChar>, _ claudeDirectory: UnsafePointer<CChar>,
+public func elisTranscriptRead(_ argsJSON: UnsafePointer<CChar>, _ agent: UnsafePointer<CChar>, _ directory: UnsafePointer<CChar>,
                                _ sessionID: UnsafePointer<CChar>, _ pane: UnsafePointer<CChar>) -> UnsafeMutablePointer<CChar>? {
     switch arguments(argsJSON) {
     case .failure(let refusal): return reply(refusal)
     case .success(let parsed):
         let source = ControlTranscriptSource(claudeSessionID: String(cString: sessionID),
                                              pane: StatusPane(rawValue: String(cString: pane)) ?? .left,
-                                             claudeDirectory: String(cString: claudeDirectory))
+                                             claudeDirectory: String(cString: directory),
+                                             agent: SessionLauncher(rawValue: String(cString: agent)) ?? .claude)
         return reply(ControlDispatcher.transcriptResponse(source, parsed))
     }
 }

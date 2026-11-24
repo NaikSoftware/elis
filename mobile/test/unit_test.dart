@@ -16,6 +16,8 @@ void main() {
       expect(chatAvailable(s({'foreground': ['claude'], 'agentSessionId': 'a1'}), 'left'), isFalse); // origin sent no agent
       expect(chatAvailable(s({'agent': 'claude'}), 'left'), isFalse);
       expect(chatAvailable(s({'agent': 'claude', 'agentSessionId': 'a1', 'agentPane': 'right'}), 'left'), isFalse);
+      expect(chatAvailable(s({'agent': 'antigravity', 'agentSessionId': 'a1'}), 'left'), isTrue);
+      expect(chatAvailable(s({'agent': 'codex', 'agentSessionId': 'a1'}), 'left'), isFalse);
     });
 
     test('autoPicksChatAndAManualPickSticks', () {

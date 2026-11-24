@@ -1856,8 +1856,13 @@ void MainWindow::sampleAgents()
                     m_store.setAgentSessionId(s->id, line.section(QLatin1Char(' '), -1));
                     break;
                 }
-        } else if (pick) { // another agent: the id no longer names what the session runs
-            m_store.setAgentSessionId(s->id, QString());
+        } else if (pick) { // another agent: its own id (agy's conversation, for Chat) or none, as Claude's no longer applies
+            QString conversation;
+            if (pick->agent == QLatin1String("antigravity"))
+                for (int pid : pick->group)
+                    if (!(conversation = antigravityConversation(QStringLiteral("/proc/%1/fd").arg(pid), antigravityHome(QDir::homePath()))).isEmpty())
+                        break;
+            m_store.setAgentSessionId(s->id, conversation);
         }
         const int shell = shellPid(part);
         const bool commandPane = isCommandPane(s, shell);
@@ -1884,7 +1889,7 @@ void MainWindow::sampleAgents()
             m_commandTitle.remove(s->id);
         }
         if (agent == QLatin1String("antigravity")) { // agy sets no terminal title; its conversation title names the session
-            static const QString agyData = QDir::homePath() + QStringLiteral("/.gemini/antigravity-cli");
+            static const QString agyData = antigravityHome(QDir::homePath());
             for (int pid : groups.value(fg))
                 if (const QString t = antigravityTitle(QStringLiteral("/proc/%1/fd").arg(pid), agyData); !t.isEmpty()) {
                     m_store.setTitle(s->id, t);

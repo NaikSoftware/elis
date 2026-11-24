@@ -10,7 +10,8 @@ extern "C" {
 // pane asked for (absent: the agent's pane), or the Mac's refusal.
 char *elis_transcript_arguments(const char *argsJSON);
 // One session.transcript page as the Mac's whole reply. Blocks on file reads, and traps on the process main thread.
-char *elis_transcript_read(const char *argsJSON, const char *claudeDir, const char *sessionID, const char *pane);
+// agent is "claude" or "antigravity"; dir and sessionID are that agent's directory and conversation.
+char *elis_transcript_read(const char *argsJSON, const char *agent, const char *dir, const char *sessionID, const char *pane);
 // sidebar.density's mode against the current density: {"ok":true,"density":"default|compact"} or the Mac's refusal.
 // Input {"mode"?,"current"}; an absent mode toggles.
 char *elis_sidebar_density(const char *json);
