@@ -60,8 +60,8 @@ std::optional<QByteArray> run(const QString &stateDir, const QStringList &args, 
 }
 
 std::optional<double> s_buildCutoff; // recordBuild's, in seconds since the epoch
-QHash<QString, int> s_shells; // daemon name -> its shell, from the last listing
-qint64 s_listedAt = 0;
+QHash<QString, int> s_shells;        // daemon name -> its shell, from the last listing
+QHash<QString, qint64> s_missedAt;   // daemon name -> when a listing last missed it
 
 } // namespace
 
@@ -118,9 +118,10 @@ std::optional<QList<Record>> list(const QString &stateDir)
     }
     s_shells.clear();
     for (const Record &rec : std::as_const(records))
-        if (rec.pid > 0)
+        if (rec.pid > 0) {
             s_shells.insert(rec.name, rec.pid);
-    s_listedAt = QDateTime::currentMSecsSinceEpoch();
+            s_missedAt.remove(rec.name);
+        }
     return records;
 }
 
@@ -139,10 +140,13 @@ int shellPid(const QString &stateDir, const QString &paneId)
 {
     const QString name = daemonName(stateDir, paneId);
     int pid = s_shells.value(name, -1);
-    // a pane that just attached is listed once its daemon is up; one listing a second serves every pane
-    if ((pid <= 0 || ::kill(pid, 0) != 0) && QDateTime::currentMSecsSinceEpoch() - s_listedAt > 1000) {
+    const qint64 now = QDateTime::currentMSecsSinceEpoch();
+    // a pane that just attached is listed once its daemon is up; a missing daemon retries at most once a second
+    if ((pid <= 0 || ::kill(pid, 0) != 0) && now - s_missedAt.value(name) > 1000) {
         list(stateDir);
         pid = s_shells.value(name, -1);
+        if (pid <= 0 || ::kill(pid, 0) != 0)
+            s_missedAt.insert(name, now);
     }
     return pid > 0 && ::kill(pid, 0) == 0 ? pid : -1;
 }
@@ -171,6 +175,7 @@ static void end(const QString &stateDir, const QStringList &daemons)
         if (job > 0 && job != shell)
             jobs << job;
         s_shells.remove(name);
+        s_missedAt.remove(name);
     }
     if (!run(stateDir, QStringList{QStringLiteral("kill")} << daemons << QStringLiteral("--force")))
         qWarning("zmx kill %s failed", qPrintable(daemons.join(QLatin1Char(' '))));

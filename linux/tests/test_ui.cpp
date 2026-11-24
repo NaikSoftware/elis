@@ -317,6 +317,7 @@ private Q_SLOTS:
         auto killDaemon = qScopeGuard([pane] { Zmx::kill(stateDir(), {pane}); });
         QTRY_COMPARE_WITH_TIMEOUT(Zmx::lead(pane).role, QStringLiteral("leader"), 5000);
         QTRY_VERIFY_WITH_TIMEOUT(Zmx::screen(stateDir(), pane, false, 0).value_or(QString()).contains(QLatin1String("titled")), 5000);
+        QTRY_COMPARE_WITH_TIMEOUT(store.session(a)->displayName(), QStringLiteral("agent"), 5000);
 
         const QString other = QUuid::createUuid().toString(QUuid::WithoutBraces);
         const QMap<QString, QString> set = Zmx::attach(stateDir(), other, QStringLiteral("/bin/sh"), {}, {}, false).set;
@@ -373,6 +374,69 @@ private Q_SLOTS:
         QVERIFY(display);
         QTest::keyClick(display, Qt::Key_A);
         QTRY_VERIFY_WITH_TIMEOUT(leads(), 5000);
+    }
+
+    void commandSessionNamesItselfWithoutBeingSelected()
+    {
+        if (qEnvironmentVariableIsEmpty("ELIS_STATE_DIR"))
+            QSKIP("runs zmx daemons in <state>: run it through ctest, which sets a throwaway ELIS_STATE_DIR");
+        const QByteArray shell = qgetenv("SHELL");
+        qputenv("SHELL", "/bin/sh");
+        auto restoreShell = qScopeGuard([shell] { qputenv("SHELL", shell); });
+        const QString wsDir = dir.filePath("my-workspace");
+        QVERIFY(QDir().mkpath(wsDir));
+        Store store;
+        store.restoreModeAtLaunch = QStringLiteral("live");
+        const QString ws = store.addWorkspace("my-workspace", false, wsDir);
+        const QString first = store.addSession(ws, {}, wsDir);
+        store.select(first);
+        MainWindow w(store, dir.filePath("phone-new.json"));
+        w.restore({});
+        w.show();
+        const QString firstPane = store.session(first)->paneId;
+        auto killFirst = qScopeGuard([firstPane] {
+            if (!firstPane.isEmpty())
+                Zmx::kill(stateDir(), {firstPane});
+        });
+
+        // a phone-created agent session runs via `session.new --command --no-select` and the phone takes the lead
+        const QString go = dir.filePath("phone-go");
+        const QString created = store.addSession(ws, {}, wsDir,
+            QStringLiteral("sleep 0.5; printf '\\033]0;✳ Initial title\\007'; while [ ! -f '%1' ]; do sleep 0.05; done; printf '\\033]0;✳ Real session name\\007'; exec sleep 30")
+                .arg(go));
+        const QString createdPane = store.session(created)->paneId;
+        auto killCreated = qScopeGuard([createdPane] {
+            if (!createdPane.isEmpty())
+                Zmx::kill(stateDir(), {createdPane});
+        });
+        QCOMPARE(store.selected, first);
+        QTRY_COMPARE_WITH_TIMEOUT(store.session(created)->displayName(), QStringLiteral("Initial title"), 5000);
+
+        // phone claims lead while the session stays unselected; a later title update (even with command cleared, as after restart) still reaches the tree
+        const QString other = QUuid::createUuid().toString(QUuid::WithoutBraces);
+        const QMap<QString, QString> set = Zmx::attach(stateDir(), other, QStringLiteral("/bin/sh"), {}, {}, false).set;
+        Zmx::forget(other);
+        QProcessEnvironment env = QProcessEnvironment::systemEnvironment();
+        for (const QString &k : env.keys())
+            if (k.startsWith(QLatin1String("ELIS_")) || k.startsWith(QLatin1String("ZMX_")))
+                env.remove(k);
+        env.insert(QStringLiteral("ZMX_DIR"), set.value(QStringLiteral("ZMX_DIR")));
+        env.insert(QStringLiteral("ZMX_MANAGED"), QStringLiteral("phone"));
+        env.insert(QStringLiteral("ZMX_MANAGED_CLAIM"), QStringLiteral("1"));
+        QProcess phone;
+        phone.setProcessEnvironment(env);
+        auto stopPhone = qScopeGuard([&] {
+            phone.kill();
+            phone.waitForFinished();
+        });
+        phone.start(QStringLiteral("script"), {QStringLiteral("-qfec"), Zmx::executable() + QStringLiteral(" attach ") + Zmx::daemonName(stateDir(), createdPane),
+                                               QStringLiteral("/dev/null")});
+        QTRY_COMPARE_WITH_TIMEOUT(Zmx::lead(createdPane).role, QStringLiteral("follower"), 5000);
+        store.session(created)->command.clear();
+        QFile f(go);
+        QVERIFY(f.open(QIODevice::WriteOnly));
+        f.close();
+        QTRY_COMPARE_WITH_TIMEOUT(store.session(created)->displayName(), QStringLiteral("Real session name"), 5000);
     }
 
     void smoothWheelReplaysNotchesLineByLine()
