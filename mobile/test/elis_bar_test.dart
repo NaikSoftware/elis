@@ -308,6 +308,19 @@ void main() {
     expect(t.getRect(surface).top, top);
   });
 
+  testWidgets('dragging down on an empty chat closes the sheet', (t) async {
+    final m = _Model();
+    await _bar(t, m);
+    await t.tap(find.byKey(_ask));
+    await t.pumpAndSettle();
+    final empty = find.byKey(const Key('assistant-empty'));
+    expect(empty, findsOneWidget);
+    await t.timedDragFrom(t.getCenter(empty), const Offset(0, 140), const Duration(milliseconds: 400));
+    await t.pumpAndSettle();
+    expect(m.assistantOpen, isFalse);
+    expect(find.byType(ElisSheet), findsNothing);
+  });
+
   testWidgets('Ask Elis is a screen reader button', (t) async {
     final h = t.ensureSemantics();
     await _bar(t, _Model(unread: 2));

@@ -76,23 +76,25 @@ class _ElisSheetState extends State<ElisSheet> {
           _built.removeWhere((id, c) => !index.containsKey(id) || !c.mounted);
           return Column(children: [
             Expanded(
-              child: ListView.builder(
-                controller: _scroll,
-                reverse: true,
-                padding: const EdgeInsets.fromLTRB(12, 2, 12, 12),
-                itemCount: entries.length,
-                findChildIndexCallback: (k) => k is ValueKey<String> ? index[k.value] : null,
-                itemBuilder: (_, i) {
-                  final e = entries[entries.length - 1 - i];
-                  return Builder(
-                    key: ValueKey(e.id),
-                    builder: (c) {
-                      _built[e.id] = c;
-                      return Padding(padding: const EdgeInsets.only(top: 10), child: _entry(c, e));
-                    },
-                  );
-                },
-              ),
+              child: entries.isEmpty
+                  ? _empty()
+                  : ListView.builder(
+                      controller: _scroll,
+                      reverse: true,
+                      padding: const EdgeInsets.fromLTRB(12, 2, 12, 12),
+                      itemCount: entries.length,
+                      findChildIndexCallback: (k) => k is ValueKey<String> ? index[k.value] : null,
+                      itemBuilder: (_, i) {
+                        final e = entries[entries.length - 1 - i];
+                        return Builder(
+                          key: ValueKey(e.id),
+                          builder: (c) {
+                            _built[e.id] = c;
+                            return Padding(padding: const EdgeInsets.only(top: 10), child: _entry(c, e));
+                          },
+                        );
+                      },
+                    ),
             ),
             if (model.assistant?.running ?? false)
               const Padding(
@@ -102,6 +104,25 @@ class _ElisSheetState extends State<ElisSheet> {
             ElisComposer(model: model),
           ]);
         },
+      );
+
+  Widget _empty() => Center(
+        key: const Key('assistant-empty'),
+        child: SingleChildScrollView(
+          padding: const EdgeInsets.all(24),
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 280),
+            child: const Column(mainAxisSize: MainAxisSize.min, spacing: 8, children: [
+              Padding(padding: EdgeInsets.only(bottom: 4), child: ExcludeSemantics(child: AppMark(size: 64))),
+              Text('Elis', style: TextStyle(fontSize: 20, fontWeight: FontWeight.w600)),
+              Text(
+                'Ask about your sessions. Tag one with @.',
+                textAlign: TextAlign.center,
+                style: TextStyle(fontSize: 14, height: 20 / 14, color: C.muted),
+              ),
+            ]),
+          ),
+        ),
       );
 
   Widget _entry(BuildContext c, AssistantEntry e) => switch (e.kind) {
