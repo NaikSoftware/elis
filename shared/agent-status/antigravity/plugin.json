@@ -1,0 +1,6 @@
+{
+  "name": "elis-status",
+  "version": "1.0.0",
+  "description": "Reports this agy session's state on its Elis sidebar row.",
+  "homepage": "https://naiksoftware.github.io/elis/"
+}

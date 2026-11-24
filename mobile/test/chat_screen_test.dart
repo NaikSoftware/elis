@@ -104,9 +104,14 @@ void main() {
       await h.opened();
       expect(_claims(h), isEmpty);
       expect(_modeIcon(t), (Icons.terminal, 'Chat — switch to Term'));
+      final chatBar = t.getRect(find.byType(AppBar));
+      final chatStatus = t.getRect(find.byKey(const Key('status')));
       await _tapKey(t, 'modeButton');
       expect(_chat(), isFalse);
       expect(_modeIcon(t), (Icons.chat_bubble_outline, 'Term — switch to Chat'));
+      expect(t.getRect(find.byType(AppBar)), chatBar);
+      expect(t.getRect(find.byKey(const Key('status'))).center.dy, chatStatus.center.dy);
+      expect(find.descendant(of: find.byType(AppBar), matching: find.byKey(const Key('termSubtitle'))), findsOneWidget);
       expect(find.byKey(const Key('term')), findsOneWidget);
       expect(_claims(h), hasLength(1)); // Term's claim on OPENED, on the next frame
       await _tapKey(t, 'modeButton');

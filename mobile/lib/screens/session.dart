@@ -772,28 +772,21 @@ class _SessionScreenState extends State<SessionScreen> {
     final chat = _inChat;
     final options = chat ? const <PromptOption>[] : promptOptions(_termShown ? t!.snapshot!.lines.map((l) => l.text).join('\n') : text);
     _answersShown = options.isNotEmpty;
-    final titleRow = Row(mainAxisSize: MainAxisSize.min, children: [
-      Flexible(
-        child: chat
-            ? ChatTitle(feed: _chatFeed, s: s)
-            : Text(s.name, style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w600), overflow: TextOverflow.ellipsis),
-      ),
-      Padding(
-        padding: const EdgeInsets.only(left: 8),
-        child: Semantics(
-            key: const Key('status'), container: true, label: statusLabel(s.status), child: StatusShape(s.status, size: 10, blink: s.blink)),
-      ),
-    ]);
     return Scaffold(
       appBar: AppBar(
         titleSpacing: 0,
-        title: chat
-            ? titleRow
-            : Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                titleRow,
-                Text([s.shortCwd, if (s.agent.isNotEmpty) s.agent].join(' · '),
-                    style: const TextStyle(fontSize: 12, color: C.muted, fontFamily: mono), overflow: TextOverflow.ellipsis),
-              ]),
+        title: Row(mainAxisSize: MainAxisSize.min, children: [
+          Flexible(
+            child: chat
+                ? ChatTitle(feed: _chatFeed, s: s)
+                : Text(s.name, style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w600), overflow: TextOverflow.ellipsis),
+          ),
+          Padding(
+            padding: const EdgeInsets.only(left: 8),
+            child: Semantics(
+                key: const Key('status'), container: true, label: statusLabel(s.status), child: StatusShape(s.status, size: 10, blink: s.blink)),
+          ),
+        ]),
         actions: [
           _modeButton(s),
           if (s.hasSplit) _paneButton(),
@@ -812,7 +805,7 @@ class _SessionScreenState extends State<SessionScreen> {
                 }),
           ),
         ],
-        bottom: chat ? _chatSubtitle(s) : const PreferredSize(preferredSize: Size.fromHeight(1), child: Divider()),
+        bottom: _subtitle(s, chat),
       ),
       body: SafeArea(
         child: Stack(fit: StackFit.expand, children: [
@@ -865,12 +858,22 @@ class _SessionScreenState extends State<SessionScreen> {
             openImage: (path) => m.act('session.overlay.open', target: widget.sessionId, args: {'image': path})));
   }
 
-  // a fixed line, never folded: nothing in Chat appears or leaves on scroll
-  PreferredSizeWidget _chatSubtitle(Session s) {
-    final line = ListenableBuilder(
-        listenable: _grids,
-        builder: (context, _) =>
-            ChatSubtitle(feed: _chatFeed, s: s, onChangeModel: _chatIdle ? () => _composer.currentState?.send('/model') : null));
+  // a fixed full-width line under the title row in both modes, so switching never jumps the app bar
+  PreferredSizeWidget _subtitle(Session s, bool chat) {
+    final line = chat
+        ? ListenableBuilder(
+            listenable: _grids,
+            builder: (context, _) =>
+                ChatSubtitle(feed: _chatFeed, s: s, onChangeModel: _chatIdle ? () => _composer.currentState?.send('/model') : null))
+        : Padding(
+            key: const Key('termSubtitle'),
+            padding: const EdgeInsets.fromLTRB(16, 0, 16, 6),
+            child: Align(
+              alignment: Alignment.centerLeft,
+              child: Text([if (s.shortCwd.isNotEmpty) s.shortCwd, if (s.agent.isNotEmpty) s.agent].join(' · '),
+                  style: const TextStyle(fontSize: 12, color: C.muted, fontFamily: mono), maxLines: 1, overflow: TextOverflow.ellipsis),
+            ),
+          );
     return PreferredSize(preferredSize: const Size.fromHeight(23), child: Column(children: [line, const Divider()]));
   }
 

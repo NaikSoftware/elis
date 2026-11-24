@@ -96,6 +96,7 @@ enum AgentHooksInstaller {
         \(outcome.files.claudeText)
         \(outcome.files.codex.text(codexHome: outcome.codexHome))
         \(outcome.files.pi.text)
+        \(outcome.files.antigravity.text)
         \(outcome.opencode.text)
         The source line was added to ~/.zshrc, ~/.bashrc (and ~/.config/fish/config.fish if fish is installed).
 

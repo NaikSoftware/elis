@@ -2537,6 +2537,10 @@ elisctl session tint clear --target &quot;$ELIS_SESSION_ID&quot;</code></pre>
 <td>a lifecycle extension, when <code>~/.pi/agent</code> already exists</td>
 </tr>
 <tr>
+<td>Antigravity CLI (<code>agy</code>)</td>
+<td>an <code>elis-status</code> plugin in <code>~/.gemini/config/plugins/</code>, when <code>~/.gemini/antigravity-cli</code> already exists (<a href="#status-antigravity">below</a>)</td>
+</tr>
+<tr>
 <td>OpenCode</td>
 <td>a lifecycle plugin for v1 or v2, when its configuration directory already exists</td>
 </tr>
@@ -2568,6 +2572,13 @@ elisctl session tint clear --target &quot;$ELIS_SESSION_ID&quot;</code></pre>
 <p>Both the skill and the hooks installers read <code>CODEX_HOME</code> as exported by your interactive login shell. A nonempty value selects the Codex directory, a relative path resolved against that shell's working directory. An unset or empty value, a shell that fails to start, unreadable output or a timeout falls back to <code>~/.codex</code>. The selected directory must already exist: a missing custom directory is skipped, with nothing installed into <code>~/.codex</code> instead. Whether OpenCode is installed does not affect this.</p>
 <h4 id="status-pi">Pi</h4>
 <p>Pi work starts as active and settles as completed once retries and queued continuations finish. Pi has no permission or structured-question event, so blocked is never guessed from its replies. Restart Pi or run <code>/reload</code> after installing.</p>
+<h4 id="status-antigravity">Antigravity CLI</h4>
+<ul>
+<li>A model call or a finished tool reports active, <code>ask_question</code> and <code>ask_permission</code> report blocked, and the end of a turn reports completed. A turn that ends while background work still runs stays active.</li>
+<li>agy has no event for its own command or edit approval prompt, so that prompt does not turn the row blocked.</li>
+<li>Headless runs (<code>agy -p</code>) and an agy started by Claude Code report nothing, so they never overwrite the pane's status.</li>
+<li>A running agy picks up the plugin at its next turn. If you set up the former <code>antigravity-agent-status</code> cookbook recipe, remove its <code>elis-status</code> block from <code>~/.gemini/config/hooks.json</code>.</li>
+</ul>
 <h4 id="status-opencode">OpenCode</h4>
 <p>The installer runs <code>opencode --version</code> and installs the matching plugin. It finds OpenCode on your interactive login shell's PATH (<code>$SHELL</code>, or <code>/bin/zsh</code> when unset). If the version cannot be told, it asks you to choose v1 or v2, or to skip OpenCode. Nothing else is needed: no npm dependencies, no configuration edits. Restart OpenCode after installing.</p>
 <p><strong>v1</strong> installs <code>~/.config/opencode/plugins/elis-status.js</code>. It serves OpenCode 1.x only; OpenCode 2 does not load 1.x plugins and shows no status with it.</p>
