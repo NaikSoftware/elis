@@ -1,12 +1,15 @@
 import 'dart:async';
+import 'dart:io';
 import 'dart:math';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
+import '../link/mux.dart' show UploadChannel, UploadFailed;
 import '../screens/composer.dart';
 import '../terminal/vt.dart';
 import '../theme.dart';
+import 'attachments.dart';
 import 'checks.dart';
 import 'claude_screen.dart';
 import 'feed.dart';
@@ -51,7 +54,10 @@ class ChatComposer extends StatefulWidget {
       this.onOpen,
       this.onSending,
       this.agent = 'Claude',
-      this.checks = _checks});
+      this.checks = _checks,
+      this.pick,
+      this.upload,
+      this.attachBlocked});
 
   final TranscriptFeed feed;
   final ClaudeScreen? Function() screen;
@@ -64,6 +70,9 @@ class ChatComposer extends StatefulWidget {
   final VoidCallback? onSending; // a send the gate takes
   final String agent; // named in the composer's messages
   final Checks checks;
+  final PickFiles? pick; // null: the system picker
+  final UploadFile? upload; // null disables attaching
+  final String? attachBlocked; // disables attaching, and is the button's tooltip
 
   @override
   State<ChatComposer> createState() => ChatComposerState();
@@ -76,6 +85,8 @@ class ChatComposerState extends State<ChatComposer> {
   String? _adopted; // the draft taken from Claude's row, which Send clears there first
   bool _seen = false, _sending = false, _running = false, _stopRun = false, _readopt = false;
   String? _offer, _offerDraft; // the text a changed row stopped, and that row
+  final _chips = <_Attachment>[];
+  bool _picking = false, _uploading = false;
 
   String get _changed => "${widget.agent}'s input changed on the computer";
 
@@ -176,6 +187,104 @@ class ChatComposerState extends State<ChatComposer> {
 
   void _tell(String why) => ScaffoldMessenger.maybeOf(context)?.showSnackBar(SnackBar(content: Text(why)));
 
+  Future<void> _pick() async {
+    setState(() => _picking = true);
+    var got = const <PickedFile>[];
+    try {
+      got = await (widget.pick ?? pickFiles)();
+    } on Object catch (e) {
+      if (mounted) _tell('$e');
+    }
+    if (!mounted) return;
+    final fit = got.where((f) => f.size <= uploadMaxBytes).toList();
+    final room = uploadMaxFiles - _chips.length;
+    setState(() {
+      _picking = false;
+      _chips.addAll(fit.take(room).map(_Attachment.new));
+    });
+    if (fit.length < got.length) {
+      _tell(tooLarge);
+    } else if (fit.length > room) {
+      _tell(tooMany);
+    }
+  }
+
+  void _remove(_Attachment a) {
+    a.channel?.cancel();
+    setState(() => _chips.remove(a));
+  }
+
+  /// The field's Send and the offer's Replace: uploads the chips not yet on the host, then sends the attached line.
+  Future<void> sendField(String text, {bool replace = false}) async {
+    if (_chips.isEmpty) return send(text, replace: replace);
+    final upload = widget.upload;
+    if (_uploading || upload == null) return;
+    if (_blocked(widget.screen()) case final why?) return _tell(why);
+    setState(() => _uploading = true);
+    try {
+      for (final a in [..._chips]) {
+        if (a.hostPath != null || !_chips.contains(a)) continue;
+        final ch = a.channel = upload(a.file);
+        ch.progress.listen((n) => mounted ? setState(() => a.sent += n) : null);
+        unawaited(ch.send(File(a.file.path).openRead()).catchError((Object _) => ch.cancel(reason: 'cannot read ${a.file.name}')));
+        final path = await ch.done;
+        if (!mounted) return;
+        setState(() {
+          a.hostPath = path;
+          a.channel = null;
+        });
+      }
+    } on UploadFailed catch (e) {
+      if (mounted && e.reason != 'cancelled') _tell(e.reason);
+      return;
+    } finally {
+      if (mounted) {
+        setState(() {
+          _uploading = false;
+          for (final a in _chips) {
+            a.channel = null;
+          }
+        });
+      }
+    }
+    await send(attachedLine(text, [for (final a in _chips) a.hostPath!]), replace: replace);
+  }
+
+  Widget _attach(bool held) => IconButton(
+        key: const Key('attach'),
+        tooltip: widget.attachBlocked ?? 'Attach files',
+        icon: const Icon(Icons.attach_file),
+        onPressed: held || _picking || _uploading || widget.gate.running || widget.upload == null || widget.attachBlocked != null
+            ? null
+            : _pick,
+      );
+
+  Widget _chip(_Attachment a) {
+    final f = a.file;
+    return InputChip(
+      key: Key('attachment-${f.name}'),
+      visualDensity: VisualDensity.compact,
+      label: Stack(clipBehavior: Clip.none, children: [
+        ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 200),
+          child: Row(mainAxisSize: MainAxisSize.min, children: [
+            Flexible(child: Text(f.name, maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(fontSize: 12))),
+            Text(' ${humanSize(f.size)}', style: const TextStyle(fontSize: 12, color: C.muted)),
+          ]),
+        ),
+        // under the label, inside the chip's padding, so an uploading chip keeps the row's height
+        if (a.channel != null)
+          Positioned(
+            left: 0,
+            right: 0,
+            bottom: -4,
+            child: LinearProgressIndicator(value: f.size == 0 ? 0 : min(1, a.sent / f.size), minHeight: 2, backgroundColor: C.line),
+          ),
+      ]),
+      onDeleted: () => _remove(a),
+    );
+  }
+
   Future<void> _live(GateSequence q, String text, bool replace) async {
     final draft = ClaudeScreen.read(q.grid).draft;
     if (draft.isNotEmpty) {
@@ -259,12 +368,15 @@ class ChatComposerState extends State<ChatComposer> {
           final queue = (s?.busy ?? false) && !_instant.contains(command);
           final menu = text.startsWith('/') && !text.contains(RegExp(r'\s')) ? slashMatches(widget.feed.commands, text) : const <SlashCommand>[];
           final held = widget.held;
-          final reason = _sending && widget.gate.running
-              ? widget.gate.progress
-              : text.trim().isNotEmpty && _offer == null && held == null
-                  ? blocked
-                  : null;
-          final canSend = text.trim().isNotEmpty && blocked == null && !widget.gate.running;
+          final some = text.trim().isNotEmpty || _chips.isNotEmpty;
+          final reason = _uploading
+              ? 'Uploading ${_chips.indexWhere((a) => a.channel != null) + 1}/${_chips.length}'
+              : _sending && widget.gate.running
+                  ? widget.gate.progress
+                  : some && _offer == null && held == null
+                      ? blocked
+                      : null;
+          final canSend = some && blocked == null && !widget.gate.running && !_uploading;
           // the menu floats above the composer, over the list, so the bottom area's scroll never clips its first rows
           return OverlayPortal(
             controller: _menuPortal,
@@ -275,14 +387,15 @@ class ChatComposerState extends State<ChatComposer> {
               child: Composer(
                   controller: _field,
                   focus: _focus,
-                  onSend: canSend ? () => send(_field.text) : null,
+                  onSend: canSend ? () => sendField(_field.text) : null,
                   maxLines: 6,
                   autocorrect: true,
                   mono: false,
                   sendLabel: queue ? 'Queue' : 'Send',
                   sendIcon: queue ? Icons.schedule : Icons.arrow_forward,
                   reason: reason,
-                  enabled: held == null,
+                  enabled: held == null && !_uploading,
+                  leading: _attach(held != null),
                   accessory: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
                     // Claude Code's mode cycle; agy's modes differ
                     if (s?.agy != true)
@@ -294,6 +407,11 @@ class ChatComposerState extends State<ChatComposer> {
                           server: widget.server,
                           disabledBy: widget.disabledBy,
                           checks: widget.checks),
+                    if (_chips.isNotEmpty)
+                      Padding(
+                        padding: const EdgeInsets.only(bottom: 6),
+                        child: Wrap(spacing: 8, runSpacing: 6, children: [for (final a in _chips) _chip(a)]),
+                      ),
                     if (_offer != null) _offerRow(),
                     if (held != null)
                       Row(key: const Key('composerHeld'), children: [
@@ -312,7 +430,7 @@ class ChatComposerState extends State<ChatComposer> {
 
   Widget _offerRow() => Row(children: [
         Expanded(child: Text(_changed, style: const TextStyle(fontSize: 12, color: C.muted))),
-        TextButton(onPressed: () => send(_offer!, replace: true), child: const Text('Replace')),
+        TextButton(onPressed: () => sendField(_offer!, replace: true), child: const Text('Replace')),
         TextButton(onPressed: () => setState(() => _offer = null), child: const Text('Keep')),
       ]);
 
@@ -522,4 +640,12 @@ class ModeChipState extends State<ModeChip> {
       ]),
     );
   }
+}
+
+class _Attachment {
+  _Attachment(this.file);
+  final PickedFile file;
+  String? hostPath; // kept across a failed send, so a re-send uploads only the rest
+  UploadChannel? channel; // while uploading
+  int sent = 0; // credited bytes
 }

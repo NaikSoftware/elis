@@ -17,6 +17,7 @@ class Composer extends StatelessWidget {
       this.sendIcon = Icons.arrow_forward,
       this.reason,
       this.accessory,
+      this.leading,
       this.hint = 'Type, then send with Enter',
       this.fill = C.surface,
       this.enabled = true});
@@ -30,11 +31,13 @@ class Composer extends StatelessWidget {
   final IconData sendIcon;
   final String? reason; // why Send is off, shown above the field
   final Widget? accessory; // a row above the field
+  final Widget? leading; // before the field, in its row
 
   @override
   Widget build(BuildContext context) {
     final send = enabled ? onSend : null;
     final row = Row(children: [
+      ?leading,
       Expanded(
         child: TextField(
           key: const Key('composer'),
