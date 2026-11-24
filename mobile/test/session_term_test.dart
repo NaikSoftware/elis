@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
+import 'package:elis_mobile/chat/attachments.dart';
 import 'package:elis_mobile/chat/mode.dart';
 import 'package:elis_mobile/client.dart';
 import 'package:elis_mobile/link/decoder.dart';
@@ -252,6 +253,7 @@ class Harness {
   Relay get r => relays.last;
 
   final webs = <FakeWeb>[]; // one per page sheet, with [start]'s pages
+  PickFiles? pick;
 
   Future<void> start({Vt Function(int, int)? vt, bool pages = false, String? startingAgent}) async {
     var n = 0;
@@ -275,6 +277,7 @@ class Harness {
       vt: vt ?? (c, r) => FakeVt(c, r)..also(vts.add),
       onKeyboard: () => keyboards++,
       pages: pages,
+      pick: pick,
       pageWebView: (c) {
         final web = FakeWeb(c);
         webs.add(web);
@@ -439,11 +442,11 @@ void phone(WidgetTester t) {
   addTearDown(t.view.reset);
 }
 
-/// The app goes to the background and back; the screen's channels close and reopen.
-Future<void> _pauseResume(Harness h, {Future<void> Function()? paused}) async {
+/// The app goes to the background and back; the screen's channels close and reopen. Without [watch] the link closes too.
+Future<void> pauseResume(Harness h, {Future<void> Function()? paused, bool watch = true}) async {
   AndroidFlutterLocalNotificationsPlugin.registerWith();
   h.t.binding.defaultBinaryMessenger.setMockMethodCallHandler(const MethodChannel('dexterous.com/flutter/local_notifications'), (_) async => null);
-  Watch.permitted = true;
+  Watch.permitted = watch;
   addTearDown(() => Watch.permitted = false);
   for (final s in [AppLifecycleState.inactive, AppLifecycleState.hidden, AppLifecycleState.paused]) {
     h.t.binding.handleAppLifecycleStateChanged(s);
@@ -751,7 +754,7 @@ void main() {
     await _leader(h, 4);
     await pageDown(h, [urlPage()], open: true);
     expect(find.byKey(const Key('pageSheet')), findsOneWidget);
-    await _pauseResume(h, paused: () async {
+    await pauseResume(h, paused: () async {
       expect(h.r.closes, containsAll([3, 4])); // the watch and the claim
       expect(h.r.closes, isNot(contains(presentCh)));
       await pageDown(h, [
@@ -1074,7 +1077,7 @@ void main() {
     await h.start();
     await h.opened();
     await _leader(h);
-    await _pauseResume(h, paused: () async => expect(h.r.closes, containsAll([2, _claimCh])));
+    await pauseResume(h, paused: () async => expect(h.r.closes, containsAll([2, _claimCh])));
     await h.opened();
     expect(_claims(h), hasLength(2));
     expect(h.r.grids, isEmpty); // the claim brings the grid: no fit to reset first
@@ -1105,7 +1108,7 @@ void main() {
     h.r.send([...json(LinkKind.lead, _claimCh, {'role': 'follower'}), ...json(LinkKind.close, _claimCh, {'reason': 'the computer took the lead back'})]);
     await t.pump();
     await t.pump();
-    await _pauseResume(h);
+    await pauseResume(h);
     await h.opened();
     await t.pump(const Duration(seconds: 1));
     expect(_claims(h), hasLength(1));
@@ -1123,7 +1126,7 @@ void main() {
     for (var i = 0; i < 10; i++) {
       await t.pump(const Duration(milliseconds: 10));
     }
-    await _pauseResume(h);
+    await pauseResume(h);
     await h.opened();
     await t.pump(const Duration(seconds: 1));
     expect(_claims(h), hasLength(1));
@@ -1817,7 +1820,7 @@ void main() {
     await _key(t, 'Left');
     await t.pump();
     await _leader(h, h.r.lastChannel);
-    await _pauseResume(h);
+    await pauseResume(h);
     await h.opened();
     await t.pump(const Duration(seconds: 2));
     expect(_fits(h), hasLength(fits));

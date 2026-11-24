@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:convert';
+import 'dart:io';
 import 'dart:math';
 import 'dart:typed_data';
 
@@ -821,6 +822,14 @@ void main() {
       expect(r.frames.last.kind, LinkKind.close);
       expect((await failure(ch.done) as UploadFailed).reason, 'file changed while sending');
       expect(r.frames.last.channel, id);
+    });
+
+    test('anUnreadableSourceFailsAndCloses', () async {
+      final (ch, r, id) = await opened(5);
+      await expectLater(
+          ch.send(Stream.error(const FileSystemException('gone'))), throwsA(isA<UploadFailed>().having((e) => e.reason, 'reason', 'cannot read a_b.png')));
+      expect((r.frames.last.kind, r.frames.last.channel), (LinkKind.close, id));
+      expect((await failure(ch.done) as UploadFailed).reason, 'cannot read a_b.png');
     });
 
     test('aLongStreamFailsAndSendsNothingPastSize', () async {

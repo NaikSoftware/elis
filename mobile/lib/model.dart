@@ -6,6 +6,7 @@ import 'package:flutter/widgets.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 
 import 'assistant/assistant_model.dart';
+import 'chat/attachments.dart';
 import 'ble_transport.dart';
 import 'client.dart';
 import 'link/mux.dart';
@@ -292,6 +293,7 @@ class ElisModel extends ChangeNotifier {
         await refresh();
         // only now: a screen that saw the mux earlier would open panes from the tree of the link before
         mux = mx;
+        AttachBlocks.tooOld.clear(); // a refusal holds until the phone reconnects
         if (!_disposed) notifyListeners();
         unawaited(rereadAssistant());
         unawaited(_eventLoop(gen));

@@ -57,7 +57,8 @@ class ChatComposer extends StatefulWidget {
       this.checks = _checks,
       this.pick,
       this.upload,
-      this.attachBlocked});
+      this.attachBlocked,
+      this.session});
 
   final TranscriptFeed feed;
   final ClaudeScreen? Function() screen;
@@ -73,6 +74,7 @@ class ChatComposer extends StatefulWidget {
   final PickFiles? pick; // null: the system picker
   final UploadFile? upload; // null disables attaching
   final String? attachBlocked; // disables attaching, and is the button's tooltip
+  final String? session; // keys [AttachBlocks]
 
   @override
   State<ChatComposer> createState() => ChatComposerState();
@@ -111,6 +113,10 @@ class ChatComposerState extends State<ChatComposer> {
 
   @override
   void dispose() {
+    for (final a in _chips) {
+      a.channel?.cancel();
+    }
+    if (_chips.isNotEmpty) clearPicked();
     widget.gate.removeListener(_onGate);
     _field.dispose();
     _focus.dispose();
@@ -160,23 +166,32 @@ class ChatComposerState extends State<ChatComposer> {
                   ? '${widget.agent} is working: this pane sends only while ${widget.agent} is idle'
                   : null);
 
-  /// Sends [text] to Claude through the gate; the field clears when it held [text].
-  Future<void> send(String text, {bool replace = false}) async {
+  /// Sends [text] to Claude through the gate; the field clears when it held [text]. The chips stay: only
+  /// [sendField] sends them.
+  Future<void> send(String text, {bool replace = false}) => _send(text, replace: replace);
+
+  // [chips], uploaded, are named in the line and clear with it
+  Future<void> _send(String text, {bool replace = false, List<_Attachment> chips = const []}) async {
     text = text.trimRight();
-    if (text.isEmpty) return;
+    final line = attachedLine(text, [for (final a in chips) a.hostPath!]);
+    if (line.isEmpty) return;
     if (_blocked(widget.screen()) case final why?) return _tell(why);
     widget.onSending?.call();
     setState(() {
       _sending = true;
       _offer = null;
     });
-    final r = await widget.gate.run(2, (q) => widget.colours ? _live(q, text, replace) : _typed(q, text));
+    final r = await widget.gate.run(2, (q) => widget.colours ? _live(q, line, replace) : _typed(q, line));
     if (!mounted) return;
     final draft = norm(widget.screen()?.draft ?? '');
     final offer = r.reason == _changed && draft.isNotEmpty;
     setState(() {
       _sending = false;
       if (r.ok && _field.text.trimRight() == text) _field.clear();
+      if (r.ok && chips.isNotEmpty) {
+        _chips.removeWhere(chips.contains);
+        if (_chips.isEmpty) clearPicked();
+      }
       if (offer) {
         _offer = text;
         _offerDraft = draft;
@@ -212,21 +227,28 @@ class ChatComposerState extends State<ChatComposer> {
   void _remove(_Attachment a) {
     a.channel?.cancel();
     setState(() => _chips.remove(a));
+    if (_chips.isEmpty) clearPicked();
   }
 
-  /// The field's Send and the offer's Replace: uploads the chips not yet on the host, then sends the attached line.
+  /// The field's Send and the offer's Replace: uploads the chips not yet on the host, one at a time, then sends
+  /// [text] with their paths. A failure keeps the text and the chips; uploaded chips keep their host path.
   Future<void> sendField(String text, {bool replace = false}) async {
     if (_chips.isEmpty) return send(text, replace: replace);
-    final upload = widget.upload;
-    if (_uploading || upload == null) return;
+    if (_uploading) return;
     if (_blocked(widget.screen()) case final why?) return _tell(why);
-    setState(() => _uploading = true);
+    final upload = widget.upload;
+    if (upload == null) return _tell('Disconnected');
+    setState(() {
+      _uploading = true;
+      _offer = null;
+    });
     try {
       for (final a in [..._chips]) {
         if (a.hostPath != null || !_chips.contains(a)) continue;
         final ch = a.channel = upload(a.file);
+        setState(() => a.sent = 0);
         ch.progress.listen((n) => mounted ? setState(() => a.sent += n) : null);
-        unawaited(ch.send(File(a.file.path).openRead()).catchError((Object _) => ch.cancel(reason: 'cannot read ${a.file.name}')));
+        unawaited(ch.send(File(a.file.path).openRead()).catchError((Object _) {})); // its failure is [done]'s
         final path = await ch.done;
         if (!mounted) return;
         setState(() {
@@ -235,7 +257,9 @@ class ChatComposerState extends State<ChatComposer> {
         });
       }
     } on UploadFailed catch (e) {
-      if (mounted && e.reason != 'cancelled') _tell(e.reason);
+      if (!mounted) return;
+      if (e.tooOld && widget.session != null) AttachBlocks.tooOld[widget.session!] = e.reason;
+      if (e.reason != 'cancelled') _tell(e.reason);
       return;
     } finally {
       if (mounted) {
@@ -247,16 +271,17 @@ class ChatComposerState extends State<ChatComposer> {
         });
       }
     }
-    await send(attachedLine(text, [for (final a in _chips) a.hostPath!]), replace: replace);
+    if (_blocked(widget.screen()) case final why?) return _tell(why);
+    await _send(text, replace: replace, chips: [..._chips]);
   }
+
+  String? get _attachBlocked => widget.attachBlocked ?? AttachBlocks.tooOld[widget.session];
 
   Widget _attach(bool held) => IconButton(
         key: const Key('attach'),
-        tooltip: widget.attachBlocked ?? 'Attach files',
+        tooltip: _attachBlocked ?? 'Attach files',
         icon: const Icon(Icons.attach_file),
-        onPressed: held || _picking || _uploading || widget.gate.running || widget.upload == null || widget.attachBlocked != null
-            ? null
-            : _pick,
+        onPressed: held || _picking || _uploading || widget.gate.running || widget.upload == null || _attachBlocked != null ? null : _pick,
       );
 
   Widget _chip(_Attachment a) {

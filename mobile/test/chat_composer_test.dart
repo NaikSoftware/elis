@@ -1,5 +1,7 @@
+import 'dart:async';
 import 'dart:io';
 
+import 'package:elis_mobile/chat/attachments.dart';
 import 'package:elis_mobile/chat/chat_composer.dart';
 import 'package:elis_mobile/chat/checks.dart';
 import 'package:elis_mobile/chat/claude_screen.dart';
@@ -7,6 +9,7 @@ import 'package:elis_mobile/chat/feed.dart';
 import 'package:elis_mobile/chat/grid.dart';
 import 'package:elis_mobile/chat/transcript.dart';
 import 'package:elis_mobile/chat/write_gate.dart';
+import 'package:elis_mobile/link/mux.dart' show UploadChannel, UploadFailed;
 import 'package:elis_mobile/terminal/vt.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -69,6 +72,35 @@ class _Writer implements GateWriter {
   bool pasteSafe(String text) => true;
 }
 
+const _a = PickedFile(name: 'a.png', path: '/p/a.png', size: 1258291);
+const _b = PickedFile(name: 'b.txt', path: '/p/b.txt', size: 4096);
+
+/// An upload the test finishes or fails; [cancel] fails it as the mux does.
+class _Up implements UploadChannel {
+  _Up(this.file);
+  final PickedFile file;
+  final _done = Completer<String>();
+  String? cancelled;
+
+  @override
+  Stream<int> get progress => const Stream.empty();
+  @override
+  Future<String> get done => _done.future;
+  @override
+  Future<void> send(Stream<List<int>> bytes) async {}
+  @override
+  void cancel({String reason = 'cancelled'}) {
+    cancelled = reason;
+    fail(reason);
+  }
+
+  void finish() => _done.complete('/h/u/S/${file.name}');
+  void fail(String reason) => _done.isCompleted ? null : _done.completeError(UploadFailed(reason));
+
+  @override
+  dynamic noSuchMethod(Invocation i) => super.noSuchMethod(i);
+}
+
 class _C {
   _C(this.t, Grid g) : grids = _Grids(g);
 
@@ -83,6 +115,11 @@ class _C {
   bool remote = false, server = false;
   Checks checks = _proven;
   String? disabledBy;
+  List<PickedFile> picks = const [_a, _b];
+  final ups = <_Up>[];
+  void Function(_Up u) onUpload = (u) => scheduleMicrotask(u.finish);
+  bool uploads = true;
+  String? attachBlocked;
 
   /// Scripts the grid's answer to each write, a microtask after it.
   void script(Grid? Function(GateWrite w) next) =>
@@ -102,7 +139,11 @@ class _C {
                   server: server,
                   gate: gate,
                   disabledBy: disabledBy,
-                  checks: checks),
+                  checks: checks,
+                  session: 'S',
+                  pick: () async => picks,
+                  upload: uploads ? _upload : null,
+                  attachBlocked: attachBlocked),
             ]),
           ),
         ),
@@ -125,6 +166,35 @@ class _C {
   }
 
   Iterable<KeyWrite> get keys => writer.writes.whereType<KeyWrite>();
+
+  UploadChannel _upload(PickedFile f) {
+    final u = _Up(f);
+    ups.add(u);
+    onUpload(u);
+    return u;
+  }
+
+  IconButton get _attach => t.widget<IconButton>(find.byKey(const Key('attach')));
+  bool get attachEnabled => _attach.onPressed != null;
+  String? get attachTip => _attach.tooltip;
+  Finder chip(String name) => find.byKey(Key('attachment-$name'));
+  ChatComposerState get state => t.state<ChatComposerState>(find.byType(ChatComposer));
+
+  Future<void> attach() async {
+    await t.tap(find.byKey(const Key('attach')));
+    await t.pump();
+  }
+
+  Future<void> unchip(String name) async {
+    await t.tap(find.descendant(of: chip(name), matching: find.byType(Icon)));
+    await t.pump();
+  }
+
+  /// Taps Send and stops while the first upload runs.
+  Future<void> startSend() async {
+    await t.tap(find.byKey(const Key('send')));
+    await t.pump();
+  }
 }
 
 const _proven =
@@ -599,6 +669,187 @@ void main() {
       c.grids.set(_g('idle-placeholder-45'));
       await t.pump();
       expect(find.text('1 shell'), findsNothing);
+    });
+  });
+
+  group('attachments', () {
+    tearDown(AttachBlocks.tooOld.clear);
+
+    testWidgets('picksAddChipsAndTheCrossRemovesOne', (t) async {
+      final c = _C(t, _g('idle-placeholder-45'));
+      await c.pump();
+      expect((c.attachEnabled, c.attachTip), (true, 'Attach files'));
+      await c.attach();
+      expect(find.descendant(of: c.chip('a.png'), matching: find.textContaining('1.2 MB')), findsOneWidget);
+      expect(find.descendant(of: c.chip('b.txt'), matching: find.textContaining('4 KB')), findsOneWidget);
+      await c.unchip('a.png');
+      expect(c.chip('a.png'), findsNothing);
+      expect(c.chip('b.txt'), findsOneWidget);
+    });
+
+    testWidgets('aFileOverTheCapIsNotAdded', (t) async {
+      final c = _C(t, _g('idle-placeholder-45'))..picks = const [_a, PickedFile(name: 'big.bin', path: '/p/big.bin', size: 20971521)];
+      await c.pump();
+      await c.attach();
+      expect(c.chip('a.png'), findsOneWidget);
+      expect(c.chip('big.bin'), findsNothing);
+      expect(find.text('file too large (max 20 MiB)'), findsOneWidget);
+    });
+
+    testWidgets('picksPastTheTenthAreDropped', (t) async {
+      final c = _C(t, _g('idle-placeholder-45'))
+        ..picks = [for (var i = 0; i < 11; i++) PickedFile(name: 'f$i.txt', path: '/p/f$i.txt', size: 1)];
+      await c.pump();
+      await c.attach();
+      expect(c.chip('f9.txt'), findsOneWidget);
+      expect(c.chip('f10.txt'), findsNothing);
+      expect(find.text('at most 10 files per message'), findsOneWidget);
+    });
+
+    testWidgets('attachIsOffWithoutUploadOrWhenBlocked', (t) async {
+      final c = _C(t, _g('idle-placeholder-45'))..uploads = false;
+      await c.pump();
+      expect(c.attachEnabled, isFalse);
+      c
+        ..uploads = true
+        ..attachBlocked = 'Sending from the phone is not verified on remote sessions yet';
+      await c.pump();
+      expect((c.attachEnabled, c.attachTip), (false, 'Sending from the phone is not verified on remote sessions yet'));
+    });
+
+    testWidgets('sendPastesTheTextAndTheHostPaths', (t) async {
+      final idle = _g('idle-placeholder-45');
+      final c = _C(t, idle);
+      const line = "fix this Attached: '/h/u/S/a.png' '/h/u/S/b.txt'";
+      c.script((w) => _enter(w) ? idle : _withInput(idle, line));
+      await c.pump();
+      await c.attach();
+      await c.type('fix this ');
+      await c.send();
+      expect((c.writer.writes.first as PasteWrite).text, line);
+      expect(_enter(c.writer.writes.last), isTrue);
+      expect(c.field, '');
+      expect(c.chip('a.png'), findsNothing);
+      expect(c.chip('b.txt'), findsNothing);
+    });
+
+    testWidgets('withNoTextSendPastesOnlyThePaths', (t) async {
+      final idle = _g('idle-placeholder-45');
+      final c = _C(t, idle)..picks = const [_a];
+      const line = "Attached: '/h/u/S/a.png'";
+      c.script((w) => _enter(w) ? idle : _withInput(idle, line));
+      await c.pump();
+      expect(c.sendEnabled, isFalse);
+      await c.attach();
+      expect(c.sendEnabled, isTrue);
+      await c.send();
+      expect((c.writer.writes.first as PasteWrite).text, line);
+      expect(c.chip('a.png'), findsNothing);
+    });
+
+    for (final runs in [true, false]) {
+      testWidgets('aCommandWithAChipIsOneWrite $runs', (t) async {
+        final idle = _g('idle-placeholder-45');
+        final c = _C(t, idle)..picks = const [_a];
+        if (!runs) c.checks = const Checks(keys: true, paste: true);
+        const line = "/review Attached: '/h/u/S/a.png'";
+        c.script((w) => _enter(w) ? idle : _withInput(idle, line));
+        await c.pump();
+        await c.attach();
+        await c.type('/review');
+        await c.send();
+        expect(c.writer.writes.where((w) => w is! KeyWrite).single, runs ? isA<PasteWrite>() : isA<TextWrite>());
+        expect(switch (c.writer.writes.first) { PasteWrite(:final text) || TextWrite(:final text) => text, _ => null }, line);
+        expect(_enter(c.writer.writes.last), isTrue);
+      });
+    }
+
+    testWidgets('aFailedUploadKeepsTextAndChipsAndTheResendUploadsOnlyTheRest', (t) async {
+      final idle = _g('idle-placeholder-45');
+      final c = _C(t, idle);
+      c.onUpload = (u) => scheduleMicrotask(() => u.file == _b ? u.fail('cannot read b.txt') : u.finish());
+      await c.pump();
+      await c.attach();
+      await c.type('fix this');
+      await c.send();
+      expect(c.writer.writes, isEmpty);
+      expect(c.field, 'fix this');
+      expect(c.chip('a.png'), findsOneWidget);
+      expect(c.chip('b.txt'), findsOneWidget);
+      expect(find.text('cannot read b.txt'), findsOneWidget);
+      c.onUpload = (u) => scheduleMicrotask(u.finish);
+      const line = "fix this Attached: '/h/u/S/a.png' '/h/u/S/b.txt'";
+      c.script((w) => _enter(w) ? idle : _withInput(idle, line));
+      await c.send();
+      expect([for (final u in c.ups) u.file.name], ['a.png', 'b.txt', 'b.txt']);
+      expect((c.writer.writes.first as PasteWrite).text, line);
+    });
+
+    testWidgets('removingAnUploadingChipStopsTheSendSilently', (t) async {
+      final c = _C(t, _g('idle-placeholder-45'))..onUpload = (_) {};
+      await c.pump();
+      await c.attach();
+      await c.type('hi');
+      await c.startSend();
+      expect(find.text('Uploading 1/2'), findsOneWidget);
+      await c.unchip('a.png');
+      await t.pump(const Duration(seconds: 1));
+      expect(c.ups.single.cancelled, 'cancelled');
+      expect(c.writer.writes, isEmpty);
+      expect(c.field, 'hi');
+      expect(c.chip('b.txt'), findsOneWidget);
+      expect(find.byType(SnackBar), findsNothing);
+      expect(c.sendEnabled, isTrue);
+    });
+
+    testWidgets('aSecondSendDuringAnUploadDoesNothing', (t) async {
+      final c = _C(t, _g('idle-placeholder-45'))..onUpload = (_) {};
+      await c.pump();
+      await c.attach();
+      await c.type('hi');
+      await c.startSend();
+      expect((c.sendEnabled, c.attachEnabled), (false, false));
+      unawaited(c.state.sendField('hi'));
+      await t.pump();
+      expect(c.ups.length, 1);
+    });
+
+    testWidgets('anotherSendLeavesTheChipsAlone', (t) async {
+      final idle = _g('idle-placeholder-45');
+      final c = _C(t, idle);
+      c.script((w) => _enter(w) ? idle : _withInput(idle, '/model'));
+      await c.pump();
+      await c.attach();
+      unawaited(c.state.send('/model'));
+      await t.pump(const Duration(seconds: 3));
+      await t.pump();
+      expect((c.writer.writes.first as PasteWrite).text, '/model');
+      expect(c.ups, isEmpty);
+      expect(c.chip('a.png'), findsOneWidget);
+      expect(c.chip('b.txt'), findsOneWidget);
+    });
+
+    testWidgets('unmountingDuringAnUploadCancelsItAndWritesNothing', (t) async {
+      final c = _C(t, _g('idle-placeholder-45'))..onUpload = (_) {};
+      await c.pump();
+      await c.attach();
+      await c.type('hi');
+      await c.startSend();
+      await t.pumpWidget(const SizedBox());
+      await t.pump(const Duration(seconds: 1));
+      expect(c.ups.single.cancelled, 'cancelled');
+      expect(c.writer.writes, isEmpty);
+    });
+
+    testWidgets('aTooOldFailureTurnsAttachOffWithTheReason', (t) async {
+      const why = 'Update Elis on mac2 to attach files';
+      final c = _C(t, _g('idle-placeholder-45'))..onUpload = (u) => scheduleMicrotask(() => u.fail(why));
+      await c.pump();
+      await c.attach();
+      await c.send();
+      expect(find.text(why), findsOneWidget);
+      expect((c.attachEnabled, c.attachTip), (false, why));
+      expect(AttachBlocks.tooOld['S'], why);
     });
   });
 }

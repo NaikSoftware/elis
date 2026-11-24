@@ -5,6 +5,7 @@ import 'package:flutter/gestures.dart' show kDoubleTapSlop, kDoubleTapTimeout, k
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
+import '../chat/attachments.dart';
 import '../chat/chat_composer.dart';
 import '../chat/chat_view.dart';
 import '../chat/checks.dart';
@@ -35,7 +36,7 @@ import 'prompt.dart';
 
 class SessionScreen extends StatefulWidget {
   const SessionScreen({super.key, required this.model, required this.sessionId, this.startingAgent, @visibleForTesting this.vt = openVt, @visibleForTesting this.onKeyboard,
-      @visibleForTesting this.pages = true, @visibleForTesting this.pageWebView});
+      @visibleForTesting this.pages = true, @visibleForTesting this.pageWebView, @visibleForTesting this.pick});
   final ElisModel model;
   final String sessionId;
   final String? startingAgent; // chat agent just launched by NewSessionSheet, before the host sampler sees it
@@ -43,6 +44,7 @@ class SessionScreen extends StatefulWidget {
   final VoidCallback? onKeyboard; // told each time a tap asks for the soft keyboard
   final bool pages; // off, a test's channel ids stay as they were before pages
   final Widget Function(PageSheetController)? pageWebView;
+  final PickFiles? pick; // null: the system picker
 
   @override
   State<SessionScreen> createState() => _SessionScreenState();
@@ -878,6 +880,7 @@ class _SessionScreenState extends State<SessionScreen> {
 
   Widget _chatView(Session s) {
     final f = _chatFeed;
+    final mux = m.mux;
     return ListenableBuilder(
         listenable: f,
         builder: (context, _) => ChatView(
@@ -895,7 +898,10 @@ class _SessionScreenState extends State<SessionScreen> {
             prompts: _prompts,
             onKey: _press,
             onAnswer: type,
-            openImage: (path) => m.act('session.overlay.open', target: widget.sessionId, args: {'image': path})));
+            openImage: (path) => m.act('session.overlay.open', target: widget.sessionId, args: {'image': path}),
+            pick: widget.pick,
+            upload: mux == null ? null : (f) => mux.upload(widget.sessionId, name: f.name, size: f.size),
+            attachBlocked: checks.writeBlockedOn(remote: s.remote, server: s.server)));
   }
 
   // a fixed full-width line under the title row in both modes, so switching never jumps the app bar

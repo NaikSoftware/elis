@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:file_picker/file_picker.dart';
 
 import '../link/mux.dart';
@@ -25,6 +27,9 @@ Future<List<PickedFile>> pickFiles() async => [
             size: f.lengthSync() ?? await f.length() ?? (throw UploadFailed('cannot read ${f.name}'))),
     ];
 
+/// Drops the picker's cached copies, every one of them: call it only when no chip is left.
+void clearPicked() => unawaited(Future.sync(FilePicker.clearTemporaryFiles).catchError((Object _) {}));
+
 /// The prompt line: [text] trimmed, then ` Attached: '<p1>' '<p2>'`; host names never hold a quote.
 String attachedLine(String text, List<String> paths) {
   if (paths.isEmpty) return text;
@@ -40,8 +45,7 @@ String humanSize(int bytes) => bytes < 1024
         ? '${(bytes / 1024).round()} KB'
         : '${(bytes / (1024 * 1024)).toStringAsFixed(1)} MB';
 
-/// Sessions whose relay or host is too old to take files; cleared whenever the link's mux changes, as
-/// `ModePicks.tooOld` is.
+/// Sessions whose relay or host is too old to take files, with the refusal; cleared when the phone reconnects.
 class AttachBlocks {
-  static final Set<String> tooOld = {};
+  static final Map<String, String> tooOld = {}; // session id: the refusal
 }
