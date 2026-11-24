@@ -79,6 +79,7 @@ void main() {
 
   testWidgets('bar shows unread', (t) async {
     await _home(t, _Model(unread: 2));
+    expect(find.descendant(of: find.byKey(_ask), matching: find.byType(UnreadBadge)), findsOneWidget);
     expect(find.descendant(of: find.byKey(_ask), matching: find.text('2')), findsOneWidget);
     expect(t.getRect(find.byKey(_ask)).right, lessThan(t.getRect(find.byKey(_new)).left));
     await t.pumpWidget(const SizedBox());

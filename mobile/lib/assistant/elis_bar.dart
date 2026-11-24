@@ -226,15 +226,7 @@ class _ElisBarState extends State<ElisBar> with SingleTickerProviderStateMixin {
           child: Row(spacing: 10, children: [
             const AppMark(size: 32),
             const Expanded(child: Text('Ask Elis…', maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(fontSize: 15, color: C.muted))),
-            if (unread > 0)
-              Container(
-                constraints: const BoxConstraints(minWidth: 20),
-                height: 20,
-                padding: const EdgeInsets.symmetric(horizontal: 6),
-                alignment: Alignment.center,
-                decoration: BoxDecoration(color: C.unseen, borderRadius: BorderRadius.circular(10)),
-                child: Text('$unread', style: const TextStyle(fontSize: 11.5, fontWeight: FontWeight.w700, color: Colors.white)),
-              ),
+            if (unread > 0) UnreadBadge(unread),
           ]),
         ),
       ),

@@ -601,16 +601,7 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
                 ]),
               ),
               if (s.flagged) const Padding(padding: EdgeInsets.only(left: 10), child: Lucide(lucideFlag, size: 14, color: C.indigo)),
-              if (s.unseen > 0)
-                Container(
-                  margin: const EdgeInsets.only(left: 10),
-                  constraints: const BoxConstraints(minWidth: 20),
-                  height: 20,
-                  padding: const EdgeInsets.symmetric(horizontal: 5),
-                  alignment: Alignment.center,
-                  decoration: BoxDecoration(color: C.unseen, borderRadius: BorderRadius.circular(10)),
-                  child: Text('${s.unseen}', style: const TextStyle(fontSize: 11.5, fontWeight: FontWeight.w700, color: Colors.white)),
-                ),
+              if (s.unseen > 0) Padding(padding: const EdgeInsets.only(left: 10), child: UnreadBadge(s.unseen)),
               if (hiddenBlocked)
                 Semantics(
                   label: 'A hidden companion is blocked',

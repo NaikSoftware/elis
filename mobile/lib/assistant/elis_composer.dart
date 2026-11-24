@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:math';
 
 import 'package:flutter/material.dart';
@@ -113,7 +114,7 @@ class _ElisComposerState extends State<ElisComposer> {
   late final _field = _TagController((t) => tagTint(widget.model, t));
   final _focus = FocusNode();
   final _portal = OverlayPortalController(), _link = LayerLink(), _box = GlobalKey();
-  bool _sending = false;
+  bool _sending = false, _picking = false;
 
   @override
   void initState() {
@@ -132,6 +133,7 @@ class _ElisComposerState extends State<ElisComposer> {
     final text = _field.text.trim();
     setState(() => _sending = true);
     final error = await widget.model.askAssistant(text);
+    if (error == null) unawaited(widget.model.readAssistant()); // the user's own bubble shows before the next event
     if (!mounted) return;
     setState(() {
       _sending = false;
@@ -143,7 +145,9 @@ class _ElisComposerState extends State<ElisComposer> {
   void _insert(String tag) {
     final v = _field.value;
     final caret = v.selection.baseOffset;
-    final start = caret - tagQuery(v.text, caret)!.length - 1;
+    final query = tagQuery(v.text, caret);
+    if (query == null) return;
+    final start = caret - query.length - 1;
     final text = v.text.replaceRange(start, caret, '$tag ');
     _field.value = TextEditingValue(text: text, selection: TextSelection.collapsed(offset: start + tag.length + 1));
     _focus.requestFocus();
@@ -158,6 +162,8 @@ class _ElisComposerState extends State<ElisComposer> {
           final query = _focus.hasFocus && v.selection.isCollapsed ? tagQuery(v.text, v.selection.baseOffset) : null;
           final tags = query == null ? const <TagCandidate>[] : tagCandidates(query, widget.model.workspaces);
           final a = widget.model.assistant;
+          // as the session chat's: the reason shows once there is something to send
+          final offline = widget.model.state != LinkState.connected;
           return OverlayPortal(
             controller: _portal,
             overlayChildBuilder: (_) => _popup(tags),
@@ -167,7 +173,8 @@ class _ElisComposerState extends State<ElisComposer> {
               child: Composer(
                 controller: _field,
                 focus: _focus,
-                onSend: v.text.trim().isEmpty || _sending ? null : _send,
+                onSend: v.text.trim().isEmpty || _sending || offline ? null : _send,
+                reason: offline && v.text.trim().isNotEmpty ? 'Not connected' : null,
                 maxLines: 6,
                 autocorrect: true,
                 mono: false,
@@ -180,38 +187,52 @@ class _ElisComposerState extends State<ElisComposer> {
         },
       );
 
+  // the menu opens above the chip, which stays in view with its chevron turned up
+  Future<void> _pick(BuildContext chip, AssistantState a) async {
+    final box = chip.findRenderObject()! as RenderBox, overlay = Overlay.of(chip).context.findRenderObject()! as RenderBox;
+    final at = box.localToGlobal(Offset.zero, ancestor: overlay);
+    const pad = 8.0, header = 32.0, row = 48.0, gap = 8.0;
+    final height = 2 * pad + header + row * a.providers.length;
+    setState(() => _picking = true);
+    final name = await showMenu<String>(
+      context: context,
+      position: RelativeRect.fromLTRB(at.dx, at.dy - gap - height, overlay.size.width - at.dx - box.size.width, overlay.size.height - at.dy + gap),
+      menuPadding: const EdgeInsets.symmetric(vertical: pad),
+      items: [
+        const PopupMenuItem(enabled: false, height: header, child: Text('FOUND ON THIS SYSTEM', style: sectionLabel)),
+        for (final name in a.providers)
+          PopupMenuItem(
+            value: name,
+            height: row,
+            child: Row(children: [
+              AgentLogo(name, size: 20),
+              const SizedBox(width: 12),
+              Expanded(child: Text(agentNames[name] ?? name, style: const TextStyle(fontSize: 15))),
+              if (name == a.provider) const Icon(Icons.check, size: 20, color: C.accent),
+            ]),
+          ),
+      ],
+    );
+    if (!mounted) return;
+    setState(() => _picking = false);
+    if (name != null && name != widget.model.assistant?.provider) unawaited(reportOf(context, widget.model.setProvider(name)));
+  }
+
   Widget _provider(AssistantState a) {
     final p = a.provider;
     return Padding(
       padding: const EdgeInsets.only(bottom: 6),
       child: Row(children: [
-        PopupMenuButton<String>(
-          key: const Key('provider-chip'),
-          tooltip: '',
-          onSelected: (name) {
-            if (name != p) reportOf(context, widget.model.setProvider(name));
-          },
-          itemBuilder: (_) => [
-            const PopupMenuItem(enabled: false, height: 32, child: Text('FOUND ON THIS SYSTEM', style: sectionLabel)),
-            for (final name in a.providers)
-              PopupMenuItem(
-                value: name,
-                height: 48,
-                child: Row(children: [
-                  AgentLogo(name, size: 20),
-                  const SizedBox(width: 12),
-                  Expanded(child: Text(agentNames[name] ?? name, style: const TextStyle(fontSize: 15))),
-                  if (name == p) const Icon(Icons.check, size: 20, color: C.accent),
-                ]),
-              ),
-          ],
-          child: Chip(
+        Builder(
+          builder: (chip) => ActionChip(
+            key: const Key('provider-chip'),
             avatar: p == null ? null : AgentLogo(p, size: 16),
             label: Row(mainAxisSize: MainAxisSize.min, children: [
               Text(p == null ? 'Provider' : agentNames[p] ?? p, style: const TextStyle(fontSize: 12)),
-              const Icon(Icons.expand_more, size: 16, color: C.muted),
+              Icon(_picking ? Icons.expand_less : Icons.expand_more, size: 16, color: C.muted),
             ]),
             visualDensity: VisualDensity.compact,
+            onPressed: () => _pick(chip, a),
           ),
         ),
       ]),

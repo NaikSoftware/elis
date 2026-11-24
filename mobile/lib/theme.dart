@@ -126,6 +126,22 @@ ThemeData buildTheme() {
   );
 }
 
+// a session row's unseen count, and Ask Elis's unread one
+class UnreadBadge extends StatelessWidget {
+  const UnreadBadge(this.count, {super.key});
+  final int count;
+
+  @override
+  Widget build(BuildContext context) => Container(
+        constraints: const BoxConstraints(minWidth: 20),
+        height: 20,
+        padding: const EdgeInsets.symmetric(horizontal: 5),
+        alignment: Alignment.center,
+        decoration: BoxDecoration(color: C.unseen, borderRadius: BorderRadius.circular(10)),
+        child: Text('$count', style: const TextStyle(fontSize: 11.5, fontWeight: FontWeight.w700, color: Colors.white)),
+      );
+}
+
 // the app icon beside the app name, the same on the home and pairing screens
 class AppMark extends StatelessWidget {
   const AppMark({super.key, this.size = 38});

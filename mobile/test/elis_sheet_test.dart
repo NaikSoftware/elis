@@ -149,6 +149,26 @@ void main() {
     expect(find.byKey(const Key('tag-@side-filter')), findsNothing);
   });
 
+  testWidgets('a tag tapped after the caret left the query does nothing', (t) async {
+    await pump(t);
+    await t.enterText(find.byKey(const Key('composer')), 'ask @si');
+    await t.pump();
+    final c = t.widget<TextField>(find.byKey(const Key('composer'))).controller!;
+    c.selection = const TextSelection.collapsed(offset: 0); // the popup is still on screen until the next frame
+    await t.tap(find.byKey(const Key('tag-@side-filter')));
+    await t.pump();
+    expect(field(t), 'ask @si');
+  });
+
+  testWidgets('offline, the composer says why it cannot send', (t) async {
+    m.state = LinkState.connecting;
+    await pump(t);
+    await t.enterText(find.byKey(const Key('composer')), 'hello');
+    await t.pump();
+    expect(find.text('Not connected'), findsOneWidget);
+    expect(t.widget<FilledButton>(find.byKey(const Key('send'))).onPressed, isNull);
+  });
+
   testWidgets('field chips stay while the keyboard composes', (t) async {
     await pump(t);
     final c = t.widget<TextField>(find.byKey(const Key('composer'))).controller!;
@@ -170,6 +190,7 @@ void main() {
     await t.tap(find.byKey(const Key('send')));
     await t.pump();
     expect(m.calls.where((c) => c.$1 == 'assistant.ask').single.$2, {'text': 'ask @side-filter to push'});
+    expect(m.calls.map((c) => c.$1).skipWhile((c) => c != 'assistant.ask'), contains('assistant.read'));
     expect(field(t), '');
     await t.pump(const Duration(milliseconds: 200));
   });
@@ -194,6 +215,20 @@ void main() {
     await t.tap(find.text('Claude Code'));
     await t.pumpAndSettle();
     expect(m.calls.where((c) => c.$1 == 'assistant.provider').single.$2, {'provider': 'claude'});
+  });
+
+  testWidgets('the provider menu opens above its chip and turns the chevron up', (t) async {
+    await pump(t);
+    final chip = find.byKey(const Key('provider-chip'));
+    expect(find.descendant(of: chip, matching: find.byIcon(Icons.expand_more)), findsOneWidget);
+    await t.tap(chip);
+    await t.pumpAndSettle();
+    expect(t.getRect(find.byType(PopupMenuItem<String>).last).bottom, closeTo(t.getRect(chip).top - 16, 1)); // the menu's 8 px padding and 8 px gap
+    expect(t.getRect(find.text('FOUND ON THIS SYSTEM')).left, greaterThanOrEqualTo(t.getRect(chip).left));
+    expect(find.descendant(of: chip, matching: find.byIcon(Icons.expand_less)), findsOneWidget);
+    await t.tapAt(const Offset(700, 20));
+    await t.pumpAndSettle();
+    expect(find.descendant(of: chip, matching: find.byIcon(Icons.expand_more)), findsOneWidget);
   });
 
   testWidgets('shows the running line while Elis works', (t) async {
