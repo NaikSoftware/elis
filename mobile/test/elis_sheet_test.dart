@@ -223,7 +223,13 @@ void main() {
     final chip = find.byKey(const Key('provider-chip'));
     expect(find.descendant(of: chip, matching: find.byIcon(Icons.expand_more)), findsOneWidget);
     await t.tap(chip);
+    await t.pump();
+    await t.pump(const Duration(milliseconds: 100));
+    final opening = t.getRect(find.byKey(const Key('provider-menu')));
+    expect(opening.bottomLeft.dx, closeTo(t.getRect(chip).left, 1));
+    expect(opening.bottom, closeTo(t.getRect(chip).top - 8, 1));
     await t.pumpAndSettle();
+    expect(t.getRect(find.byKey(const Key('provider-menu'))).height, greaterThan(opening.height));
     expect(t.getRect(find.byType(PopupMenuItem<String>).last).bottom, closeTo(t.getRect(chip).top - 16, 1)); // the menu's 8 px padding and 8 px gap
     expect(t.getRect(find.text('FOUND ON THIS SYSTEM')).left, greaterThanOrEqualTo(t.getRect(chip).left));
     expect(find.descendant(of: chip, matching: find.byIcon(Icons.expand_less)), findsOneWidget);
