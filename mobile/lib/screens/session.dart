@@ -860,14 +860,14 @@ class _SessionScreenState extends State<SessionScreen> {
     return PreferredSize(preferredSize: const Size.fromHeight(23), child: Column(children: [line, const Divider()]));
   }
 
-  // the icon is the mode shown; a tap picks the other one
+  // the icon is the mode a tap switches to
   Widget _modeButton(Session s) {
     final canSwitch = chatAvailable(s, pane) || _inChat;
     final reason = ModePicks.tooOld.contains(s.id) ? _tooOld(s) : 'No Claude in this pane';
     return IconButton(
       key: const Key('modeButton'),
       tooltip: _inChat ? 'Chat — switch to Term' : canSwitch ? 'Term — switch to Chat' : 'Term — $reason',
-      icon: Icon(_inChat ? Icons.chat_bubble_outline : Icons.terminal),
+      icon: Icon(_inChat ? Icons.terminal : Icons.chat_bubble_outline),
       onPressed: canSwitch ? () => _pickMode(_inChat ? ViewMode.term : ViewMode.chat) : null,
     );
   }
