@@ -80,10 +80,11 @@ class _Up implements UploadChannel {
   _Up(this.file);
   final PickedFile file;
   final _done = Completer<String>();
+  final credits = StreamController<int>();
   String? cancelled;
 
   @override
-  Stream<int> get progress => const Stream.empty();
+  Stream<int> get progress => credits.stream;
   @override
   Future<String> get done => _done.future;
   @override
@@ -116,6 +117,7 @@ class _C {
   Checks checks = _proven;
   String? disabledBy;
   List<PickedFile> picks = const [_a, _b];
+  PickFiles? pickWith;
   final ups = <_Up>[];
   void Function(_Up u) onUpload = (u) => scheduleMicrotask(u.finish);
   bool uploads = true;
@@ -141,7 +143,7 @@ class _C {
                   disabledBy: disabledBy,
                   checks: checks,
                   session: 'S',
-                  pick: () async => picks,
+                  pick: pickWith ?? () async => picks,
                   upload: uploads ? _upload : null,
                   attachBlocked: attachBlocked),
             ]),
@@ -812,6 +814,38 @@ void main() {
       unawaited(c.state.sendField('hi'));
       await t.pump();
       expect(c.ups.length, 1);
+    });
+
+    testWidgets('anUploadingChipShowsTheCreditedShare', (t) async {
+      final c = _C(t, _g('idle-placeholder-45'))..onUpload = (_) {};
+      await c.pump();
+      await c.attach();
+      await c.startSend();
+      c.ups.single.credits
+        ..add(251658)
+        ..add(251658);
+      await t.pump();
+      expect(t.widget<LinearProgressIndicator>(find.descendant(of: c.chip('a.png'), matching: find.byType(LinearProgressIndicator))).value,
+          closeTo(.4, .001));
+      expect(find.descendant(of: c.chip('b.txt'), matching: find.byType(LinearProgressIndicator)), findsNothing);
+    });
+
+    testWidgets('sendWaitsForAPickInProgress', (t) async {
+      final picked = Completer<List<PickedFile>>();
+      final c = _C(t, _g('idle-placeholder-45'));
+      await c.pump();
+      await c.attach();
+      c.pickWith = () => picked.future;
+      await c.pump();
+      await c.attach();
+      await c.type('hi');
+      expect(c.sendEnabled, isFalse);
+      unawaited(c.state.sendField('hi'));
+      await t.pump();
+      expect(c.ups, isEmpty);
+      picked.complete(const []);
+      await t.pump();
+      expect(c.sendEnabled, isTrue);
     });
 
     testWidgets('anotherSendLeavesTheChipsAlone', (t) async {

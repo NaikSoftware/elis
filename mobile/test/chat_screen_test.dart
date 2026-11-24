@@ -323,8 +323,12 @@ void main() {
     await h.start();
     await h.opened();
     await _show(h, 'idle-placeholder-45');
+    IconButton attach() => t.widget<IconButton>(find.byKey(const Key('attach')));
     await t.tap(find.byKey(const Key('attach')));
+    AttachBlocks.tooOld['s1'] = 'Update Elis on the computer to attach files';
+    addTearDown(AttachBlocks.tooOld.clear);
     await t.pump();
+    expect((attach().onPressed, attach().tooltip), (null, 'Update Elis on the computer to attach files'));
     final first = h.r;
     await pauseResume(h, watch: false, paused: () async {
       expect(h.m.mux, isNull);
@@ -337,6 +341,7 @@ void main() {
     await h.opened();
     await _show(h, 'idle-placeholder-45');
     expect(find.byKey(const Key('attachment-a.png')), findsOneWidget);
+    expect((attach().onPressed != null, attach().tooltip), (true, 'Attach files'));
     await t.enterText(find.byKey(const Key('composer')), 'fix this');
     await t.pump();
     await t.tap(find.byKey(const Key('send')));

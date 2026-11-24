@@ -234,7 +234,7 @@ class ChatComposerState extends State<ChatComposer> {
   /// [text] with their paths. A failure keeps the text and the chips; uploaded chips keep their host path.
   Future<void> sendField(String text, {bool replace = false}) async {
     if (_chips.isEmpty) return send(text, replace: replace);
-    if (_uploading) return;
+    if (_uploading || _picking) return; // a pick in progress would add a chip with no host path
     if (_blocked(widget.screen()) case final why?) return _tell(why);
     final upload = widget.upload;
     if (upload == null) return _tell('Disconnected');
@@ -401,7 +401,7 @@ class ChatComposerState extends State<ChatComposer> {
                   : some && _offer == null && held == null
                       ? blocked
                       : null;
-          final canSend = some && blocked == null && !widget.gate.running && !_uploading;
+          final canSend = some && blocked == null && !widget.gate.running && !_uploading && !_picking;
           // the menu floats above the composer, over the list, so the bottom area's scroll never clips its first rows
           return OverlayPortal(
             controller: _menuPortal,
