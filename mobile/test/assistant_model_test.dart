@@ -14,7 +14,7 @@ class CallLog extends ElisModel {
   }
   final calls = <(String, Map<String, dynamic>?, bool)>[];
   Map<String, dynamic> tree = {};
-  Object? treeError;
+  Object? treeError, readError;
 
   Iterable<String> get assistantCalls => calls.map((c) => c.$1).where((c) => c.startsWith('assistant.'));
 
@@ -22,6 +22,7 @@ class CallLog extends ElisModel {
   Future<Map<String, dynamic>> call(String cmd, {String? target, Map<String, dynamic>? args, bool windowed = true}) async {
     calls.add((cmd, args, windowed));
     if (treeError case final e? when cmd == 'tree') throw e;
+    if (readError case final e? when cmd == 'assistant.read') throw e;
     return switch (cmd) {
       'window.list' => {'windows': []},
       'tree' => {'tree': tree},
@@ -73,6 +74,16 @@ void main() {
     ]);
     expect(m.assistantEntries.single.to, ['s1']);
     expect(m.assistantCalls, ['assistant.read', 'assistant.seen']);
+    m.dispose();
+  });
+
+  test('a failed read marks nothing seen', () async {
+    final m = CallLog()
+      ..assistantOpen = true
+      ..readError = TimeoutException('slow');
+    m.onEvent({'kind': 'assistant.message'});
+    await pumpEventQueue();
+    expect(m.assistantCalls, ['assistant.read']);
     m.dispose();
   });
 

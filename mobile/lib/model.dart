@@ -257,7 +257,7 @@ class ElisModel extends ChangeNotifier {
     seen = DateTime.now();
     Watch.check();
     start();
-    unawaited(rereadAssistant()); // a kept link's open sheet missed nothing it showed; a reconnect re-reads after its refresh
+    unawaited(rereadAssistant()); // the background read nothing for an open sheet; a reconnect re-reads after its refresh
   }
 
   void _background() {
@@ -369,15 +369,17 @@ class ElisModel extends ChangeNotifier {
     if (assistant?.running == true && !_disposed) scheduleRefresh(const Duration(seconds: 2));
   }
 
-  Future<void> readAssistant({int last = 100}) async {
+  /// Whether the transcript was read; a failure keeps the old one for the next event to retry.
+  Future<bool> readAssistant({int last = 100}) async {
     try {
       final r = await call('assistant.read', args: {'last': last}, windowed: false);
       assistantEntries = [for (final e in ((r['assistant'] as Map?)?['entries'] as List? ?? const [])) AssistantEntry.fromJson(e as Map)];
       if (!_disposed) notifyListeners();
+      return true;
     } on ElisError {
-      // the next event retries
+      return false;
     } on TimeoutException {
-      // the next event retries
+      return false;
     }
   }
 
@@ -388,8 +390,8 @@ class ElisModel extends ChangeNotifier {
   /// Re-reads the transcript and marks it seen, only while the sheet is on screen and the app in front.
   Future<void> rereadAssistant() async {
     if (!assistantOpen || background) return;
-    await readAssistant();
-    if (assistantOpen && !background) await markAssistantSeen();
+    // a failed read showed nothing new, so nothing is marked seen
+    if (await readAssistant() && assistantOpen && !background) await markAssistantSeen();
   }
 
   Future<void> markAssistantSeen() async {
