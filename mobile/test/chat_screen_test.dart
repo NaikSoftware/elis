@@ -103,10 +103,10 @@ void main() {
       await h.start();
       await h.opened();
       expect(_claims(h), isEmpty);
-      expect(_modeIcon(t), (Icons.chat_bubble_outline, 'Chat — switch to Term'));
+      expect(_modeIcon(t), (Icons.terminal, 'Chat — switch to Term'));
       await _tapKey(t, 'modeButton');
       expect(_chat(), isFalse);
-      expect(_modeIcon(t), (Icons.terminal, 'Term — switch to Chat'));
+      expect(_modeIcon(t), (Icons.chat_bubble_outline, 'Term — switch to Chat'));
       expect(find.byKey(const Key('term')), findsOneWidget);
       expect(_claims(h), hasLength(1)); // Term's claim on OPENED, on the next frame
       await _tapKey(t, 'modeButton');
@@ -131,7 +131,7 @@ void main() {
     final h = Harness(t, treeOf());
     await h.start();
     expect(t.widget<IconButton>(find.byKey(const Key('modeButton'))).onPressed, isNull);
-    expect(_modeIcon(t), (Icons.terminal, 'Term — No Claude in this pane'));
+    expect(_modeIcon(t), (Icons.chat_bubble_outline, 'Term — No Claude in this pane'));
     expect(_chat(), isFalse);
     expect(h.r.transcriptArgs, isEmpty);
     await h.stop();
