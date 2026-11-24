@@ -50,3 +50,5 @@ app.*.map.json
 # libvtshim, built by tool/build-vtshim.sh (build/vtshim/ falls under /build/)
 /android/app/src/main/jniLibs/
 /.vtshim-build-stamp
+# a failed golden test writes its diffs here
+/test/failures/
