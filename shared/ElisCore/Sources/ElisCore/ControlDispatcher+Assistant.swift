@@ -41,6 +41,7 @@ extension ControlDispatcher {
             case let .sent(entry): actions.assistantSent(entry)
             case let .providerChanged(provider): actions.assistantProviderChanged(provider)
             case .seen: actions.assistantSeen()
+            case .cleared: actions.assistantCleared()
             case let .show(window):
                 let response = actions.showAssistant(window: window)
                 if response.ok { chat.markSeen() }

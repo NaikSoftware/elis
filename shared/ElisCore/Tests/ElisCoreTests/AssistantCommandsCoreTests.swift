@@ -93,7 +93,14 @@ struct AssistantCommandsCoreTests {
         #expect(response.ok && effects == [.seen] && chat.unread == 0)
     }
 
-    @Test(arguments: [Command.assistantAsk, .assistantSend, .assistantReply, .assistantRead, .assistantSeen])
+    @Test func clearEmptiesTheChatAndRepliesWithTheClearedEffect() throws {
+        let chat = AssistantChat()
+        chat.append(.user, text: "hi", now: 0)
+        let (response, effects) = try reply(run(.assistantClear, ControlArgs(), chat: chat))
+        #expect(response.ok && effects == [.cleared] && chat.entries(last: nil).isEmpty)
+    }
+
+    @Test(arguments: [Command.assistantAsk, .assistantSend, .assistantReply, .assistantRead, .assistantSeen, .assistantClear])
     func nilPeersRefuse(cmd: Command) throws {
         let (response, effects) = try reply(run(cmd, target: "shell1-uuid", ControlArgs(text: "hi", recipients: ["zsh"]),
                                                 chat: AssistantChat(), peers: .some(nil)))

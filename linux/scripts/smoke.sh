@@ -377,6 +377,8 @@ grep -q 'assistant.message kind=user from=- hello' "$ELIS_STATE_DIR/assistant-ev
 grep -q 'assistant.message kind=assistant from=- ' "$ELIS_STATE_DIR/assistant-events.log" || fail "assistant.message assistant event"
 grep -q "assistant.message kind=reply from=$ahandle done" "$ELIS_STATE_DIR/assistant-events.log" || fail "assistant.message reply event"
 grep -q 'assistant.message kind=sent from=- hi from assistant' "$ELIS_STATE_DIR/assistant-events.log" || fail "assistant.message sent event"
+ctl assistant clear | grep -qx ok || fail "assistant clear"
+[ -z "$(ctl assistant read)" ] || fail "assistant clear read-back"
 ctl session close --target "$asst" >/dev/null
 # the phone relay: TLS pinned by the link's fingerprint, the token first, then elisctl requests answered under their id
 port=$(python3 -c 'import socket; s = socket.socket(); s.bind(("127.0.0.1", 0)); print(s.getsockname()[1])')

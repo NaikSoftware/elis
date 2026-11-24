@@ -96,6 +96,23 @@ import Testing
         #expect(again.provider == .codex)
     }
 
+    @Test func clearEmptiesTheChatAndForgetsConversationsButKeepsTheProvider() {
+        let (dir, file) = tempFile()
+        defer { try? FileManager.default.removeItem(at: dir) }
+        let chat = AssistantChat(file: file)
+        chat.provider = .codex
+        chat.resume[.codex] = "x-1"
+        chat.append(.sent, text: "go", to: ["s1"], now: 1)
+        chat.append(.reply, text: "done", from: "s1", now: 2)
+        chat.inputQueued()
+        chat.clear()
+        #expect(chat.entries(last: nil).isEmpty && chat.marks.isEmpty && chat.unread == 0 && !chat.running && chat.resume.isEmpty)
+        let reopened = AssistantChat(file: file)
+        #expect(reopened.entries(last: nil).isEmpty && reopened.resume.isEmpty && reopened.provider == .codex)
+        let after = chat.append(.user, text: "again", now: 3)
+        #expect(AssistantChat(file: file).entries(last: nil) == [after])
+    }
+
     @Test func resumeIDsPersistPerProvider() throws {
         let (dir, file) = tempFile()
         defer { try? FileManager.default.removeItem(at: dir) }

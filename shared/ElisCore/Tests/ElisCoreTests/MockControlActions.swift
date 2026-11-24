@@ -1134,6 +1134,9 @@ final class MockControlActions: ControlActions {
     var seenRepaints = 0
     func assistantSeen() { seenRepaints += 1 }
 
+    var clears = 0
+    func assistantCleared() { clears += 1 }
+
     func showAssistant(window: String?) -> ControlResponse {
         showWindows.append(window)
         return nextShowAssistantResponse
