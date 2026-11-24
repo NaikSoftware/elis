@@ -66,12 +66,12 @@ Widget _row(BuildContext c, ChatRow r, bool gone, String? Function(String)? prom
   final i = r.item!;
   return switch (i.kind) {
     'user' => _bubble(c, i),
-    'text' => _menu(c, i.text ?? '', chatMarkdown(i.text ?? '')),
+    'text' => copyMenu(c, i.text ?? '', chatMarkdown(i.text ?? '')),
     'tool' => _toolRow(c, i, stopped: r.interruptedAfter || gone, promptMark: promptMark, openImage: openImage),
     'compact' => _divider('Conversation compacted', r.key, r.summary?.text),
     'compactSummary' => _divider('Conversation compacted', r.key, i.text ?? ''),
     'interrupted' => _divider('Interrupted', r.key, null),
-    'error' => _menu(c, i.text ?? '', Text(i.text ?? '', style: const TextStyle(color: C.danger))),
+    'error' => copyMenu(c, i.text ?? '', Text(i.text ?? '', style: const TextStyle(color: C.danger))),
     'hook' => _notice(i.text, warning: true),
     'notice' => _notice(i.text, warning: i.raw['level'] == 'warning'),
     'message' => _message(i),
@@ -86,8 +86,8 @@ Widget _row(BuildContext c, ChatRow r, bool gone, String? Function(String)? prom
         if (i.raw['args'] case final String a when a.isNotEmpty)
           Expanded(child: Text(a, style: _toolStyle, maxLines: 1, overflow: TextOverflow.ellipsis)),
       ]),
-    'commandOutput' => _menu(c, i.text ?? '', _monoBlock(i.text ?? '')),
-    'bash' => _menu(c, i.text ?? '', Text('! ${i.text ?? ''}', style: _monoStyle)),
+    'commandOutput' => copyMenu(c, i.text ?? '', _monoBlock(i.text ?? '')),
+    'bash' => copyMenu(c, i.text ?? '', Text('! ${i.text ?? ''}', style: _monoStyle)),
     'image' => _image(c, i),
     'oversized' => _placeholder('Record too large to show · ${byteSize(i.bytes ?? 0)}'),
     _ => Text(i.text ?? i.name ?? i.kind, style: const TextStyle(color: C.muted)),
@@ -366,7 +366,7 @@ Widget userBubble(BuildContext c, String text, {Key? key, Widget? child}) => Ali
       alignment: Alignment.centerRight,
       child: Padding(
         padding: const EdgeInsets.only(left: 48),
-        child: _menu(
+        child: copyMenu(
           c,
           text,
           Container(
@@ -380,7 +380,7 @@ Widget userBubble(BuildContext c, String text, {Key? key, Widget? child}) => Ali
     );
 
 // `selectable: true` fights the list's scroll, so text leaves through the long-press menu
-Widget _menu(BuildContext c, String text, Widget child) => GestureDetector(behavior: HitTestBehavior.opaque, onLongPress: () => _actions(c, text), child: child);
+Widget copyMenu(BuildContext c, String text, Widget child) => GestureDetector(behavior: HitTestBehavior.opaque, onLongPress: () => _actions(c, text), child: child);
 
 void _actions(BuildContext c, String text) {
   final code = fencedCode(text);

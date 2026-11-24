@@ -2,7 +2,6 @@ import 'dart:async';
 import 'dart:math';
 
 import 'package:flutter/material.dart';
-import 'package:flutter/rendering.dart';
 
 import '../model.dart';
 import '../terminal/vt.dart';
@@ -13,6 +12,7 @@ import 'claude_screen.dart';
 import 'feed.dart';
 import 'grid.dart';
 import 'items.dart';
+import 'keep_scroll.dart';
 import 'panel_sheet.dart';
 import 'prompt_dialog.dart';
 import 'prompt_ledger.dart';
@@ -163,7 +163,7 @@ class ChatView extends StatefulWidget {
 
 class _ChatViewState extends State<ChatView> {
   static const _bottomSlack = 24.0;
-  late final _scroll = _KeepController(_keepShift);
+  late final _scroll = KeepController(_keepShift);
   (RenderObject, double)? _keep; // the read row and its content offset before the rows changed
   List<ChatRow> _rows = const [];
   int _items = 0; // feed items behind [_rows]: an earlier page can join the oldest run and add no row
@@ -290,16 +290,6 @@ class _ChatViewState extends State<ChatView> {
     return box != null && box.attached && box.hasSize ? box.localToGlobal(Offset.zero).dy : null;
   }
 
-  // a row's place in the list's content, so the user's own scrolling does not count as a shift; safe inside layout,
-  // where a dropped row's element is already inactive but its render object reads detached
-  static double? _offset(RenderObject? row) {
-    var o = row;
-    while (o != null && o.parentData is! SliverMultiBoxAdaptorParentData) {
-      o = o.parent;
-    }
-    return o != null && o.attached ? (o.parentData as SliverMultiBoxAdaptorParentData).layoutOffset : null;
-  }
-
   Rect? get _viewport {
     if (!_scroll.hasClients) return null;
     final box = _scroll.position.context.notificationContext?.findRenderObject() as RenderBox?;
@@ -329,7 +319,7 @@ class _ChatViewState extends State<ChatView> {
     // since a growing tool run is the newest and anchoring it would push every row above it
     final read = _visible.fold<(int, String)?>(null, (m, v) => m == null || v.$1 > m.$1 ? v : m);
     final anchor = _away ? _built[read?.$2]?.findRenderObject() : null;
-    final at = _offset(anchor);
+    final at = listOffset(anchor);
     final switched = feed.switches != _switches;
     final grew = feed.items.length != _items;
     _items = feed.items.length;
@@ -356,7 +346,7 @@ class _ChatViewState extends State<ChatView> {
   double _keepShift() {
     final k = _keep;
     _keep = null;
-    final now = k == null ? null : _offset(k.$1);
+    final now = k == null ? null : listOffset(k.$1);
     return now == null ? 0 : now - k!.$2;
   }
 
@@ -698,31 +688,5 @@ class _TrackedState extends State<_Tracked> {
   void dispose() {
     widget.onGone(context);
     super.dispose();
-  }
-}
-
-/// Applies [shift] when the list's content settles in a layout pass, before that frame paints.
-class _KeepController extends ScrollController {
-  _KeepController(this.shift);
-
-  final double Function() shift;
-
-  @override
-  ScrollPosition createScrollPosition(ScrollPhysics physics, ScrollContext context, ScrollPosition? oldPosition) =>
-      _KeepPosition(shift, physics: physics, context: context, oldPosition: oldPosition);
-}
-
-class _KeepPosition extends ScrollPositionWithSingleContext {
-  _KeepPosition(this.shift, {required super.physics, required super.context, super.oldPosition});
-
-  final double Function() shift;
-
-  @override
-  bool applyContentDimensions(double minScrollExtent, double maxScrollExtent) {
-    final by = shift();
-    if (by == 0) return super.applyContentDimensions(minScrollExtent, maxScrollExtent);
-    // correctBy keeps a drag or fling going, which a jump would end; false lays the viewport out again
-    correctBy(by);
-    return false;
   }
 }

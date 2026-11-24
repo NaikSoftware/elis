@@ -27,6 +27,8 @@ class _Model extends ElisModel {
   final calls = <(String, Map<String, dynamic>?)>[];
   String? fail;
 
+  void changed() => notifyListeners(); // ignore: invalid_use_of_protected_member, invalid_use_of_visible_for_testing_member
+
   @override
   Future<Map<String, dynamic>> call(String cmd, {String? target, Map<String, dynamic>? args, bool windowed = true}) async {
     calls.add((cmd, args));
@@ -75,20 +77,66 @@ void main() {
     expect(opened.single.id, 's1');
   });
 
-  testWidgets('reply from a closed session does nothing', (t) async {
-    m.assistantEntries = [_e('reply', 'old news', from: 'gone')];
+  testWidgets('a reply from a session the phone cannot see names its id and opens nothing', (t) async {
+    m.assistantEntries = [_e('reply', 'old news', from: '0123456789abcdef')];
     await pump(t);
+    expect(find.text('FROM'), findsOneWidget);
+    expect(find.text('@01234567'), findsOneWidget);
+    expect(find.descendant(of: find.ancestor(of: find.text('FROM'), matching: find.byType(Row)), matching: find.byIcon(Icons.arrow_forward)), findsNothing);
     await t.tap(find.text('old news'));
     expect(opened, isEmpty);
-    expect(find.text('FROM'), findsNothing);
   });
 
-  testWidgets('sent card rows open their sessions', (t) async {
+  testWidgets('sent card rows open their sessions; an unseen one only names its id', (t) async {
     m.assistantEntries = [_e('sent', 'push it', to: ['gone', 's2'])];
     await pump(t);
-    expect(find.byKey(const Key('to-gone')), findsNothing);
+    expect(find.descendant(of: find.byKey(const Key('to-gone')), matching: find.text('@gone')), findsOneWidget);
+    expect(find.descendant(of: find.byKey(const Key('to-gone')), matching: find.byIcon(Icons.arrow_forward)), findsNothing);
+    await t.tap(find.byKey(const Key('to-gone')));
+    expect(opened, isEmpty);
     await t.tap(find.text('Pair link'));
     expect(opened.single.id, 's2');
+  });
+
+  testWidgets('assistant text renders Markdown', (t) async {
+    m.assistantEntries = [_e('assistant', 'Pushed **two** branches.')];
+    await pump(t);
+    expect(find.textContaining('**', findRichText: true), findsNothing);
+    expect(find.textContaining('two', findRichText: true), findsOneWidget);
+  });
+
+  testWidgets('assistant and reply text copy on a long press', (t) async {
+    m.assistantEntries = [_e('assistant', 'Sent to 2 sessions.'), _e('reply', '4 files changed.', from: 's1')];
+    await pump(t);
+    for (final e in m.assistantEntries) {
+      await t.longPress(find.textContaining(e.text, findRichText: true));
+      await t.pumpAndSettle();
+      expect(find.text('Copy'), findsOneWidget, reason: e.kind);
+      await t.tapAt(const Offset(10, 10));
+      await t.pumpAndSettle();
+    }
+  });
+
+  testWidgets('scrolled up, a new entry keeps the cards on screen in place', (t) async {
+    m.assistantEntries = [for (var i = 0; i < 30; i++) _e('assistant', 'line $i')];
+    await pump(t);
+    await t.drag(find.byType(ListView), const Offset(0, 300));
+    await t.pumpAndSettle();
+    final card = find.textContaining('line 20', findRichText: true);
+    final before = t.getRect(card);
+    m.assistantEntries = [...m.assistantEntries, _e('assistant', 'line 30')];
+    m.changed();
+    await t.pump();
+    expect(t.getRect(card), before);
+  });
+
+  testWidgets('at the bottom, a new entry shows', (t) async {
+    m.assistantEntries = [for (var i = 0; i < 30; i++) _e('assistant', 'line $i')];
+    await pump(t);
+    m.assistantEntries = [...m.assistantEntries, _e('assistant', 'line 30')];
+    m.changed();
+    await t.pump();
+    expect(find.textContaining('line 30', findRichText: true).hitTestable(), findsOneWidget);
   });
 
   testWidgets('@ popup inserts the tag', (t) async {
