@@ -284,14 +284,16 @@ class ChatComposerState extends State<ChatComposer> {
                   reason: reason,
                   enabled: held == null,
                   accessory: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
-                    ModeChip(
-                        screen: s,
-                        meta: widget.feed.meta,
-                        gate: widget.gate,
-                        remote: widget.remote,
-                        server: widget.server,
-                        disabledBy: widget.disabledBy,
-                        checks: widget.checks),
+                    // Claude Code's mode cycle; agy's modes differ
+                    if (s?.agy != true)
+                      ModeChip(
+                          screen: s,
+                          meta: widget.feed.meta,
+                          gate: widget.gate,
+                          remote: widget.remote,
+                          server: widget.server,
+                          disabledBy: widget.disabledBy,
+                          checks: widget.checks),
                     if (_offer != null) _offerRow(),
                     if (held != null)
                       Row(key: const Key('composerHeld'), children: [
