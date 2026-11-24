@@ -238,6 +238,7 @@ final class ServerHarness {
                                 events: events, overlayJobs: OverlayJobs(now: { jobClock }))
         actions.streams.presentationHelloDeadline = 60
         actions.recentClosed = recentClosed
+        actions.uploadDirectory = URL(fileURLWithPath: scratch.state)
         actions.processes = processes
         actions.restartWaits = (program: .milliseconds(200), shell: .seconds(5), poll: .milliseconds(10))
         let observer = PaneObserver(store: store, panes: panes, cwd: { _ in nil })

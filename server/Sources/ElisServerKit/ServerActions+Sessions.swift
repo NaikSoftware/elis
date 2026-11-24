@@ -289,6 +289,23 @@ extension ServerActions {
         }
     }
 
+    public func uploadDestination(_ target: String?, window: String?, name: String, size _: Int) -> ControlResponse {
+        if let refusal = windowRefusal(window) { return refusal }
+        guard let uploadDirectory else { return ControlResponse(ok: false, error: "uploads are not available") }
+        switch resolveSession(target) {
+        case .failure(let refusal): return refusal.response
+        case .success(let session): return UploadStorage.answer(for: session, stateDir: uploadDirectory, name: name, now: Date())
+        }
+    }
+
+    /// sweepUploads drops the upload folders of sessions that are neither listed nor reopenable from Recent Closed.
+    func sweepUploads(now: Date = Date()) {
+        guard let uploadDirectory else { return }
+        let live = store.workspaces.flatMap { $0.sessions.map(\.id) }
+        let recent = (recentClosed?.load() ?? []).flatMap(\.restoredSessionIDs)
+        UploadStorage.sweep(stateDir: uploadDirectory, keep: Set((live + recent).map(\.uuidString)), now: now)
+    }
+
     // MARK: - Resolution
 
     func withSession(_ target: String?, window: String?, _ body: (Session) -> ControlResponse) -> ControlResponse {

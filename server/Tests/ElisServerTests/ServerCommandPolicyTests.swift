@@ -17,6 +17,10 @@ struct ServerCommandPolicyTests {
         #expect(ServerCommandPolicy.refusal(.sessionTranscript) == nil)
     }
 
+    @Test func uploadIsServed() {
+        #expect(ServerCommandPolicy.refusal(.sessionUpload) == nil)
+    }
+
     @Test func aWindowCommandIsRefusedWithTheWindowReason() {
         #expect(ServerCommandPolicy.refusal(.windowNew) == HeadlessCommandPolicy.physicalWindowRefusal(.windowNew))
     }
