@@ -34,10 +34,11 @@ import 'composer.dart';
 import 'prompt.dart';
 
 class SessionScreen extends StatefulWidget {
-  const SessionScreen({super.key, required this.model, required this.sessionId, @visibleForTesting this.vt = openVt, @visibleForTesting this.onKeyboard,
+  const SessionScreen({super.key, required this.model, required this.sessionId, this.startingAgent, @visibleForTesting this.vt = openVt, @visibleForTesting this.onKeyboard,
       @visibleForTesting this.pages = true, @visibleForTesting this.pageWebView});
   final ElisModel model;
   final String sessionId;
+  final String? startingAgent; // chat agent just launched by NewSessionSheet, before the host sampler sees it
   final Vt Function(int cols, int rows) vt;
   final VoidCallback? onKeyboard; // told each time a tap asks for the soft keyboard
   final bool pages; // off, a test's channel ids stay as they were before pages
@@ -108,6 +109,8 @@ class _SessionScreenState extends State<SessionScreen> {
   // latched, not shownMode on each build: Chat stays when Claude exits, until the user leaves it
   bool _inChat = false;
   bool _picked = false; // the opening pane and mode, picked once the session is known
+  bool _starting = false; // a claude/agy session launched from NewSessionSheet before the host sampler sees it
+  Timer? _startTimer;
   TranscriptFeed? _feed;
   PromptLedger? _ledger;
   final _grids = ValueNotifier(0); // bumped whenever the grid Chat reads may have changed
@@ -159,9 +162,35 @@ class _SessionScreenState extends State<SessionScreen> {
     if (_picked || s == null) return;
     _picked = true;
     _agentSessionId = s.agentSessionId;
-    if (shownMode(s, s.agentPane) != ViewMode.chat) return;
-    pane = s.agentPane;
-    _inChat = true;
+    if (shownMode(s, s.agentPane) == ViewMode.chat) {
+      pane = s.agentPane;
+      _inChat = true;
+      return;
+    }
+    if (widget.startingAgent case final a?
+        when chatAgents.contains(a) && ModePicks.of(s.id) != ViewMode.term && !ModePicks.tooOld.contains(s.id)) {
+      _chatAgent = _labelOf(a) ?? _chatAgent;
+      _inChat = true;
+      _starting = true;
+      _startTimer = Timer(const Duration(seconds: 15), _onStartTimeout);
+    }
+  }
+
+  void _clearStarting() {
+    _starting = false;
+    _startTimer?.cancel();
+    _startTimer = null;
+  }
+
+  void _onStartTimeout() {
+    if (!mounted || !_starting) return;
+    _clearStarting();
+    if (s case final s? when !chatAgents.contains(s.liveAgent)) {
+      _syncMode(); // the agent never started: show Term so the user sees what happened
+    } else {
+      _syncFeed();
+      setState(() {});
+    }
   }
 
   TranscriptFeed get _chatFeed => _feed ??= TranscriptFeed(
@@ -174,7 +203,7 @@ class _SessionScreenState extends State<SessionScreen> {
 
   void _syncFeed() {
     if (!mounted) return;
-    if (_inChat && _foreground) return _chatFeed.start();
+    if (_inChat && _foreground && (s == null || chatAvailable(s!, pane))) return _chatFeed.start();
     _feed?.stop();
   }
 
@@ -186,13 +215,14 @@ class _SessionScreenState extends State<SessionScreen> {
 
   String _tooOld(Session s) => 'Update Elis on ${s.remoteHost.isEmpty ? 'the computer' : s.remoteHost}';
 
-  bool _exited(Session s) => !chatAgents.contains(s.liveAgent);
+  bool _exited(Session s) => !_starting && !chatAgents.contains(s.liveAgent);
 
   // the agent Chat last showed, named in its messages after it exits
   String _chatAgent = 'Claude';
 
-  String _agentName(Session s) =>
-      _chatAgent = switch (s.liveAgent) { 'claude' => 'Claude', 'antigravity' => 'Antigravity', _ => _chatAgent };
+  static String? _labelOf(String agent) => switch (agent) { 'claude' => 'Claude', 'antigravity' => 'Antigravity', _ => null };
+
+  String _agentName(Session s) => _chatAgent = _labelOf(s.liveAgent) ?? _chatAgent;
 
   // a Live pane that showed its terminal this visit and has no running one now
   bool get _termLost =>
@@ -216,6 +246,7 @@ class _SessionScreenState extends State<SessionScreen> {
 
   void _setMode(bool chat) {
     if (chat == _inChat) return;
+    if (!chat) _clearStarting();
     setState(() => _inChat = chat);
     _syncFeed();
     if (chat) return;
@@ -260,6 +291,7 @@ class _SessionScreenState extends State<SessionScreen> {
     poll?.cancel();
     _leadResize?.cancel();
     _fitRetry?.cancel();
+    _startTimer?.cancel();
     term?.removeListener(_onTerm);
     term?.close();
     for (final t in _closedRecently.values) {
@@ -290,12 +322,16 @@ class _SessionScreenState extends State<SessionScreen> {
       return;
     }
     _pickStart();
+    if (pane == 'right' && s?.hasSplit != true) pane = 'left';
+    if (s case final s?) {
+      if (_starting && chatAvailable(s, pane)) _clearStarting();
+      if (!_inChat && shownMode(s, pane) == ViewMode.chat) _inChat = true;
+    }
     _syncFeed(); // a session that loaded after initState may open in Chat
     if (s?.agentSessionId != _agentSessionId) {
       _agentSessionId = s?.agentSessionId;
       _feed?.pollNow();
     }
-    if (pane == 'right' && s?.hasSplit != true) pane = 'left';
     _syncTerm(); // a reconnect brings a new mux; a pane can stop being Live
     setState(() {});
     _syncFit(); // a reconnect cleared the fits the computer gave back

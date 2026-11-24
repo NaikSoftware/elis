@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../chat/mode.dart';
 import '../model.dart';
 import '../theme.dart';
 import 'actions.dart';
@@ -71,7 +72,9 @@ class _NewSessionSheetState extends State<NewSessionSheet> {
       Navigator.pop(context);
       final id = r['id'] as String?;
       if (id != null && widget.host.mounted) {
-        Navigator.of(widget.host).push(MaterialPageRoute(builder: (_) => SessionScreen(model: widget.model, sessionId: id)));
+        Navigator.of(widget.host).push(MaterialPageRoute(
+            builder: (_) => SessionScreen(
+                model: widget.model, sessionId: id, startingAgent: chatAgents.contains(launcher) ? launcher : null)));
       }
     } catch (e) {
       setState(() => (busy = false, error = '$e'));
