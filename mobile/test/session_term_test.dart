@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
+import 'package:elis_mobile/chat/mode.dart';
 import 'package:elis_mobile/client.dart';
 import 'package:elis_mobile/link/decoder.dart';
 import 'package:elis_mobile/link/frame.dart';
@@ -46,6 +47,7 @@ class Relay {
   final held = <String, List<List<int>>>{}; // answers kept back until the test sends them
   Map<String, Object> transcript = {'transcript': 't1', 'size': 0, 'start': 0, 'next': 0, 'items': <Object>[]}; // what session.transcript answers
   final transcriptArgs = <Map>[];
+  String? newSessionId; // what session.new answers as `id`
   final errors = <String, String>{}; // commands answered with this error text
   final events = <Map<String, Object>>[]; // the next events.read's items
   int eventsServed = 0; // events.read replies that carried items
@@ -102,6 +104,7 @@ class Relay {
           },
         'session.transcript' => transcript,
         'session.text' => {'text': text, 'columns': (grids.isEmpty ? null : grids.last['columns'] as int?) ?? 40}, // the fit's width
+        'session.new' when newSessionId != null => {'id': newSessionId!},
         _ => <String, Object>{},
       };
       send(frame(LinkKind.data, 0, answer(r['id'], result)));
@@ -250,7 +253,7 @@ class Harness {
 
   final webs = <FakeWeb>[]; // one per page sheet, with [start]'s pages
 
-  Future<void> start({Vt Function(int, int)? vt, bool pages = false}) async {
+  Future<void> start({Vt Function(int, int)? vt, bool pages = false, String? startingAgent}) async {
     var n = 0;
     m = ElisModel(pairing, open: (p, {preferBluetooth = false}) {
       if (n == relays.length) relays.add(Relay(relays.first.tree));
@@ -261,13 +264,14 @@ class Harness {
     expect(m.mux, isNotNull);
     expect(m.loaded, isTrue);
     unawaited(nav.currentState!.push(MaterialPageRoute<void>(
-        builder: (_) => screen(vt: vt, pages: pages))));
+        builder: (_) => screen(vt: vt, pages: pages, startingAgent: startingAgent))));
     await t.pumpAndSettle(const Duration(milliseconds: 10));
   }
 
-  SessionScreen screen({Vt Function(int, int)? vt, bool pages = false}) => SessionScreen(
+  SessionScreen screen({Vt Function(int, int)? vt, bool pages = false, String? startingAgent}) => SessionScreen(
       model: m,
       sessionId: 's1',
+      startingAgent: startingAgent,
       vt: vt ?? (c, r) => FakeVt(c, r)..also(vts.add),
       onKeyboard: () => keyboards++,
       pages: pages,
@@ -570,6 +574,8 @@ void main() {
   });
 
   testWidgets('agentOnMainScreenShowsTheTerminal', (t) async {
+    ModePicks.pick('s1', ViewMode.term);
+    addTearDown(() => ModePicks.pick('s1', null));
     final h = Harness(t, treeOf());
     await h.start();
     await h.opened();

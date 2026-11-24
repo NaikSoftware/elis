@@ -10,6 +10,7 @@ import 'package:elis_mobile/chat/write_gate.dart';
 import 'package:elis_mobile/link/frame.dart';
 import 'package:elis_mobile/model.dart';
 import 'package:elis_mobile/notice.dart';
+import 'package:elis_mobile/screens/new_session.dart';
 import 'package:elis_mobile/screens/session.dart';
 import 'package:elis_mobile/terminal/vt.dart';
 import 'package:flutter/material.dart';
@@ -141,6 +142,110 @@ void main() {
     expect(h.r.transcriptArgs, isEmpty);
     await h.stop();
   });
+
+  for (final (name, session) in [('Claude', _claude), ('Agy', {'agent': 'antigravity'})]) {
+    testWidgets('agentStartingLaterSwitchesToChat$name', (t) async {
+      final h = Harness(t, treeOf());
+      await h.start();
+      expect(_chat(), isFalse);
+      await h.retree(treeOf(session: session));
+      await t.pump(const Duration(milliseconds: 100));
+      expect(_chat(), isTrue);
+      expect(h.r.transcriptArgs, isNotEmpty);
+      await h.stop();
+    });
+  }
+
+  testWidgets('manualTermPickStaysInTermWhenAgentStarts', (t) async {
+    ModePicks.pick('s1', ViewMode.term);
+    final h = Harness(t, treeOf());
+    await h.start();
+    expect(_chat(), isFalse);
+    await h.retree(treeOf(session: _claude));
+    await t.pump(const Duration(milliseconds: 100));
+    expect(_chat(), isFalse);
+    expect(h.r.transcriptArgs, isEmpty);
+    await h.stop();
+  });
+
+  for (final (agent, label, readySession) in [
+    ('claude', 'Claude', _claude),
+    ('antigravity', 'Antigravity', {'agent': 'antigravity'}),
+  ]) {
+    testWidgets('startingAgentOpensInChatImmediately$label', (t) async {
+      final h = Harness(t, treeOf());
+      h.r.errors['session.transcript'] = 'transcript not found';
+      await h.start(startingAgent: agent);
+      await h.opened();
+      expect(_chat(), isTrue);
+      expect(_view(t).exited, isFalse);
+      expect(_view(t).agent, label);
+      expect(find.byKey(const Key('chatSkeleton')), findsOneWidget);
+      expect(find.byKey(const Key('chatExited')), findsNothing);
+      expect(find.byKey(const Key('chatUnreadable')), findsNothing);
+      expect(h.r.transcriptArgs, isEmpty); // waits until the host sampler sees the agent
+      expect(_claims(h), isEmpty); // never claims or resizes while starting
+      expect(h.r.grids, isEmpty);
+      await h.retree(treeOf(session: readySession));
+      await t.pump(const Duration(milliseconds: 100));
+      expect(_chat(), isTrue);
+      expect(_view(t).exited, isFalse);
+      expect(h.r.transcriptArgs, isNotEmpty);
+      expect(find.text('$label is ready'), findsOneWidget);
+      await h.stop();
+    });
+  }
+
+  testWidgets('startingAgentFallsBackToTermOnTimeout', (t) async {
+    final h = Harness(t, treeOf());
+    await h.start(startingAgent: 'claude');
+    expect(_chat(), isTrue);
+    await t.pump(const Duration(seconds: 15));
+    await t.pump();
+    expect(_chat(), isFalse);
+    // once the agent eventually starts in Auto mode, it still switches to Chat
+    await h.retree(treeOf(session: _claude));
+    await t.pump(const Duration(milliseconds: 100));
+    expect(_chat(), isTrue);
+    await h.stop();
+  });
+
+  testWidgets('startingAgentCanSwitchToTermManually', (t) async {
+    final h = Harness(t, treeOf());
+    await h.start(startingAgent: 'antigravity');
+    expect(_chat(), isTrue);
+    await _tapKey(t, 'modeButton');
+    expect(_chat(), isFalse);
+    expect(ModePicks.of('s1'), ViewMode.term);
+    await h.retree(treeOf(session: {'agent': 'antigravity'}));
+    await t.pump(const Duration(milliseconds: 100));
+    expect(_chat(), isFalse);
+    await h.stop();
+  });
+
+  for (final (title, expectChat) in [('Claude Code', true), ('Antigravity', true), ('Terminal', false)]) {
+    testWidgets('newSessionSheetOpens$title', (t) async {
+      final h = Harness(t, {
+        ...treeOf(live: false),
+        'launchers': ['terminal', 'claude', 'antigravity'],
+      });
+      h.r.newSessionId = 's1';
+      await h.start();
+      h.nav.currentState!.pop();
+      await t.pumpAndSettle();
+      unawaited(showNewSession(h.nav.currentContext!, h.m, workspaceId: 'w1'));
+      await t.pumpAndSettle();
+      await t.tap(find.text(title));
+      await t.pump();
+      await t.ensureVisible(find.byKey(const Key('createSession')));
+      await t.pump();
+      await t.tap(find.byKey(const Key('createSession')));
+      await t.pumpAndSettle(const Duration(milliseconds: 50));
+      expect(find.byType(SessionScreen), findsOneWidget);
+      expect(_chat(), expectChat);
+      await h.stop();
+    });
+  }
 
   for (final viaTerm in [false, true]) {
     testWidgets('chatNeverResizes${viaTerm ? 'AfterTerm' : ''}', (t) async {
