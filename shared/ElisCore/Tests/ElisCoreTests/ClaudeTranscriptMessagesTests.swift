@@ -45,6 +45,9 @@ struct ClaudeTranscriptMessagesTests {
         let message = try #require(items(content, origin: "peer", isMeta: true, promptSource: "system").first)
         #expect(message.kind == "message" && message.channel == "session")
         #expect(message.from == "Chat mode for phone" && message.text == "Check the build.")
+        let fromName = try #require(items("<cross-session-message from=\"uds:/1.sock\" from-name=\"worker\">Hi.</cross-session-message>",
+                                          origin: "peer", isMeta: true).first)
+        #expect(fromName.from == "worker" && fromName.text == "Hi.")
         #expect(items("a skill body", isMeta: true).isEmpty)
         #expect(items("plain text", origin: "peer", isMeta: true).isEmpty)
     }

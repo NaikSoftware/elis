@@ -205,6 +205,10 @@ final class ClaudeTranscriptIndex {
                 meta.skillsAt = records[index].offset
                 if attachment?["isInitial"] as? Bool == true { skillListings = [] }
                 skillListings.append(index)
+            } else if attachment?["type"] as? String == "queued_command",
+                      (attachment?["origin"] as? [String: Any])?["kind"] as? String == "task-notification",
+                      let prompt = attachment?["prompt"] as? String {
+                endAgent(prompt, at: object["timestamp"] as? String)
             }
         case "assistant" where !sidechain:
             if let model = message?["model"] as? String, model != "<synthetic>" {

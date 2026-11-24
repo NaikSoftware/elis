@@ -315,4 +315,46 @@ struct ClaudeTranscriptItemsTests {
         #expect(items(#"{"type":"attachment","uuid":"x","attachment":{"type":"skill_listing"}}"#).isEmpty)
         #expect(items(#"{"type":"user","message":{"role":"user","content":"no uuid"}}"#).isEmpty)
     }
+
+    @Test func queuedCommandAttachmentBecomesQueuedHumanPromptAndImages() {
+        let prompt = items(#"{"type":"attachment","uuid":"q1","timestamp":"2026-11-24T00:28:03.771Z","attachment":{"type":"queued_command","# +
+                #""prompt":"delegate to antigravity","commandMode":"prompt","origin":{"kind":"human"},"humanTurn":true}}"#)
+        #expect(prompt.count == 1)
+        #expect(prompt[0].kind == "user")
+        #expect(prompt[0].text == "delegate to antigravity")
+        #expect(prompt[0].promptSource == "queued")
+        #expect(prompt[0].origin == "human")
+        #expect(prompt[0].uuid == "q1" && prompt[0].at == 100 && prompt[0].time == "2026-11-24T00:28:03.771Z")
+
+        let png = Data(repeating: 7, count: 16).base64EncodedString()
+        let mixed = items(#"{"type":"attachment","uuid":"q2","attachment":{"type":"queued_command","commandMode":"prompt","# +
+                #""origin":{"kind":"human"},"humanTurn":true,"prompt":[{"type":"text","text":"look [Image #1]"},"# +
+                #"{"type":"image","source":{"type":"base64","media_type":"image/png","data":"\#(png)"}}]}}"#)
+        #expect(mixed.map(\.kind) == ["user", "image"])
+        #expect(mixed.map(\.uuid) == ["q2", "q2#1"])
+        #expect(mixed[0].promptSource == "queued" && mixed[0].origin == "human")
+        #expect(mixed[1].mediaType == "image/png" && mixed[1].bytes == 16)
+    }
+
+    @Test func queuedCommandNonHumanVariantsMatchUserRules() {
+        let task = items(#"{"type":"attachment","uuid":"q3","attachment":{"type":"queued_command","commandMode":"task-notification","# +
+                #""origin":{"kind":"task-notification"},"prompt":"<task-notification><tool-use-id>t1</tool-use-id><status>completed</status>"# +
+                #"<summary>Done</summary></task-notification>"}}"#)
+        #expect(task.map(\.kind) == ["message"])
+        #expect(task.first?.channel == "task" && task.first?.id == "t1" && task.first?.status == "completed")
+
+        let peer = items(#"{"type":"attachment","uuid":"q4","attachment":{"type":"queued_command","commandMode":"prompt","isMeta":true,"# +
+                #""origin":{"kind":"peer"},"prompt":"<cross-session-message from=\"uds:/x.sock\" from-name=\"worker\">ping</cross-session-message>"}}"#)
+        #expect(peer.map(\.kind) == ["message"])
+        #expect(peer.first?.channel == "session" && peer.first?.from == "worker" && peer.first?.text == "ping")
+
+        let handback = items(#"{"type":"attachment","uuid":"q5","attachment":{"type":"queued_command","commandMode":"prompt","isMeta":true,"# +
+                #""origin":{"kind":"peer"},"prompt":"<agent-message from=\"a1\">report</agent-message>"}}"#)
+        #expect(handback.isEmpty)
+
+        let auto = items(#"{"type":"attachment","uuid":"q6","attachment":{"type":"queued_command","commandMode":"prompt","# +
+                #""origin":{"kind":"auto-continuation"},"prompt":"Goal set: ship it"}}"#)
+        #expect(auto.map(\.kind) == ["user"])
+        #expect(auto.first?.promptSource == nil && auto.first?.origin == "auto-continuation")
+    }
 }

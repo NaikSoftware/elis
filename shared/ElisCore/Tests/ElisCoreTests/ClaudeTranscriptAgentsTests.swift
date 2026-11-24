@@ -133,6 +133,22 @@ struct ClaudeTranscriptAgentsTests {
         #expect(try fixture.agents.map(\.state) == ["stopped"])
     }
 
+    @Test func midTurnQueuedTaskNotificationEndsAgentAndNamesTaskMessage() throws {
+        let fixture = try Fixture([
+            user("u1", parent: nil),
+            agentCall("a1", parent: "u1", id: "t1", input: #"{"description":"Map callers","name":"scout"}"#),
+            agentResult("r1", parent: "a1", id: "t1", result: launched("abc")),
+            #"{"type":"attachment","uuid":"q1","parentUuid":"r1","isSidechain":false,"timestamp":"\#(Self.start)","# +
+                #""attachment":{"type":"queued_command","commandMode":"task-notification","origin":{"kind":"task-notification"},"# +
+                #""prompt":"<task-notification><task-id>abc</task-id><tool-use-id>t1</tool-use-id><status>completed</status><summary>s</summary></task-notification>"}}"#,
+        ])
+        try fixture.agentFile("abc", [Self.working])
+        let page = try fixture.reader.page(ClaudeTranscriptRequest(sessionID: "s1")).get()
+        #expect(page.meta.agents?.map(\.state) == ["done"])
+        let message = try #require(page.items.first { $0.kind == "message" })
+        #expect(message.uuid == "q1" && message.channel == "task" && message.from == "scout" && message.status == "completed")
+    }
+
     @Test func notificationTextOutsideAUserRecordIsIgnored() throws {
         let fixture = try Fixture([
             user("u1", parent: nil),
