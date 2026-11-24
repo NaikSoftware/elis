@@ -197,6 +197,93 @@ void main() {
     expect(find.byType(ElisSheet), findsNothing);
   });
 
+  testWidgets('the open sheet follows a drag down and back up, and snaps back when let go early', (t) async {
+    final m = _Model();
+    await _bar(t, m);
+    await t.tap(find.byKey(_ask));
+    await t.pumpAndSettle();
+    final surface = find.byKey(const ValueKey('surface'));
+    final top = t.getRect(surface).top;
+    final g = await t.startGesture(const Offset(195, 72 + 24));
+    await g.moveBy(const Offset(0, 50));
+    await g.moveBy(const Offset(0, 50));
+    await t.pump();
+    expect(t.getRect(surface).top, moreOrLessEquals(top + 100, epsilon: 1));
+    expect(m.assistantOpen, isTrue);
+    await g.moveBy(const Offset(0, -60));
+    await t.pump();
+    expect(t.getRect(surface).top, moreOrLessEquals(top + 40, epsilon: 1));
+    await t.pump(const Duration(seconds: 1));
+    await g.up();
+    await t.pumpAndSettle();
+    expect(t.getRect(surface).top, top);
+    expect(m.assistantOpen, isTrue);
+    await t.flingFrom(const Offset(195, 72 + 24), const Offset(0, 60), 1500);
+    await t.pumpAndSettle();
+    expect(m.assistantOpen, isFalse);
+    expect(find.byType(ElisSheet), findsNothing);
+  });
+
+  testWidgets('the Ask Elis bar follows an upward drag, snaps back early without marking seen, and opens past threshold or on a fling', (t) async {
+    final m = _Model(unread: 2);
+    await _bar(t, m);
+    final surface = find.byKey(const ValueKey('surface'));
+    final closedTop = t.getRect(surface).top;
+
+    final g = await t.startGesture(t.getCenter(find.byKey(_ask)));
+    await g.moveBy(const Offset(0, -30));
+    await g.moveBy(const Offset(0, -30));
+    await t.pump();
+    expect(t.getRect(surface).top, moreOrLessEquals(closedTop - 60, epsilon: 1));
+    expect(m.assistantOpen, isFalse);
+    expect(m.assistantCalls, isEmpty);
+    await t.pump(const Duration(seconds: 1));
+    await g.up();
+    await t.pumpAndSettle();
+    expect(t.getRect(surface).top, closedTop);
+    expect(find.byType(ElisSheet), findsNothing);
+    expect(m.assistantCalls, isEmpty);
+
+    final openDrag = await t.startGesture(t.getCenter(find.byKey(_ask)));
+    await openDrag.moveBy(const Offset(0, -70));
+    await openDrag.moveBy(const Offset(0, -70));
+    await t.pump();
+    expect(t.getRect(surface).top, moreOrLessEquals(closedTop - 140, epsilon: 1));
+    await t.pump(const Duration(seconds: 1));
+    await openDrag.up();
+    await t.pumpAndSettle();
+    expect(t.getRect(surface).top, 72);
+    expect(find.byType(ElisSheet), findsOneWidget);
+    expect(m.assistantOpen, isTrue);
+    expect(m.assistantCalls, ['assistant.read', 'assistant.seen']);
+
+    await t.tapAt(const Offset(195, 72 + 24));
+    await t.pumpAndSettle();
+    await t.fling(find.byKey(_ask), const Offset(0, -50), 1500);
+    await t.pumpAndSettle();
+    expect(m.assistantOpen, isTrue);
+    expect(t.getRect(surface).top, 72);
+  });
+
+  testWidgets('dragging inside a scrollable transcript scrolls it instead of dragging the sheet', (t) async {
+    final m = _Model()..transcript = [for (var i = 0; i < 30; i++) {'id': 'e$i', 'kind': 'assistant', 'text': 'line $i', 'ts': i}];
+    await _bar(t, m);
+    await t.tap(find.byKey(_ask));
+    await t.pumpAndSettle();
+    final surface = find.byKey(const ValueKey('surface'));
+    final top = t.getRect(surface).top;
+    final list = find.byType(ListView);
+    final g = await t.startGesture(t.getCenter(list));
+    await g.moveBy(const Offset(0, 100));
+    await g.moveBy(const Offset(0, 100));
+    await t.pump();
+    expect(t.getRect(surface).top, top);
+    await g.up();
+    await t.pumpAndSettle();
+    expect(m.assistantOpen, isTrue);
+    expect(t.getRect(surface).top, top);
+  });
+
   testWidgets('Ask Elis is a screen reader button', (t) async {
     final h = t.ensureSemantics();
     await _bar(t, _Model(unread: 2));
