@@ -186,31 +186,74 @@ class _ElisComposerState extends State<ElisComposer> {
         },
       );
 
-  // the menu opens above the chip, which stays in view with its chevron turned up
+  // the menu grows up out of the chip, which stays in view with its chevron turned up;
+  // showMenu always grows down from its top edge, so this is its look and timing in a route of our own
   Future<void> _pick(BuildContext chip, AssistantState a) async {
     final box = chip.findRenderObject()! as RenderBox, overlay = Overlay.of(chip).context.findRenderObject()! as RenderBox;
     final at = box.localToGlobal(Offset.zero, ancestor: overlay);
-    const pad = 8.0, header = 32.0, row = 48.0, gap = 8.0;
-    final height = 2 * pad + header + row * a.providers.length;
+    final items = [
+      const PopupMenuItem<String>(enabled: false, height: 32, child: Text('FOUND ON THIS SYSTEM', style: sectionLabel)),
+      for (final name in a.providers)
+        PopupMenuItem(
+          value: name,
+          height: 48,
+          child: Row(children: [
+            AgentLogo(name, size: 20),
+            const SizedBox(width: 12),
+            Expanded(child: Text(agentNames[name] ?? name, style: const TextStyle(fontSize: 15))),
+            if (name == a.provider) const Icon(Icons.check, size: 20, color: C.accent),
+          ]),
+        ),
+    ];
+    final unit = 1 / (items.length + 1.5);
     setState(() => _picking = true);
-    final name = await showMenu<String>(
+    final name = await showGeneralDialog<String>(
       context: context,
-      position: RelativeRect.fromLTRB(at.dx, at.dy - gap - height, overlay.size.width - at.dx - box.size.width, overlay.size.height - at.dy + gap),
-      menuPadding: const EdgeInsets.symmetric(vertical: pad),
-      items: [
-        const PopupMenuItem(enabled: false, height: header, child: Text('FOUND ON THIS SYSTEM', style: sectionLabel)),
-        for (final name in a.providers)
-          PopupMenuItem(
-            value: name,
-            height: row,
-            child: Row(children: [
-              AgentLogo(name, size: 20),
-              const SizedBox(width: 12),
-              Expanded(child: Text(agentNames[name] ?? name, style: const TextStyle(fontSize: 15))),
-              if (name == a.provider) const Icon(Icons.check, size: 20, color: C.accent),
-            ]),
+      useRootNavigator: false,
+      barrierDismissible: true,
+      barrierLabel: MaterialLocalizations.of(context).modalBarrierDismissLabel,
+      barrierColor: Colors.transparent,
+      transitionDuration: const Duration(milliseconds: 300),
+      transitionBuilder: (_, _, _, menu) => menu,
+      pageBuilder: (context, animation, _) {
+        final t = CurvedAnimation(parent: animation, curve: Curves.linear, reverseCurve: const Interval(0, 2 / 3));
+        return Stack(children: [
+          Positioned(
+            left: at.dx,
+            bottom: overlay.size.height - at.dy + 8,
+            child: FadeTransition(
+              opacity: t.drive(CurveTween(curve: const Interval(0, 1 / 3))),
+              child: Material(
+                key: const Key('provider-menu'),
+                color: PopupMenuTheme.of(context).color,
+                elevation: 3,
+                shape: const RoundedRectangleBorder(borderRadius: BorderRadius.all(Radius.circular(4))),
+                clipBehavior: Clip.antiAlias,
+                child: AnimatedBuilder(
+                  animation: t,
+                  builder: (_, menu) => Align(
+                    alignment: Alignment.bottomLeft,
+                    widthFactor: Interval(0, unit).transform(t.value),
+                    heightFactor: Interval(0, unit * items.length).transform(t.value),
+                    child: menu,
+                  ),
+                  child: ConstrainedBox(
+                    constraints: const BoxConstraints(minWidth: 112, maxWidth: 280),
+                    child: IntrinsicWidth(
+                      stepWidth: 56,
+                      child: Semantics(
+                        role: SemanticsRole.menu,
+                        explicitChildNodes: true,
+                        child: Padding(padding: const EdgeInsets.symmetric(vertical: 8), child: ListBody(children: items)),
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+            ),
           ),
-      ],
+        ]);
+      },
     );
     if (!mounted) return;
     setState(() => _picking = false);
