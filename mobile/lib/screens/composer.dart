@@ -18,6 +18,7 @@ class Composer extends StatelessWidget {
       this.reason,
       this.accessory,
       this.hint = 'Type, then send with Enter',
+      this.fill = C.surface,
       this.enabled = true});
   final TextEditingController controller;
   final FocusNode focus;
@@ -25,6 +26,7 @@ class Composer extends StatelessWidget {
   final int maxLines;
   final bool autocorrect, mono, enabled;
   final String sendLabel, hint;
+  final Color fill;
   final IconData sendIcon;
   final String? reason; // why Send is off, shown above the field
   final Widget? accessory; // a row above the field
@@ -47,7 +49,7 @@ class Composer extends StatelessWidget {
           style: TextStyle(fontFamily: mono ? theme.mono : null, fontSize: 13),
           decoration: InputDecoration(
             hintText: hint,
-            fillColor: C.surface,
+            fillColor: fill,
             border: OutlineInputBorder(borderRadius: BorderRadius.circular(14), borderSide: const BorderSide(color: C.line)),
             enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(14), borderSide: const BorderSide(color: C.line)),
           ),

@@ -154,6 +154,7 @@ class _ElisComposerState extends State<ElisComposer> {
                 autocorrect: true,
                 mono: false,
                 hint: 'Message Elis… @ to tag',
+                fill: C.bg,
                 accessory: a == null || a.providers.isEmpty ? null : _provider(a),
               ),
             ),

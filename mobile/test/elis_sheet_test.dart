@@ -83,6 +83,14 @@ void main() {
     expect(find.text('FROM'), findsNothing);
   });
 
+  testWidgets('sent card rows open their sessions', (t) async {
+    m.assistantEntries = [_e('sent', 'push it', to: ['gone', 's2'])];
+    await pump(t);
+    expect(find.byKey(const Key('to-gone')), findsNothing);
+    await t.tap(find.text('Pair link'));
+    expect(opened.single.id, 's2');
+  });
+
   testWidgets('@ popup inserts the tag', (t) async {
     await pump(t);
     await t.enterText(find.byKey(const Key('composer')), 'ask @si');

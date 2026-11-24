@@ -108,12 +108,18 @@ class ElisSheet extends StatelessWidget {
           ),
           child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
             for (final (i, s) in to.indexed)
-              SizedBox(
-                height: 44,
-                child: Row(spacing: 8, children: [
-                  SizedBox(width: 22, child: i == 0 ? const Text('TO', style: sectionLabel) : null),
-                  ..._who(s),
-                ]),
+              InkWell(
+                key: Key('to-${s.id}'),
+                borderRadius: BorderRadius.circular(8),
+                onTap: () => openSession(s),
+                child: SizedBox(
+                  height: 44,
+                  child: Row(spacing: 8, children: [
+                    SizedBox(width: 22, child: i == 0 ? const Text('TO', style: sectionLabel) : null),
+                    ..._who(s),
+                    const Icon(Icons.arrow_forward, size: 16, color: C.accent),
+                  ]),
+                ),
               ),
             if (to.isNotEmpty) const SizedBox(height: 8),
             Text(e.text, style: _body.copyWith(color: C.muted)),
