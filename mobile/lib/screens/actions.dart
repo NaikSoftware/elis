@@ -12,12 +12,15 @@ Future<String?> promptText(BuildContext context, String title, {String initial =
     context: context,
     builder: (context) => AlertDialog(
       title: Text(title),
-      content: TextField(
-          key: const Key('promptField'),
-          controller: c,
-          autofocus: true,
-          decoration: InputDecoration(hintText: hint),
-          onSubmitted: (v) => Navigator.pop(context, v)),
+      content: SizedBox(
+        width: double.maxFinite, // fill the dialog instead of resizing to the text
+        child: TextField(
+            key: const Key('promptField'),
+            controller: c,
+            autofocus: true,
+            decoration: InputDecoration(hintText: hint),
+            onSubmitted: (v) => Navigator.pop(context, v)),
+      ),
       actions: [
         TextButton(onPressed: () => Navigator.pop(context), child: const Text('Cancel')),
         FilledButton(onPressed: () => Navigator.pop(context, c.text), child: Text(action)),
