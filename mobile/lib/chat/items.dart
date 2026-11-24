@@ -359,18 +359,21 @@ class _ExpandableState extends State<_Expandable> {
   }
 }
 
-Widget _bubble(BuildContext c, ChatItem i) => Align(
+Widget _bubble(BuildContext c, ChatItem i) => userBubble(c, i.text ?? '', key: Key('bubble-${i.uuid}'));
+
+/// The user's message, right-aligned; [child] draws [text] when it needs more than plain text.
+Widget userBubble(BuildContext c, String text, {Key? key, Widget? child}) => Align(
       alignment: Alignment.centerRight,
       child: Padding(
         padding: const EdgeInsets.only(left: 48),
         child: _menu(
           c,
-          i.text ?? '',
+          text,
           Container(
-            key: Key('bubble-${i.uuid}'),
+            key: key,
             padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
             decoration: BoxDecoration(color: C.surface2, borderRadius: BorderRadius.circular(16)),
-            child: Text(i.text ?? '', style: const TextStyle(fontSize: 15)),
+            child: child ?? Text(text, style: const TextStyle(fontSize: 15)),
           ),
         ),
       ),
