@@ -15,7 +15,7 @@ const wire = {
     'current', 'canGoBack', 'appliedSeq', 'hidden', 'dismissed', 'kind', 'url', 'adapter', 'helper', 'javascript', 'chromeless', 'browse',
   ],
   'elisctlKit/PhoneLinkSession.swift': ['present', 'forward', 'upload'],
-  'elisctlKit/PhoneLinkUpload.swift': ['uploaded'],
+  'elisctlKit/PhoneLinkUpload.swift': ['uploaded', 'name', 'size', 'path'],
   'elisctlKit/PhoneLinkPresenter+Forward.swift': ['forward'],
   'ElisCore/PhoneLink/PhoneLinkMessages.swift': ['type', 'target', 'page'],
   'ElisCore/ControlProjection+Tree.swift': ['workspaces', 'id', 'name', 'open', 'active', 'launchers'],

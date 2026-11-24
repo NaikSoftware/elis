@@ -714,4 +714,120 @@ void main() {
     r.drop();
     expect(await done, isEmpty);
   });
+
+  group('upload', () {
+    Future<(UploadChannel, FakeRelay, int)> opened(int size, {String name = 'a_b.png'}) async {
+      final (m, r, _) = await upgraded();
+      final ch = m.upload('S', name: name, size: size);
+      await flush();
+      final id = r.frames.last.channel;
+      r.send(json(LinkKind.opened, id, {}));
+      await flush();
+      return (ch, r, id);
+    }
+
+    int sent(FakeRelay r, int id) => dataOn(r, id).fold(0, (a, f) => a + f.payload.length);
+    Future<Object?> failure(Future<Object?> f) async {
+      try {
+        await f;
+        return null;
+      } on Object catch (e) {
+        return e;
+      }
+    }
+
+    test('opensWithTheVectorPayloadAndSendsNothingBeforeOpened', () async {
+      final (m, r, _) = await upgraded();
+      final ch = m.upload('S', name: 'a_b.png', size: 5);
+      final sending = ch.send(Stream.value([1, 2, 3, 4, 5]));
+      await flush();
+      expect(r.frames.last.kind, LinkKind.open);
+      expect(jsonDecode(utf8.decode(r.frames.last.payload)), {'type': 'upload', 'target': 'S', 'name': 'a_b.png', 'size': 5});
+      expect(dataOn(r, r.frames.last.channel), isEmpty);
+      r.send(json(LinkKind.opened, r.frames.last.channel, {}));
+      await sending;
+      expect(sent(r, r.frames.last.channel), 5);
+    });
+
+    test('neverHasMoreThanTheWindowUnacknowledged', () async {
+      final (ch, r, id) = await opened(40000);
+      final sending = ch.send(Stream.value(List.filled(40000, 7)));
+      final credited = <int>[];
+      ch.progress.listen(credited.add);
+      await flush();
+      expect(sent(r, id), 16384);
+      r.send(frame(LinkKind.credit, id, LinkFrame.credit(id, 16384).payload));
+      await flush();
+      expect(sent(r, id), 32768);
+      r.send(frame(LinkKind.credit, id, LinkFrame.credit(id, 16384).payload));
+      await flush();
+      expect(sent(r, id), 40000);
+      await sending;
+      expect(credited, [16384, 16384]);
+    });
+
+    test('closeUploadedCompletesDoneAndClosesProgress', () async {
+      final (ch, r, id) = await opened(0);
+      final sending = ch.send(const Stream.empty());
+      r.send(json(LinkKind.close, id, {'reason': 'uploaded', 'path': '/s/uploads/S/x.png'}));
+      expect(await ch.done, '/s/uploads/S/x.png');
+      await sending;
+      expect(await ch.progress.isEmpty, isTrue);
+    });
+
+    test('openedErrorThrows', () async {
+      final (m, r, _) = await upgraded();
+      final ch = m.upload('S', name: 'a', size: 5);
+      await flush();
+      r.send(json(LinkKind.opened, r.frames.last.channel, {'error': 'file too large (max 20 MiB)'}));
+      final e = await failure(ch.done) as UploadFailed;
+      expect(e.reason, 'file too large (max 20 MiB)');
+      expect(e.tooOld, isFalse);
+      await ch.send(Stream.value([1]));
+      expect(dataOn(r, r.frames.last.channel), isEmpty);
+    });
+
+    test('anOlderRelayIsTooOld', () async {
+      final (m, r, _) = await upgraded();
+      final ch = m.upload('S', name: 'a', size: 5);
+      await flush();
+      r.send(json(LinkKind.opened, r.frames.last.channel, {'error': 'unsupported channel type'}));
+      final e = await failure(ch.done) as UploadFailed;
+      expect((e.reason, e.tooOld), ('Update Elis on the computer to attach files', true));
+      expect(UploadFailed('Update Elis on h to attach files').tooOld, isTrue);
+    });
+
+    test('aLostLinkFailsDisconnected', () async {
+      final (ch, r, _) = await opened(5);
+      final sending = ch.send(Stream.value([1]));
+      r.drop();
+      expect((await failure(ch.done) as UploadFailed).reason, 'Disconnected');
+      await sending;
+    });
+
+    test('cancelSendsCloseAndFailsCancelled', () async {
+      final (ch, r, id) = await opened(5);
+      ch.cancel();
+      expect(r.frames.last.kind, LinkKind.close);
+      expect((await failure(ch.done) as UploadFailed).reason, 'cancelled');
+      expect(await ch.progress.isEmpty, isTrue);
+      await ch.send(Stream.value([1]));
+      expect(dataOn(r, id), isEmpty);
+    });
+
+    test('aShortStreamFailsAndCloses', () async {
+      final (ch, r, id) = await opened(5);
+      await expectLater(ch.send(Stream.value([1, 2])), throwsA(isA<UploadFailed>().having((e) => e.reason, 'reason', 'file changed while sending')));
+      expect(r.frames.last.kind, LinkKind.close);
+      expect((await failure(ch.done) as UploadFailed).reason, 'file changed while sending');
+      expect(r.frames.last.channel, id);
+    });
+
+    test('aLongStreamFailsAndSendsNothingPastSize', () async {
+      final (ch, r, id) = await opened(3);
+      await expectLater(ch.send(Stream.value([1, 2, 3, 4])), throwsA(isA<UploadFailed>()));
+      expect(sent(r, id), 0);
+      expect((await failure(ch.done) as UploadFailed).reason, 'file changed while sending');
+    });
+  });
 }
