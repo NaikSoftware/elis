@@ -13,7 +13,7 @@ const _body = TextStyle(fontSize: 14, height: 20 / 14);
 const _name = TextStyle(fontSize: 13, color: C.muted);
 final _cardLine = BorderSide(color: C.text.withValues(alpha: .14));
 
-/// The Elis chat: its header, the transcript and the composer.
+/// The Elis chat: the transcript and the composer.
 class ElisSheet extends StatefulWidget {
   const ElisSheet({super.key, required this.model, required this.openSession});
   final ElisModel model;
@@ -75,10 +75,6 @@ class _ElisSheetState extends State<ElisSheet> {
           final index = {for (final (i, e) in entries.indexed) e.id: entries.length - 1 - i};
           _built.removeWhere((id, c) => !index.containsKey(id) || !c.mounted);
           return Column(children: [
-            const Padding(
-              padding: EdgeInsets.fromLTRB(12, 0, 12, 8),
-              child: Row(spacing: 10, children: [AppMark(size: 28), Text('Elis', style: TextStyle(fontSize: 18, fontWeight: FontWeight.w600))]),
-            ),
             Expanded(
               child: ListView.builder(
                 controller: _scroll,

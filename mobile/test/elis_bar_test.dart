@@ -175,7 +175,7 @@ void main() {
     await t.pump(const Duration(seconds: 1)); // the seen refresh
   });
 
-  testWidgets('the handle closes on a tap, and the header on a long enough drag', (t) async {
+  testWidgets('the handle closes on a tap, and on a long enough drag', (t) async {
     final m = _Model();
     await _bar(t, m);
     Future<void> open() async {
@@ -188,10 +188,10 @@ void main() {
     await t.pumpAndSettle();
     expect(m.assistantOpen, isFalse);
     await open();
-    await t.timedDragFrom(const Offset(300, 72 + 48 + 18), const Offset(0, 40), const Duration(milliseconds: 400));
+    await t.timedDragFrom(const Offset(300, 72 + 24), const Offset(0, 40), const Duration(milliseconds: 400));
     await t.pumpAndSettle();
     expect(m.assistantOpen, isTrue);
-    await t.timedDragFrom(const Offset(300, 72 + 48 + 18), const Offset(0, 120), const Duration(milliseconds: 400));
+    await t.timedDragFrom(const Offset(300, 72 + 24), const Offset(0, 120), const Duration(milliseconds: 400));
     await t.pumpAndSettle();
     expect(m.assistantOpen, isFalse);
     expect(find.byType(ElisSheet), findsNothing);
@@ -217,7 +217,7 @@ void main() {
     await t.pumpAndSettle();
   });
 
-  testWidgets('the @ popup stays under the sheet header on a short screen with the keyboard up', (t) async {
+  testWidgets('the @ popup stays inside the sheet on a short screen with the keyboard up', (t) async {
     await _bar(t, _Model(), height: 640);
     await t.tap(find.byKey(_ask));
     await t.pumpAndSettle();
@@ -225,7 +225,7 @@ void main() {
     await t.enterText(find.byKey(const Key('composer')), '@');
     await t.pumpAndSettle();
     final popup = find.ancestor(of: find.byKey(const Key('tag-@all')), matching: find.byType(ListView));
-    expect(t.getRect(popup).top, greaterThanOrEqualTo(t.getRect(find.byType(ElisSheet)).top + 36));
+    expect(t.getRect(popup).top, greaterThanOrEqualTo(t.getRect(find.byType(ElisSheet)).top));
   });
 
   testWidgets('a dropped link keeps the open sheet and its draft', (t) async {

@@ -233,7 +233,7 @@ class _ElisBarState extends State<ElisBar> with SingleTickerProviderStateMixin {
     );
   }
 
-  // a downward drag outside the transcript (the handle, the header) closes the sheet
+  // a downward drag outside the transcript (the handle) closes the sheet
   Widget _content(double bottomInset) => GestureDetector(
         behavior: HitTestBehavior.opaque,
         onVerticalDragStart: (_) => _drag = 0,

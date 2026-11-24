@@ -244,9 +244,9 @@ class _ElisComposerState extends State<ElisComposer> {
       : LayoutBuilder(builder: (context, _) {
           final box = _box.currentContext?.findRenderObject() as RenderBox?;
           if (box == null || !box.hasSize) return const SizedBox.shrink();
-          // the sheet's column: the popup stays under its first child, the header
-          final head = _box.currentContext?.findAncestorRenderObjectOfType<RenderFlex>()?.firstChild;
-          final top = head == null ? MediaQuery.paddingOf(context).top + kToolbarHeight : head.localToGlobal(Offset(0, head.size.height)).dy;
+          // the popup stays inside the sheet's column, under the drag handle
+          final sheet = _box.currentContext?.findAncestorRenderObjectOfType<RenderFlex>();
+          final top = sheet == null ? MediaQuery.paddingOf(context).top + kToolbarHeight : sheet.localToGlobal(Offset.zero).dy;
           final room = box.localToGlobal(Offset.zero).dy - top - 8;
           final width = box.size.width - 24; // the field and send button, inside the composer's padding
           return Align(
