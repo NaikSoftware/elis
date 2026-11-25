@@ -465,22 +465,6 @@ enum AssistantTagStyle {
         storage.endEditing()
     }
 
-    /// chipImage draws one tag as the composer draws it in place, for text that can only hold an image.
-    static func chipImage(_ tag: String, dark: Bool) -> NSImage {
-        let label = NSAttributedString(string: tag, attributes: [.font: tagFont, .foregroundColor: NSColor.labelColor])
-        let size = NSSize(width: ceil(label.size().width) + chipPad * 2, height: 19)
-        let image = NSImage(size: size, flipped: false) { rect in
-            NSAppearance(named: dark ? .darkAqua : .aqua)?.performAsCurrentDrawingAppearance {
-                NSColor.controlAccentColor.withAlphaComponent(0.25).setFill()
-                NSBezierPath(roundedRect: rect, xRadius: 5, yRadius: 5).fill()
-                label.draw(at: NSPoint(x: chipPad, y: (rect.height - label.size().height) / 2))
-            }
-            return true
-        }
-        image.accessibilityDescription = tag
-        return image
-    }
-
     /// Fills each tag's rounded chip, one per line it spans; the last character's kern is its right padding.
     static func drawChips(_ tags: [NSRange], layoutManager: NSLayoutManager, textContainer: NSTextContainer,
                           origin: NSPoint, lineHeight: CGFloat) {

@@ -6,7 +6,6 @@ import SwiftUI
 struct AssistantMarkdown: View {
     let text: String
     var directory = AssistantDirectory([])
-    var dark = false
 
     struct Block: Identifiable {
         enum Kind: Equatable { case paragraph, header, code, item(String) }
@@ -41,7 +40,7 @@ struct AssistantMarkdown: View {
     }
 
     @ViewBuilder private func view(_ block: Block, mentions: [AssistantMentionSegment]) -> some View {
-        let content = Self.text(block.content, mentions: mentions, dark: dark)
+        let content = Self.text(block.content, mentions: mentions)
         switch block.kind {
         case .paragraph:
             line(content)
@@ -64,6 +63,7 @@ struct AssistantMarkdown: View {
 
     private func line(_ text: Text) -> some View {
         text.font(.system(size: 13))
+            .mentionChips()
             .lineSpacing(4)
             .fixedSize(horizontal: false, vertical: true)
     }
@@ -87,28 +87,33 @@ struct AssistantMarkdown: View {
     }
 
     /// An error line: no markdown, but its sessions named as in an answer.
-    static func plain(_ text: String, in directory: AssistantDirectory, dark: Bool) -> Text {
+    static func plain(_ text: String, in directory: AssistantDirectory) -> Text {
         let marked = mark(text, in: directory)
-        return self.text(AttributedString(marked.source), mentions: marked.mentions, dark: dark)
+        return self.text(AttributedString(marked.source), mentions: marked.mentions)
     }
 
-    /// text joins a block's runs and its mentions' chips, which `Text` can only hold as images.
-    static func text(_ content: AttributedString, mentions: [AssistantMentionSegment], dark: Bool) -> Text {
+    /// text joins a block's runs and its mentions' tags; `mentionChips()` draws the chips behind the tags.
+    static func text(_ content: AttributedString, mentions: [AssistantMentionSegment]) -> Text {
         var result = Text(verbatim: "")
         var rest = content[content.startIndex..<content.endIndex]
         while let start = rest.characters.firstIndex(of: open), let end = rest.characters[start...].firstIndex(of: close) {
             let index = Int(String(rest.characters[rest.characters.index(after: start)..<end])) ?? -1
-            result = Text("\(result)\(Text(AttributedString(rest[rest.startIndex..<start])))\(mention(index, in: mentions, dark: dark))")
+            result = Text("\(result)\(Text(AttributedString(rest[rest.startIndex..<start])))\(mention(index, in: mentions))")
             rest = rest[rest.characters.index(after: end)..<rest.endIndex]
         }
         return Text("\(result)\(Text(AttributedString(rest)))")
     }
 
-    private static func mention(_ index: Int, in mentions: [AssistantMentionSegment], dark: Bool) -> Text {
+    /// The chip's padding: a 1pt-high image, so it widens the line without heightening it.
+    private static let chipPad = Text(Image(nsImage: NSImage(size: NSSize(width: AssistantTagStyle.chipPad, height: 1))))
+
+    private static func mention(_ index: Int, in mentions: [AssistantMentionSegment]) -> Text {
         guard mentions.indices.contains(index), case .mention(_, let handle) = mentions[index] else { return Text(verbatim: "") }
         // a session that ended has no tag to show, as its cards say
         guard let handle else { return Text(verbatim: "ended session") }
-        return Text(Image(nsImage: AssistantTagStyle.chipImage("@\(handle)", dark: dark))).baselineOffset(-4.5)
+        let tag = Text(verbatim: "@\(handle)").fontWeight(.medium)
+        guard #available(macOS 15.0, *) else { return tag }
+        return Text("\(chipPad)\(tag.customAttribute(MentionChip()))\(chipPad)")
     }
 
     static func blocks(_ source: String) -> [Block] {
@@ -153,5 +158,39 @@ struct AssistantMarkdown: View {
             }
         }
         return Block(id: id, kind: .paragraph, list: nil, content: trimmed)
+    }
+}
+
+extension View {
+    /// mentionChips draws each tag's chip behind its text, as the composer does, so a line holding one keeps its
+    /// height; an inline image would push the line. Before macOS 15 the tags show without a chip.
+    @ViewBuilder func mentionChips() -> some View {
+        if #available(macOS 15.0, *) {
+            textRenderer(MentionChipRenderer(fill: Color(nsColor: .controlAccentColor).opacity(0.25), pad: AssistantTagStyle.chipPad))
+        } else {
+            self
+        }
+    }
+}
+
+@available(macOS 15.0, *)
+private struct MentionChip: TextAttribute {}
+
+@available(macOS 15.0, *)
+private struct MentionChipRenderer: TextRenderer {
+    let fill: Color
+    let pad: CGFloat
+
+    func draw(layout: Text.Layout, in context: inout GraphicsContext) {
+        for line in layout {
+            for run in line {
+                if run[MentionChip.self] != nil {
+                    let text = run.typographicBounds.rect
+                    let chip = CGRect(x: text.minX - pad, y: text.midY - 9.5, width: text.width + pad * 2, height: 19)
+                    context.fill(RoundedRectangle(cornerRadius: 5).path(in: chip), with: .color(fill))
+                }
+                context.draw(run)
+            }
+        }
     }
 }

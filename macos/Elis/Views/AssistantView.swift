@@ -122,14 +122,15 @@ private struct AssistantEntryView: View {
                     .overlay(RoundedRectangle(cornerRadius: 12).strokeBorder(Color.appAccent.opacity(dark ? 0.65 : 0.55)))
             }
         case .assistant:
-            AssistantMarkdown(text: entry.text, directory: directory, dark: dark)
+            AssistantMarkdown(text: entry.text, directory: directory)
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .accessibilityIdentifier("assistant-answer")
         case .sent, .reply:
             card
         case .error:
-            AssistantMarkdown.plain(entry.text, in: directory, dark: dark)
+            AssistantMarkdown.plain(entry.text, in: directory)
                 .font(.system(size: 13))
+                .mentionChips()
                 .foregroundStyle(Color(nsColor: dark ? NSColor(srgbRed: 1, green: 0x69 / 255, blue: 0x61 / 255, alpha: 1)
                                                      : NSColor(srgbRed: 0xD7 / 255, green: 0, blue: 0x15 / 255, alpha: 1)))
                 .frame(maxWidth: .infinity, alignment: .leading)

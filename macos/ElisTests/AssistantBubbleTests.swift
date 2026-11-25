@@ -64,6 +64,19 @@ final class AssistantBubbleTests: XCTestCase {
         XCTAssertEqual(size.height, 80, accuracy: 1)
     }
 
+    func testAChipInAnAnswerLineKeepsTheLineHeight() {
+        let id = "A8BA15A4-73FE-45D7-89A9-9D764EDF9389"
+        let directory = AssistantDirectory([AssistantPeer(sessionID: id, window: "w", workspaceID: "ws", workspaceName: "elis",
+                                                          name: "sidebar-filter")])
+        func height(_ text: String) -> CGFloat {
+            let host = NSHostingView(rootView: AssistantMarkdown(text: text, directory: directory).frame(width: 600))
+            host.layoutSubtreeIfNeeded()
+            return host.fittingSize.height
+        }
+
+        XCTAssertEqual(height("[reply from @side-filter \(id)] The chip is wired."), height("The chip is wired."), accuracy: 0.5)
+    }
+
     private func mount() throws -> [AssistantTagLabel] {
         let library = WindowLibrary(directory: stateDir)
         let store = try XCTUnwrap(library.activeStore)
