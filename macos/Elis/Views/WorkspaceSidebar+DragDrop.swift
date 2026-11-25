@@ -26,6 +26,8 @@ extension WorkspaceSidebar.Coordinator {
             guard store.sidebarMode == .tree else { return nil }
             pbItem.setString(node.id.uuidString, forType: workspacePasteboardType)
             dropText = Session.dropText(store.workspaces.first { $0.id == node.id }?.sessions ?? [])
+        case .assistant:
+            return nil
         }
         // a terminal types the ids
         if let dropText { pbItem.setString(dropText, forType: .string) }
@@ -36,12 +38,14 @@ extension WorkspaceSidebar.Coordinator {
                      validateDrop info: NSDraggingInfo,
                      proposedItem item: Any?,
                      proposedChildIndex index: Int) -> NSDragOperation {
+        if refusesAssistantDrop(item: item, childIndex: index) { return [] }
         if draggedWorkspaceID(from: info) != nil {
             cancelSpringLoadedExpansion()
             guard let move = resolveWorkspaceMove(from: info, in: outlineView) else { return [] }
             if store.remoteActions != nil, remoteWorkspaceStep(move) == nil { return [] }
             // workspace reorder lives at the top level: highlight a between-rows slot under the root.
-            outlineView.setDropItem(nil, dropChildIndex: move.dropChildIndex)
+            // + 1: the pinned Elis row is root 0
+            outlineView.setDropItem(nil, dropChildIndex: move.dropChildIndex + 1)
             return .move
         }
         if !draggedSessionIDs(from: info).isEmpty, showsFlatFlaggedList {
@@ -85,6 +89,7 @@ extension WorkspaceSidebar.Coordinator {
         // a SUCCESSFUL drop keeps an already-spring-opened workspace open so the dropped/moved session
         // stays visible; a rejected/no-op drop collapses it back, same as leave/cancel. (A rejected
         // Finder drop can't rely on `draggingSession:endedAt:` to collapse — Finder is the source.)
+        if refusesAssistantDrop(item: item, childIndex: index) { return false }
         var dropSucceeded = false
         defer { finishDraggingSequence(collapseSpringLoaded: !dropSucceeded) }
         if draggedWorkspaceID(from: info) != nil {
@@ -209,6 +214,8 @@ extension WorkspaceSidebar.Coordinator {
         case .session:
             guard let drop = store.sessionLocation(ofSession: node.id) else { return nil }
             target = .sessionRow(workspace: drop.workspace, sessionIndex: drop.index, sessionCount: drop.count)
+        case .assistant:
+            return nil
         }
 
         let sources = sessionIDs.compactMap { id -> SidebarDrop.SessionSource? in
@@ -283,7 +290,7 @@ extension WorkspaceSidebar.Coordinator {
         let sessionIDs = draggedSessionIDs(from: info)
         guard !sessionIDs.isEmpty else { return nil }
         return SidebarDrop.resolveFlaggedReorder(order: store.orderedFlaggedSessions.map(\.id), dragged: sessionIDs,
-                                                 onRow: (item as? SidebarNode)?.id, childIndex: index)
+                                                 onRow: (item as? SidebarNode)?.id, childIndex: item == nil && index > 0 ? index - 1 : index)
     }
 
     private var showsFlatFlaggedList: Bool {
@@ -323,6 +330,8 @@ extension WorkspaceSidebar.Coordinator {
             return node.id
         case .session:
             return store.workspace(forSession: node.id)?.id
+        case .assistant:
+            return nil
         }
     }
 
