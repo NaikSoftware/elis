@@ -31,6 +31,11 @@ struct AssistantMentionsTests {
         #expect(segments == [.text("ask "), .mention(sessionID: Self.filter, handle: "side-filter"), .text(", not \(Self.gone).")])
     }
 
+    @Test func aKnownIdInsideABareURLStaysText() {
+        let text = "see https://example.com/s/\(Self.filter.lowercased()) now"
+        #expect(AssistantMentions.segments(text, in: directory) == [.text(text)])
+    }
+
     @Test func textWithoutIdsIsOneSegment() {
         #expect(AssistantMentions.segments("**Status**\n- all green", in: directory) == [.text("**Status**\n- all green")])
         #expect(AssistantMentions.segments("", in: directory) == [])

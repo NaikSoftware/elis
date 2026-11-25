@@ -8,11 +8,11 @@ public enum AssistantMentionSegment: Equatable, Sendable {
 }
 
 /// AssistantMentions finds the sessions an answer names, so a view shows them as tags instead of ids:
-/// a `[reply from @<handle> <id>]` frame whatever its session's state, and a bare id of a live session.
+/// a `[reply from @<handle> <id>]` frame whatever its session's state, and a bare id of a live session outside a URL path.
 public enum AssistantMentions {
     private static let uuid = "[0-9A-Fa-f]{8}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{12}"
     private static let pattern = try! NSRegularExpression( // swiftlint:disable:this force_try
-        pattern: #"\[reply from @[^\s\]]* ("# + uuid + #")\]|\b("# + uuid + #")\b"#)
+        pattern: #"\[reply from @[^\s\]]* ("# + uuid + #")\]|(?<!/)\b("# + uuid + #")\b"#)
 
     public static func segments(_ text: String, in directory: AssistantDirectory) -> [AssistantMentionSegment] {
         let known = Dictionary(directory.peers.map { ($0.sessionID.uppercased(), $0.sessionID) }) { first, _ in first }

@@ -133,13 +133,29 @@ final class AssistantRunnerTests: XCTestCase {
         XCTAssertTrue(answers.last?.contains(": x") == true, "\(answers)")
     }
 
-    func testGoneResumeRetriesFreshWithTheChatInlined() async {
+    func testGoneResumeRetriesFreshWithTheChatInlined() async throws {
+        chat.append(.user, text: "earlier-marker", now: 0)
         chat.resume[.claude] = "gone"
         let runner = runner()
         ask(runner, "x")
         await waitFor("the retried answer") { entries(.assistant).count == 1 && !chat.running }
         XCTAssertEqual(entries(.error), [])
         XCTAssertNotEqual(chat.resume[.claude], "gone")
+        let answer = try XCTUnwrap(entries(.assistant).first)
+        XCTAssertTrue(answer.contains("user: earlier-marker"), answer)
+    }
+
+    func testStreamProviderAfterASwitchGetsTheRecap() async throws {
+        chat.provider = .codex
+        let runner = runner()
+        ask(runner, "first-turn-marker")
+        await waitFor("the codex answer") { entries(.assistant).count == 1 && !chat.running }
+        chat.provider = .claude
+        runner.providerChanged(.claude)
+        ask(runner, "second")
+        await waitFor("the claude answer") { entries(.assistant).count == 2 }
+        let answer = try XCTUnwrap(entries(.assistant).last)
+        XCTAssertTrue(answer.contains("user: first-turn-marker"), answer)
     }
 
     func testProviderChangeRestartsWithTheRecap() async throws {

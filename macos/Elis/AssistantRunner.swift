@@ -165,6 +165,7 @@ final class AssistantRunner {
             let recap = recap ? AssistantPrompt.inline(chat.settledEntries(last: 50)) : ""
             input = preamble + (recap.isEmpty ? "" : recap + "\n\n") + input
             fresh = false
+            self.recap = false
         }
         if mode == .stream {
             write(AssistantStream.encode(provider, text: input) + "\n")
@@ -244,7 +245,6 @@ final class AssistantRunner {
             fail("Cannot run \(argv[0]): \(error.localizedDescription)")
             return
         }
-        recap = false
         if let started = Self.startTime(process.processIdentifier) {
             try? "\(process.processIdentifier) \(started)\n".write(to: Self.pidfile(stateDirectory), atomically: true, encoding: .utf8)
         }
@@ -404,6 +404,7 @@ final class AssistantRunner {
         process.terminate() // SIGTERM first, so the provider can end what it started
         let pid = process.processIdentifier
         guard wait else {
+            // shortcut: SIGKILL orphans claude's own-group tool children (Bash, MCP); walk the tree if one is ever seen surviving
             DispatchQueue.main.asyncAfter(deadline: .now() + 3) { if process.isRunning { kill(pid, SIGKILL) } }
             return
         }
