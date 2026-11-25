@@ -26,6 +26,7 @@ Elis is a native terminal for macOS and Linux (engines: libghostty on macOS, Kon
 
 ## Install
 
+- Homebrew: `brew tap naiksoftware/tap && brew trust --cask naiksoftware/tap/elis && brew install --cask naiksoftware/tap/elis`
 - [Releases](https://github.com/NaikSoftware/elis/releases/latest): the macOS DMG (Apple Silicon, macOS 14+, not notarized) and the Android APK
 - [Linux](https://github.com/NaikSoftware/elis/tree/master/linux): the Qt6/KDE app, built from source
 

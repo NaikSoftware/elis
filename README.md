@@ -48,7 +48,15 @@ Anyone with the code controls your terminals until you revoke it.
 
 Elis runs on macOS and Linux.
 
-**macOS** (Apple Silicon, macOS 14 or later):
+**macOS** (Apple Silicon, macOS 14 or later), with Homebrew:
+
+```sh
+brew tap naiksoftware/tap
+brew trust --cask naiksoftware/tap/elis
+brew install --cask naiksoftware/tap/elis
+```
+
+The build is not notarized; the cask clears its quarantine flag. Or install the DMG by hand:
 
 1. Download the `.dmg` from the [latest release](https://github.com/NaikSoftware/elis/releases/latest), open it, and drag `Elis.app` to Applications.
 2. The build is not notarized. Clear the quarantine flag once:
