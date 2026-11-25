@@ -382,7 +382,11 @@
           <section id="install" class="doc-v2" style="scroll-margin-top: 88px; padding-top: 56px">
 <h2>Install</h2>
 <p>Builds for Apple Silicon (arm64) Macs running macOS 14 or later are published on the <a href="https://github.com/NaikSoftware/elis/releases">releases page</a>.</p>
-<p>Download the <code>.dmg</code> from the <a href="https://github.com/NaikSoftware/elis/releases/latest">latest release</a>, open it, and drag Elis.app into <code>/Applications</code>. The build is not notarized, so clear the download flag once before the first launch:</p>
+<p>With Homebrew, tap and trust the cask, then install it. The cask clears the quarantine flag, so the unnotarized app opens without a prompt:</p>
+<pre class="bash"><code>brew tap naiksoftware/tap
+brew trust --cask naiksoftware/tap/elis
+brew install --cask naiksoftware/tap/elis</code></pre>
+<p>Upgrade with <code>brew upgrade --cask elis</code>. To install by hand instead, download the <code>.dmg</code> from the <a href="https://github.com/NaikSoftware/elis/releases/latest">latest release</a>, open it, and drag Elis.app into <code>/Applications</code>. The build is not notarized, so clear the download flag once before the first launch:</p>
 <pre class="bash"><code>xattr -dr com.apple.quarantine /Applications/Elis.app</code></pre>
 <h3 id="install-help">Automatic installers</h3>
 <p>None is needed to use Elis as a terminal; each connects it to a wider workflow. A release build installs all three once per installed build: on the first launch after a fresh install and after each update. It runs silently and shows an alert only when you must act, for example after a failure or a skipped agent. An agent you install later gets its hooks and skill on the next Elis update.</p>

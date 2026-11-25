@@ -232,7 +232,8 @@ release_notes >"$NOTES_FILE"
 if gh release view "$TAG" --repo "$GH_REPO" >/dev/null 2>&1; then
   gh release edit "$TAG" --repo "$GH_REPO" --title "Version $VERSION" --notes-file "$NOTES_FILE"
 else
-  gh release create "$TAG" --repo "$GH_REPO" --title "Version $VERSION" --notes-file "$NOTES_FILE"
+  # a draft until the assets are up: publishing fires the Homebrew tap workflow, which reads the DMG
+  gh release create "$TAG" --repo "$GH_REPO" --title "Version $VERSION" --notes-file "$NOTES_FILE" --draft
 fi
 rm -f "$NOTES_FILE"
 # the asset name is the file name (`path#label` sets only a display label), so the APK is copied under its asset name
@@ -243,6 +244,7 @@ if [ -n "${MOBILE_APK:-}" ]; then
   ASSETS+=("$APK_STAGE/elis-mobile.apk")
 fi
 gh release upload "$TAG" --repo "$GH_REPO" "${ASSETS[@]}" --clobber
+gh release edit "$TAG" --repo "$GH_REPO" --draft=false
 [ -z "${APK_STAGE:-}" ] || rm -rf "$APK_STAGE"
 if [ -z "${MOBILE_APK:-}" ]; then
   echo "==> !!! NO PHONE APP UPLOADED: README and the site link elis-mobile.apk. Re-run with MOBILE_APK=<path> or" >&2
