@@ -53,7 +53,7 @@ Parts in this order, each only when it has something to show, truncated at the t
    - all in one group: `✓ 3 passed`, `◷ 3 running`, `✗ 2 failed`;
    - mixed: `✗ 2  ◷ 1  ✓ 5`, and a single failure names itself: `✗ build  ◷ 1  ✓ 2`.
 
-Colored spans ease toward the text color just far enough to keep 4.5:1 against the fills under them.
+Colored spans ease toward white on a dark row, black on a light one, just far enough to keep 4.5:1 against the fills under them.
 
 Examples: `#56 👍1 · ✗ build  ◷ 1  ✓ 2`, `◷ build`, `#61 👎1 · ✓ build`, `#62 👍2` (no runs).
 

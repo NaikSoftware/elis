@@ -128,7 +128,7 @@ final class SidebarInfoCellView: SidebarCellView {
         return NSFont(descriptor: font.fontDescriptor.withSymbolicTraits(.italic), size: size) ?? font
     }
 
-    /// color eases a colored span toward the text color just far enough to keep 4.5:1 on every backdrop.
+    /// color eases a colored span just far enough to keep 4.5:1 on every backdrop (`legibleOn`).
     private func color(for span: SessionInfoSpan, foreground: NSColor, backdrops: [RGBA]) -> NSColor {
         if let tint = span.color {
             let raw = NSColor.tint(tint).withAlphaComponent(span.dim ? 0.55 : 1)

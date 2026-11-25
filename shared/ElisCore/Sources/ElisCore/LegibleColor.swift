@@ -29,21 +29,25 @@ public struct RGBA: Equatable, Sendable {
     }
 }
 
-/// Moves `color` toward `text` until it reaches 4.5:1 on every backdrop; returns `text` if no step does.
+func contrast(_ color: RGBA, over bg: RGBA) -> Double {
+    let a = RGBA.luminance(RGBA.composite(color, over: bg)), b = RGBA.luminance(bg)
+    return (max(a, b) + 0.05) / (min(a, b) + 0.05)
+}
+
+/// Moves `color` toward white on a dark first backdrop, black on a light one, until it reaches 4.5:1 on every
+/// backdrop; returns `text` if no step does. Mixing toward a pole, not the text color, keeps the hue.
 public func legibleOn(_ color: RGBA, under: [RGBA], text: RGBA) -> RGBA {
+    guard let base = under.first else { return color }
+    let white = RGBA(r: 1, g: 1, b: 1), black = RGBA(r: 0, g: 0, b: 0)
+    let pole = contrast(white, over: base) > contrast(black, over: base) ? white : black
     for step in 0...20 {
         let t = Double(step) / 20
         let candidate = RGBA(
-            r: color.r + (text.r - color.r) * t,
-            g: color.g + (text.g - color.g) * t,
-            b: color.b + (text.b - color.b) * t,
+            r: color.r + (pole.r - color.r) * t,
+            g: color.g + (pole.g - color.g) * t,
+            b: color.b + (pole.b - color.b) * t,
             a: color.a)
-        let passes = under.allSatisfy { bg in
-            let a = RGBA.luminance(RGBA.composite(candidate, over: bg))
-            let b = RGBA.luminance(bg)
-            return (max(a, b) + 0.05) / (min(a, b) + 0.05) >= 4.5
-        }
-        if passes { return candidate }
+        if under.allSatisfy({ contrast(candidate, over: $0) >= 4.5 }) { return candidate }
     }
     return text
 }

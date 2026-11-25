@@ -137,6 +137,7 @@ final class SidebarInfoRowTests: XCTestCase {
                 let fg = RGBA.luminance(RGBA.composite(shown, over: backdrop)), bg = RGBA.luminance(backdrop)
                 XCTAssertGreaterThanOrEqual((max(fg, bg) + 0.05) / (min(fg, bg) + 0.05), 4.5, "\(glyph) \(shown) on \(backdrop)")
             }
+            if glyph == "✗" { XCTAssertTrue(shown.r > shown.g && shown.r > shown.b, "red keeps its hue: \(shown)") }
         }
         XCTAssertEqual(rgba(color(in: text, at: 0)), rgba(SidebarCellView.themeTextColor(selected: false)))
     }
@@ -243,9 +244,9 @@ final class SidebarInfoRowTests: XCTestCase {
         SidebarInfoMetrics.rowHeight(base: GhosttyApp.shared.sidebarFontSize, density: GhosttyApp.shared.sidebarDensity)
     }
 
-    private func ci(pr: Bool = false, workflow: String? = "build", state: CIRunState = .passed) -> CIStatus {
+    private func ci(pr: Bool = false, workflow: String? = "build") -> CIStatus {
         CIStatus(branch: "main", sha: "abc", pr: pr ? CIPullRequest(number: 5, title: "t", url: "https://github.com/o/r/pull/5") : nil,
-                 runs: workflow.map { [CIRun(workflow: $0, state: state, url: "https://github.com/o/r/actions/runs/1")] } ?? [])
+                 runs: workflow.map { [CIRun(workflow: $0, state: .passed, url: "https://github.com/o/r/actions/runs/1")] } ?? [])
     }
 
     private func seed(_ store: AppStore) throws -> Session {
