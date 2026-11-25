@@ -106,7 +106,39 @@ final class SidebarInfoRowTests: XCTestCase {
 
         let text = cell.infoField.attributedStringValue
         XCTAssertEqual(rgba(color(in: text, at: 0)), rgba(SidebarCellView.themeTextColor(selected: true).withAlphaComponent(0.85)))
-        XCTAssertEqual(rgba(color(in: text, at: text.length - 1)), rgba(NSColor.tint(.green)))
+        let row = try XCTUnwrap(outline.rowView(atRow: try row(of: session.id), makeIfNecessary: false) as? SidebarRowView)
+        var green = RGBA(r: 0, g: 0, b: 0)
+        cell.effectiveAppearance.performAsCurrentDrawingAppearance {
+            green = legibleOn(NSColor.tint(.green).rgba, under: row.infoBackdrops,
+                              text: SidebarCellView.themeTextColor(selected: true).rgba)
+        }
+        XCTAssertEqual(rgba(color(in: text, at: text.length - 1)), rgba(NSColor(green)))
+    }
+
+    func testAColoredFragmentStaysLegibleOnTheRowsBackdrop() async throws {
+        let store = try XCTUnwrap(library.activeStore)
+        let session = try seed(store)
+        XCTAssertTrue(store.setTint(SidebarTint(color: .yellow), forWorkspace: try XCTUnwrap(store.workspaces.last).id))
+        let runs = [CIRunState.failed, .running, .passed].map { CIRun(workflow: "\($0)", state: $0, url: "https://github.com/o/r/actions/runs/1") }
+        store.setCI(CIStatus(branch: "main", sha: "abc", pr: CIPullRequest(number: 5, title: "t", url: "https://github.com/o/r/pull/5"),
+                             runs: runs), forSession: session.id)
+        try mountSidebar(for: store)
+        try await waitUntil { (try? self.height(of: session.id)) == self.infoHeight }
+        let row = try XCTUnwrap(outline.rowView(atRow: try row(of: session.id), makeIfNecessary: false) as? SidebarRowView)
+        let backdrops = row.infoBackdrops
+        XCTAssertTrue((1...2).contains(backdrops.count), "\(backdrops)")
+        XCTAssertNotNil(row.band)
+
+        let text = try infoCell(forSession: session.id).infoField.attributedStringValue
+        for glyph in ["✗", "◷", "✓"] {
+            let index = (text.string as NSString).range(of: glyph).location
+            let shown = try XCTUnwrap(color(in: text, at: index), glyph).rgba
+            for backdrop in backdrops {
+                let fg = RGBA.luminance(RGBA.composite(shown, over: backdrop)), bg = RGBA.luminance(backdrop)
+                XCTAssertGreaterThanOrEqual((max(fg, bg) + 0.05) / (min(fg, bg) + 0.05), 4.5, "\(glyph) \(shown) on \(backdrop)")
+            }
+        }
+        XCTAssertEqual(rgba(color(in: text, at: 0)), rgba(SidebarCellView.themeTextColor(selected: false)))
     }
 
     // #1019: the field kept the 13 pt label font, so single-line mode placed the smaller text low and clipped it
@@ -211,9 +243,9 @@ final class SidebarInfoRowTests: XCTestCase {
         SidebarInfoMetrics.rowHeight(base: GhosttyApp.shared.sidebarFontSize, density: GhosttyApp.shared.sidebarDensity)
     }
 
-    private func ci(pr: Bool = false, workflow: String? = "build") -> CIStatus {
+    private func ci(pr: Bool = false, workflow: String? = "build", state: CIRunState = .passed) -> CIStatus {
         CIStatus(branch: "main", sha: "abc", pr: pr ? CIPullRequest(number: 5, title: "t", url: "https://github.com/o/r/pull/5") : nil,
-                 runs: workflow.map { [CIRun(workflow: $0, state: .passed, url: "https://github.com/o/r/actions/runs/1")] } ?? [])
+                 runs: workflow.map { [CIRun(workflow: $0, state: state, url: "https://github.com/o/r/actions/runs/1")] } ?? [])
     }
 
     private func seed(_ store: AppStore) throws -> Session {

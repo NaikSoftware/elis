@@ -59,6 +59,15 @@ final class SidebarInfoCellView: SidebarCellView {
         render()
     }
 
+    /// refreshColors re-renders for the row's current fills; the row calls it when they change.
+    func refreshColors() { render() }
+
+    // the cell renders before the outline inserts it into its row, so the first render had no backdrops
+    override func viewDidMoveToSuperview() {
+        super.viewDidMoveToSuperview()
+        render()
+    }
+
     override func layout() {
         super.layout()
         let available = infoField.cell?.titleRect(forBounds: infoField.bounds).width ?? infoField.bounds.width
@@ -67,12 +76,13 @@ final class SidebarInfoCellView: SidebarCellView {
 
     private func render() {
         let foreground = Self.themeTextColor(selected: selected)
+        let backdrops = (superview as? SidebarRowView)?.infoBackdrops ?? []
         let paragraph = NSMutableParagraphStyle()
         paragraph.lineBreakMode = .byTruncatingTail
         let text = NSMutableAttributedString()
         for span in spans {
             let font = font(for: span)
-            let color = color(for: span, foreground: foreground)
+            let color = color(for: span, foreground: foreground, backdrops: backdrops)
             for (piece, emoji) in Self.emojiRuns(span.text) {
                 var attributes: [NSAttributedString.Key: Any] = [.font: font, .foregroundColor: color, .paragraphStyle: paragraph]
                 if emoji {
@@ -118,8 +128,19 @@ final class SidebarInfoCellView: SidebarCellView {
         return NSFont(descriptor: font.fontDescriptor.withSymbolicTraits(.italic), size: size) ?? font
     }
 
-    private func color(for span: SessionInfoSpan, foreground: NSColor) -> NSColor {
-        if let tint = span.color { return NSColor.tint(tint).withAlphaComponent(span.dim ? 0.55 : 1) }
+    /// color eases a colored span toward the text color just far enough to keep 4.5:1 on every backdrop.
+    private func color(for span: SessionInfoSpan, foreground: NSColor, backdrops: [RGBA]) -> NSColor {
+        if let tint = span.color {
+            let raw = NSColor.tint(tint).withAlphaComponent(span.dim ? 0.55 : 1)
+            guard !backdrops.isEmpty else { return raw }
+            var legible = raw
+            effectiveAppearance.performAsCurrentDrawingAppearance {
+                let color = raw.rgba, eased = legibleOn(color, under: backdrops, text: foreground.rgba)
+                // an unchanged color stays the dynamic one, so it still follows the appearance
+                if eased != color { legible = NSColor(eased) }
+            }
+            return legible
+        }
         let alpha: CGFloat = selected ? (span.dim ? 0.6 : 0.85) : (span.dim ? 0.38 : span.bold ? 1 : 0.58)
         return foreground.withAlphaComponent(alpha)
     }

@@ -1,4 +1,5 @@
 import AppKit
+import ElisCore
 
 extension NSColor {
     /// Parse a `#RRGGBB` (or bare `RRGGBB`) hex string into an sRGB color. Returns nil for nil or
@@ -21,5 +22,17 @@ extension NSColor {
         let g = Int((c.greenComponent * 255).rounded())
         let b = Int((c.blueComponent * 255).rounded())
         return String(format: "#%02X%02X%02X", r, g, b)
+    }
+}
+
+extension NSColor {
+    /// rgba is the color in sRGB for ElisCore's contrast math; resolve a dynamic color under the drawing appearance.
+    var rgba: RGBA {
+        let c = usingColorSpace(.sRGB) ?? .black
+        return RGBA(r: c.redComponent, g: c.greenComponent, b: c.blueComponent, a: c.alphaComponent)
+    }
+
+    convenience init(_ rgba: RGBA) {
+        self.init(srgbRed: rgba.r, green: rgba.g, blue: rgba.b, alpha: rgba.a)
     }
 }

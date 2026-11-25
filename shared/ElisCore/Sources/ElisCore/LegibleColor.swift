@@ -13,7 +13,7 @@ public struct RGBA: Equatable, Sendable {
         self.a = a
     }
 
-    static func composite(_ layer: RGBA, over under: RGBA) -> RGBA {
+    public static func composite(_ layer: RGBA, over under: RGBA) -> RGBA {
         let a = layer.a + under.a * (1 - layer.a)
         guard a > 0 else { return RGBA(r: 0, g: 0, b: 0, a: 0) }
         func mix(_ l: Double, _ u: Double) -> Double {
@@ -23,7 +23,7 @@ public struct RGBA: Equatable, Sendable {
     }
 
     /// WCAG relative luminance of the RGB channels; alpha is ignored.
-    static func luminance(_ c: RGBA) -> Double {
+    public static func luminance(_ c: RGBA) -> Double {
         func lin(_ v: Double) -> Double { v <= 0.04045 ? v / 12.92 : pow((v + 0.055) / 1.055, 2.4) }
         return 0.2126 * lin(c.r) + 0.7152 * lin(c.g) + 0.0722 * lin(c.b)
     }
