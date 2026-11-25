@@ -171,6 +171,28 @@ final class AssistantRunnerTests: XCTestCase {
         XCTAssertTrue(answer.hasSuffix("second") || answer.hasSuffix("second leaked"), answer)
     }
 
+    func testAFailedStartKeepsTheRecapForTheNextStart() async throws {
+        let fake = stateDir.appendingPathComponent("provider")
+        for provider in [SessionLauncher.codex, .claude] {
+            chat.clear()
+            chat.append(.user, text: "earlier-\(provider.rawValue)", now: 0)
+            chat.provider = provider
+            try? FileManager.default.removeItem(at: fake)
+            let runner = runner(standIn: [fake.path])
+            runner.providerChanged(provider)
+            ask(runner, "x")
+            await waitFor("the start error") { entries(.error).count == 1 }
+            try FileManager.default.createDirectory(at: stateDir, withIntermediateDirectories: true)
+            try "#!/bin/bash\nexec /bin/bash \(Self.fake) \"$@\"\n".write(to: fake, atomically: true, encoding: .utf8)
+            try FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: fake.path)
+            ask(runner, "y")
+            await waitFor("the answer") { entries(.assistant).count == 1 && !chat.running }
+            let answer = try XCTUnwrap(entries(.assistant).first)
+            XCTAssertTrue(answer.contains("user: earlier-\(provider.rawValue)"), "\(provider): \(answer)")
+            runner.stopForQuit()
+        }
+    }
+
     func testWatchdogFailsASilentTurn() async throws {
         var clock = Date(timeIntervalSince1970: 1_000_000)
         let runner = runner(standIn: ["/bin/bash", "-c", "exec sleep 600"], now: { clock })

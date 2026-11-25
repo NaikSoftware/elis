@@ -165,13 +165,13 @@ final class AssistantRunner {
             let recap = recap ? AssistantPrompt.inline(chat.settledEntries(last: 50)) : ""
             input = preamble + (recap.isEmpty ? "" : recap + "\n\n") + input
             fresh = false
-            self.recap = false
         }
         if mode == .stream {
             write(AssistantStream.encode(provider, text: input) + "\n")
-            return
+        } else {
+            spawn(AssistantProvider.turn(provider, input: input, prompt: prompt(), resume: chat.resume[provider]))
         }
-        spawn(AssistantProvider.turn(provider, input: input, prompt: prompt(), resume: chat.resume[provider]))
+        if process != nil { recap = false } // a start that failed keeps it for the next, as Linux clears it on `started`
     }
 
     private func launch() -> SessionLauncher? {
