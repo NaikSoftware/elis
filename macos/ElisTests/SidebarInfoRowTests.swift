@@ -262,11 +262,13 @@ final class SidebarInfoRowTests: XCTestCase {
         try await waitUntil { (try? self.height(of: other.id)) == self.infoHeight }
         defer { CIStatusLine.panel?.close() }
 
-        try await click(try infoCell(forSession: other.id).infoField)
+        try click(try infoCell(forSession: other.id).infoField)
+        try await Task.sleep(nanoseconds: 100_000_000)
         XCTAssertEqual(store.selectedSessionID, other.id)
         XCTAssertNil(CIStatusLine.panel)
 
-        try await click(try infoCell(forSession: other.id).infoField)
+        try click(try infoCell(forSession: other.id).infoField)
+        try await waitUntil { CIStatusLine.panel != nil }
         XCTAssertNotNil(CIStatusLine.panel)
         CIStatusLine.panel?.close()
         try await waitUntil { CIStatusLine.panel == nil }
@@ -381,7 +383,7 @@ final class SidebarInfoRowTests: XCTestCase {
     }
 
     // the mouse-up is queued first: the outline's tracking loop pulls it, and otherwise the window delivers it
-    private func click(_ view: NSView) async throws {
+    private func click(_ view: NSView) throws {
         let point = view.convert(NSPoint(x: view.bounds.midX, y: view.bounds.midY), to: nil)
         let event = { (type: NSEvent.EventType) in
             try XCTUnwrap(NSEvent.mouseEvent(with: type, location: point, modifierFlags: [],
@@ -391,7 +393,6 @@ final class SidebarInfoRowTests: XCTestCase {
         }
         NSApp.postEvent(try event(.leftMouseUp), atStart: false)
         window.sendEvent(try event(.leftMouseDown))
-        try await Task.sleep(nanoseconds: 100_000_000)
     }
 
     private func waitUntil(timeout: TimeInterval = 5, _ condition: () -> Bool) async throws {
