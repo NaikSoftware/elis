@@ -15,6 +15,7 @@ final class AssistantRunner {
     private let stateDirectory: URL?
     private let standIn: [String]?
     private let baseEnvironment: [String: String]
+    private let appPid: pid_t
     private let now: () -> Date
 
     private var queue: [String] = []
@@ -38,15 +39,18 @@ final class AssistantRunner {
 
     private var process: Process?
     private var stdin: FileHandle?
+    private(set) var guardian: Process?
     private var stdout = Data()
     private let writer = DispatchQueue(label: "ua.naiksoftware.elis.assistant-writer")
 
     init(chat: AssistantChat, stateDirectory: URL?, standIn: [String]?,
-         baseEnvironment: [String: String] = ProcessInfo.processInfo.environment, now: @escaping () -> Date = Date.init) {
+         baseEnvironment: [String: String] = ProcessInfo.processInfo.environment, appPid: pid_t = getpid(),
+         now: @escaping () -> Date = Date.init) {
         self.chat = chat
         self.stateDirectory = stateDirectory
         self.standIn = standIn
         self.baseEnvironment = baseEnvironment
+        self.appPid = appPid
         self.now = now
     }
 
@@ -244,6 +248,7 @@ final class AssistantRunner {
         if let started = Self.startTime(process.processIdentifier) {
             try? "\(process.processIdentifier) \(started)\n".write(to: Self.pidfile(stateDirectory), atomically: true, encoding: .utf8)
         }
+        guardProvider(process.processIdentifier)
         // One reader posts chunks then EOF in order, so the exit is handled after the last output line.
         let reader = output.fileHandleForReading
         DispatchQueue.global().async { @Sendable [weak self] in
@@ -255,6 +260,26 @@ final class AssistantRunner {
                 self?.finishIfDone(process, exited, provider: provider)
             }
         }
+    }
+
+    /// guardProvider stops the provider when the app dies: a hard-killed app runs no teardown, and a busy provider reads
+    /// stdin only between turns. The guard outlives the app and exits with the provider.
+    private func guardProvider(_ pid: pid_t) {
+        let guardian = Process()
+        guardian.executableURL = URL(fileURLWithPath: "/bin/sh")
+        // Process makes the provider its own group's leader, so the group signal reaches its children too.
+        guardian.arguments = ["-c", """
+            while kill -0 "$1" 2>/dev/null && kill -0 "$2" 2>/dev/null; do sleep 1; done
+            kill -0 "$1" 2>/dev/null && exit 0
+            kill -TERM -"$2" 2>/dev/null || exit 0
+            sleep 3
+            kill -KILL -"$2" 2>/dev/null
+            """, "elis-assistant-guard", String(appPid), String(pid)]
+        guardian.standardInput = FileHandle.nullDevice
+        guardian.standardOutput = FileHandle.nullDevice
+        guardian.standardError = FileHandle.nullDevice
+        try? guardian.run()
+        self.guardian = guardian
     }
 
     private final class Exit: @unchecked Sendable { // touched on the main queue only

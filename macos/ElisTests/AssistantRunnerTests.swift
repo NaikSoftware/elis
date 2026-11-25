@@ -24,9 +24,9 @@ final class AssistantRunnerTests: XCTestCase {
     }
 
     private func runner(standIn: [String]? = nil, stateDirectory: URL?? = nil, base: [String: String]? = nil,
-                        now: @escaping () -> Date = Date.init) -> AssistantRunner {
+                        appPid: pid_t = getpid(), now: @escaping () -> Date = Date.init) -> AssistantRunner {
         let runner = AssistantRunner(chat: chat, stateDirectory: stateDirectory ?? stateDir, standIn: standIn ?? ["/bin/bash", Self.fake],
-                                     baseEnvironment: base ?? ProcessInfo.processInfo.environment, now: now)
+                                     baseEnvironment: base ?? ProcessInfo.processInfo.environment, appPid: appPid, now: now)
         runners.append(runner)
         return runner
     }
@@ -203,6 +203,28 @@ final class AssistantRunnerTests: XCTestCase {
         try "\(stale.processIdentifier) \(started)\n".write(to: pidfile, atomically: true, encoding: .utf8)
         _ = AssistantModel(stateDirectory: stateDir, standIn: nil)
         await waitFor("the stale provider to exit", seconds: 5) { !stale.isRunning }
+    }
+
+    func testProviderEndsWhenTheAppDies() async throws {
+        let app = try sleeper()
+        defer { app.terminate() }
+        let runner = runner(standIn: ["/bin/bash", "-c", "exec sleep 600"], appPid: app.processIdentifier)
+        ask(runner, "a")
+        let provider = try XCTUnwrap(runner.pid)
+        let guardian = try XCTUnwrap(runner.guardian)
+        XCTAssertTrue(guardian.isRunning)
+
+        app.terminate()
+        await waitFor("the provider to exit", seconds: 5) { kill(provider, 0) != 0 }
+        await waitFor("the guard to exit", seconds: 5) { !guardian.isRunning }
+    }
+
+    func testGuardEndsWithItsProvider() async throws {
+        let runner = runner(standIn: ["/bin/bash", "-c", "exec sleep 600"])
+        ask(runner, "a")
+        let guardian = try XCTUnwrap(runner.guardian)
+        runner.stopForQuit()
+        await waitFor("the guard to exit", seconds: 5) { !guardian.isRunning }
     }
 
     private func sleeper() throws -> Process {
