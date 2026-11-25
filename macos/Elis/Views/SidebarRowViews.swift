@@ -540,11 +540,13 @@ class SidebarRowView: NSTableRowView {
         }
     }
 
-    // re-adds the drift if Core Animation dropped it while the row was out of a window
+    // re-adds the drift if Core Animation dropped it while the row was out of a window; a window move also changes
+    // `isEmphasized` without its setter, so the info line re-renders for the new key state
     override func viewDidMoveToWindow() {
         super.viewDidMoveToWindow()
         if window == nil { isHovered = false }
         needsLayout = true
+        refreshInfoLine()
     }
 
     private func layoutWave() {

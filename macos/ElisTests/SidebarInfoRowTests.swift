@@ -124,12 +124,50 @@ final class SidebarInfoRowTests: XCTestCase {
                              runs: runs), forSession: session.id)
         try mountSidebar(for: store)
         try await waitUntil { (try? self.height(of: session.id)) == self.infoHeight }
+        try assertLegibleLine(of: session.id)
+    }
+
+    func testALineAddedToAKeyWindowRendersForTheEmphasizedSelection() async throws {
+        let store = try XCTUnwrap(library.activeStore)
+        let session = try seed(store)
+        XCTAssertTrue(store.setTint(SidebarTint(color: .yellow), forWorkspace: try XCTUnwrap(store.workspaces.last).id))
+        let runs = [CIRunState.failed, .running, .passed].map { CIRun(workflow: "\($0)", state: $0, url: "https://github.com/o/r/actions/runs/1") }
+        store.setCI(CIStatus(branch: "main", sha: "abc", runs: runs), forSession: session.id)
+        try mountSidebar(for: store, key: true)
+        try await waitUntil { (try? self.height(of: session.id)) == self.infoHeight }
         let row = try XCTUnwrap(outline.rowView(atRow: try row(of: session.id), makeIfNecessary: false) as? SidebarRowView)
+        XCTAssertTrue(row.isSelected && row.isEmphasized)
+        try assertLegibleLine(of: session.id, plainPrefix: false)
+    }
+
+    func testTheLineStaysLegibleWhenTheWindowBecomesKeyAfterItRenders() async throws {
+        let store = try XCTUnwrap(library.activeStore)
+        let session = try seed(store)
+        XCTAssertTrue(store.setTint(SidebarTint(color: .yellow), forWorkspace: try XCTUnwrap(store.workspaces.last).id))
+        let runs = [CIRunState.failed, .running, .passed].map { CIRun(workflow: "\($0)", state: $0, url: "https://github.com/o/r/actions/runs/1") }
+        store.setCI(CIStatus(branch: "main", sha: "abc", runs: runs), forSession: session.id)
+        try mountSidebar(for: store, key: true)
+        let keyWindow = try XCTUnwrap(window as? KeyWindow)
+        keyWindow.isKey = false
+        try await waitUntil { (try? self.height(of: session.id)) == self.infoHeight }
+        let row = try XCTUnwrap(outline.rowView(atRow: try row(of: session.id), makeIfNecessary: false) as? SidebarRowView)
+        XCTAssertTrue(row.isSelected)
+        XCTAssertFalse(row.isEmphasized)
+
+        keyWindow.isKey = true
+        keyWindow.becomeKey()
+
+        XCTAssertTrue(row.isEmphasized)
+        try assertLegibleLine(of: session.id, plainPrefix: false)
+    }
+
+    private func assertLegibleLine(of id: UUID, plainPrefix: Bool = true) throws {
+        let row = try XCTUnwrap(outline.rowView(atRow: try row(of: id), makeIfNecessary: false) as? SidebarRowView)
         let backdrops = row.infoBackdrops
         XCTAssertTrue((1...2).contains(backdrops.count), "\(backdrops)")
         XCTAssertNotNil(row.band)
 
-        let text = try infoCell(forSession: session.id).infoField.attributedStringValue
+        let text = try infoCell(forSession: id).infoField.attributedStringValue
         for glyph in ["✗", "◷", "✓"] {
             let index = (text.string as NSString).range(of: glyph).location
             let shown = try XCTUnwrap(color(in: text, at: index), glyph).rgba
@@ -139,7 +177,7 @@ final class SidebarInfoRowTests: XCTestCase {
             }
             if glyph == "✗" { XCTAssertTrue(shown.r > shown.g && shown.r > shown.b, "red keeps its hue: \(shown)") }
         }
-        XCTAssertEqual(rgba(color(in: text, at: 0)), rgba(SidebarCellView.themeTextColor(selected: false)))
+        if plainPrefix { XCTAssertEqual(rgba(color(in: text, at: 0)), rgba(SidebarCellView.themeTextColor(selected: false))) }
     }
 
     // #1019: the field kept the 13 pt label font, so single-line mode placed the smaller text low and clipped it
@@ -392,5 +430,6 @@ final class SidebarInfoRowTests: XCTestCase {
 
 // the hosted app is never active, so no window becomes key and a click would only activate it
 private final class KeyWindow: NSWindow {
-    override var isKeyWindow: Bool { true }
+    var isKey = true
+    override var isKeyWindow: Bool { isKey }
 }
