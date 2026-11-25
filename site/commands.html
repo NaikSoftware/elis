@@ -609,7 +609,7 @@
                 <span style="font-family: &quot;JetBrains Mono&quot;, monospace">presenter</span>, true when one holds it; omitted when none does; an older Elis omits <span style="font-family: &quot;JetBrains Mono&quot;, monospace">viewers</span>),
                 <span style="font-family: &quot;JetBrains Mono&quot;, monospace">remoteOverlays</span> (on an origin session: the overlay slots a presenting Mac holds, each
                 <span style="font-family: &quot;JetBrains Mono&quot;, monospace">{pane?, sizePercent?, pageID?}</span>, <span style="font-family: &quot;JetBrains Mono&quot;, monospace">pageID</span> for a page, while the session stays uncovered here; omitted when none is held),
-                <span style="font-family: &quot;JetBrains Mono&quot;, monospace">handle</span> (the session's short Latin <span style="font-family: &quot;JetBrains Mono&quot;, monospace">@</span> tag for the Elis assistant),
+                <span style="font-family: &quot;JetBrains Mono&quot;, monospace">handle</span> (the session's short Latin <span style="font-family: &quot;JetBrains Mono&quot;, monospace">@</span> tag for the Elis assistant; a remote row has none),
                 <span style="font-family: &quot;JetBrains Mono&quot;, monospace">assistantMark</span> (<span style="font-family: &quot;JetBrains Mono&quot;, monospace">waiting</span>, <span style="font-family: &quot;JetBrains Mono&quot;, monospace">replied</span>, or <span style="font-family: &quot;JetBrains Mono&quot;, monospace">not-delivered</span> during an assistant exchange; omitted when none), and
                 <span style="font-family: &quot;JetBrains Mono&quot;, monospace">unseen</span>.
               </p>
@@ -4099,7 +4099,7 @@
               </div>
               <div style="font-family: &quot;JetBrains Mono&quot;, monospace; font-size: 11.5px; color: #6b727a; margin-top: 6px">assistant.ask · assistant.send · assistant.read · assistant.provider · assistant.show · assistant.seen · assistant.clear</div>
               <p style="font-size: 15px; line-height: 1.65; color: #cbc6bc; margin: 10px 0 0">
-                Drive the app-wide Elis assistant chat pinned above the workspaces in the sidebar (available in the Linux app now; the macOS app gets it later).
+                Drive the app-wide Elis assistant chat pinned above the workspaces in the sidebar, in the macOS and Linux apps.
                 <span style="font-family: &quot;JetBrains Mono&quot;, monospace">ask</span> posts a user message to the assistant;
                 <span style="font-family: &quot;JetBrains Mono&quot;, monospace">--wait</span> polls <span style="font-family: &quot;JetBrains Mono&quot;, monospace">tree</span> until
                 <span style="font-family: &quot;JetBrains Mono&quot;, monospace">assistant.running</span> clears and prints the new entries (or <span style="font-family: &quot;JetBrains Mono&quot;, monospace">ok</span>), and

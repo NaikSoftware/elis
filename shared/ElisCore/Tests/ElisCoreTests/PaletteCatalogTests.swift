@@ -43,6 +43,7 @@ struct PaletteCatalogTests {
             "Find…",
             "Quick Terminal",
             "Dashboard",
+            "Show Elis",
             "Toggle Full Screen",
             "Increase Font Size",
             "Decrease Font Size",
@@ -74,7 +75,7 @@ struct PaletteCatalogTests {
     }
 
     @Test func catalogHasTheExpectedStaticCommandCount() {
-        #expect(PaletteCommand.allCases.count == 66)
+        #expect(PaletteCommand.allCases.count == 67)
     }
 
     @Test func idsRoundTripThroughRawValue() {
@@ -470,12 +471,19 @@ struct PaletteCatalogTests {
                                      hasRecentClosed: true, hasActiveSession: true,
                                      hasCurrentWorkspace: true, dashboardOpen: true)
         for command in PaletteCommand.allCases {
-            let expected = Self.coverProof.contains(command) || command == .dashboard || command == .swapPanes
+            let expected = Self.coverProof.contains(command) || command == .dashboard || command == .showAssistant || command == .swapPanes
             #expect(command.isEnabled(in: context) == expected, "\(command)")
         }
         #expect(!PaletteCommand.dashboard.isEnabled(
             in: PaletteContext(hasActiveSession: true, hasCurrentWorkspace: true,
                                terminalZoomActive: true, dashboardOpen: true)))
+    }
+
+    @Test func showElisNeedsNoSessionAndOnlyZoomOrAPickerCoverIt() {
+        #expect(PaletteCommand.showAssistant.isEnabled(in: PaletteContext(hasActiveSession: false, hasCurrentWorkspace: false)))
+        #expect(PaletteCommand.showAssistant.isEnabled(in: PaletteContext(dashboardOpen: true)))
+        #expect(!PaletteCommand.showAssistant.isEnabled(in: PaletteContext(terminalZoomActive: true)))
+        #expect(!PaletteCommand.showAssistant.isEnabled(in: PaletteContext(pickerActive: true)))
     }
 
     // the palette lists rows the menu disables, so a missing session must not remove them from the catalog.
@@ -493,6 +501,7 @@ struct PaletteCatalogTests {
         #expect(PaletteCommand.toggleTerminalZoom.builtinAction == .toggleTerminalZoom)
         #expect(PaletteCommand.resetFontSize.builtinAction == .resetFontSize)
         #expect(PaletteCommand.dashboard.builtinAction == .dashboard)
+        #expect(PaletteCommand.showAssistant.builtinAction == .showAssistant)
         #expect(PaletteCommand.reopenRecent.builtinAction == .reopenRecent)
         #expect(PaletteCommand.undoClose.builtinAction == .undoClose)
         #expect(PaletteCommand.toggleWorkspaceFilter.builtinAction == .toggleWorkspaceFilter)

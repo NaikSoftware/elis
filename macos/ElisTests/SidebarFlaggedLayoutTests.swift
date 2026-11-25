@@ -43,7 +43,7 @@ final class SidebarFlaggedLayoutTests: XCTestCase {
         }
 
         var rows: [String] {
-            (0..<outline.numberOfRows).map { row in
+            (0..<outline.numberOfRows).filter { (outline.item(atRow: $0) as? SidebarNode)?.kind != .assistant }.map { row in
                 let cell = outline.view(atColumn: 0, row: row, makeIfNecessary: true) as? SidebarCellView
                 let kind = (outline.item(atRow: row) as? SidebarNode)?.kind == .workspace ? "ws" : "s"
                 return "\(kind):\(cell?.textField?.stringValue ?? "")"
@@ -117,7 +117,7 @@ final class SidebarFlaggedLayoutTests: XCTestCase {
         XCTAssertGreaterThan(stack.frame.width, 0)
         XCTAssertEqual(stack.frame.midX, scroll.bounds.midX, accuracy: 1)
         let topGap = scroll.isFlipped ? stack.frame.minY : scroll.bounds.height - stack.frame.maxY
-        XCTAssertEqual(topGap, scroll.safeAreaInsets.top + 40, accuracy: 1)
+        XCTAssertEqual(topGap, scroll.safeAreaInsets.top + 40 + sidebar.outline.rect(ofRow: 0).maxY, accuracy: 1, "below the Elis row")
         let labelFrame = label.convert(label.bounds, to: scroll)
         let linkFrame = add.convert(add.bounds, to: scroll)
         XCTAssertFalse(labelFrame.intersects(linkFrame), "the link sits under the hint, not on it")
@@ -308,7 +308,7 @@ final class SidebarFlaggedLayoutTests: XCTestCase {
         store.setSidebarMode(.flagged)
         model.setFlaggedViewLayout(.tree)
         let sidebar = mount(store)
-        sidebar.outline.collapseItem(sidebar.outline.item(atRow: 0))
+        sidebar.outline.collapseItem(sidebar.coordinator.workspaceNode(forID: try XCTUnwrap(store.workspaces.first { $0.name == "Alpha" }).id))
         let folded = ["ws:Alpha", "ws:Gamma", "s:c1"]
         XCTAssertEqual(sidebar.rows, folded)
 

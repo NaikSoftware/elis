@@ -583,8 +583,9 @@ elisctl session overlay open --html report.html --page</code></pre>
           <!-- ELIS ASSISTANT -->
           <section id="assistant" class="doc-v2" style="scroll-margin-top: 88px; padding-top: 56px">
 <h2>Elis assistant</h2>
-<p><strong>Elis</strong> is a system chat pinned above the workspaces in the sidebar, shown with the dog icon, the name <strong>Elis</strong> and an unread count of replies from other sessions. It lets you talk to your sessions from one thread and manages them through <code>elisctl</code>. Available in the Linux app now; the macOS app gets it later.</p>
+<p><strong>Elis</strong> is a system chat pinned above the workspaces in the sidebar, shown with the dog icon, the name <strong>Elis</strong> and an unread count of replies from other sessions. It lets you talk to your sessions from one thread and manages them through <code>elisctl</code>.</p>
 <p>Open the chat by clicking the row or with <strong>Navigate ▸ Show Elis</strong> (bindable as <code>show_assistant</code>). Opening it leaves the session you were in, so no session shortcut reaches a session hidden behind the chat; one tap of the session switcher (<kbd>Ctrl</kbd>+<kbd>Tab</kbd>) takes you back to it.</p>
+<p>On the Mac, <strong>Show Elis</strong> is also in the command palette, and <code>show_assistant</code> has no default shortcut. The <strong>Show notification badges</strong> setting also hides the unread count on the row. Elis works with local sessions only: a session on an attached Mac or an elis-server host has no handle and cannot be tagged. The Elis row also shows in a remote window and opens the local chat.</p>
 <h3 id="assistant-providers">Choosing an agent</h3>
 <p>Every message goes through the agent you pick by name in the composer's provider panel: Claude Code, Codex, Antigravity or OpenCode, whichever are installed. The choice applies from the next message.</p>
 <p>Elis keeps one conversation across your messages. Replies from other sessions reach it in the order they arrive, each after the turn it is busy with.</p>
@@ -1167,7 +1168,7 @@ s=$(elisctl zmx tree studio.local --json \
 </ul>
 <p>The <a href="commands.html#phone">phone</a> and <a href="commands.html#mobile">mobile</a> commands drive all of this from a script.</p>
 <h3 id="phone-assistant">Ask Elis on the phone</h3>
-<p>When the paired computer runs the <a href="#assistant">Elis assistant</a>, the Sessions screen has an <strong>Ask Elis…</strong> button with the Elis icon and the unread count of agent replies, beside New session. Without the assistant, New session fills the row; today only the Linux app runs it, so on a Mac or an elis-server host the button is absent.</p>
+<p>When the paired computer runs the <a href="#assistant">Elis assistant</a>, the Sessions screen has an <strong>Ask Elis…</strong> button with the Elis icon and the unread count of agent replies, beside New session. Without the assistant, New session fills the row; an elis-server host has no assistant, so the button is absent there.</p>
 <ul>
 <li><strong>Open and close.</strong> A tap expands the button into the Elis chat as a sheet over the list. Opening it marks the replies read and never switches the computer to its Elis chat. Close the sheet by dragging it down, tapping its handle or the dimmed list, or pressing Back.</li>
 <li><strong>The chat.</strong> It shows your messages, Elis's answers, errors, and a card for each message Elis sent to sessions (one row per session) and each reply from a session. A tap on a session opens it; a session the phone does not list shows the start of its id. <em>Elis is working…</em> shows while a turn runs.</li>
@@ -1431,7 +1432,7 @@ previous_workspace   next_workspace
 previous_window   next_window
 previous_attention_session   next_attention_session
 quick_terminal   session_palette   command_palette
-custom_command_palette   show_attention
+custom_command_palette   show_attention   show_assistant
 select_theme   toggle_fullscreen   toggle_terminal_zoom
 dashboard   attach_remote
 open_remote_window   detached_sessions

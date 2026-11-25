@@ -1,0 +1,404 @@
+import AppKit
+import ElisCore
+import XCTest
+@testable import Elis
+
+@MainActor
+final class AssistantComposerTests: XCTestCase {
+    private var stateDir: URL!
+    private var library: WindowLibrary!
+    private var actions: AppActions!
+    private var server: ControlServer!
+    private var window: NSWindow!
+    private var composer: AssistantComposerTextView!
+    private var surfaces: [GhosttySurfaceView] = []
+
+    override func setUp() async throws {
+        try await super.setUp()
+        stateDir = FileManager.default.temporaryDirectory.appendingPathComponent("elis-composer-\(UUID().uuidString)", isDirectory: true)
+        library = WindowLibrary(directory: stateDir)
+        actions = AppActions(library: library)
+        server = ControlServer(
+            library: library, actions: actions,
+            settingsModel: SettingsModel(library: library, settingsStore: SettingsStore(directory: stateDir)),
+            identity: AppIdentity(version: "9.9.9", commit: "testsha"),
+            socketPath: stateDir.appendingPathComponent("control.sock").path)
+        server.installAssistant()
+        window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 600, height: 200), styleMask: [.titled], backing: .buffered, defer: false)
+        window.isReleasedWhenClosed = false
+        composer = AssistantComposerTextView(model: actions.assistant, store: try store(), state: AssistantComposerState())
+        composer.frame = NSRect(x: 0, y: 0, width: 600, height: 22)
+        window.contentView?.addSubview(composer)
+    }
+
+    override func tearDown() async throws {
+        surfaces.forEach { $0.retireSurface() }
+        surfaces = []
+        window.close()
+        composer = nil
+        window = nil
+        server = nil
+        actions = nil
+        library = nil
+        try? FileManager.default.removeItem(at: stateDir)
+        try await super.tearDown()
+    }
+
+    private func store() throws -> AppStore { try XCTUnwrap(library.activeStore) }
+
+    private func session(remote: String? = nil) throws -> Session {
+        let store = try store()
+        return try XCTUnwrap(store.addSession(toWorkspace: try XCTUnwrap(store.currentWorkspaceID), cwd: "/tmp", remoteHost: remote))
+    }
+
+    private func press(_ modifiers: NSEvent.ModifierFlags = [], key: String = "\r", code: UInt16 = 36) throws {
+        let event = try XCTUnwrap(NSEvent.keyEvent(with: .keyDown, location: .zero, modifierFlags: modifiers, timestamp: 0,
+                                                   windowNumber: window.windowNumber, context: nil, characters: key,
+                                                   charactersIgnoringModifiers: key, isARepeat: false, keyCode: code))
+        composer.keyDown(with: event)
+    }
+
+    private func terminal() -> GhosttySurfaceView {
+        let view = GhosttySurfaceView(workingDirectory: NSTemporaryDirectory(), command: "/bin/cat", env: [:], backedByZmx: false)
+        view.frame = NSRect(x: 0, y: 0, width: 300, height: 100)
+        window.contentView?.addSubview(view)
+        view.createSurface()
+        surfaces.append(view)
+        return view
+    }
+
+    private func splitSession() throws -> (Session, GhosttySurfaceView, GhosttySurfaceView) {
+        let session = try session()
+        let main = terminal()
+        let split = terminal()
+        split.isSplitPane = true
+        main.session = session
+        split.session = session
+        session.surface = main
+        session.splitSurface = split
+        session.splitPaneIdentity = UUID()
+        session.hasSplit = true
+        return (session, main, split)
+    }
+
+    private func content() throws -> WindowContentView {
+        WindowContentView(
+            windowID: try XCTUnwrap(library.activeWindowID), store: try store(), library: library,
+            makeSurface: { _ in fatalError("unused") }, makeSplitSurface: { _ in fatalError("unused") },
+            makeOverlaySurface: { _, _ in fatalError("unused") }, makeScratchSurface: { _ in fatalError("unused") },
+            captureOnExit: nil, actions: actions, palette: PaletteController(),
+            sessionSwitcher: SessionSwitcher(library: library, canSwitch: { false }),
+            toolbarMode: .normal, chromeText: .black, attentionButtonEnabled: true, hiddenInterfaceElements: []
+        )
+    }
+
+    private func settle() async { try? await Task.sleep(for: .milliseconds(600)) }
+
+    private func waitFor(_ what: String, _ condition: () -> Bool) async {
+        let deadline = Date().addingTimeInterval(5)
+        while !condition(), Date() < deadline { try? await Task.sleep(for: .milliseconds(20)) }
+        XCTAssertTrue(condition(), "timed out waiting for \(what)")
+    }
+
+    private func drag(_ id: UUID) -> SidebarFakeDrag {
+        let pasteboard = NSPasteboard(name: NSPasteboard.Name(UUID().uuidString))
+        pasteboard.clearContents()
+        let item = NSPasteboardItem()
+        item.setString(id.uuidString, forType: sessionPasteboardType)
+        item.setString(id.uuidString, forType: .string)
+        pasteboard.writeObjects([item])
+        return SidebarFakeDrag(pasteboard, over: composer)
+    }
+
+    func testReturnSendsAndShiftReturnInsertsANewline() async throws {
+        var sent: [ControlRequest] = []
+        actions.assistant.perform = { request in
+            sent.append(request)
+            return ControlResponse(ok: true)
+        }
+        composer.insertText("hi", replacementRange: composer.selectedRange())
+        try press()
+        await waitFor("the field to empty") { composer.string.isEmpty }
+        XCTAssertEqual(sent.map(\.cmd), [.assistantAsk])
+        XCTAssertEqual(sent.first?.args?.text, "hi")
+
+        composer.insertText("a", replacementRange: composer.selectedRange())
+        try press(.shift)
+        XCTAssertEqual(composer.string, "a\n")
+        XCTAssertEqual(sent.count, 1)
+    }
+
+    func testRemoteRowDropIsRefused() throws {
+        let remote = try session(remote: "far")
+        XCTAssertEqual(composer.draggingEntered(drag(remote.id)), [])
+        XCTAssertEqual(composer.string, "")
+
+        let local = try session()
+        let handle = try XCTUnwrap(AssistantDirectory(server.assistantPeers() ?? []).handle(of: local.id.uuidString))
+        let info = drag(local.id)
+        XCTAssertEqual(composer.draggingEntered(info), .copy)
+        XCTAssertTrue(composer.performDragOperation(info))
+        XCTAssertEqual(composer.string, "@\(handle) ")
+    }
+
+    private static let mentioned = "A8BA15A4-73FE-45D7-89A9-9D764EDF9389"
+    private static let mentionDirectory = AssistantDirectory([AssistantPeer(sessionID: mentioned, window: "w", workspaceID: "ws",
+                                                                            workspaceName: "elis", name: "sidebar-filter")])
+
+    private func mentions(_ blocks: [AssistantMarkdown.Block]) -> [String] {
+        blocks.flatMap { block in block.content.runs.compactMap { run in run.assistantMention.map { _ in String(block.content[run.range].characters) } } }
+    }
+
+    func testAnAnswersReplyFrameRendersAsATagWithoutTheSessionID() {
+        let id = Self.mentioned
+        let blocks = AssistantMarkdown.blocks("[reply from @side-filter \(id)] The chip is **wired**, ask \(id).", in: Self.mentionDirectory)
+        let shown = blocks.map { String($0.content.characters) }.joined()
+
+        XCTAssertFalse(shown.contains(id), shown)
+        XCTAssertFalse(shown.contains("reply from"), shown)
+        XCTAssertTrue(shown.contains("The chip is wired, ask "), shown)
+        XCTAssertEqual(mentions(blocks), ["@side-filter", "@side-filter"])
+    }
+
+    func testCodeAndLinkDestinationsKeepASessionIDVerbatim() throws {
+        let id = Self.mentioned
+        let source = "```\nelisctl session go \(id)\n```\n\nRun `go \(id)`, see [the log](https://example.com/\(id)), or ask \(id)."
+        let blocks = AssistantMarkdown.blocks(source, in: Self.mentionDirectory)
+
+        let code = try XCTUnwrap(blocks.first { $0.kind == .code })
+        XCTAssertTrue(String(code.content.characters).contains(id), String(code.content.characters))
+        let paragraph = try XCTUnwrap(blocks.last)
+        let inline = paragraph.content.runs.first { $0.inlinePresentationIntent?.contains(.code) == true }.map { String(paragraph.content[$0.range].characters) }
+        XCTAssertEqual(inline, "go \(id)")
+        let link = paragraph.content.runs.compactMap(\.link).first
+        XCTAssertEqual(link?.absoluteString, "https://example.com/\(id)")
+        XCTAssertFalse(String(paragraph.content.characters).contains("\u{E000}"))
+        XCTAssertEqual(mentions(blocks), ["@side-filter"], "only the plain-text id becomes a tag")
+    }
+
+    func testAnAnswerLinkOpensOnlyAWebOrMailScheme() throws {
+        let blocks = AssistantMarkdown.blocks("[a](file:///Applications/Calculator.app) [b](x-elis://run) [c](https://example.com)")
+        let links = blocks.flatMap { $0.content.runs.compactMap(\.link) }
+        XCTAssertEqual(links.map(\.absoluteString), ["file:///Applications/Calculator.app", "x-elis://run", "https://example.com"])
+        XCTAssertEqual(links.map(AssistantMarkdown.opens), [false, false, true])
+    }
+
+    func testEditNotesUserActivity() async throws {
+        let idle = { [server] () async -> Int? in await server?.dispatch(ControlRequest(cmd: .tree)).result?.tree?.idleMs }
+        let before = await idle()
+        XCTAssertTrue(before == nil || before! >= 1000, "idleMs \(String(describing: before)) before any edit")
+        composer.insertText("x", replacementRange: composer.selectedRange())
+        let after = await idle()
+        XCTAssertLessThan(try XCTUnwrap(after), 1000)
+    }
+
+    func testASplitExitUnderTheChatLeavesTheComposerFocused() async throws {
+        let (session, _, split) = try splitSession()
+        let store = try store()
+        actions.showAssistant(in: store)
+        window.makeFirstResponder(composer)
+
+        elisApp.handlePaneExit(split, store: store, sessionID: session.id, library: library)
+        await settle()
+
+        XCTAssertTrue(window.firstResponder === composer, "first responder \(String(describing: window.firstResponder))")
+    }
+
+    func testTheSelectedSessionsSplitExitFocusesItsSurvivingPane() async throws {
+        let (session, main, split) = try splitSession()
+        let store = try store()
+        _ = store.selectSession(session.id)
+        window.makeFirstResponder(composer)
+
+        elisApp.handlePaneExit(split, store: store, sessionID: session.id, library: library)
+
+        await waitFor("the surviving pane to take focus") { window.firstResponder === main }
+        await settle()
+    }
+
+    func testTabWithoutACompletionKeepsTheComposerFocused() throws {
+        let other = NSTextField(frame: NSRect(x: 0, y: 100, width: 100, height: 22))
+        window.contentView?.addSubview(other)
+        composer.nextKeyView = other
+        other.nextKeyView = composer
+        window.makeFirstResponder(composer)
+
+        try press(key: "\t", code: 48)
+        XCTAssertTrue(window.firstResponder === composer)
+        try press(.shift, key: "\u{19}", code: 48)
+        XCTAssertTrue(window.firstResponder === composer)
+        XCTAssertEqual(composer.string, "")
+    }
+
+    private func type(_ text: String) { composer.insertText(text, replacementRange: composer.selectedRange()) }
+
+    func testCompletionKeysMoveAndInsertTheHighlightedTag() throws {
+        _ = try session()
+        _ = try session()
+        window.makeFirstResponder(composer)
+        type("@")
+        let rows = composer.state.completion.map(\.tag)
+        XCTAssertGreaterThan(rows.count, 2)
+        try press(key: "\u{F701}", code: 125)
+        try press(key: "\u{F701}", code: 125)
+        try press(key: "\u{F700}", code: 126)
+        XCTAssertEqual(composer.state.highlighted, 1)
+        try press()
+        XCTAssertEqual(composer.string, "\(rows[1]) ")
+        XCTAssertTrue(composer.state.completion.isEmpty)
+
+        type("@")
+        try press(key: "\t", code: 48)
+        XCTAssertEqual(composer.string, "\(rows[1]) \(rows[0]) ")
+    }
+
+    func testEscapeClosesTheCompletionAndKeepsTheText() throws {
+        _ = try session()
+        window.makeFirstResponder(composer)
+        type("@")
+        XCTAssertFalse(composer.state.completion.isEmpty)
+        try press(key: "\u{1b}", code: 53)
+        XCTAssertTrue(composer.state.completion.isEmpty)
+        XCTAssertEqual(composer.string, "@")
+    }
+
+    func testBackspaceAfterAChipRemovesTheWholeChip() throws {
+        window.makeFirstResponder(composer)
+        type("hi @all")
+        try press(key: "\u{7f}", code: 51)
+        XCTAssertEqual(composer.string, "hi ")
+    }
+
+    func testAWorkspaceDropAddsItsWorkspaceTag() throws {
+        let local = try session()
+        let peers = server.assistantPeers() ?? []
+        let workspaceID = try XCTUnwrap(peers.first { $0.sessionID == local.id.uuidString }?.workspaceID)
+        let handle = try XCTUnwrap(AssistantDirectory(peers).workspaceHandle(of: workspaceID))
+        let pasteboard = NSPasteboard(name: NSPasteboard.Name(UUID().uuidString))
+        pasteboard.clearContents()
+        pasteboard.setString(workspaceID, forType: workspacePasteboardType)
+        let info = SidebarFakeDrag(pasteboard, over: composer)
+        XCTAssertEqual(composer.draggingEntered(info), .copy)
+        XCTAssertTrue(composer.performDragOperation(info))
+        XCTAssertEqual(composer.string, "@ws:\(handle) ")
+    }
+
+    func testTheFocusRequestReachesOnlyItsOwnStoresComposer() throws {
+        window.makeFirstResponder(nil)
+        NotificationCenter.default.post(name: .elisFocusAssistantComposer, object: AppStore())
+        XCTAssertFalse(window.firstResponder === composer)
+        NotificationCenter.default.post(name: .elisFocusAssistantComposer, object: try store())
+        XCTAssertTrue(window.firstResponder === composer)
+    }
+
+    func testAnOpenRenameFieldKeepsTheKeyboard() throws {
+        window.makeFirstResponder(nil)
+        actions.renamePending = true
+        actions.showAssistant(in: try store())
+        composer.takeFocus()
+        XCTAssertFalse(window.firstResponder === composer)
+        actions.renamePending = false
+        composer.takeFocus()
+        XCTAssertTrue(window.firstResponder === composer)
+    }
+
+    func testShowUnderTerminalZoomLeavesZoomAndFocusesTheComposer() async throws {
+        let session = try session()
+        let windowID = try XCTUnwrap(library.activeWindowID)
+        let zoom = TerminalZoomController()
+        TerminalZoomRegistry.shared.register(windowID, controller: zoom)
+        defer { TerminalZoomRegistry.shared.unregister(windowID) }
+        zoom.set(.on, target: .session(session.id, .primary))
+        window.makeFirstResponder(nil)
+        composer.takeFocus()
+        XCTAssertFalse(window.firstResponder === composer)
+
+        let show = await server.dispatch(ControlRequest(cmd: .assistantShow, target: nil, args: ControlArgs()))
+        XCTAssertTrue(show.ok, show.error ?? "")
+
+        XCTAssertNil(zoom.target)
+        XCTAssertTrue(try store().assistantShown)
+        XCTAssertTrue(window.firstResponder === composer)
+    }
+
+    func testClosingADashboardOverTheChatMarksAMissedReplySeen() async throws {
+        let sender = try session()
+        actions.assistant.onScreen = { false }
+        let reply = await server.dispatch(ControlRequest(cmd: .assistantReply, target: sender.id.uuidString, args: ControlArgs(text: "done")))
+        XCTAssertTrue(reply.ok, reply.error ?? "")
+        XCTAssertEqual(actions.assistant.unread, 1)
+        try store().assistantShown = true
+        actions.assistant.onScreen = { true }
+
+        try content().handleDashboardOpenChange(false)
+
+        XCTAssertEqual(actions.assistant.unread, 0)
+    }
+
+    func testLeavingZoomOverTheChatMarksAMissedReplySeen() async throws {
+        let sender = try session()
+        actions.assistant.onScreen = { false }
+        let reply = await server.dispatch(ControlRequest(cmd: .assistantReply, target: sender.id.uuidString, args: ControlArgs(text: "done")))
+        XCTAssertTrue(reply.ok, reply.error ?? "")
+        XCTAssertEqual(actions.assistant.unread, 1)
+        try store().assistantShown = true
+        actions.assistant.onScreen = { true }
+
+        try content().handleZoomTargetChange(old: .session(sender.id, .primary), new: nil)
+
+        XCTAssertEqual(actions.assistant.unread, 0)
+    }
+
+    func testUndoAfterASendLeavesTheFieldEmpty() async throws {
+        let undo = UndoManager()
+        let owner = UndoOwner(undo)
+        window.delegate = owner
+        defer { window.delegate = nil }
+        actions.assistant.perform = { _ in ControlResponse(ok: true) }
+        window.makeFirstResponder(composer)
+        type("hi")
+        try press()
+        await waitFor("the field to empty") { composer.string.isEmpty }
+        XCTAssertTrue(composer.undoManager === undo)
+        while undo.canUndo { undo.undo() }
+        XCTAssertEqual(composer.string, "")
+    }
+
+    func testDetectionThatFindsNothingStopsDetecting() async {
+        final class Flag: @unchecked Sendable { var raised = false }
+        let model = AssistantModel(stateDirectory: nil, standIn: nil)
+        model.detect = {}
+        XCTAssertFalse(model.detected)
+        let changed = Flag()
+        withObservationTracking { _ = model.detecting } onChange: { changed.raised = true }
+        await model.detectProviders()
+        XCTAssertTrue(changed.raised)
+        XCTAssertFalse(model.detecting)
+    }
+
+    func testTheAnswerViewRefusesAFileOrCustomSchemeLink() {
+        var accepted: [Bool] = []
+        for link in ["file:///Applications/Calculator.app", "x-elis://run"] {
+            AssistantMarkdown.openURL(URL(string: link)!) { accepted.append($0) }
+        }
+        XCTAssertEqual(accepted, [false, false])
+    }
+
+    func testACardForAnEndedSessionHasNoTag() throws {
+        let local = try session()
+        let directory = AssistantDirectory(server.assistantPeers() ?? [])
+        let live = AssistantView.cardPeer(local.id.uuidString, in: directory)
+        XCTAssertEqual(live.tag, directory.handle(of: local.id.uuidString).map { "@\($0)" })
+        XCTAssertNotNil(live.tag)
+        let ended = AssistantView.cardPeer(UUID().uuidString, in: directory)
+        XCTAssertNil(ended.tag)
+        XCTAssertEqual(ended.name, "ended session")
+    }
+}
+
+/// A private undo stack, so undoing everything never reaches the app's shared one.
+private final class UndoOwner: NSObject, NSWindowDelegate {
+    let undo: UndoManager
+    init(_ undo: UndoManager) { self.undo = undo }
+    func windowWillReturnUndoManager(_: NSWindow) -> UndoManager? { undo }
+}

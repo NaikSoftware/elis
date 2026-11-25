@@ -32,7 +32,7 @@ An elis-server host is not this app: SKILL.md's "Remote windows and elis-server"
 - `tree`'s `surfaces[]` carries `id`, `kind`, `active`, `visible`, `backedByZmx`, `lead`, `paneID`, `phoneViewers`
   and `phoneLead`, but no per-pane status or `pendingMessages`.
 - `msg send --all` reaches the addressed window only.
-- The Elis assistant (`assistant` and `reply`) is available in the Linux app now (macOS gets it later); see [reference.md](reference.md#assistant).
+- The Elis assistant (`assistant` and `reply`) is in the macOS and Linux apps; see [reference.md](reference.md#assistant).
 - A terminal-style `ask` is a dialog over the window, not drawn in the pane; `pick` rows show no status glyph.
 - The `pane.focused`, `pane.scratch` and `remote.*` event kinds are accepted and never fire.
 - `keymap.conf`: `--repeat` is accepted with a diagnostic and not honoured; `global-hotkey` is skipped.

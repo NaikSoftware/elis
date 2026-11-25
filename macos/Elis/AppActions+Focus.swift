@@ -205,6 +205,9 @@ extension AppActions {
         if palette?.mode != nil { return }
         if pickActive(for: library.activeWindowID) { return }
         if quickTerminal.holdsKey { return }
+        if let store, store.assistantShown {
+            return NotificationCenter.default.post(name: .elisFocusAssistantComposer, object: store)
+        }
         let pageCovers = store?.activeSession.map { HtmlOverlayRegistry.shared.focusCover(of: $0) } ?? false
         if !pageCovers, let view = store?.activeSession?.topmostSurface as? GhosttySurfaceView, let window = view.window {
             guard !view.deferFocusToAsk() else { return }

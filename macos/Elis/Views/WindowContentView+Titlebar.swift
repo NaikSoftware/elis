@@ -333,10 +333,15 @@ struct TitlebarLabel: View {
     let showsWindowName: Bool
     let showsContext: Bool
     let showsRemoteHost: Bool
+    private static let dog = NSImage.elisDog(side: 16, radius: 4)
+
     var body: some View {
         let composition = composition
         VStack(alignment: .leading, spacing: 1) {
             HStack(spacing: 0) {
+                if store.assistantShown {
+                    Image(nsImage: Self.dog).padding(.trailing, 7).accessibilityHidden(true)
+                }
                 if !composition.title.isEmpty {
                     Text(composition.title).fontWeight(.semibold)
                         .layoutPriority(1)

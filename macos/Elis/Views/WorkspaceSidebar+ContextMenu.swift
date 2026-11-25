@@ -50,7 +50,7 @@ extension WorkspaceSidebar.Coordinator {
         pendingRowToggle?.cancel()
         pendingRowToggle = nil
         let row = sender.clickedRow
-        guard row >= 0, let node = sender.item(atRow: row) as? SidebarNode else { return }
+        guard row >= 0, let node = sender.item(atRow: row) as? SidebarNode, node.kind != .assistant else { return }
         // the second click of an icon double-click arrives only here, so it toggles back as the triangle does.
         if node.kind == .workspace, clickHitsWorkspaceIcon(sender, row: row) {
             toggleExpansion(of: node, in: sender)
@@ -77,7 +77,8 @@ extension WorkspaceSidebar.Coordinator {
 
     /// Builds the per-row context menu, resolving the clicked row lazily so one menu serves every row.
     func menu(forRow row: Int) -> NSMenu? {
-        guard let outline = outlineView, row >= 0, let node = outline.item(atRow: row) as? SidebarNode else { return nil }
+        guard let outline = outlineView, row >= 0, let node = outline.item(atRow: row) as? SidebarNode,
+              node.kind != .assistant else { return nil }
         let menu = NSMenu()
         // explicit enabled state (Delete is disabled at the last workspace), not responder-chain auto-enabling.
         menu.autoenablesItems = false
@@ -268,6 +269,8 @@ extension WorkspaceSidebar.Coordinator {
             delete.representedObject = node
             delete.isEnabled = store.canCloseWorkspace
             menu.addItem(delete)
+        case .assistant:
+            break
         }
         return menu
     }
@@ -304,6 +307,7 @@ extension WorkspaceSidebar.Coordinator {
         let name = switch node.kind {
         case .session: store.session(withID: node.id)?.displayName
         case .workspace: store.workspaceName(node.id)
+        case .assistant: String?.none
         }
         // a row gone between the right-click and the choice, or a blank workspace name: leave the
         // pasteboard as the user had it rather than clearing it to write nothing.

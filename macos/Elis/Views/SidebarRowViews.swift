@@ -711,7 +711,7 @@ class SidebarRowView: NSTableRowView {
 /// caches one per workspace/session id and rebuilds only the child lists.
 final class SidebarNode {
     enum Kind {
-        case workspace, session
+        case workspace, session, assistant
 
         var iconElement: InterfaceElement { self == .workspace ? .workspaceIcons : .sessionIcons }
     }

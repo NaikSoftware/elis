@@ -45,7 +45,8 @@ struct BuiltinActionTests {
         #expect(BuiltinAction.editFlaggedSessions.rawValue == "edit_flagged_sessions")
         #expect(BuiltinAction.editFocusedWorkspaces.rawValue == "edit_focused_workspaces")
         #expect(BuiltinAction.toggleFilePanel.rawValue == "toggle_file_panel")
-        #expect(BuiltinAction.allCases.count == 58)
+        #expect(BuiltinAction(rawValue: "show_assistant") == .showAssistant)
+        #expect(BuiltinAction.allCases.count == 59)
     }
 
     @Test func rejectsUnknownName() {
@@ -142,6 +143,7 @@ struct BuiltinActionTests {
             .customCommandPalette: Chord(mods: [.control, .shift], key: "o"),
             .showAttention: Chord(mods: [.control, .shift], key: "i"),
             .dashboard: Chord(mods: [.command, .shift], key: "g"),
+            .showAssistant: nil,
             .attachRemote: Chord(mods: [.command, .shift], key: "r"),
             .openRemoteWindow: nil,
             .detachedSessions: nil,
@@ -212,7 +214,7 @@ struct BuiltinActionTests {
             .convertCompanion,
             .clearStatus, .firstSession, .lastSession, .selectTheme, .toggleFlaggedView, .focusWorkspace,
             .toggleWorkspaceFilter, .previousWorkspace, .nextWorkspace, .toggleWorkspaceCollapse,
-            .previousWindow, .nextWindow, .editFlaggedSessions, .editFocusedWorkspaces, .openRemoteWindow, .detachedSessions,
+            .previousWindow, .nextWindow, .editFlaggedSessions, .editFocusedWorkspaces, .openRemoteWindow, .detachedSessions, .showAssistant,
         ]
         for action in keyless {
             #expect(action.defaultChord == nil, "expected nil default for \(action.rawValue)")

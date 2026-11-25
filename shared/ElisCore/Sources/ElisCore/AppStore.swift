@@ -75,9 +75,10 @@ public final class AppStore {
                 let now = Date()
                 for id in [oldValue, selectedSessionID].compactMap({ $0 }) { session(withID: id)?.lastSelectedAt = now }
             }
-            emitSessionSelected(previous: oldValue)
+            selectionDidChange(previous: oldValue)
         }
     }
+    public var assistantShown = false // the Elis chat shows in place of a session; transient, never in `Snapshot`
 
     /// restoringSelection is true while `restore(from:)` runs: a reload is not a selection.
     var restoringSelection = false
@@ -509,7 +510,7 @@ public final class AppStore {
                            pickPending: pickPending(), askPending: askPending(), app: app, liveReset: liveReset,
                            indexUnsaved: indexUnsaved ? true : nil, snapshotUnsaved: snapshotUnsaved ? true : nil,
                            linkOpenMode: linkOpenMode?.rawValue,
-                           sidebarDensity: sidebarDensity?.rawValue, keepAwake: keepAwake)
+                           sidebarDensity: sidebarDensity?.rawValue, keepAwake: keepAwake, assistantShown: assistantShown ? true : nil)
     }
 
     /// The tree's `paneOverlays`: the panes covered by their own overlay, omitted when neither is.

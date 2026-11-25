@@ -62,7 +62,7 @@ extension WindowContentView {
     @ViewBuilder var detailPane: some View {
         let sessions = store.workspaces.flatMap(\.sessions)
         TerminalDeck {
-            if store.activeSession == nil {
+            if store.activeSession == nil, !store.assistantShown {
                 Text("No session selected")
                     .foregroundStyle(.secondary)
             }
@@ -71,6 +71,13 @@ extension WindowContentView {
                 sessionDetail(session, isActive: isActive)
                     .opacity(isActive ? 1 : 0)
                     .allowsHitTesting(isActive)
+            }
+        }
+        // over the deck, never inside a session's detail: the terminals stay mounted and take no keys or clicks
+        .overlay {
+            if store.assistantShown {
+                AssistantView(model: actions.assistant, store: store, background: terminalColor,
+                              dark: GhosttyApp.shared.terminalThemeIsDark)
             }
         }
     }
@@ -91,9 +98,9 @@ extension WindowContentView {
         // a FULL overlay (no size) hides the panes and draws translucent; a FLOATING one leaves them VISIBLE
         // under a smaller opaque framed panel. Either way the pane(s) stay non-interactive while one is up.
         let fullOverlay = session.fullOverlayVisible
-        // while zoomed OR the dashboard is open (mutually exclusive) the deck stays mounted only to realize
+        // while zoomed, the dashboard is open or the chat shows, the deck stays mounted only to realize
         // surfaces: no focus, no drag targets, no focusable controls behind the full-window modal layer.
-        let deckInteractive = terminalZoom.target == nil && !dashboard.isOpen
+        let deckInteractive = terminalZoom.target == nil && !dashboard.isOpen && !store.assistantShown
         // the scratch is full-coverage too, so it hides the panes like a FULL overlay does. False for a
         // FLOATING overlay, whose opening must leave the shape alone.
         let hideForOverlay = fullOverlay || session.scratchActive

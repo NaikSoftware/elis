@@ -39,6 +39,7 @@ extension WorkspaceSidebar.Coordinator {
     /// groupEdge is a row's place in its workspace group, tinted or not: nil where no workspace rows render. One
     /// rule feeds the row height, the cell frame and the drawing, so they cannot disagree.
     func groupEdge(for node: SidebarNode) -> SidebarBandEdge? {
+        if node.kind == .assistant { return .single }
         guard rendersWorkspaceRows, let outline = outlineView else { return nil }
         // from the model, not `parent(forItem:)`: the outline asks heights while its own row map is being built
         let workspaceID = node.kind == .workspace ? node.id : store.workspace(forSession: node.id)?.id
