@@ -2229,6 +2229,15 @@ private Q_SLOTS:
             }
         }
         QCOMPARE(legibleOn(QColor(0x30D158), {QColor(0x202326)}, QColor(0xFCFCFC)).rgba(), QColor(0x30D158).rgba()); // already legible: untouched
+        // mid-gray text on a dark wave: red eases toward white and keeps its hue
+        const QColor dark(0x282C34), wave = over(dark, QColor(0xDBD9E6), 0.20);
+        const QColor red = legibleOn(QColor(0xFF0000), {dark, wave}, QColor(0xABB2BF));
+        QVERIFY(red != QColor(0xABB2BF));
+        QVERIFY(red.redF() > red.greenF() && red.redF() > red.blueF());
+        for (const QColor &bg : {dark, wave}) {
+            const qreal a = luminance(over(bg, red, red.alphaF())), b = luminance(bg);
+            QVERIFY((std::max(a, b) + 0.05) / (std::min(a, b) + 0.05) >= 4.5);
+        }
     }
 
     void aClickOnTheShownSessionsCiLineOpensItsPanel()

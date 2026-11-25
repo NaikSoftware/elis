@@ -14,7 +14,7 @@ struct SettingsGroup: ParsableCommand {
             commandName: "keep-awake",
             abstract: "Keep the computer from idle sleep while an agent is working (on|off|toggle).",
             discussion: "On (the default), the computer does not sleep on its own while any session's status is active; "
-                + "the display still sleeps and locks. Prints the new setting; tree's keepAwake reads it."
+                + "the display stays on too. Prints the new setting; tree's keepAwake reads it."
         )
         @Argument(help: "Mode: on, off, or toggle (default).") var mode: String = "toggle"
         @OptionGroup var options: BasicOptions

@@ -106,7 +106,103 @@ final class SidebarInfoRowTests: XCTestCase {
 
         let text = cell.infoField.attributedStringValue
         XCTAssertEqual(rgba(color(in: text, at: 0)), rgba(SidebarCellView.themeTextColor(selected: true).withAlphaComponent(0.85)))
-        XCTAssertEqual(rgba(color(in: text, at: text.length - 1)), rgba(NSColor.tint(.green)))
+        let row = try XCTUnwrap(outline.rowView(atRow: try row(of: session.id), makeIfNecessary: false) as? SidebarRowView)
+        var green = RGBA(r: 0, g: 0, b: 0)
+        cell.effectiveAppearance.performAsCurrentDrawingAppearance {
+            green = legibleOn(NSColor.tint(.green).rgba, under: row.infoBackdrops,
+                              text: SidebarCellView.themeTextColor(selected: true).rgba)
+        }
+        XCTAssertEqual(rgba(color(in: text, at: text.length - 1)), rgba(NSColor(green)))
+    }
+
+    func testAColoredFragmentStaysLegibleOnTheRowsBackdrop() async throws {
+        let store = try XCTUnwrap(library.activeStore)
+        let session = try seed(store)
+        XCTAssertTrue(store.setTint(SidebarTint(color: .yellow), forWorkspace: try XCTUnwrap(store.workspaces.last).id))
+        let runs = [CIRunState.failed, .running, .passed].map { CIRun(workflow: "\($0)", state: $0, url: "https://github.com/o/r/actions/runs/1") }
+        store.setCI(CIStatus(branch: "main", sha: "abc", pr: CIPullRequest(number: 5, title: "t", url: "https://github.com/o/r/pull/5"),
+                             runs: runs), forSession: session.id)
+        try mountSidebar(for: store)
+        try await waitUntil { (try? self.height(of: session.id)) == self.infoHeight }
+        try assertLegibleLine(of: session.id)
+    }
+
+    func testALineAddedToAKeyWindowRendersForTheEmphasizedSelection() async throws {
+        let store = try XCTUnwrap(library.activeStore)
+        let session = try seed(store)
+        XCTAssertTrue(store.setTint(SidebarTint(color: .yellow), forWorkspace: try XCTUnwrap(store.workspaces.last).id))
+        let runs = [CIRunState.failed, .running, .passed].map { CIRun(workflow: "\($0)", state: $0, url: "https://github.com/o/r/actions/runs/1") }
+        store.setCI(CIStatus(branch: "main", sha: "abc", runs: runs), forSession: session.id)
+        try mountSidebar(for: store, key: true)
+        try await waitUntil { (try? self.height(of: session.id)) == self.infoHeight }
+        let row = try XCTUnwrap(outline.rowView(atRow: try row(of: session.id), makeIfNecessary: false) as? SidebarRowView)
+        XCTAssertTrue(row.isSelected && row.isEmphasized)
+        try assertLegibleLine(of: session.id, plainPrefix: false)
+    }
+
+    func testTheLineStaysLegibleWhenTheWindowBecomesKeyAfterItRenders() async throws {
+        let store = try XCTUnwrap(library.activeStore)
+        let session = try seed(store)
+        XCTAssertTrue(store.setTint(SidebarTint(color: .yellow), forWorkspace: try XCTUnwrap(store.workspaces.last).id))
+        let runs = [CIRunState.failed, .running, .passed].map { CIRun(workflow: "\($0)", state: $0, url: "https://github.com/o/r/actions/runs/1") }
+        store.setCI(CIStatus(branch: "main", sha: "abc", runs: runs), forSession: session.id)
+        try mountSidebar(for: store, key: true)
+        let keyWindow = try XCTUnwrap(window as? KeyWindow)
+        keyWindow.isKey = false
+        try await waitUntil { (try? self.height(of: session.id)) == self.infoHeight }
+        let row = try XCTUnwrap(outline.rowView(atRow: try row(of: session.id), makeIfNecessary: false) as? SidebarRowView)
+        XCTAssertTrue(row.isSelected)
+        XCTAssertFalse(row.isEmphasized)
+
+        keyWindow.isKey = true
+        keyWindow.becomeKey()
+
+        XCTAssertTrue(row.isEmphasized)
+        try assertLegibleLine(of: session.id, plainPrefix: false)
+    }
+
+    func testANewWorkspaceTintRecolorsTheSelectedRowsLine() async throws {
+        let store = try XCTUnwrap(library.activeStore)
+        let session = try seed(store)
+        let workspace = try XCTUnwrap(store.workspaces.last).id
+        XCTAssertTrue(store.setTint(SidebarTint(color: .yellow), forWorkspace: workspace))
+        let runs = [CIRunState.failed, .running, .passed].map { CIRun(workflow: "\($0)", state: $0, url: "https://github.com/o/r/actions/runs/1") }
+        store.setCI(CIStatus(branch: "main", sha: "abc", runs: runs), forSession: session.id)
+        try mountSidebar(for: store, key: true)
+        try await waitUntil { (try? self.height(of: session.id)) == self.infoHeight }
+        let row = try XCTUnwrap(outline.rowView(atRow: try row(of: session.id), makeIfNecessary: false) as? SidebarRowView)
+        XCTAssertTrue(row.isSelected)
+
+        XCTAssertTrue(store.setTint(SidebarTint(color: .indigo), forWorkspace: workspace))
+        try await waitUntil { row.selectionTint == NSColor.tint(.indigo) }
+
+        let cell = try infoCell(forSession: session.id)
+        let shown = colors(of: cell.infoField.attributedStringValue)
+        cell.refreshColors()
+        XCTAssertEqual(shown, colors(of: cell.infoField.attributedStringValue))
+    }
+
+    private func colors(of text: NSAttributedString) -> [[CGFloat]] {
+        (0..<text.length).map { rgba(color(in: text, at: $0)) }
+    }
+
+    private func assertLegibleLine(of id: UUID, plainPrefix: Bool = true) throws {
+        let row = try XCTUnwrap(outline.rowView(atRow: try row(of: id), makeIfNecessary: false) as? SidebarRowView)
+        let backdrops = row.infoBackdrops
+        XCTAssertTrue((1...2).contains(backdrops.count), "\(backdrops)")
+        XCTAssertNotNil(row.band)
+
+        let text = try infoCell(forSession: id).infoField.attributedStringValue
+        for glyph in ["✗", "◷", "✓"] {
+            let index = (text.string as NSString).range(of: glyph).location
+            let shown = try XCTUnwrap(color(in: text, at: index), glyph).rgba
+            for backdrop in backdrops {
+                let fg = RGBA.luminance(RGBA.composite(shown, over: backdrop)), bg = RGBA.luminance(backdrop)
+                XCTAssertGreaterThanOrEqual((max(fg, bg) + 0.05) / (min(fg, bg) + 0.05), 4.5, "\(glyph) \(shown) on \(backdrop)")
+            }
+            if glyph == "✗" { XCTAssertTrue(shown.r > shown.g && shown.r > shown.b, "red keeps its hue: \(shown)") }
+        }
+        if plainPrefix { XCTAssertEqual(rgba(color(in: text, at: 0)), rgba(SidebarCellView.themeTextColor(selected: false))) }
     }
 
     // #1019: the field kept the 13 pt label font, so single-line mode placed the smaller text low and clipped it
@@ -178,6 +274,42 @@ final class SidebarInfoRowTests: XCTestCase {
         store.setCI(nil, forSession: session.id)
         try await waitUntil { (try? self.height(of: session.id)) == self.plainHeight }
         XCTAssertEqual(try height(of: session.id), plainHeight)
+    }
+
+    func testACILineOpensThePanelOnlyForTheShownSession() async throws {
+        let store = try XCTUnwrap(library.activeStore)
+        let shown = try seed(store)
+        let other = try XCTUnwrap(store.addSession(toWorkspace: try XCTUnwrap(store.workspaces.last).id, cwd: "/tmp/other"))
+        store.setCI(ci(), forSession: shown.id)
+        store.setCI(ci(), forSession: other.id)
+        store.selectSession(shown.id)
+        try mountSidebar(for: store, key: true)
+        try await waitUntil { (try? self.height(of: other.id)) == self.infoHeight }
+        defer { CIStatusLine.panel?.close() }
+
+        try click(try infoCell(forSession: other.id).infoField)
+        try await waitUntil { store.selectedSessionID == other.id }
+        XCTAssertEqual(store.selectedSessionID, other.id)
+        XCTAssertNil(CIStatusLine.panel)
+
+        try click(try infoCell(forSession: other.id).infoField)
+        try await waitUntil { CIStatusLine.panel != nil }
+        XCTAssertNotNil(CIStatusLine.panel)
+        CIStatusLine.panel?.close()
+        try await waitUntil { CIStatusLine.panel == nil }
+
+        let line = try infoCell(forSession: other.id)
+        let recognizer = try XCTUnwrap(line.infoField.gestureRecognizers.first { $0 is NSClickGestureRecognizer })
+        for modifier in [NSEvent.ModifierFlags.control, .shift, .command] {
+            XCTAssertFalse(line.gestureRecognizer(recognizer, shouldAttemptToRecognizeWith: try mouseDown(on: line.infoField, modifiers: modifier)))
+        }
+        try click(line.infoField, modifiers: .shift)
+        try await Task.sleep(nanoseconds: 100_000_000)
+        XCTAssertNil(CIStatusLine.panel)
+
+        XCTAssertTrue(try infoCell(forSession: shown.id).infoField.accessibilityPerformPress())
+        XCTAssertEqual(store.selectedSessionID, shown.id)
+        XCTAssertNil(CIStatusLine.panel)
     }
 
     // regression: a line cleared while another row was being renamed stayed on screen after the rename ended
@@ -267,10 +399,11 @@ final class SidebarInfoRowTests: XCTestCase {
         return [rgb.redComponent, rgb.greenComponent, rgb.blueComponent, rgb.alphaComponent].map { ($0 * 1000).rounded() / 1000 }
     }
 
-    private func mountSidebar(for store: AppStore) throws {
+    private func mountSidebar(for store: AppStore, key: Bool = false) throws {
         let host = NSHostingView(rootView: WorkspaceSidebar(store: store, actions: actions).frame(width: 240, height: 400))
-        window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 240, height: 400),
-                          styleMask: [.titled], backing: .buffered, defer: false)
+        let type = key ? KeyWindow.self : NSWindow.self
+        window = type.init(contentRect: NSRect(x: 0, y: 0, width: 240, height: 400),
+                           styleMask: [.titled], backing: .buffered, defer: false)
         window.isReleasedWhenClosed = false
         window.contentView = host
         window.orderFront(nil)
@@ -281,6 +414,24 @@ final class SidebarInfoRowTests: XCTestCase {
     private func outlineView(in view: NSView) -> SidebarOutlineView? {
         if let outline = view as? SidebarOutlineView { return outline }
         return view.subviews.lazy.compactMap { self.outlineView(in: $0) }.first
+    }
+
+    // the mouse-up is queued first: the outline's tracking loop pulls it, and otherwise the window delivers it
+    private func click(_ view: NSView, modifiers: NSEvent.ModifierFlags = []) throws {
+        NSApp.postEvent(try mouseEvent(.leftMouseUp, on: view, modifiers: modifiers), atStart: false)
+        window.sendEvent(try mouseDown(on: view, modifiers: modifiers))
+    }
+
+    private func mouseDown(on view: NSView, modifiers: NSEvent.ModifierFlags) throws -> NSEvent {
+        try mouseEvent(.leftMouseDown, on: view, modifiers: modifiers)
+    }
+
+    private func mouseEvent(_ type: NSEvent.EventType, on view: NSView, modifiers: NSEvent.ModifierFlags) throws -> NSEvent {
+        let point = view.convert(NSPoint(x: view.bounds.midX, y: view.bounds.midY), to: nil)
+        return try XCTUnwrap(NSEvent.mouseEvent(with: type, location: point, modifierFlags: modifiers,
+                                                timestamp: ProcessInfo.processInfo.systemUptime,
+                                                windowNumber: window.windowNumber, context: nil, eventNumber: 0,
+                                                clickCount: 1, pressure: 1))
     }
 
     private func waitUntil(timeout: TimeInterval = 5, _ condition: () -> Bool) async throws {
@@ -315,4 +466,10 @@ final class SidebarInfoRowTests: XCTestCase {
         coordinator.seedExpansionFromModel()
         coordinator.reconcile()
     }
+}
+
+// the hosted app is never active, so no window becomes key and a click would only activate it
+private final class KeyWindow: NSWindow {
+    var isKey = true
+    override var isKeyWindow: Bool { isKey }
 }

@@ -1310,7 +1310,7 @@ s=$(elisctl zmx tree studio.local --json \
 <li>Where a new session opens: by default the workspace's project folder, else the current session's directory; or your home directory, or a folder you pick; and whether New Session adds it at the end of the workspace or right after the current session.</li>
 <li><strong>Restore mode</strong>: fresh shells, re-run commands, or Live sessions (<a href="#restore">Restore &amp; persistence</a>).</li>
 <li>An optional confirmation before closing a session.</li>
-<li><strong>Keep the Mac awake while an agent is working</strong> (on by default; <em>Keep the computer awake</em> on Linux): while any session's agent status is active, the computer does not sleep on its own; on the Mac the display still sleeps and locks, while on Linux the screen also stays on and unlocked so an agent can see and drive the desktop. A blocked or finished agent lets it sleep again. Sessions attached from another computer or shown in a remote window do not count, since they run there. <code>elisctl settings keep-awake on|off|toggle</code> sets it.</li>
+<li><strong>Keep the Mac awake while an agent is working</strong> (on by default; <em>Keep the computer awake</em> on Linux): while any session's agent status is active, the computer does not sleep on its own; the display also stays on, and on Linux the screen also stays unlocked so an agent can see and drive the desktop. A blocked or finished agent lets it sleep again. Sessions attached from another computer or shown in a remote window do not count, since they run there. <code>elisctl settings keep-awake on|off|toggle</code> sets it.</li>
 <li>Whether to load your global Ghostty config (<a href="#ghostty">Ghostty config</a>).</li>
 </ul>
 <h3 id="settings-appearance">Appearance</h3>
@@ -2490,7 +2490,7 @@ elisctl session context --clear --target &quot;$ELIS_SESSION_ID&quot;</code></pr
 <ul>
 <li>The line counts the workflow runs of the branch's last pushed commit: <code>◷ build</code> for one run, <code>✓ 3 passed</code> when all agree, <code>✗ build  ◷ 1  ✓ 2</code> when they differ, a single failure by name.</li>
 <li>With an open pull request the line starts with its number and reviews: <code>#56 👍1 👎1 · ✓ build</code> counts approvals and change requests.</li>
-<li>Click the line for the details: the pull request with who approved and who asked for changes, then every run. Click the pull request or a run to open it on GitHub.</li>
+<li>Click the shown session's line for the details; a click on another session's line selects it. The details are the pull request with who approved and who asked for changes, then every run. Click the pull request or a run to open it on GitHub. A Control-, Shift- or Command-click on the line acts on the row (menu, selection) and opens no details.</li>
 <li>Elis checks every 30 seconds while a run is going and every 3 minutes once all are done, once for all sessions on the same branch.</li>
 <li><strong>Settings ▸ Interface ▸ CI status</strong> shows it Always (the default), only in the flagged view (Flagged), or never (Off). Off stops asking GitHub.</li>
 <li>A session attached from another Mac or an elis-server host shows the CI the host sees.</li>

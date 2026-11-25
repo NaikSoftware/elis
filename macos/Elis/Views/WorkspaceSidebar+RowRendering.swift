@@ -130,6 +130,7 @@ extension WorkspaceSidebar.Coordinator {
                     guard let session = store.session(withID: node.id) else { return }
                     CIStatusLine.showPanel(for: session, from: anchor)
                 }
+                infoCell.claimsInfoClick = { store.selectedSessionID == node.id }
             }
         case .assistant:
             break
