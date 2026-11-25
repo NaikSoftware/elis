@@ -286,6 +286,7 @@ final class AssistantTagLabel: NSTextView {
     func show(_ text: String, known: Set<String>) {
         guard let storage = textStorage, storage.string != text || self.known != known else { return }
         self.known = known
+        measured = nil
         storage.setAttributedString(NSAttributedString(string: text))
         AssistantTagStyle.apply(to: storage, known: known, lineHeight: 20)
         needsDisplay = true
@@ -293,6 +294,16 @@ final class AssistantTagLabel: NSTextView {
 
     /// A message hugs its longest line; one that soft-wraps takes the whole width, as the mockup's bubble does.
     func size(fitting width: CGFloat) -> CGSize {
+        if let measured, measured.width == width { return measured.size }
+        let size = measure(fitting: width)
+        measured = (width, size)
+        return size
+    }
+
+    /// The last measure, since SwiftUI asks again for the same width on every pass over the transcript.
+    private var measured: (width: CGFloat, size: CGSize)?
+
+    private func measure(fitting width: CGFloat) -> CGSize {
         guard let textStorage else { return .zero }
         // a viewless layout of the same text: a non-resizable text view reports its whole container width as used
         let storage = NSTextStorage(attributedString: textStorage), layout = NSLayoutManager()

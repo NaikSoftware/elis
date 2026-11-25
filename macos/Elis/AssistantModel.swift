@@ -17,6 +17,11 @@ final class AssistantModel {
     @ObservationIgnored var onScreen: () -> Bool = { false }
     /// mayFocus says no palette, pick or rename field in the store's window owns the keyboard.
     @ObservationIgnored var mayFocus: (AppStore) -> Bool = { _ in true }
+    /// keyWindowObserver marks a missed reply seen once a chat window becomes key; the host installs it, a reinstall
+    /// replaces it.
+    @ObservationIgnored var keyWindowObserver: NSObjectProtocol? {
+        didSet { oldValue.map(NotificationCenter.default.removeObserver) }
+    }
     /// detect runs the agent detection the picker waits for.
     @ObservationIgnored var detect: @MainActor () async -> Void = {
         _ = SessionLaunchers.available

@@ -272,7 +272,7 @@ final class ControlServerAssistantTests: XCTestCase {
         XCTAssertEqual(unseen.assistant?.unread, 1)
 
         actions.assistant.onScreen = { true }
-        NotificationCenter.default.post(name: NSWindow.didBecomeKeyNotification, object: NSWindow())
+        NotificationCenter.default.post(name: NSWindow.didBecomeKeyNotification, object: nil)
         await waitFor("unread cleared", seconds: 5) { actions.assistant.unread == 0 }
 
         let seen = try await tree()
