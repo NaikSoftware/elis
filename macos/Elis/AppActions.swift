@@ -58,6 +58,7 @@ final class AppActions {
 
     /// settingsModel is wired during app initialization, before commands are evaluated.
     var settingsModel: SettingsModel?
+    var assistant = AssistantModel(stateDirectory: nil) // elisApp gives it the state directory
 
     /// customCommandRunner runs the palette's custom commands; wired in the scene `.task`.
     var customCommandRunner: CustomCommandRunner?

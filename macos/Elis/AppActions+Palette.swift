@@ -120,6 +120,7 @@ extension AppActions {
         case .find: toggleSearch()
         case .quickTerminal: toggleQuickTerminal()
         case .dashboard: toggleDashboard()
+        case .showAssistant: if let store { showAssistant(in: store) }
         case .toggleFullscreen: toggleFullscreen()
         case .increaseFontSize: increaseFontSize()
         case .decreaseFontSize: decreaseFontSize()

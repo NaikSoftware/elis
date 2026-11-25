@@ -146,7 +146,7 @@ public enum PaletteCommand: String, CaseIterable, Sendable {
     case firstSession, lastSession, showAttention
     case toggleSplit, toggleHorizontalSplit, closeSplit, swapPanes, toggleScratch, toggleOverlay, toggleTerminalZoom
     case toggleSidebar, toggleFilePanel, toggleFlag, focusWorkspace
-    case find, quickTerminal, dashboard, toggleFullscreen
+    case find, quickTerminal, dashboard, showAssistant, toggleFullscreen
     case increaseFontSize, decreaseFontSize, resetFontSize, selectTheme
     case attachRemote, openRemoteWindow, detachedSessions
     case editKeymap, reloadKeymap, editHooks, reloadHooks, editGhosttyConfig, reloadConfig
@@ -226,7 +226,7 @@ public enum PaletteCommand: String, CaseIterable, Sendable {
         case .increaseFontSize, .decreaseFontSize, .resetFontSize,
              .reloadKeymap, .reloadHooks, .reloadConfig, .toggleTerminalZoom, .closeSession:
             return false
-        case .dashboard:
+        case .dashboard, .showAssistant: // showing the chat closes the dashboard
             return context.terminalZoomActive || context.pickerActive
         case .swapPanes:
             return context.pickerActive
@@ -322,6 +322,7 @@ public enum PaletteCommand: String, CaseIterable, Sendable {
         case .find: return "Find…"
         case .quickTerminal: return "Quick Terminal"
         case .dashboard: return "Dashboard"
+        case .showAssistant: return "Show Elis"
         case .toggleFullscreen: return "Toggle Full Screen"
         case .increaseFontSize: return "Increase Font Size"
         case .decreaseFontSize: return "Decrease Font Size"
@@ -391,6 +392,7 @@ public enum PaletteCommand: String, CaseIterable, Sendable {
         case .find: return .toggleSearch
         case .quickTerminal: return .quickTerminal
         case .dashboard: return .dashboard
+        case .showAssistant: return .showAssistant
         case .toggleFullscreen: return .toggleFullscreen
         case .increaseFontSize: return .increaseFontSize
         case .decreaseFontSize: return .decreaseFontSize

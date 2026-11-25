@@ -81,10 +81,15 @@ final class SessionSwitcher {
         guard let store else { return }
         let valid = Set(store.navigableSessions.map(\.id))
         let order = store.sessionRecency.top(Self.maxCandidates, in: valid)
-        guard order.count > 1 else { return }
+        guard let start = Self.startIndex(hasSelection: store.selectedSessionID != nil, count: order.count) else { return }
         candidates = order
-        index = 1
+        index = start
         isActive = true
+    }
+
+    /// startIndex skips the selected session, the most recent; with none selected (the chat shows) it lands on it.
+    static func startIndex(hasSelection: Bool, count: Int) -> Int? {
+        hasSelection ? (count > 1 ? 1 : nil) : (count > 0 ? 0 : nil)
     }
 
     private func advance(reverse: Bool) {

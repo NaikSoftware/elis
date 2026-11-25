@@ -396,6 +396,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // cancellation, but a later poll can still race socket teardown at process exit.
         actions?.cancelAllPendingModals()
         phoneRelay?.stopForQuit()
+        actions?.assistant.runner.stopForQuit()
         controlServer?.stop()
         customCommandRunner?.stop()
         TerminalInputSource.shared.stop()

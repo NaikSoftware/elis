@@ -12,6 +12,9 @@ final class AssistantModel {
     @ObservationIgnored var perform: (ControlRequest) async -> ControlResponse = { request in
         ControlResponse(ok: false, error: ControlActionsUnsupported.message(request.cmd.rawValue))
     }
+    @ObservationIgnored var peers: () -> [AssistantPeer] = { [] }
+    /// onScreen says the chat is in front of the user, so a reply arriving then is not unread.
+    @ObservationIgnored var onScreen: () -> Bool = { false }
     private(set) var entries: [AssistantEntry] = []
     private(set) var unread = 0
     private(set) var running = false
@@ -26,6 +29,7 @@ final class AssistantModel {
     }
 
     func refresh() {
+        if onScreen() { chat.markSeen() }
         entries = chat.entries(last: nil)
         unread = chat.unread
         running = chat.running

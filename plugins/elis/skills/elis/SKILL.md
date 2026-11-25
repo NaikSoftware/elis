@@ -178,7 +178,7 @@ session and whatever agent runs there:
 - Read it: `elisctl session text --lines 80 --target ID`.
 - Talk to it without typing into its prompt: `elisctl msg send --to ID:PANE TEXT`, PANE from `surfaces[].paneID`
   or `left`/`right`; the receiver reads with `msg read`. `session type --target ID` types into its prompt instead.
-- Through the Elis assistant (Linux now, macOS later): `elisctl assistant send --to @handle TEXT`
+- Through the Elis assistant (macOS and Linux apps): `elisctl assistant send --to @handle TEXT`
   (`@handle`, `@ws:<workspace>`, `@all`, or a session id; `blocked` sessions are skipped), or answer Elis from inside a
   session with `elisctl reply TEXT`.
 - Wait for it: `elisctl session wait --until completed --target ID`.
@@ -756,7 +756,7 @@ the batch in one step. Mail is in memory only and is dropped when the pane close
 
 **assistant & reply** — `assistant ask TEXT [--wait [--timeout N]]` · `assistant send --to TAG... TEXT|--stdin` ·
 `assistant read [--last N]` · `assistant provider [NAME]` · `assistant show [--window W]` · `assistant seen` · `assistant clear` · `reply TEXT|--stdin` —
-drive the pinned **Elis** system chat (available in the Linux app now; macOS gets it later). Providers (`claude`,
+drive the pinned **Elis** system chat in the macOS and Linux apps. Providers (`claude`,
 `codex`, `antigravity`, `opencode`) run in full-auto permission mode; other sessions'
 replies reach Elis in order, each after its current turn; switching applies from the next message. `send` tags `@handle`, `@ws:<workspace>`,
 `@all` (agent sessions only), or an exact session id, skips `blocked` sessions, types one line ending in

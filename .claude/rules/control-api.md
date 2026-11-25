@@ -1818,6 +1818,8 @@ the spec `docs/superpowers/specs/2026-11-20-phone-chat-mode-design.md` owns the 
   A catalog-owned row keeps the catalog as its only source, so the two streams' orderings never meet in one cache.
   The origin publishes from `PresentationMailRelay`, one main-queue turn after any count-changing bus mutation,
   so no disposal site needs its own hook; the hub sends each viewer only a map that differs from its last.
+- The Mac host's assistant members live in `ControlServer+Assistant`, the `AssistantModel` on `AppActions.assistant`,
+  and `assistant.*` events go out through `WindowLibrary.emitAppEvent`.
 
 ## Keymap, config, theme, and sidebar
 

@@ -25,7 +25,7 @@ public enum BuiltinAction: String, CaseIterable, Sendable {
     case firstSession = "first_session", lastSession = "last_session"
     case quickTerminal = "quick_terminal", sessionPalette = "session_palette", commandPalette = "command_palette"
     case customCommandPalette = "custom_command_palette", showAttention = "show_attention"
-    case dashboard = "dashboard"
+    case dashboard = "dashboard", showAssistant = "show_assistant"
     case attachRemote = "attach_remote", openRemoteWindow = "open_remote_window", detachedSessions = "detached_sessions"
     case editFlaggedSessions = "edit_flagged_sessions", editFocusedWorkspaces = "edit_focused_workspaces"
 
@@ -72,7 +72,8 @@ public enum BuiltinAction: String, CaseIterable, Sendable {
         case .renameWindow, .deleteWindow, .renameWorkspace, .deleteWorkspace, .renameSession, .duplicateSession, .newCompanion, .duplicateCompanion, .convertCompanion,
              .clearStatus, .firstSession, .lastSession, .selectTheme, .toggleFlaggedView, .focusWorkspace,
              .toggleWorkspaceFilter, .previousWorkspace, .nextWorkspace, .toggleWorkspaceCollapse,
-             .previousWindow, .nextWindow, .editFlaggedSessions, .editFocusedWorkspaces, .openRemoteWindow, .detachedSessions:
+             .previousWindow, .nextWindow, .editFlaggedSessions, .editFocusedWorkspaces, .openRemoteWindow, .detachedSessions,
+             .showAssistant:
             return nil
         }
     }

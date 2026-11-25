@@ -717,7 +717,7 @@ final class ControlServer {
         // every entry, a page's bridge included, reaches a remote window's server the one way the socket does
         if let route = remoteRoute(request) { return await runRemoteRoute(route) }
         if let refusal = pageCompanionRefusal(request) { return refusal }
-        if let response = await ControlDispatcher(actions: self).dispatch(request) {
+        if let response = await ControlDispatcher(actions: self, chat: actions.assistant.chat).dispatch(request) {
             return response
         }
         switch request.cmd {
