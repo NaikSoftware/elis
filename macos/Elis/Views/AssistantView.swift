@@ -349,11 +349,9 @@ private struct AssistantComposerBox: View {
         .overlay {
             if state.dropping {
                 RoundedRectangle(cornerRadius: 13.5).stroke(Color.appAccent.opacity(0.30), lineWidth: 3).padding(-1.5)
-            } else if state.focused {
-                RoundedRectangle(cornerRadius: 13.5).stroke(Color(nsColor: .keyboardFocusIndicatorColor), lineWidth: 3).padding(-1.5)
             }
         }
-        .background(AssistantDropZone(state: state))
+        .background(AssistantDropZone(state: state, ring: state.focused && !state.dropping).padding(-AssistantDropZone.ringRoom))
         .overlay(alignment: .topLeading) { completionPanel }
         .onAppear(perform: detectProviders)
     }
@@ -578,21 +576,45 @@ private final class AssistantMenuTarget: NSObject {
     }
 }
 
-/// AssistantDropZone makes the whole field a drop target for sidebar rows, not only its text.
+/// AssistantDropZone makes the whole field a drop target for sidebar rows, not only its text, and draws the
+/// standard focus ring around the field while the composer has focus in a key window.
 private struct AssistantDropZone: NSViewRepresentable {
+    /// The room the zone extends past the field on each side, so the ring is not clipped.
+    static let ringRoom: CGFloat = 4
     let state: AssistantComposerState
+    let ring: Bool
 
     func makeNSView(context _: Context) -> DropView { DropView(state: state) }
 
-    func updateNSView(_: DropView, context _: Context) {}
+    func updateNSView(_ view: DropView, context _: Context) {
+        view.ring = ring
+    }
 
     final class DropView: NSView {
         let state: AssistantComposerState
+        var ring = false {
+            didSet { if ring != oldValue { needsDisplay = true } }
+        }
+
+        @objc private func keyChanged(_ note: Notification) {
+            if note.object as? NSWindow === window { needsDisplay = true }
+        }
+
+        override func draw(_: NSRect) {
+            guard ring, window?.isKeyWindow == true else { return }
+            NSGraphicsContext.saveGraphicsState()
+            NSFocusRingPlacement.only.set()
+            NSBezierPath(roundedRect: bounds.insetBy(dx: AssistantDropZone.ringRoom, dy: AssistantDropZone.ringRoom), xRadius: 12, yRadius: 12).fill()
+            NSGraphicsContext.restoreGraphicsState()
+        }
 
         init(state: AssistantComposerState) {
             self.state = state
             super.init(frame: .zero)
             registerForDraggedTypes([sessionPasteboardType, workspacePasteboardType])
+            for name in [NSWindow.didBecomeKeyNotification, NSWindow.didResignKeyNotification] {
+                NotificationCenter.default.addObserver(self, selector: #selector(keyChanged), name: name, object: nil)
+            }
         }
 
         @available(*, unavailable)
