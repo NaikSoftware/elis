@@ -41,10 +41,7 @@ extension WorkspaceSidebar.Coordinator {
     private func colorItem(_ title: String, _ value: TintValue, checked: Bool, request: TintMenuRequest) -> NSMenuItem {
         let item = NSMenuItem(title: title, action: #selector(menuTint(_:)), keyEquivalent: "")
         item.image = Self.swatch(value)
-        // preferredImageVisibility is macOS 27 SDK API the CI toolchain cannot name, so it is set by key; 1 is .visible
-        if item.responds(to: NSSelectorFromString("setPreferredImageVisibility:")) {
-            item.setValue(1, forKey: "preferredImageVisibility")
-        }
+        item.keepsImageVisible()
         item.state = checked ? .on : .off
         item.target = self
         item.representedObject = request
@@ -96,5 +93,13 @@ extension WorkspaceSidebar.Coordinator {
             self.workspaceID = workspaceID
             self.choice = choice
         }
+    }
+}
+
+extension NSMenuItem {
+    /// keepsImageVisible stops macOS 27 hiding the item's image, which its default `preferredImageVisibility` does.
+    func keepsImageVisible() {
+        // macOS 27 SDK API the CI toolchain cannot name, so it is set by key; 1 is .visible
+        if responds(to: NSSelectorFromString("setPreferredImageVisibility:")) { setValue(1, forKey: "preferredImageVisibility") }
     }
 }

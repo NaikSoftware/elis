@@ -1,5 +1,5 @@
+import AppKit
 import ElisCore
-import Foundation
 
 /// The assistant's host members: peers, the provider runner's effects and `assistant.*` events.
 extension ControlServer {
@@ -13,6 +13,10 @@ extension ControlServer {
         }
         model.onScreen = { [weak self] in self?.assistantOnScreen() ?? false }
         model.mayFocus = { [weak self] store in self?.actions.composerMayTakeFocus(in: store) ?? true }
+        // a reply that arrived while no chat window was key is seen once one becomes key
+        NotificationCenter.default.addObserver(forName: NSWindow.didBecomeKeyNotification, object: nil, queue: .main) { [weak self] _ in
+            Task { @MainActor in self?.actions.assistant.refresh() }
+        }
     }
 
     /// assistantOnScreen is true while a key, unminimized window shows the chat with no dashboard over it.

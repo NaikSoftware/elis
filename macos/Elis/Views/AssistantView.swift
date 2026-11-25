@@ -87,6 +87,8 @@ struct AssistantView: View {
             }
             .defaultScrollAnchor(.bottom)
         }
+        // the scroll view draws into the titlebar's safe area otherwise; the terminal stops at its edge too
+        .clipped()
     }
 
     /// A card names a session by its tag and name; the ids of an ended one mean nothing to the reader.
@@ -142,7 +144,7 @@ private struct AssistantEntryView: View {
         return HStack(spacing: 0) {
             if sent { Spacer(minLength: 0) }
             VStack(alignment: .leading, spacing: 7) {
-                Grid(horizontalSpacing: 7, verticalSpacing: 6) {
+                Grid(alignment: .leading, horizontalSpacing: 7, verticalSpacing: 6) {
                     ForEach(Array(peers.enumerated()), id: \.offset) { index, id in
                         GridRow {
                             Text(index == 0 ? (sent ? "To" : "From") : "")
@@ -409,6 +411,7 @@ private struct AssistantComposerBox: View {
             let item = NSMenuItem(title: provider.title, action: #selector(AssistantMenuTarget.pick(_:)), keyEquivalent: "")
             item.target = target
             item.image = provider.image(pointSize: 15)
+            item.keepsImageVisible()
             item.state = provider == current ? .on : .off
             item.representedObject = provider.rawValue
             menu.addItem(item)

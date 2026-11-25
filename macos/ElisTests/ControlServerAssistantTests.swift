@@ -259,4 +259,23 @@ final class ControlServerAssistantTests: XCTestCase {
         let unseen = try await tree()
         XCTAssertEqual(unseen.assistant?.unread, 1)
     }
+
+    func testAReplyMissedOffScreenIsSeenWhenAChatWindowBecomesKey() async throws {
+        actions.assistant.runner.stopForQuit()
+        actions.assistant = AssistantModel(stateDirectory: stateDir, standIn: ["/bin/bash", "-c", "exec sleep 600"])
+        server.installAssistant()
+        let sender = try session()
+        actions.assistant.onScreen = { false }
+        let reply = await run(.assistantReply, target: sender.id.uuidString) { $0.text = "done" }
+        XCTAssertTrue(reply.ok, reply.error ?? "")
+        let unseen = try await tree()
+        XCTAssertEqual(unseen.assistant?.unread, 1)
+
+        actions.assistant.onScreen = { true }
+        NotificationCenter.default.post(name: NSWindow.didBecomeKeyNotification, object: NSWindow())
+        await waitFor("unread cleared", seconds: 5) { actions.assistant.unread == 0 }
+
+        let seen = try await tree()
+        XCTAssertEqual(seen.assistant?.unread, 0)
+    }
 }
