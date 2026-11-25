@@ -107,6 +107,13 @@ final class SidebarAssistantCellView: NSTableCellView {
 
     @available(*, unavailable)
     required init?(coder _: NSCoder) { fatalError("init(coder:) is not supported") }
+
+    // VoiceOver's press takes the click's path: selecting the row shows the chat
+    override func accessibilityPerformPress() -> Bool {
+        guard let outline = superview?.superview as? NSOutlineView, case let row = outline.row(for: self), row >= 0 else { return false }
+        outline.selectRowIndexes(IndexSet(integer: row), byExtendingSelection: false)
+        return true
+    }
 }
 
 /// SidebarAssistantRowView draws the Elis card and a session pill in the accent color; no band, tint, wash or wave.

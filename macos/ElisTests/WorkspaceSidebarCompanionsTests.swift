@@ -489,7 +489,7 @@ private struct CompanionRows {
     let after: Session
 }
 
-private final class RecordingOutlineView: NSOutlineView {
+final class RecordingOutlineView: NSOutlineView {
     private(set) var dropItem: Any?
     private(set) var dropChildIndex = SidebarDrop.onItemIndex
 
@@ -506,10 +506,10 @@ final class SidebarFakeDrag: NSObject, @preconcurrency NSDraggingInfo {
     let draggingDestinationWindow: NSWindow?
     let draggingLocation: NSPoint
 
-    init(_ pasteboard: NSPasteboard, over view: NSView) {
+    init(_ pasteboard: NSPasteboard, over view: NSView, at location: NSPoint = .zero) {
         draggingPasteboard = pasteboard
         draggingDestinationWindow = view.window
-        draggingLocation = .zero
+        draggingLocation = location
     }
 
     var draggingSourceOperationMask: NSDragOperation { .every }

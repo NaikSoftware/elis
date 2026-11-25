@@ -38,7 +38,6 @@ extension WorkspaceSidebar.Coordinator {
                      validateDrop info: NSDraggingInfo,
                      proposedItem item: Any?,
                      proposedChildIndex index: Int) -> NSDragOperation {
-        if refusesAssistantDrop(item: item, childIndex: index) { return [] }
         if draggedWorkspaceID(from: info) != nil {
             cancelSpringLoadedExpansion()
             guard let move = resolveWorkspaceMove(from: info, in: outlineView) else { return [] }
@@ -48,6 +47,8 @@ extension WorkspaceSidebar.Coordinator {
             outlineView.setDropItem(nil, dropChildIndex: move.dropChildIndex + 1)
             return .move
         }
+        // a workspace drag resolves from the cursor, highlighting at root 1 or later, so only it may hover the row
+        if refusesAssistantDrop(item: item, childIndex: index) { return [] }
         if !draggedSessionIDs(from: info).isEmpty, showsFlatFlaggedList {
             cancelSpringLoadedExpansion()
             return resolveFlaggedReorder(from: info, item: item, childIndex: index) == nil ? [] : .move
@@ -89,7 +90,6 @@ extension WorkspaceSidebar.Coordinator {
         // a SUCCESSFUL drop keeps an already-spring-opened workspace open so the dropped/moved session
         // stays visible; a rejected/no-op drop collapses it back, same as leave/cancel. (A rejected
         // Finder drop can't rely on `draggingSession:endedAt:` to collapse — Finder is the source.)
-        if refusesAssistantDrop(item: item, childIndex: index) { return false }
         var dropSucceeded = false
         defer { finishDraggingSequence(collapseSpringLoaded: !dropSucceeded) }
         if draggedWorkspaceID(from: info) != nil {
@@ -103,6 +103,7 @@ extension WorkspaceSidebar.Coordinator {
             dropSucceeded = true
             return true
         }
+        if refusesAssistantDrop(item: item, childIndex: index) { return false }
         if !draggedSessionIDs(from: info).isEmpty, showsFlatFlaggedList {
             guard let move = resolveFlaggedReorder(from: info, item: item, childIndex: index) else { return false }
             dropSucceeded = store.moveFlagged(move.ids, to: move.placement, of: move.anchor)

@@ -60,6 +60,54 @@ final class SidebarAssistantRowTests: XCTestCase {
         XCTAssertEqual(outline.selectedRow, 0)
     }
 
+    func testAccessibilityPressShowsTheChat() throws {
+        let (store, _, _) = try seed()
+        try mountSidebar(for: store)
+        let cell = try XCTUnwrap(outline.view(atColumn: 0, row: 0, makeIfNecessary: true) as? SidebarAssistantCellView)
+
+        XCTAssertTrue(cell.accessibilityPerformPress())
+
+        XCTAssertTrue(store.assistantShown)
+        XCTAssertNil(store.selectedSessionID)
+    }
+
+    func testAWorkspaceDraggedOverTheRowLandsInTheFirstSlot() throws {
+        let (store, _, _) = try seed()
+        let other = store.addWorkspace(name: "other")
+        let recording = RecordingOutlineView()
+        let sidebar = WorkspaceSidebar.Coordinator(store: store, actions: actions)
+        recording.dataSource = sidebar
+        recording.delegate = sidebar
+        recording.rowSizeStyle = .custom
+        recording.rowHeight = AppSettings.sidebarRowHeight(fontSize: GhosttyApp.shared.sidebarFontSize)
+        let column = NSTableColumn(identifier: NSUserInterfaceItemIdentifier("main"))
+        recording.addTableColumn(column)
+        recording.outlineTableColumn = column
+        let scroll = NSScrollView(frame: NSRect(x: 0, y: 0, width: 240, height: 400))
+        scroll.documentView = recording
+        window = NSWindow(contentRect: scroll.frame, styleMask: [.titled], backing: .buffered, defer: false)
+        window.isReleasedWhenClosed = false
+        window.contentView = scroll
+        sidebar.outlineView = recording
+        sidebar.seedExpansionFromModel()
+        sidebar.rebuildAndReload()
+        XCTAssertEqual((recording.item(atRow: 0) as? SidebarNode)?.kind, .assistant)
+
+        let pasteboard = NSPasteboard(name: NSPasteboard.Name("elis-assistant-\(UUID().uuidString)"))
+        defer { pasteboard.releaseGlobally() }
+        pasteboard.clearContents()
+        pasteboard.setString(other.id.uuidString, forType: workspacePasteboardType)
+        let overRow = recording.convert(NSPoint(x: 20, y: recording.rect(ofRow: 0).midY), to: nil)
+        let info = SidebarFakeDrag(pasteboard, over: recording, at: overRow)
+
+        XCTAssertEqual(sidebar.outlineView(recording, validateDrop: info, proposedItem: recording.item(atRow: 0),
+                                           proposedChildIndex: SidebarDrop.onItemIndex), .move)
+        XCTAssertNil(recording.dropItem)
+        XCTAssertEqual(recording.dropChildIndex, 1, "the first slot, below the Elis row")
+        XCTAssertTrue(sidebar.outlineView(recording, acceptDrop: info, item: recording.dropItem, childIndex: recording.dropChildIndex))
+        XCTAssertEqual(store.workspaces.first?.id, other.id)
+    }
+
     func testSessionClickHidesTheChat() throws {
         let (store, first, _) = try seed()
         try mountSidebar(for: store)
