@@ -12,6 +12,7 @@ extension ControlServer {
             await self?.dispatch(request) ?? ControlResponse(ok: false, error: "no control server")
         }
         model.onScreen = { [weak self] in self?.assistantOnScreen() ?? false }
+        model.mayFocus = { [weak self] store in self?.actions.composerMayTakeFocus(in: store) ?? true }
     }
 
     /// assistantOnScreen is true while a key, unminimized window shows the chat with no dashboard over it.

@@ -62,14 +62,14 @@ struct AssistantView: View {
     }
 
     private var transcript: some View {
-        let directory = AssistantDirectory(model.peers())
+        let directory = model.directory()
+        let known = AssistantTagStyle.knownTags(directory)
         return GeometryReader { viewport in
             ScrollView {
                 VStack(alignment: .leading, spacing: 16) {
                     ForEach(model.entries, id: \.id) { entry in
                         AssistantEntryView(entry: entry, directory: directory, columnWidth: columnWidth, dark: dark,
-                                           known: knownTags(directory),
-                                           goTo: goTo)
+                                           known: known, goTo: goTo)
                     }
                     if model.running {
                         Text("Elis is working…")
@@ -89,16 +89,13 @@ struct AssistantView: View {
         }
     }
 
-    private func knownTags(_ directory: AssistantDirectory) -> Set<String> {
-        var tags: Set<String> = ["@all"]
-        for peer in directory.peers {
-            if let handle = directory.handle(of: peer.sessionID) { tags.insert("@\(handle)") }
-            if let handle = directory.workspaceHandle(of: peer.workspaceID) { tags.insert("@ws:\(handle)") }
-        }
-        return tags
+    /// A card names a session by its tag and name; the ids of an ended one mean nothing to the reader.
+    static func cardPeer(_ id: String, in directory: AssistantDirectory) -> (tag: String?, name: String) {
+        guard let handle = directory.handle(of: id) else { return (nil, "ended session") }
+        return ("@\(handle)", directory.peers.first { $0.sessionID == id }?.name ?? "")
     }
 
-    private func goTo(_ sessionID: String) {
+        private func goTo(_ sessionID: String) {
         Task { _ = await model.perform(ControlRequest(cmd: .sessionGo, target: sessionID)) }
     }
 }
@@ -152,14 +149,17 @@ private struct AssistantEntryView: View {
                                 .font(.system(size: 11))
                                 .foregroundStyle(.tertiary)
                                 .frame(minWidth: 28, alignment: .leading)
-                            AssistantChip(tag: "@" + (directory.handle(of: id) ?? id))
-                            Text(verbatim: directory.peers.first { $0.sessionID == id }?.name ?? "")
+                            let peer = AssistantView.cardPeer(id, in: directory)
+                            if let tag = peer.tag { AssistantChip(tag: tag) } else { Color.clear.frame(width: 0, height: 0) }
+                            Text(verbatim: peer.name)
                                 .font(.system(size: 12))
                                 .foregroundStyle(.secondary)
                                 .lineLimit(1)
                                 .truncationMode(.tail)
                                 .frame(maxWidth: .infinity, alignment: .leading)
                             AssistantGoButton { goTo(id) }
+                                .disabled(peer.tag == nil)
+                                .opacity(peer.tag == nil ? 0.35 : 1)
                         }
                     }
                 }
@@ -358,8 +358,6 @@ private struct AssistantComposerBox: View {
 
     // MARK: - Provider
 
-    private var detecting: Bool { SessionLaunchers.path == nil && model.providers.isEmpty }
-
     private var current: SessionLauncher? {
         model.provider.flatMap { model.providers.contains($0) ? $0 : nil } ?? model.providers.first
     }
@@ -370,7 +368,7 @@ private struct AssistantComposerBox: View {
                 if let current, let image = current.image(pointSize: 13) {
                     Image(nsImage: image).resizable().frame(width: 13, height: 13).opacity(dark ? 0.75 : 0.62)
                 }
-                Text(verbatim: detecting ? "Detecting agents…" : current?.title ?? "No agent found")
+                Text(verbatim: model.detecting ? "Detecting agents…" : current?.title ?? "No agent found")
                     .font(.system(size: 12, weight: .medium))
                 Image(systemName: "chevron.up.chevron.down").font(.system(size: 9, weight: .semibold))
             }
@@ -382,7 +380,7 @@ private struct AssistantComposerBox: View {
         }
         .buttonStyle(.plain)
         .focusable(false)
-        .disabled(detecting)
+        .disabled(model.detecting)
         .accessibilityLabel("Provider")
         .accessibilityValue(current?.title ?? "")
         .accessibilityIdentifier("assistant-provider")
@@ -390,11 +388,7 @@ private struct AssistantComposerBox: View {
 
     /// The composer's picker is what starts agent detection; the tree only ever reads the cached list.
     private func detectProviders() {
-        _ = SessionLaunchers.available
-        Task { @MainActor in
-            await SessionLaunchers.settled()
-            model.refresh()
-        }
+        Task { await model.detectProviders() }
     }
 
     private func openProviders() {

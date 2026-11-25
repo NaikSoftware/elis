@@ -24,8 +24,10 @@ struct AssistantMarkdown: View {
             }
         }
         // provider and session text is untrusted: a link opens only through the terminal's web/mail allowlist
-        .environment(\.openURL, OpenURLAction { Self.opens($0) ? .systemAction($0) : .discarded })
+        .environment(\.openURL, Self.openURL)
     }
+
+    static let openURL = OpenURLAction { opens($0) ? .systemAction($0) : .discarded }
 
     static func opens(_ url: URL) -> Bool { LinkPolicy.permittedSchemes.contains(url.scheme?.lowercased() ?? "") }
 

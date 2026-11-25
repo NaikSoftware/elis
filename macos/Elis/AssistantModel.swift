@@ -15,11 +15,20 @@ final class AssistantModel {
     @ObservationIgnored var peers: () -> [AssistantPeer] = { [] }
     /// onScreen says the chat is in front of the user, so a reply arriving then is not unread.
     @ObservationIgnored var onScreen: () -> Bool = { false }
+    /// mayFocus says no palette, pick or rename field in the store's window owns the keyboard.
+    @ObservationIgnored var mayFocus: (AppStore) -> Bool = { _ in true }
+    /// detect runs the agent detection the picker waits for.
+    @ObservationIgnored var detect: @MainActor () async -> Void = {
+        _ = SessionLaunchers.available
+        await SessionLaunchers.settled()
+    }
     private(set) var entries: [AssistantEntry] = []
     private(set) var unread = 0
     private(set) var running = false
     private(set) var provider: SessionLauncher?
     private(set) var providers: [SessionLauncher] = []
+    private(set) var detected = false
+    var detecting: Bool { !detected && providers.isEmpty }
 
     init(stateDirectory: URL?, standIn: [String]? = AssistantRunner.standInFromEnvironment()) {
         AssistantRunner.endLeftover(stateDirectory: stateDirectory)
@@ -37,4 +46,13 @@ final class AssistantModel {
         provider = chat.provider
         providers = runner.providers()
     }
+
+    /// detectProviders starts agent detection; the tree only ever reads the cached list.
+    func detectProviders() async {
+        await detect()
+        detected = true
+        refresh()
+    }
+
+    func directory() -> AssistantDirectory { AssistantDirectory(peers()) }
 }

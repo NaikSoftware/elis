@@ -87,7 +87,7 @@ final class AssistantComposerTextView: NSTextView {
         updateDragTypeRegistration()
         setAccessibilityIdentifier("assistant-composer")
         setAccessibilityPlaceholderValue(Self.placeholder)
-                NotificationCenter.default.addObserver(self, selector: #selector(focusRequested), name: .elisFocusAssistantComposer, object: store)
+        NotificationCenter.default.addObserver(self, selector: #selector(focusRequested), name: .elisFocusAssistantComposer, object: store)
     }
 
     @available(*, unavailable)
@@ -100,6 +100,7 @@ final class AssistantComposerTextView: NSTextView {
     @objc private func focusRequested() { takeFocus() }
 
     func takeFocus() {
+        guard model.mayFocus(store) else { return }
         window?.makeFirstResponder(self)
     }
 
@@ -146,13 +147,10 @@ final class AssistantComposerTextView: NSTextView {
         }
     }
 
-    override func insertTab(_ sender: Any?) {
-        window?.selectNextKeyView(sender)
-    }
+    // the next key view can be a hidden deck surface, so Tab never leaves the field
+    override func insertTab(_: Any?) {}
 
-    override func insertBacktab(_ sender: Any?) {
-        window?.selectPreviousKeyView(sender)
-    }
+    override func insertBacktab(_: Any?) {}
 
     // Escape closes the completion and otherwise does nothing; NSTextView's own Escape opens word completion
     override func cancelOperation(_: Any?) {
@@ -184,6 +182,8 @@ final class AssistantComposerTextView: NSTextView {
 
     private func replace(with text: String) {
         string = text
+        // undoing the sent text's typing would edit text that is gone; NSTextView registers it on private targets
+        undoManager?.removeAllActions()
         didChangeText()
     }
 
@@ -208,16 +208,10 @@ final class AssistantComposerTextView: NSTextView {
         updateLines()
     }
 
-    private var directory: AssistantDirectory { AssistantDirectory(model.peers()) }
+    private var directory: AssistantDirectory { model.directory() }
 
     private func refreshKnown() {
-        let directory = directory
-        var tags: Set<String> = ["@all"]
-        for peer in directory.peers {
-            if let handle = directory.handle(of: peer.sessionID) { tags.insert("@\(handle)") }
-            if let handle = directory.workspaceHandle(of: peer.workspaceID) { tags.insert("@ws:\(handle)") }
-        }
-        known = tags
+        known = AssistantTagStyle.knownTags(directory)
         restyle()
     }
 
@@ -239,23 +233,27 @@ final class AssistantComposerTextView: NSTextView {
         if state.lines != lines { state.lines = lines }
     }
 
+    /// The `@` word ending at the caret, in the whole text.
+    private func tokenRange() -> NSRange? {
+        let caret = selectedRange().location
+        let text = string as NSString
+        let lineStart = text.lineRange(for: NSRange(location: caret, length: 0)).location
+        let before = text.substring(with: NSRange(location: lineStart, length: caret - lineStart))
+        guard let match = Self.tokenPattern.firstMatch(in: before, range: NSRange(location: 0, length: (before as NSString).length)) else {
+            return nil
+        }
+        return NSRange(location: lineStart + match.range(at: 1).location, length: match.range(at: 1).length)
+    }
+
     /// Opens, filters or closes the completion for the `@` word ending at the caret.
     func updateCompletion() {
-        let caret = selectedRange()
-        let text = string as NSString
-        guard caret.length == 0, !hasMarkedText() else { return closeCompletion() }
-        let lineStart = text.lineRange(for: NSRange(location: caret.location, length: 0)).location
-        let before = text.substring(with: NSRange(location: lineStart, length: caret.location - lineStart))
-        guard let match = Self.tokenPattern.firstMatch(in: before, range: NSRange(location: 0, length: (before as NSString).length)) else {
-            return closeCompletion()
-        }
-        let prefix = (before as NSString).substring(with: match.range(at: 1)).lowercased()
+        guard selectedRange().length == 0, !hasMarkedText(), let token = tokenRange() else { return closeCompletion() }
+        let prefix = (string as NSString).substring(with: token).lowercased()
         let rows = completionRows().filter { $0.tag.lowercased().hasPrefix(prefix) }
         guard !rows.isEmpty else { return closeCompletion() }
         if rows.map(\.tag) != state.completion.map(\.tag) { state.highlighted = 0 }
         state.completion = rows
-        let tokenStart = lineStart + match.range(at: 1).location
-        state.completionX = caretX(at: tokenStart)
+        state.completionX = caretX(at: token.location)
     }
 
     private func caretX(at location: Int) -> CGFloat {
@@ -296,13 +294,7 @@ final class AssistantComposerTextView: NSTextView {
     func acceptCompletion(_ index: Int? = nil) {
         let rows = state.completion
         let index = index ?? state.highlighted
-        guard rows.indices.contains(index) else { return }
-        let caret = selectedRange().location
-        let text = string as NSString
-        let lineStart = text.lineRange(for: NSRange(location: caret, length: 0)).location
-        let before = text.substring(with: NSRange(location: lineStart, length: caret - lineStart))
-        guard let match = Self.tokenPattern.firstMatch(in: before, range: NSRange(location: 0, length: (before as NSString).length)) else { return }
-        let token = NSRange(location: lineStart + match.range(at: 1).location, length: match.range(at: 1).length)
+        guard rows.indices.contains(index), let token = tokenRange() else { return }
         closeCompletion()
         insertTags([rows[index].tag], replacing: token)
     }
@@ -423,6 +415,16 @@ enum AssistantTagStyle {
     static let tagFont = NSFont.systemFont(ofSize: 13, weight: .medium)
     static let chipPad: CGFloat = 5
     private static let pattern = try! NSRegularExpression(pattern: #"(?<!\S)@[\w:-]+"#) // swiftlint:disable:this force_try
+
+    /// The tags the live peers answer to, with `@all`.
+    static func knownTags(_ directory: AssistantDirectory) -> Set<String> {
+        var tags: Set<String> = ["@all"]
+        for peer in directory.peers {
+            if let handle = directory.handle(of: peer.sessionID) { tags.insert("@\(handle)") }
+            if let handle = directory.workspaceHandle(of: peer.workspaceID) { tags.insert("@ws:\(handle)") }
+        }
+        return tags
+    }
 
     /// The words that name a session, a workspace or `@all`; any other `@word` stays plain text.
     static func tagRanges(_ string: String, known: Set<String>) -> [NSRange] {
