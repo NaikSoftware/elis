@@ -293,10 +293,16 @@ final class AssistantTagLabel: NSTextView {
     /// A wrapped message takes the whole width, as the mockup's bubble does; one line hugs its text.
     func size(fitting width: CGFloat) -> CGSize {
         guard let textStorage else { return .zero }
-        // measured off the view: until the view has a frame, its own layout reports the whole container width as used
-        let used = textStorage.boundingRect(with: NSSize(width: max(1, width), height: .greatestFiniteMagnitude),
-                                            options: [.usesLineFragmentOrigin])
-        return CGSize(width: used.height > 20 * 1.5 ? width : ceil(used.width), height: ceil(used.height)) // past one 20pt line
+        // a viewless layout of the same text: a non-resizable text view reports its whole container width as used
+        let storage = NSTextStorage(attributedString: textStorage), layout = NSLayoutManager()
+        let container = NSTextContainer(size: NSSize(width: max(1, width), height: .greatestFiniteMagnitude))
+        container.lineFragmentPadding = 0
+        storage.addLayoutManager(layout)
+        layout.addTextContainer(container)
+        layout.ensureLayout(for: container)
+        // maxX, not width: a leading chip's indent starts the text past zero
+        let used = layout.usedRect(for: container)
+        return CGSize(width: used.height > 20 * 1.5 ? width : ceil(used.maxX), height: ceil(used.height)) // past one 20pt line
     }
 
     override func layout() {

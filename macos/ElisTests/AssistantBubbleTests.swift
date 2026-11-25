@@ -39,6 +39,20 @@ final class AssistantBubbleTests: XCTestCase {
         XCTAssertEqual(wide.frame.width, 680 * 0.76 - 26, accuracy: 2, "long bubble capped")
     }
 
+    func testAMeasuredTaggedLineStaysOneLineInTheLabelsOwnLayout() {
+        let label = AssistantTagLabel()
+        label.show("@rele-notes open the draft in an overlay", known: ["@rele-notes"])
+        let size = label.size(fitting: 491)
+        label.frame = NSRect(origin: .zero, size: size)
+        label.layout()
+        let layoutManager = label.layoutManager!, container = label.textContainer!
+        layoutManager.ensureLayout(for: container)
+        var lines = 0
+        layoutManager.enumerateLineFragments(forGlyphRange: layoutManager.glyphRange(for: container)) { _, _, _, _, _ in lines += 1 }
+        XCTAssertEqual(lines, 1, "measured \(size) wraps in the label")
+        XCTAssertLessThan(size.width, 491)
+    }
+
     private func mount() throws -> [AssistantTagLabel] {
         let library = WindowLibrary(directory: stateDir)
         let store = try XCTUnwrap(library.activeStore)
