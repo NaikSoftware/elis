@@ -128,6 +128,7 @@ extension WorkspaceSidebar.Coordinator {
                     guard let session = store.session(withID: node.id) else { return }
                     CIStatusLine.showPanel(for: session, from: anchor)
                 }
+                infoCell.claimsInfoClick = { store.selectedSessionID == node.id }
             }
         }
         // the selection pill is a soft tint, so a selected row keeps the theme colors; a row tint overrides

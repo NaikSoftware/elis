@@ -176,16 +176,18 @@ paths:
   minimum, lifted 6 points into the plain row's bottom padding. The title row centers in a band of plain
   row height, so the name sits where a plain row puts it. `heightOfRowByItem` and the cell read the same `sessionInfo(forSession:)` gate.
   `RowContent.info` reloads the row and calls `noteHeightOfRows`, which a reload alone does not do.
-- `SidebarInfoCellView` rebuilds its colors on every `setColors`. A colored fragment keeps its `TintColor`
-  whatever `selected` says, as a row tint does, and uncolored text follows the theme color for it. Color emoji
+- `SidebarInfoCellView` rebuilds its colors on every `setColors` and whenever a row fill changes. A colored fragment
+  is eased by `legibleOn` to 4.5:1 on every backdrop `SidebarRowView.infoBackdrops` lists; uncolored text follows
+  the theme color for `selected`. Color emoji
   are drawn at 0.7 of the line's size, centered on cap height, because a full-size glyph reads oversized
   and low. A text-default symbol counts as emoji only with VS16, and VS15 always keeps text form.
 - `AppSettings.sessionInfoDisplay` (`always`|`flagged`|`off`, nil = always) decides where the line shows,
   mirrored to `GhosttyApp.sessionInfoDisplay`, labelled "CI status". `flagged` shows it in the flagged view only
   and polls only flagged sessions; `off` polls none. The picker shares the Settings ▸ Interface Sidebar section's last row.
-- A click on the line opens `CIStatusPanel` in an `NSPopover` and does nothing else: its
-  `NSClickGestureRecognizer` delays the mouse-down, so the row neither selects nor drags, while a moved press
-  fails the recognizer and drags as before. The panel reads the session live and closes when the line goes.
+- A plain click on the shown session's line opens `CIStatusPanel` in an `NSPopover`; its delaying
+  `NSClickGestureRecognizer` claims only that click, decided at mouse-down. Any other click on the line, or one
+  with Control, Shift or Command, reaches the row whole: it selects, drags, extends the selection or opens the
+  row menu. The panel reads the session live and closes when the line goes.
 
 ## Workspace focus
 

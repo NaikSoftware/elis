@@ -6,7 +6,7 @@ import SwiftUI
 @MainActor
 enum CIStatusLine {
     private static var poller: CIPoller?
-    private static weak var panel: NSPopover?
+    private(set) static weak var panel: NSPopover?
 
     static func start(library: WindowLibrary) {
         let poller = CIPoller(

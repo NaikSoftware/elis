@@ -156,14 +156,19 @@ qreal luminance(const QColor &c) // WCAG relative luminance
 
 QColor legibleOn(const QColor &color, const QList<QColor> &under, const QColor &text)
 {
+    if (under.isEmpty())
+        return color;
+    const auto contrast = [](const QColor &c, const QColor &bg) {
+        const qreal a = luminance(over(bg, c)), b = luminance(bg); // not std::minmax: it binds references to these temporaries
+        return (std::max(a, b) + 0.05) / (std::min(a, b) + 0.05);
+    };
+    // toward white on a dark first backdrop, black on a light one: mixing toward a pole keeps the hue
+    const QColor pole = contrast(Qt::white, under.first()) > contrast(Qt::black, under.first()) ? QColor(Qt::white) : QColor(Qt::black);
     for (int step = 0; step <= 20; ++step) {
         const qreal t = step / 20.0;
-        QColor c = QColor::fromRgbF(color.redF() + (text.redF() - color.redF()) * t, color.greenF() + (text.greenF() - color.greenF()) * t,
-                                    color.blueF() + (text.blueF() - color.blueF()) * t, color.alphaF());
-        if (std::all_of(under.begin(), under.end(), [&](const QColor &bg) {
-                const qreal a = luminance(over(bg, c)), b = luminance(bg); // not std::minmax: it binds references to these temporaries
-                return (std::max(a, b) + 0.05) / (std::min(a, b) + 0.05) >= 4.5;
-            }))
+        QColor c = QColor::fromRgbF(color.redF() + (pole.redF() - color.redF()) * t, color.greenF() + (pole.greenF() - color.greenF()) * t,
+                                    color.blueF() + (pole.blueF() - color.blueF()) * t, color.alphaF());
+        if (std::all_of(under.begin(), under.end(), [&](const QColor &bg) { return contrast(c, bg) >= 4.5; }))
             return c;
     }
     return text;

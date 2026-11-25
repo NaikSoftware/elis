@@ -2013,7 +2013,7 @@ needed, and every window's sidebar follows at once. Returns the resulting densit
 as the tree's top-level `sidebarDensity`.
 
 `elisctl settings keep-awake [on|off|toggle]` — keep the computer from sleeping on its own while any local session's
-status is `active` (on by default; the display still sleeps). `toggle` is the default; an unknown mode is an error.
+status is `active` (on by default; the display stays on too). `toggle` is the default; an unknown mode is an error.
 APP-WIDE, the Settings ▸ General toggle: no `--window`. Returns `on` or `off` in `result.text`; read back as the
 tree's top-level `keepAwake`. Not on elis-server.
 
