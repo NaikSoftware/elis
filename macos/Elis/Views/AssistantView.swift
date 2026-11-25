@@ -290,7 +290,7 @@ final class AssistantTagLabel: NSTextView {
         needsDisplay = true
     }
 
-    /// A wrapped message takes the whole width, as the mockup's bubble does; one line hugs its text.
+    /// A message hugs its longest line; one that soft-wraps takes the whole width, as the mockup's bubble does.
     func size(fitting width: CGFloat) -> CGSize {
         guard let textStorage else { return .zero }
         // a viewless layout of the same text: a non-resizable text view reports its whole container width as used
@@ -301,8 +301,14 @@ final class AssistantTagLabel: NSTextView {
         layout.addTextContainer(container)
         layout.ensureLayout(for: container)
         // maxX, not width: a leading chip's indent starts the text past zero
-        let used = layout.usedRect(for: container)
-        return CGSize(width: used.height > 20 * 1.5 ? width : ceil(used.maxX), height: ceil(used.height)) // past one 20pt line
+        var longest: CGFloat = 0, wraps = false
+        let text = storage.string as NSString
+        layout.enumerateLineFragments(forGlyphRange: layout.glyphRange(for: container)) { _, used, _, glyphs, _ in
+            longest = max(longest, used.maxX)
+            let end = layout.characterRange(forGlyphRange: glyphs, actualGlyphRange: nil)
+            if NSMaxRange(end) < text.length, text.character(at: NSMaxRange(end) - 1) != 0x0A { wraps = true }
+        }
+        return CGSize(width: wraps ? width : ceil(longest), height: ceil(layout.usedRect(for: container).height))
     }
 
     override func layout() {

@@ -53,6 +53,17 @@ final class AssistantBubbleTests: XCTestCase {
         XCTAssertLessThan(size.width, 491)
     }
 
+    func testHardBrokenLinesHugTheirLongestLine() {
+        let label = AssistantTagLabel()
+        label.show("short\nthe longest line of the three\n\nend", known: [])
+        let longest = ceil(("the longest line of the three" as NSString).size(withAttributes: [.font: AssistantTagStyle.font]).width)
+
+        let size = label.size(fitting: 491)
+
+        XCTAssertEqual(size.width, longest, accuracy: 2)
+        XCTAssertEqual(size.height, 80, accuracy: 1)
+    }
+
     private func mount() throws -> [AssistantTagLabel] {
         let library = WindowLibrary(directory: stateDir)
         let store = try XCTUnwrap(library.activeStore)
