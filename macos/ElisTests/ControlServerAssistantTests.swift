@@ -150,6 +150,22 @@ final class ControlServerAssistantTests: XCTestCase {
         XCTAssertFalse(server.assistantOnScreen { _ in true })
     }
 
+    func testAZoomOverTheChatTakesItOffScreen() async throws {
+        let member = try session()
+        let windowID = try XCTUnwrap(library.activeWindowID)
+        let zoom = TerminalZoomController()
+        TerminalZoomRegistry.shared.register(windowID, controller: zoom)
+        defer { TerminalZoomRegistry.shared.unregister(windowID) }
+        let show = await run(.assistantShow)
+        XCTAssertTrue(show.ok)
+
+        let zoomed = await run(.surfaceZoom, target: "surface:\(member.id.uuidString):primary")
+        XCTAssertTrue(zoomed.ok, zoomed.error ?? "")
+        XCTAssertNotNil(zoom.target)
+        XCTAssertTrue(try store().assistantShown)
+        XCTAssertFalse(server.assistantOnScreen { _ in true })
+    }
+
     func testChatSurvivesBackgroundCloseAndModeSwitch() async throws {
         let background = try session()
         _ = try session()

@@ -81,6 +81,17 @@ final class AssistantComposerTests: XCTestCase {
         return (session, main, split)
     }
 
+    private func content() throws -> WindowContentView {
+        WindowContentView(
+            windowID: try XCTUnwrap(library.activeWindowID), store: try store(), library: library,
+            makeSurface: { _ in fatalError("unused") }, makeSplitSurface: { _ in fatalError("unused") },
+            makeOverlaySurface: { _, _ in fatalError("unused") }, makeScratchSurface: { _ in fatalError("unused") },
+            captureOnExit: nil, actions: actions, palette: PaletteController(),
+            sessionSwitcher: SessionSwitcher(library: library, canSwitch: { false }),
+            toolbarMode: .normal, chromeText: .black, attentionButtonEnabled: true, hiddenInterfaceElements: []
+        )
+    }
+
     private func settle() async { try? await Task.sleep(for: .milliseconds(600)) }
 
     private func waitFor(_ what: String, _ condition: () -> Bool) async {
@@ -313,25 +324,27 @@ final class AssistantComposerTests: XCTestCase {
     func testClosingADashboardOverTheChatMarksAMissedReplySeen() async throws {
         let sender = try session()
         actions.assistant.onScreen = { false }
-        let reply = await server.dispatch(ControlRequest(cmd: .assistantReply, target: sender.id.uuidString, args: {
-            var args = ControlArgs()
-            args.text = "done"
-            return args
-        }()))
+        let reply = await server.dispatch(ControlRequest(cmd: .assistantReply, target: sender.id.uuidString, args: ControlArgs(text: "done")))
         XCTAssertTrue(reply.ok, reply.error ?? "")
         XCTAssertEqual(actions.assistant.unread, 1)
         try store().assistantShown = true
-        let content = WindowContentView(
-            windowID: try XCTUnwrap(library.activeWindowID), store: try store(), library: library,
-            makeSurface: { _ in fatalError("unused") }, makeSplitSurface: { _ in fatalError("unused") },
-            makeOverlaySurface: { _, _ in fatalError("unused") }, makeScratchSurface: { _ in fatalError("unused") },
-            captureOnExit: nil, actions: actions, palette: PaletteController(),
-            sessionSwitcher: SessionSwitcher(library: library, canSwitch: { false }),
-            toolbarMode: .normal, chromeText: .black, attentionButtonEnabled: true, hiddenInterfaceElements: []
-        )
         actions.assistant.onScreen = { true }
 
-        content.handleDashboardOpenChange(false)
+        try content().handleDashboardOpenChange(false)
+
+        XCTAssertEqual(actions.assistant.unread, 0)
+    }
+
+    func testLeavingZoomOverTheChatMarksAMissedReplySeen() async throws {
+        let sender = try session()
+        actions.assistant.onScreen = { false }
+        let reply = await server.dispatch(ControlRequest(cmd: .assistantReply, target: sender.id.uuidString, args: ControlArgs(text: "done")))
+        XCTAssertTrue(reply.ok, reply.error ?? "")
+        XCTAssertEqual(actions.assistant.unread, 1)
+        try store().assistantShown = true
+        actions.assistant.onScreen = { true }
+
+        try content().handleZoomTargetChange(old: .session(sender.id, .primary), new: nil)
 
         XCTAssertEqual(actions.assistant.unread, 0)
     }

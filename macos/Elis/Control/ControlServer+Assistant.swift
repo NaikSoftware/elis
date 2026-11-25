@@ -23,11 +23,12 @@ extension ControlServer {
         }
     }
 
-    /// assistantOnScreen is true while a key, unminimized window shows the chat with no dashboard over it.
+    /// assistantOnScreen is true while a key, unminimized window shows the chat with no dashboard or zoom over it.
     func assistantOnScreen(isKey: (WindowInfo.ID) -> Bool = { WindowRegistry.shared.isKeyWindow($0) }) -> Bool {
         library.openIDs().contains { id in
             library.store(for: id)?.assistantShown == true && isKey(id) && !WindowRegistry.shared.isMinimized(id)
                 && DashboardControllerRegistry.shared.controller(for: id)?.isOpen != true
+                && TerminalZoomRegistry.shared.controller(for: id)?.target == nil
         }
     }
 
