@@ -1,3 +1,4 @@
+import ElisCore
 import SwiftUI
 
 /// AssistantMarkdown draws an answer's markdown as blocks: `Text` keeps inline styles but runs every block
@@ -22,7 +23,11 @@ struct AssistantMarkdown: View {
                     .padding(.bottom, spacing(after: block, in: blocks))
             }
         }
+        // provider and session text is untrusted: a link opens only through the terminal's web/mail allowlist
+        .environment(\.openURL, OpenURLAction { Self.opens($0) ? .systemAction($0) : .discarded })
     }
+
+    static func opens(_ url: URL) -> Bool { LinkPolicy.permittedSchemes.contains(url.scheme?.lowercased() ?? "") }
 
     private func spacing(after block: Block, in blocks: [Block]) -> CGFloat {
         guard block.id + 1 < blocks.count else { return 0 }

@@ -102,6 +102,13 @@ final class AssistantComposerTests: XCTestCase {
         XCTAssertEqual(composer.string, "@\(handle) ")
     }
 
+    func testAnAnswerLinkOpensOnlyAWebOrMailScheme() throws {
+        let blocks = AssistantMarkdown.blocks("[a](file:///Applications/Calculator.app) [b](x-elis://run) [c](https://example.com)")
+        let links = blocks.flatMap { $0.content.runs.compactMap(\.link) }
+        XCTAssertEqual(links.map(\.absoluteString), ["file:///Applications/Calculator.app", "x-elis://run", "https://example.com"])
+        XCTAssertEqual(links.map(AssistantMarkdown.opens), [false, false, true])
+    }
+
     func testEditNotesUserActivity() async throws {
         let idle = { [server] () async -> Int? in await server?.dispatch(ControlRequest(cmd: .tree)).result?.tree?.idleMs }
         let before = await idle()
