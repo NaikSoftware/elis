@@ -33,10 +33,11 @@ __pycache__/
 .revmux/*
 !.revmux/profile.md
 
-# track the path-scoped Claude rules (the global ~/.gitignore_global ignores .claude/)
+# track the path-scoped Claude rules and project skills (the global ~/.gitignore_global ignores .claude/)
 !.claude/
 .claude/*
 !.claude/rules/
+!.claude/skills/
 
 # linux/ (Qt app) build outputs
 linux/build/
