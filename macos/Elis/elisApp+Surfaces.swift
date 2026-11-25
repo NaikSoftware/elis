@@ -173,6 +173,8 @@ extension elisApp {
         }
         // focus the surviving (now maximized) pane, else the session reselected to; the collapse/switch re-hosts
         // the target, hence the retry. `topmostSurface` prefers an overlay/scratch cover over the pane it hides.
+        // a surviving unselected session (or any under the chat) is hidden, so the visible view keeps focus.
+        if store.session(withID: sessionID) != nil, store.selectedSessionID != sessionID { return }
         if let survivor = store.session(withID: sessionID) ?? store.activeSession,
            HtmlOverlayRegistry.shared.focusCover(of: survivor) { return }
         let target = store.session(withID: sessionID)?.topmostSurface ?? store.activeSession?.topmostSurface
