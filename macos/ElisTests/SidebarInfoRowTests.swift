@@ -161,6 +161,31 @@ final class SidebarInfoRowTests: XCTestCase {
         try assertLegibleLine(of: session.id, plainPrefix: false)
     }
 
+    func testANewWorkspaceTintRecolorsTheSelectedRowsLine() async throws {
+        let store = try XCTUnwrap(library.activeStore)
+        let session = try seed(store)
+        let workspace = try XCTUnwrap(store.workspaces.last).id
+        XCTAssertTrue(store.setTint(SidebarTint(color: .yellow), forWorkspace: workspace))
+        let runs = [CIRunState.failed, .running, .passed].map { CIRun(workflow: "\($0)", state: $0, url: "https://github.com/o/r/actions/runs/1") }
+        store.setCI(CIStatus(branch: "main", sha: "abc", runs: runs), forSession: session.id)
+        try mountSidebar(for: store, key: true)
+        try await waitUntil { (try? self.height(of: session.id)) == self.infoHeight }
+        let row = try XCTUnwrap(outline.rowView(atRow: try row(of: session.id), makeIfNecessary: false) as? SidebarRowView)
+        XCTAssertTrue(row.isSelected)
+
+        XCTAssertTrue(store.setTint(SidebarTint(color: .indigo), forWorkspace: workspace))
+        try await waitUntil { row.selectionTint == NSColor.tint(.indigo) }
+
+        let cell = try infoCell(forSession: session.id)
+        let shown = colors(of: cell.infoField.attributedStringValue)
+        cell.refreshColors()
+        XCTAssertEqual(shown, colors(of: cell.infoField.attributedStringValue))
+    }
+
+    private func colors(of text: NSAttributedString) -> [[CGFloat]] {
+        (0..<text.length).map { rgba(color(in: text, at: $0)) }
+    }
+
     private func assertLegibleLine(of id: UUID, plainPrefix: Bool = true) throws {
         let row = try XCTUnwrap(outline.rowView(atRow: try row(of: id), makeIfNecessary: false) as? SidebarRowView)
         let backdrops = row.infoBackdrops
@@ -263,7 +288,7 @@ final class SidebarInfoRowTests: XCTestCase {
         defer { CIStatusLine.panel?.close() }
 
         try click(try infoCell(forSession: other.id).infoField)
-        try await Task.sleep(nanoseconds: 100_000_000)
+        try await waitUntil { store.selectedSessionID == other.id }
         XCTAssertEqual(store.selectedSessionID, other.id)
         XCTAssertNil(CIStatusLine.panel)
 
@@ -272,6 +297,15 @@ final class SidebarInfoRowTests: XCTestCase {
         XCTAssertNotNil(CIStatusLine.panel)
         CIStatusLine.panel?.close()
         try await waitUntil { CIStatusLine.panel == nil }
+
+        let line = try infoCell(forSession: other.id)
+        let recognizer = try XCTUnwrap(line.infoField.gestureRecognizers.first { $0 is NSClickGestureRecognizer })
+        for modifier in [NSEvent.ModifierFlags.control, .shift, .command] {
+            XCTAssertFalse(line.gestureRecognizer(recognizer, shouldAttemptToRecognizeWith: try mouseDown(on: line.infoField, modifiers: modifier)))
+        }
+        try click(line.infoField, modifiers: .shift)
+        try await Task.sleep(nanoseconds: 100_000_000)
+        XCTAssertNil(CIStatusLine.panel)
 
         XCTAssertTrue(try infoCell(forSession: shown.id).infoField.accessibilityPerformPress())
         XCTAssertEqual(store.selectedSessionID, shown.id)
@@ -383,16 +417,21 @@ final class SidebarInfoRowTests: XCTestCase {
     }
 
     // the mouse-up is queued first: the outline's tracking loop pulls it, and otherwise the window delivers it
-    private func click(_ view: NSView) throws {
+    private func click(_ view: NSView, modifiers: NSEvent.ModifierFlags = []) throws {
+        NSApp.postEvent(try mouseEvent(.leftMouseUp, on: view, modifiers: modifiers), atStart: false)
+        window.sendEvent(try mouseDown(on: view, modifiers: modifiers))
+    }
+
+    private func mouseDown(on view: NSView, modifiers: NSEvent.ModifierFlags) throws -> NSEvent {
+        try mouseEvent(.leftMouseDown, on: view, modifiers: modifiers)
+    }
+
+    private func mouseEvent(_ type: NSEvent.EventType, on view: NSView, modifiers: NSEvent.ModifierFlags) throws -> NSEvent {
         let point = view.convert(NSPoint(x: view.bounds.midX, y: view.bounds.midY), to: nil)
-        let event = { (type: NSEvent.EventType) in
-            try XCTUnwrap(NSEvent.mouseEvent(with: type, location: point, modifierFlags: [],
-                                             timestamp: ProcessInfo.processInfo.systemUptime,
-                                             windowNumber: self.window.windowNumber, context: nil, eventNumber: 0,
-                                             clickCount: 1, pressure: 1))
-        }
-        NSApp.postEvent(try event(.leftMouseUp), atStart: false)
-        window.sendEvent(try event(.leftMouseDown))
+        return try XCTUnwrap(NSEvent.mouseEvent(with: type, location: point, modifierFlags: modifiers,
+                                                timestamp: ProcessInfo.processInfo.systemUptime,
+                                                windowNumber: window.windowNumber, context: nil, eventNumber: 0,
+                                                clickCount: 1, pressure: 1))
     }
 
     private func waitUntil(timeout: TimeInterval = 5, _ condition: () -> Bool) async throws {

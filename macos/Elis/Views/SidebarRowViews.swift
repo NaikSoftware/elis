@@ -416,7 +416,7 @@ class SidebarRowView: NSTableRowView {
 
     /// selectionTint is the tint of the row's group (workspace, else its own session tint); nil uses the theme.
     var selectionTint: NSColor? {
-        didSet { if selectionTint != oldValue, isSelected { needsDisplay = true } }
+        didSet { if selectionTint != oldValue, isSelected { needsDisplay = true; refreshInfoLine() } }
     }
 
     var selectionColor: NSColor {

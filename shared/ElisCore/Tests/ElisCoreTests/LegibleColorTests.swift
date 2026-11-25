@@ -35,8 +35,11 @@ struct LegibleColorTests {
     }
 
     @Test func legibleOnMustPassEveryBackdrop() {
-        // No red shade toward black reaches 4.5:1 on both white and black.
-        #expect(legibleOn(RGBA(r: 1, g: 0, b: 0), under: [white, black], text: black) == black)
+        let gray = RGBA(r: 0.6, g: 0.6, b: 0.6), wave = RGBA(r: 0.3, g: 0.3, b: 0.3)
+        #expect(legibleOn(gray, under: [black], text: white) == gray)
+        let result = legibleOn(gray, under: [black, wave], text: white)
+        #expect(result != gray && result != white)
+        for bg in [black, wave] { #expect(contrast(result, over: bg) >= 4.5) }
     }
 
     @Test func legibleOnKeepsRedsHueOnADarkWaveUnderMidGrayText() {

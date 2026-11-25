@@ -17,9 +17,8 @@ enum SidebarInfoMetrics {
     }
 }
 
-/// SidebarInfoCellView is a session cell with a styled info line under the name. Colors are rebuilt on every
-/// `setColors`, so the selection and theme refresh paths recolor each fragment. On a selected row uncolored
-/// fragments follow the selection foreground while colored ones keep their color, as a row tint does.
+/// SidebarInfoCellView is a session cell with a styled info line under the name; `.claude/rules/sidebar.md`
+/// owns its color and click rules.
 final class SidebarInfoCellView: SidebarCellView, NSGestureRecognizerDelegate {
     let infoField = SidebarInfoField(labelWithString: "")
     var titleBandHeight: NSLayoutConstraint?
@@ -56,9 +55,10 @@ final class SidebarInfoCellView: SidebarCellView, NSGestureRecognizerDelegate {
         onInfoClick?(infoField)
     }
 
-    // decided at mouse-down: a declined click reaches the outline whole, so its drag tracking still works
-    func gestureRecognizer(_: NSGestureRecognizer, shouldAttemptToRecognizeWith _: NSEvent) -> Bool {
-        claimsInfoClick?() ?? false
+    // decided at mouse-down: a declined click reaches the outline whole, so its drag tracking, row menu
+    // (Control) and selection extension (Shift, Command) still work
+    func gestureRecognizer(_: NSGestureRecognizer, shouldAttemptToRecognizeWith event: NSEvent) -> Bool {
+        event.modifierFlags.isDisjoint(with: [.control, .shift, .command]) && claimsInfoClick?() ?? false
     }
 
     private func infoPressed() {

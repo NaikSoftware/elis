@@ -28,7 +28,7 @@ extension NSColor {
 extension NSColor {
     /// rgba is the color in sRGB for ElisCore's contrast math; resolve a dynamic color under the drawing appearance.
     var rgba: RGBA {
-        let c = usingColorSpace(.sRGB) ?? .black
+        guard let c = usingColorSpace(.sRGB) else { return RGBA(r: 0, g: 0, b: 0) }
         return RGBA(r: c.redComponent, g: c.greenComponent, b: c.blueComponent, a: c.alphaComponent)
     }
 
