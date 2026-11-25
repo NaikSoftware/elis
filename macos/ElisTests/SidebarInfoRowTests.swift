@@ -213,6 +213,31 @@ final class SidebarInfoRowTests: XCTestCase {
         XCTAssertEqual(try height(of: session.id), plainHeight)
     }
 
+    func testACILineOpensThePanelOnlyForTheShownSession() async throws {
+        let store = try XCTUnwrap(library.activeStore)
+        let shown = try seed(store)
+        let other = try XCTUnwrap(store.addSession(toWorkspace: try XCTUnwrap(store.workspaces.last).id, cwd: "/tmp/other"))
+        store.setCI(ci(), forSession: shown.id)
+        store.setCI(ci(), forSession: other.id)
+        store.selectSession(shown.id)
+        try mountSidebar(for: store, key: true)
+        try await waitUntil { (try? self.height(of: other.id)) == self.infoHeight }
+        defer { CIStatusLine.panel?.close() }
+
+        try await click(try infoCell(forSession: other.id).infoField)
+        XCTAssertEqual(store.selectedSessionID, other.id)
+        XCTAssertNil(CIStatusLine.panel)
+
+        try await click(try infoCell(forSession: other.id).infoField)
+        XCTAssertNotNil(CIStatusLine.panel)
+        CIStatusLine.panel?.close()
+        try await waitUntil { CIStatusLine.panel == nil }
+
+        XCTAssertTrue(try infoCell(forSession: shown.id).infoField.accessibilityPerformPress())
+        XCTAssertEqual(store.selectedSessionID, shown.id)
+        XCTAssertNil(CIStatusLine.panel)
+    }
+
     // regression: a line cleared while another row was being renamed stayed on screen after the rename ended
     func testAnInfoChangeDuringARenameCatchesUpWhenTheRenameEnds() async throws {
         let store = try XCTUnwrap(library.activeStore)
@@ -300,10 +325,11 @@ final class SidebarInfoRowTests: XCTestCase {
         return [rgb.redComponent, rgb.greenComponent, rgb.blueComponent, rgb.alphaComponent].map { ($0 * 1000).rounded() / 1000 }
     }
 
-    private func mountSidebar(for store: AppStore) throws {
+    private func mountSidebar(for store: AppStore, key: Bool = false) throws {
         let host = NSHostingView(rootView: WorkspaceSidebar(store: store, actions: actions).frame(width: 240, height: 400))
-        window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 240, height: 400),
-                          styleMask: [.titled], backing: .buffered, defer: false)
+        let type = key ? KeyWindow.self : NSWindow.self
+        window = type.init(contentRect: NSRect(x: 0, y: 0, width: 240, height: 400),
+                           styleMask: [.titled], backing: .buffered, defer: false)
         window.isReleasedWhenClosed = false
         window.contentView = host
         window.orderFront(nil)
@@ -314,6 +340,20 @@ final class SidebarInfoRowTests: XCTestCase {
     private func outlineView(in view: NSView) -> SidebarOutlineView? {
         if let outline = view as? SidebarOutlineView { return outline }
         return view.subviews.lazy.compactMap { self.outlineView(in: $0) }.first
+    }
+
+    // the mouse-up is queued first: the outline's tracking loop pulls it, and otherwise the window delivers it
+    private func click(_ view: NSView) async throws {
+        let point = view.convert(NSPoint(x: view.bounds.midX, y: view.bounds.midY), to: nil)
+        let event = { (type: NSEvent.EventType) in
+            try XCTUnwrap(NSEvent.mouseEvent(with: type, location: point, modifierFlags: [],
+                                             timestamp: ProcessInfo.processInfo.systemUptime,
+                                             windowNumber: self.window.windowNumber, context: nil, eventNumber: 0,
+                                             clickCount: 1, pressure: 1))
+        }
+        NSApp.postEvent(try event(.leftMouseUp), atStart: false)
+        window.sendEvent(try event(.leftMouseDown))
+        try await Task.sleep(nanoseconds: 100_000_000)
     }
 
     private func waitUntil(timeout: TimeInterval = 5, _ condition: () -> Bool) async throws {
@@ -348,4 +388,9 @@ final class SidebarInfoRowTests: XCTestCase {
         coordinator.seedExpansionFromModel()
         coordinator.reconcile()
     }
+}
+
+// the hosted app is never active, so no window becomes key and a click would only activate it
+private final class KeyWindow: NSWindow {
+    override var isKeyWindow: Bool { true }
 }

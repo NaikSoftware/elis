@@ -20,12 +20,14 @@ enum SidebarInfoMetrics {
 /// SidebarInfoCellView is a session cell with a styled info line under the name. Colors are rebuilt on every
 /// `setColors`, so the selection and theme refresh paths recolor each fragment. On a selected row uncolored
 /// fragments follow the selection foreground while colored ones keep their color, as a row tint does.
-final class SidebarInfoCellView: SidebarCellView {
+final class SidebarInfoCellView: SidebarCellView, NSGestureRecognizerDelegate {
     let infoField = SidebarInfoField(labelWithString: "")
     var titleBandHeight: NSLayoutConstraint?
     var infoTop: NSLayoutConstraint?
-    /// onInfoClick opens the CI panel; the line claims its click, so it neither selects the row nor starts a drag.
+    /// onInfoClick opens the CI panel. The line claims its click only while `claimsInfoClick` says so (the shown
+    /// session); any other click falls through to the row, which selects it, drags it or opens its menu.
     var onInfoClick: ((NSView) -> Void)?
+    var claimsInfoClick: (() -> Bool)?
     private var spans: [SessionInfoSpan] = []
     private var base = AppSettings.defaultSidebarFontSize
     private var selected = false
@@ -43,14 +45,27 @@ final class SidebarInfoCellView: SidebarCellView {
         super.init(frame: frameRect)
         let click = NSClickGestureRecognizer(target: self, action: #selector(infoClicked))
         click.delaysPrimaryMouseButtonEvents = true
+        click.delegate = self
         infoField.addGestureRecognizer(click)
-        infoField.onPress = { [weak self] in self?.infoClicked() }
+        infoField.onPress = { [weak self] in self?.infoPressed() }
     }
 
     required init?(coder _: NSCoder) { fatalError("init(coder:) is not supported") }
 
     @objc private func infoClicked() {
         onInfoClick?(infoField)
+    }
+
+    // decided at mouse-down: a declined click reaches the outline whole, so its drag tracking still works
+    func gestureRecognizer(_: NSGestureRecognizer, shouldAttemptToRecognizeWith _: NSEvent) -> Bool {
+        claimsInfoClick?() ?? false
+    }
+
+    private func infoPressed() {
+        if claimsInfoClick?() ?? false { return infoClicked() }
+        guard let outline = enclosingScrollView?.documentView as? NSOutlineView else { return }
+        let row = outline.row(for: self)
+        if row >= 0 { outline.selectRowIndexes(IndexSet(integer: row), byExtendingSelection: false) }
     }
 
     override func setColors(selected: Bool) {
