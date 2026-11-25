@@ -30,7 +30,7 @@ Problem: a raw red, yellow or green span merges into a yellow status band and wa
 - `macos/Elis/Views/SidebarInfoCell.swift:122` returns raw `NSColor.tint(tint)` with alpha 1 or 0.55.
 - Linux algorithm, to mirror exactly:
   - the delegate tracks the opaque color under the line by compositing each fill it paints: window background, then the group band at alpha 0.10, then the row tint at 0.09, then the status or selection fill at 0.20 (key window) or 0.12;
-  - `legibleOn(color, under[], text)` tries 21 steps `t = 0, 0.05 … 1.0`, mixing the span color toward the row text color by `t` and keeping its alpha;
+  - `legibleOn(color, under[], text)` tries 21 steps `t = 0, 0.05 … 1.0`, mixing the span color by `t` toward white or black, whichever contrasts more with the base backdrop (owner decision, Mac and Linux; mixing toward the text color erased hue), and keeping its alpha;
   - it returns the first mix where every background `bg` in `under` gives WCAG contrast of at least 4.5, comparing the luminance of `bg` with the luminance of the span color composited over `bg`; if none passes, it returns the text color;
   - it runs only for colored spans, and plain text is untouched.
 - Mac approach: add a pure `legibleOn` in `ElisCore` (Double-backed RGBA, no AppKit) with the composite and WCAG luminance helpers.
@@ -40,13 +40,14 @@ Problem: a raw red, yellow or green span merges into a yellow status band and wa
   - yellow over a yellow band and over a white sidebar reaches 4.5;
   - an impossible case falls back to the text color;
   - alpha is kept.
-  No hosted test; show the owner the rendered rows in a Debug instance first.
+  Hosted tests in `SidebarInfoRowTests` check the rendered line against the row's backdrops; show the owner the rendered rows in a Debug instance first.
 
 ## 3. CI line click rule
 
 Linux PR #86 (`1c3a9ee8`, `sidebar.cpp`, `cipanel.cpp`).
 Rule, same on both platforms: a click on the CI line of a session that is not shown selects it, like a row click.
 A click on the shown session's CI line opens the CI panel.
+A click with a modifier (Control, Shift; Command on Mac) never opens it and reaches the row: menu or selection extension.
 
 - `macos/Elis/Views/SidebarInfoCell.swift:27` documents `onInfoClick` as claiming every click.
 - `macos/Elis/Views/WorkspaceSidebar+RowRendering.swift:126-130` opens the panel for any row.
@@ -56,7 +57,7 @@ A click on the shown session's CI line opens the CI panel.
 - The flag must refresh when selection changes, since a reused cell keeps its closure.
 - Docs: `docs/superpowers/specs/2026-11-21-ci-status-line-design.md` ("The panel", ~line 60: "The click does only that; selecting the session stays the click on the name band") and `site/docs.html:2492` ("Click the line for the details").
   Both state the new rule once.
-- Tests: a hosted test with two session rows, in `ElisTests/SidebarInfoRowTests.swift`: a click on an unshown row's line selects it and shows no panel; a click on the shown row's line shows the panel.
+- Tests: a hosted test with two session rows, in `ElisTests/SidebarInfoRowTests.swift`: a click on an unshown row's line selects it and shows no panel; a click on the shown row's line shows the panel; a modified click on it shows none.
 
 ## Left to the builder
 
