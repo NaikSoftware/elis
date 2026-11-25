@@ -113,21 +113,13 @@ final class SidebarAssistantCellView: NSTableCellView {
 final class SidebarAssistantRowView: SidebarRowView {
     override var selectionColor: NSColor { NSColor(named: "AccentColor") ?? .controlAccentColor }
 
-    // a flat list's pills start at the row edge; the card keeps 8pt from the sidebar's edge (its inset is 6) instead
     override var selectionRect: NSRect {
         let rect = super.selectionRect
-        guard (superview as? SidebarOutlineView)?.listsSessionsFlat == true else { return rect }
-        let minX: CGFloat = 2 + Self.groupPadding
+        guard let minX = (superview as? SidebarOutlineView)?.assistantPillMinX else { return rect }
         return NSRect(x: minX, y: rect.minY, width: rect.maxX - minX, height: rect.height)
     }
 
     private var isDark: Bool { effectiveAppearance.bestMatch(from: [.aqua, .darkAqua]) == .darkAqua }
-
-    override func layout() {
-        super.layout()
-        let content = contentRect
-        for case let cell as NSTableCellView in subviews { cell.frame = content }
-    }
 
     override func drawBackground(in dirtyRect: NSRect) {
         let card = bandRect(.single), cardRadius = Self.bandRadius

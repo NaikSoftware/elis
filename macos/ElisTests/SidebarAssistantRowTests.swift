@@ -192,6 +192,30 @@ final class SidebarAssistantRowTests: XCTestCase {
         XCTAssertEqual(cell.accessibilityIdentifier(), "assistant-row")
     }
 
+    func testIconAndBadgeSitEightPointsInsideThePillAfterAReload() throws {
+        let (store, _, _) = try seed()
+        actions.assistant.chat.append(.reply, text: "done", from: "s", now: 0)
+        actions.assistant.refresh()
+        try mountSidebar(for: store)
+
+        for pass in ["mount", "reloadData", "reloadItem"] {
+            if pass == "reloadData" { outline.reloadData() }
+            if pass == "reloadItem" { outline.reloadItem(outline.item(atRow: 0)) }
+            settle()
+            let rowView = try XCTUnwrap(outline.rowView(atRow: 0, makeIfNecessary: false) as? SidebarAssistantRowView)
+            let cell = try XCTUnwrap(outline.view(atColumn: 0, row: 0, makeIfNecessary: false) as? SidebarAssistantCellView)
+            let pill = rowView.selectionRect
+            let icon = try XCTUnwrap(cell.imageView).convert(try XCTUnwrap(cell.imageView).bounds, to: rowView)
+            let badge = cell.badge.convert(cell.badge.bounds, to: rowView)
+            XCTAssertEqual(icon.minX, pill.minX + 8, accuracy: 0.5, "icon after \(pass)")
+            XCTAssertEqual(badge.maxX, pill.maxX - 8, accuracy: 0.5, "badge after \(pass)")
+            // AppKit re-places a live cell at frameOfCell on some paths without laying out its row again
+            let placed = outline.frameOfCell(atColumn: 0, row: 0)
+            XCTAssertEqual(placed.minX, pill.minX, accuracy: 0.5, "frameOfCell after \(pass)")
+            XCTAssertEqual(placed.maxX, pill.maxX, accuracy: 0.5, "frameOfCell after \(pass)")
+        }
+    }
+
     private func seed() throws -> (AppStore, Session, Session) {
         let store = try XCTUnwrap(library.activeStore)
         let workspace = store.addWorkspace(name: "work")
