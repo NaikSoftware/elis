@@ -26,7 +26,7 @@ This work gives the Mac the row, the chat, the provider process and the `Control
 ## Non-goals
 
 - No change to the shared contract, except four ElisCore changes: `AppStore.assistantShown`,
-  `ControlWindowNode.assistantShown`, `BuiltinAction.showAssistant`, and the snapshot selection fallback.
+  `ControlTree.assistantShown`, `BuiltinAction.showAssistant`, and the snapshot selection fallback.
 - No remote assistant (see Remote exception).
 - No new settings in v1.
 
@@ -89,7 +89,7 @@ Reason: the assistant only makes sense on the machine where the owner works.
 | `AssistantView::refreshAll` | new `@Observable` `AssistantModel` (app target): entries, unread, running, provider, providers | `AssistantChat` is not observable; the adapter and runner bump the model after each effect and turn. |
 | `app/sidebar.cpp` Elis row | `WorkspaceSidebar` Coordinator: a pinned `SidebarNode` kind at row 0, drawn by `WorkspaceSidebar+RowRendering.swift` | See Sidebar row. |
 | `app/assistantview.cpp` | new `macos/Elis/Views/AssistantView.swift` (+ `AssistantComposer.swift`), shown by `WindowContentView+Detail.swift` | See Chat view. |
-| `mainwindow.cpp` `m_assistantShown`, window `assistantShown` | `AppStore.assistantShown` (ElisCore, transient); `ControlWindowNode.assistantShown: Bool?` (ElisCore), set only when true | ElisCore additions; Linux writes its own JSON and is unaffected. |
+| `mainwindow.cpp` `m_assistantShown`, window `assistantShown` | `AppStore.assistantShown` (ElisCore, transient); `ControlTree.assistantShown: Bool?` (ElisCore, top-level, as Linux `chromeState`), set only when true | ElisCore additions; Linux writes its own JSON and is unaffected. |
 | keymap `show_assistant`, Navigate ▸ Show Elis | `BuiltinAction.showAssistant = "show_assistant"` (no default chord), Navigate ▸ Show Elis, palette row "Show Elis" | Bump `BuiltinActionTests`' count and the count in `keymap.md`. |
 | `ELIS_ASSISTANT_PROVIDER_CMD` | same variable, read by `AssistantRunner` | Test seam for hosted and UI tests. |
 
@@ -165,7 +165,7 @@ through the same `elis-session-host` path panes use instead of as a direct child
 
 One rule (owner's decision, 2026-11-25, exactly as Linux): while the chat shows, the window has no selected session,
 and keys go to the chat. No new "default target" concept joins `AppStore`.
-- `showAssistant` closes an open dashboard (as Linux `MainWindow::showAssistant`, lead's call), sets
+- `showAssistant` closes an open dashboard (as Linux `MainWindow::showAssistant`, lead's call) and leaves terminal zoom, sets
   `assistantShown = true`, clears `selectedSessionID`, and focuses the composer.
 - `session.selected` fires with no session, as for any cleared selection.
 - Any session selection (click, `session.go`, MRU, Ctrl-Tab, palette, notification reveal) sets `assistantShown = false`.
@@ -190,7 +190,7 @@ MRU session, then the first, as it already does for an unpersistable one.
 ### Tree, events, phone
 
 - Tree: the dispatcher stamps top-level `assistant {provider, providers, running, unread}` and node `handle`/`assistantMark`.
-  The Mac adds `assistantShown: true` on the window node.
+  The Mac adds top-level `assistantShown: true` while the projected window shows the chat.
 - `assistant.message` for every new entry (user, assistant, sent, reply, error), `assistant.cleared` after a clear.
 - `.seen` (from the phone's `assistant.seen` or the Mac's own show): bump `AssistantModel`, so the row's badge repaints.
 - The phone needs nothing more: it polls the tree and calls `assistant.*` through the Mac's dispatcher.
@@ -204,7 +204,7 @@ MRU session, then the first, as it already does for an unpersistable one.
 ### Docs and skill
 
 - `site/docs.html:582`: drop "the macOS app gets it later"; state Mac and Linux; document the drop and the shortcut name.
-- `site/docs.html` and `site/commands.html`: window `assistantShown`, and that remote rows have no handle.
+- `site/docs.html` and `site/commands.html`: top-level `assistantShown`, and that remote rows have no handle.
 - `plugins/elis/skills/elis/SKILL.md:181`: drop "(Linux now, macOS later)"; add "local sessions only".
 - `.claude/rules/control-api.md`: the Mac host's actions and the remote exception, once.
 - `macos/ARCHITECTURE.md`: `AssistantRunner` and the model, one line each.
@@ -213,7 +213,7 @@ MRU session, then the first, as it already does for an unpersistable one.
 ## Tests
 
 ElisCore logic is tested. Add only what this work adds.
-- ElisCore: `ControlWindowNode.assistantShown` encoding; `AppStore` selection clears `assistantShown`;
+- ElisCore: `ControlTree.assistantShown` encoding; `AppStore` selection clears `assistantShown`;
   a nil selection persists the MRU session;
   `BuiltinActionTests` count.
 - Hosted (`macos/ElisTests/ControlServerAssistantTests.swift`, with `ELIS_ASSISTANT_PROVIDER_CMD` pointing at a fake
