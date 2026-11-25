@@ -193,7 +193,7 @@ final class AssistantComposerTextView: NSTextView {
         super.didChangeText()
         store.noteUserActivity()
         state.text = string
-        restyle()
+        refreshKnown()
         updateCompletion()
         updateLines()
     }
@@ -380,11 +380,16 @@ final class AssistantComposerTextView: NSTextView {
     }
 
     override func performDragOperation(_ sender: any NSDraggingInfo) -> Bool {
-        guard let tags = sidebarTags(sender.draggingPasteboard) else { return super.performDragOperation(sender) }
+        guard sidebarTags(sender.draggingPasteboard) != nil else { return super.performDragOperation(sender) }
+        return dropSidebarRow(sender, at: landing(sender))
+    }
+
+    /// Inserts a sidebar row's tags at `location`, or at the caret when the drop missed the text.
+    func dropSidebarRow(_ sender: any NSDraggingInfo, at location: Int?) -> Bool {
         state.dropping = false
-        guard !tags.isEmpty else { return false }
+        guard let tags = sidebarTags(sender.draggingPasteboard), !tags.isEmpty else { return false }
         window?.makeFirstResponder(self)
-        insertTags(tags, replacing: NSRange(location: landing(sender), length: 0))
+        insertTags(tags, replacing: NSRange(location: location ?? selectedRange().location, length: 0))
         return true
     }
 
@@ -393,7 +398,7 @@ final class AssistantComposerTextView: NSTextView {
     }
 
     /// A sidebar row's operation, nil for any other drag; a sidebar row with no local peer is refused.
-    private func sidebarDrag(_ sender: any NSDraggingInfo) -> NSDragOperation? {
+    func sidebarDrag(_ sender: any NSDraggingInfo) -> NSDragOperation? {
         guard let tags = sidebarTags(sender.draggingPasteboard) else { return nil }
         state.dropping = !tags.isEmpty
         return tags.isEmpty ? [] : .copy

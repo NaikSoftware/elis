@@ -620,6 +620,7 @@ struct SwitcherPillLabel: View {
     let showsWindowName: Bool
     let showsContext: Bool
     let showsRemoteHost: Bool
+    private static let dog = NSImage.elisDog(side: 16, radius: 4)
 
     var body: some View {
         let session = store.activeSession
@@ -630,7 +631,9 @@ struct SwitcherPillLabel: View {
         let context = showsContext ? session?.effectiveContext : nil
         let name = showsSessionName ? session?.displayName ?? "Elis" : nil
         HStack(spacing: 9) {
-            if let icon = (session?.runningAgent ?? .terminal).image(pointSize: 14) {
+            if session == nil, store.assistantShown {
+                Image(nsImage: Self.dog).accessibilityHidden(true)
+            } else if let icon = (session?.runningAgent ?? .terminal).image(pointSize: 14) {
                 Image(nsImage: icon).renderingMode(.template).foregroundStyle(chromeText.opacity(0.7))
             }
             // a narrow bar drops the identity's side parts whole, rather than squeezing each to an ellipsis

@@ -39,7 +39,8 @@ final class AssistantUITests: ControlAPITestCase {
         let row = app.staticTexts["session-row"].firstMatch
         XCTAssertTrue(row.waitForHittable(timeout: 10), "the session row should be hittable to drag")
         let start = row.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5))
-        let end = composer.coordinate(withNormalizedOffset: CGVector(dx: 0.3, dy: 0.5))
+        // the field's bottom row, not its text: the whole rounded box takes the drop
+        let end = app.buttons["assistant-clear"].coordinate(withNormalizedOffset: CGVector(dx: -1.5, dy: 0.5))
         start.click(forDuration: 0.7, thenDragTo: end, withVelocity: 180, thenHoldForDuration: 0.25)
 
         XCTAssertTrue(poll(until: (composer.value as? String)?.hasPrefix("@\(handle)") == true, timeout: 10),

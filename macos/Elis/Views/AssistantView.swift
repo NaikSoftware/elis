@@ -63,26 +63,30 @@ struct AssistantView: View {
 
     private var transcript: some View {
         let directory = AssistantDirectory(model.peers())
-        return ScrollView {
-            VStack(alignment: .leading, spacing: 16) {
-                ForEach(model.entries, id: \.id) { entry in
-                    AssistantEntryView(entry: entry, directory: directory, columnWidth: columnWidth, dark: dark,
-                                       known: knownTags(directory),
-                                       goTo: goTo)
+        return GeometryReader { viewport in
+            ScrollView {
+                VStack(alignment: .leading, spacing: 16) {
+                    ForEach(model.entries, id: \.id) { entry in
+                        AssistantEntryView(entry: entry, directory: directory, columnWidth: columnWidth, dark: dark,
+                                           known: knownTags(directory),
+                                           goTo: goTo)
+                    }
+                    if model.running {
+                        Text("Elis is working…")
+                            .font(.system(size: 13).italic())
+                            .foregroundStyle(.secondary)
+                            .accessibilityIdentifier("assistant-working")
+                    }
                 }
-                if model.running {
-                    Text("Elis is working…")
-                        .font(.system(size: 13).italic())
-                        .foregroundStyle(.secondary)
-                        .accessibilityIdentifier("assistant-working")
-                }
+                .frame(maxWidth: Self.column, alignment: .leading)
+                .onGeometryChange(for: CGFloat.self) { $0.size.width } action: { columnWidth = $0 }
+                .frame(maxWidth: .infinity)
+                .padding(EdgeInsets(top: 28, leading: 32, bottom: 4, trailing: 32))
+                // a short transcript starts at the top; the bottom anchor only follows a long one's end
+                .frame(minHeight: viewport.size.height, alignment: .top)
             }
-            .frame(maxWidth: Self.column, alignment: .leading)
-            .onGeometryChange(for: CGFloat.self) { $0.size.width } action: { columnWidth = $0 }
-            .frame(maxWidth: .infinity)
-            .padding(EdgeInsets(top: 28, leading: 32, bottom: 4, trailing: 32))
+            .defaultScrollAnchor(.bottom)
         }
-        .defaultScrollAnchor(.bottom)
     }
 
     private func knownTags(_ directory: AssistantDirectory) -> Set<String> {
@@ -349,6 +353,7 @@ private struct AssistantComposerBox: View {
                 RoundedRectangle(cornerRadius: 13.5).stroke(Color(nsColor: .keyboardFocusIndicatorColor), lineWidth: 3).padding(-1.5)
             }
         }
+        .background(AssistantDropZone(state: state))
         .overlay(alignment: .topLeading) { completionPanel }
         .onAppear(perform: detectProviders)
     }
@@ -570,5 +575,41 @@ private final class AssistantMenuTarget: NSObject {
 
     @MainActor @objc func pick(_ sender: NSMenuItem) {
         (sender.representedObject as? String).flatMap(SessionLauncher.init(rawValue:)).map(onPick)
+    }
+}
+
+/// AssistantDropZone makes the whole field a drop target for sidebar rows, not only its text.
+private struct AssistantDropZone: NSViewRepresentable {
+    let state: AssistantComposerState
+
+    func makeNSView(context _: Context) -> DropView { DropView(state: state) }
+
+    func updateNSView(_: DropView, context _: Context) {}
+
+    final class DropView: NSView {
+        let state: AssistantComposerState
+
+        init(state: AssistantComposerState) {
+            self.state = state
+            super.init(frame: .zero)
+            registerForDraggedTypes([sessionPasteboardType, workspacePasteboardType])
+        }
+
+        @available(*, unavailable)
+        required init?(coder _: NSCoder) { fatalError("init(coder:) is not supported") }
+
+        override func draggingEntered(_ sender: any NSDraggingInfo) -> NSDragOperation {
+            state.textView?.sidebarDrag(sender) ?? []
+        }
+
+        override func draggingUpdated(_ sender: any NSDraggingInfo) -> NSDragOperation {
+            state.textView?.sidebarDrag(sender) ?? []
+        }
+
+        override func draggingExited(_: (any NSDraggingInfo)?) { state.dropping = false }
+
+        override func performDragOperation(_ sender: any NSDraggingInfo) -> Bool {
+            state.textView?.dropSidebarRow(sender, at: nil) ?? false
+        }
     }
 }
