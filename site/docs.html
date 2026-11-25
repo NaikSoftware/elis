@@ -2489,7 +2489,7 @@ elisctl session context --clear --target &quot;$ELIS_SESSION_ID&quot;</code></pr
 <ul>
 <li>The line counts the workflow runs of the branch's last pushed commit: <code>◷ build</code> for one run, <code>✓ 3 passed</code> when all agree, <code>✗ build  ◷ 1  ✓ 2</code> when they differ, a single failure by name.</li>
 <li>With an open pull request the line starts with its number and reviews: <code>#56 👍1 👎1 · ✓ build</code> counts approvals and change requests.</li>
-<li>Click the shown session's line for the details; a click on another session's line selects it. The details are the pull request with who approved and who asked for changes, then every run. Click the pull request or a run to open it on GitHub.</li>
+<li>Click the shown session's line for the details; a click on another session's line selects it. The details are the pull request with who approved and who asked for changes, then every run. Click the pull request or a run to open it on GitHub. A Control-, Shift- or Command-click on the line acts on the row (menu, selection) and opens no details.</li>
 <li>Elis checks every 30 seconds while a run is going and every 3 minutes once all are done, once for all sessions on the same branch.</li>
 <li><strong>Settings ▸ Interface ▸ CI status</strong> shows it Always (the default), only in the flagged view (Flagged), or never (Off). Off stops asking GitHub.</li>
 <li>A session attached from another Mac or an elis-server host shows the CI the host sees.</li>
