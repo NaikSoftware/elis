@@ -178,7 +178,7 @@ session and whatever agent runs there:
 - Read it: `elisctl session text --lines 80 --target ID`.
 - Talk to it without typing into its prompt: `elisctl msg send --to ID:PANE TEXT`, PANE from `surfaces[].paneID`
   or `left`/`right`; the receiver reads with `msg read`. `session type --target ID` types into its prompt instead.
-- Through the Elis assistant (macOS and Linux apps): `elisctl assistant send --to @handle TEXT`
+- Through the Elis assistant (macOS and Linux apps, local sessions only): `elisctl assistant send --to @handle TEXT`
   (`@handle`, `@ws:<workspace>`, `@all`, or a session id; `blocked` sessions are skipped), or answer Elis from inside a
   session with `elisctl reply TEXT`.
 - Wait for it: `elisctl session wait --until completed --target ID`.

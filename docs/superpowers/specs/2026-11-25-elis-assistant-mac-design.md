@@ -147,8 +147,8 @@ through the same `elis-session-host` path panes use instead of as a direct child
 
 - `WindowContentView+Detail.swift` shows `AssistantView` while `store.assistantShown` is true, the way it handles the
   dashboard: the terminal deck stays mounted underneath and non-interactive (no focus, no hit testing, no drag targets).
-- Cards: user and sent cards on the right, assistant and reply cards on the left; a reply card names its session with a
-  "go to session" control that runs `session.go`; an error entry renders as an error card.
+- No cards, as on Linux: user and sent entries on the right, assistant and reply entries on the left; a reply entry names
+  its session with a "go to session" control that runs `session.go`; an error entry renders plain, with no error card.
 - Markdown in cards: native `Text` over `AttributedString(markdown:)` with block structure, matching Linux's
   `Qt::MarkdownText`.
   `MarkdownPage.html` builds a whole web page and `HudMarkdown` paints terminal rows; neither fits a card.
