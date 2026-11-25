@@ -95,7 +95,7 @@ struct AssistantView: View {
         return ("@\(handle)", directory.peers.first { $0.sessionID == id }?.name ?? "")
     }
 
-        private func goTo(_ sessionID: String) {
+    private func goTo(_ sessionID: String) {
         Task { _ = await model.perform(ControlRequest(cmd: .sessionGo, target: sessionID)) }
     }
 }
