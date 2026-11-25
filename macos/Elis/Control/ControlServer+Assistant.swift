@@ -11,12 +11,14 @@ extension ControlServer {
         model.perform = { [weak self] request in
             await self?.dispatch(request) ?? ControlResponse(ok: false, error: "no control server")
         }
-        model.onScreen = { [weak library] in
-            guard let library else { return false }
-            return library.openIDs().contains { id in
-                library.store(for: id)?.assistantShown == true && WindowRegistry.shared.isKeyWindow(id)
-                    && !WindowRegistry.shared.isMinimized(id)
-            }
+        model.onScreen = { [weak self] in self?.assistantOnScreen() ?? false }
+    }
+
+    /// assistantOnScreen is true while a key, unminimized window shows the chat with no dashboard over it.
+    func assistantOnScreen(isKey: (WindowInfo.ID) -> Bool = { WindowRegistry.shared.isKeyWindow($0) }) -> Bool {
+        library.openIDs().contains { id in
+            library.store(for: id)?.assistantShown == true && isKey(id) && !WindowRegistry.shared.isMinimized(id)
+                && DashboardControllerRegistry.shared.controller(for: id)?.isOpen != true
         }
     }
 

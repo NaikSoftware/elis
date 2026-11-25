@@ -65,14 +65,7 @@ extension WorkspaceSidebar.Coordinator {
 final class SidebarAssistantCellView: NSTableCellView {
     let badge = BadgeView()
 
-    // the About panel's icon without the icon grid's transparent margin, so it fills 18x18 under a 4pt corner
-    private static let dog = NSImage(size: NSSize(width: 18, height: 18), flipped: false) { rect in
-        guard let icon = NSApp.applicationIconImage else { return false }
-        NSBezierPath(roundedRect: rect, xRadius: 4, yRadius: 4).addClip()
-        let bleed = rect.width * 100 / 824
-        icon.draw(in: rect.insetBy(dx: -bleed, dy: -bleed))
-        return true
-    }
+    private static let dog = NSImage.elisDog(side: 18, radius: 4)
 
     override init(frame frameRect: NSRect) {
         super.init(frame: frameRect)

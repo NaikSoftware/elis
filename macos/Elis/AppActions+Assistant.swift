@@ -11,7 +11,7 @@ extension AppActions {
         if let dashboard = DashboardControllerRegistry.shared.controller(for: library.windowID(for: store)), dashboard.isOpen {
             dashboard.close()
         }
-        // nil first: the setter hides the chat only on a selection change, so a click on the old row must be one
+        // nil, so a later click on the previously selected row is a change that hides the chat
         store.selectedSessionID = nil
         store.assistantShown = true
         assistant.chat.markSeen()

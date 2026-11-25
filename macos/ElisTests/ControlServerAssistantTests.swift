@@ -136,6 +136,20 @@ final class ControlServerAssistantTests: XCTestCase {
         XCTAssertTrue(closed.dashboardMembers?.isEmpty ?? true)
     }
 
+    func testADashboardOverTheChatTakesItOffScreen() async throws {
+        let member = try session()
+        let windowID = try XCTUnwrap(library.activeWindowID)
+        let dashboard = DashboardController()
+        DashboardControllerRegistry.shared.register(windowID, controller: dashboard)
+        defer { DashboardControllerRegistry.shared.unregister(windowID) }
+        let show = await run(.assistantShow)
+        XCTAssertTrue(show.ok)
+        XCTAssertTrue(server.assistantOnScreen { _ in true })
+
+        dashboard.open(members: [DashboardMember(session: member.id, surface: .primary)])
+        XCTAssertFalse(server.assistantOnScreen { _ in true })
+    }
+
     func testChatSurvivesBackgroundCloseAndModeSwitch() async throws {
         let background = try session()
         _ = try session()

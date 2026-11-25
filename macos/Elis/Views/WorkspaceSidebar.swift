@@ -869,6 +869,7 @@ struct WorkspaceSidebar: NSViewRepresentable {
         /// program of input and send keystrokes to a surface the user can't see.
         func focusActiveTerminal(attempt: Int = 0) {
             if renameController.isRenameInFlight { return }
+            if store.assistantShown { return NotificationCenter.default.post(name: .elisFocusAssistantComposer, object: store) }
             let window = outlineView?.window
             if let window, window.firstResponder is NSText { return }
             if let session = store.activeSession, HtmlOverlayRegistry.shared.focusCover(of: session) { return }
