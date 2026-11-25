@@ -175,6 +175,8 @@ final class AssistantRunnerTests: XCTestCase {
         ask(runner, "a")
         await waitFor("the answer") { entries(.assistant).count == 1 }
         let first = try XCTUnwrap(runner.pid)
+        let pidfile = stateDir.appendingPathComponent("assistant/provider.pid")
+        XCTAssertEqual(try String(contentsOf: pidfile, encoding: .utf8), "\(first) \(try XCTUnwrap(AssistantRunner.startTime(first)))\n")
         runner.clear()
         await waitFor("the cleared provider to exit", seconds: 5) { kill(first, 0) != 0 }
 
@@ -183,6 +185,32 @@ final class AssistantRunnerTests: XCTestCase {
         let second = try XCTUnwrap(runner.pid)
         runner.stopForQuit()
         await waitFor("the quit provider to exit", seconds: 5) { kill(second, 0) != 0 }
+        XCTAssertFalse(FileManager.default.fileExists(atPath: pidfile.path))
+    }
+
+    func testStalePidfileProcessIsTerminatedOnLaunch() async throws {
+        let pidfile = stateDir.appendingPathComponent("assistant/provider.pid")
+        try FileManager.default.createDirectory(at: pidfile.deletingLastPathComponent(), withIntermediateDirectories: true)
+        let stale = try sleeper(), reused = try sleeper()
+        defer { [stale, reused].forEach { $0.terminate() } }
+
+        try "\(reused.processIdentifier) 1.0\n".write(to: pidfile, atomically: true, encoding: .utf8)
+        _ = AssistantModel(stateDirectory: stateDir, standIn: nil)
+        try await Task.sleep(for: .seconds(1))
+        XCTAssertTrue(reused.isRunning)
+
+        let started = try XCTUnwrap(AssistantRunner.startTime(stale.processIdentifier))
+        try "\(stale.processIdentifier) \(started)\n".write(to: pidfile, atomically: true, encoding: .utf8)
+        _ = AssistantModel(stateDirectory: stateDir, standIn: nil)
+        await waitFor("the stale provider to exit", seconds: 5) { !stale.isRunning }
+    }
+
+    private func sleeper() throws -> Process {
+        let process = Process()
+        process.executableURL = URL(fileURLWithPath: "/bin/sleep")
+        process.arguments = ["600"]
+        try process.run()
+        return process
     }
 
     func testNoStateDirectoryRefusesToSpawn() async {

@@ -22,6 +22,7 @@ final class AssistantModel {
     private(set) var providers: [SessionLauncher] = []
 
     init(stateDirectory: URL?, standIn: [String]? = AssistantRunner.standInFromEnvironment()) {
+        AssistantRunner.endLeftover(stateDirectory: stateDirectory)
         chat = AssistantChat(file: stateDirectory?.appendingPathComponent("assistant/chat.jsonl"))
         runner = AssistantRunner(chat: chat, stateDirectory: stateDirectory, standIn: standIn)
         runner.changed = { [weak self] in self?.refresh() }

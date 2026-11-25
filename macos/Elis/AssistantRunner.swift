@@ -56,6 +56,34 @@ final class AssistantRunner {
         return words.isEmpty ? nil : words
     }
 
+    /// endLeftover ends the provider a hard-killed app left running: a busy one reads stdin only between turns, so it
+    /// misses the EOF. The pidfile's start time keeps a reused pid alive.
+    static func endLeftover(stateDirectory: URL?) {
+        guard let file = stateDirectory.map(pidfile),
+              let words = (try? String(contentsOf: file, encoding: .utf8))?.split(whereSeparator: \.isWhitespace),
+              words.count == 2, let pid = pid_t(words[0]) else { return }
+        try? FileManager.default.removeItem(at: file)
+        let started = String(words[1])
+        guard startTime(pid) == started else { return }
+        kill(pid, SIGTERM)
+        DispatchQueue.main.asyncAfter(deadline: .now() + 3) { if startTime(pid) == started { kill(pid, SIGKILL) } }
+    }
+
+    nonisolated static func startTime(_ pid: pid_t) -> String? {
+        var info = proc_bsdinfo()
+        let size = Int32(MemoryLayout<proc_bsdinfo>.size)
+        guard proc_pidinfo(pid, PROC_PIDTBSDINFO, 0, &info, size) == size else { return nil }
+        return "\(info.pbi_start_tvsec).\(info.pbi_start_tvusec)"
+    }
+
+    private static func pidfile(_ stateDirectory: URL) -> URL {
+        stateDirectory.appendingPathComponent("assistant/provider.pid")
+    }
+
+    private func forgetPid() {
+        if let stateDirectory { try? FileManager.default.removeItem(at: Self.pidfile(stateDirectory)) }
+    }
+
     /// The stand-in plays every provider, so tests and isolated instances need no installed agent.
     func providers() -> [SessionLauncher] {
         AssistantProvider.choices(standIn != nil ? SessionLauncher.allCases : SessionLaunchers.cached)
@@ -213,6 +241,9 @@ final class AssistantRunner {
             return
         }
         recap = false
+        if let started = Self.startTime(process.processIdentifier) {
+            try? "\(process.processIdentifier) \(started)\n".write(to: Self.pidfile(stateDirectory), atomically: true, encoding: .utf8)
+        }
         // One reader posts chunks then EOF in order, so the exit is handled after the last output line.
         let reader = output.fileHandleForReading
         DispatchQueue.global().async { @Sendable [weak self] in
@@ -277,6 +308,7 @@ final class AssistantRunner {
     private func finishIfDone(_ process: Process, _ exited: Exit, provider: SessionLauncher) {
         guard self.process === process, exited.eof, let (code, crashed) = exited.status else { return }
         self.process = nil
+        forgetPid()
         stdin = nil
         if mode == .stream { self.provider = nil } // the next input starts it again, resuming its conversation
         guard busy else { return }
@@ -342,6 +374,7 @@ final class AssistantRunner {
         guard let process else { return }
         self.process = nil
         stdin = nil
+        forgetPid()
         guard process.isRunning else { return }
         process.terminate() // SIGTERM first, so the provider can end what it started
         let pid = process.processIdentifier
