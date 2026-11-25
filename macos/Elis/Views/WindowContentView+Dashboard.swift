@@ -171,6 +171,7 @@ extension WindowContentView {
             store.suppressAutoFollow()
         } else {
             store.resumeAutoFollow()
+            if store.assistantShown { actions.assistant.refresh() } // a reply that arrived under the grid is seen now
         }
     }
 

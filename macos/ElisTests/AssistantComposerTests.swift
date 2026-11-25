@@ -291,6 +291,51 @@ final class AssistantComposerTests: XCTestCase {
         XCTAssertTrue(window.firstResponder === composer)
     }
 
+    func testShowUnderTerminalZoomLeavesZoomAndFocusesTheComposer() async throws {
+        let session = try session()
+        let windowID = try XCTUnwrap(library.activeWindowID)
+        let zoom = TerminalZoomController()
+        TerminalZoomRegistry.shared.register(windowID, controller: zoom)
+        defer { TerminalZoomRegistry.shared.unregister(windowID) }
+        zoom.set(.on, target: .session(session.id, .primary))
+        window.makeFirstResponder(nil)
+        composer.takeFocus()
+        XCTAssertFalse(window.firstResponder === composer)
+
+        let show = await server.dispatch(ControlRequest(cmd: .assistantShow, target: nil, args: ControlArgs()))
+        XCTAssertTrue(show.ok, show.error ?? "")
+
+        XCTAssertNil(zoom.target)
+        XCTAssertTrue(try store().assistantShown)
+        XCTAssertTrue(window.firstResponder === composer)
+    }
+
+    func testClosingADashboardOverTheChatMarksAMissedReplySeen() async throws {
+        let sender = try session()
+        actions.assistant.onScreen = { false }
+        let reply = await server.dispatch(ControlRequest(cmd: .assistantReply, target: sender.id.uuidString, args: {
+            var args = ControlArgs()
+            args.text = "done"
+            return args
+        }()))
+        XCTAssertTrue(reply.ok, reply.error ?? "")
+        XCTAssertEqual(actions.assistant.unread, 1)
+        try store().assistantShown = true
+        let content = WindowContentView(
+            windowID: try XCTUnwrap(library.activeWindowID), store: try store(), library: library,
+            makeSurface: { _ in fatalError("unused") }, makeSplitSurface: { _ in fatalError("unused") },
+            makeOverlaySurface: { _, _ in fatalError("unused") }, makeScratchSurface: { _ in fatalError("unused") },
+            captureOnExit: nil, actions: actions, palette: PaletteController(),
+            sessionSwitcher: SessionSwitcher(library: library, canSwitch: { false }),
+            toolbarMode: .normal, chromeText: .black, attentionButtonEnabled: true, hiddenInterfaceElements: []
+        )
+        actions.assistant.onScreen = { true }
+
+        content.handleDashboardOpenChange(false)
+
+        XCTAssertEqual(actions.assistant.unread, 0)
+    }
+
     func testUndoAfterASendLeavesTheFieldEmpty() async throws {
         let undo = UndoManager()
         let owner = UndoOwner(undo)

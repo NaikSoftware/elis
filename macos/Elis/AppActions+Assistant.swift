@@ -8,9 +8,10 @@ extension Notification.Name {
 
 extension AppActions {
     func showAssistant(in store: AppStore) {
-        if let dashboard = DashboardControllerRegistry.shared.controller(for: library.windowID(for: store)), dashboard.isOpen {
-            dashboard.close()
-        }
+        // the chat replaces whatever covers the window
+        let windowID = library.windowID(for: store)
+        if let dashboard = DashboardControllerRegistry.shared.controller(for: windowID), dashboard.isOpen { dashboard.close() }
+        TerminalZoomRegistry.shared.controller(for: windowID)?.clear()
         // nil, so a later click on the previously selected row is a change that hides the chat
         store.selectedSessionID = nil
         store.assistantShown = true
@@ -25,5 +26,6 @@ extension AppActions {
         if windowID == library.activeWindowID, renamePending || palette?.mode != nil { return false }
         return !pickActive(for: windowID) && !quickTerminal.holdsKey
             && DashboardControllerRegistry.shared.controller(for: windowID)?.isOpen != true
+            && TerminalZoomRegistry.shared.controller(for: windowID)?.target == nil
     }
 }
