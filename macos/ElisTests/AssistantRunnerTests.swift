@@ -62,7 +62,7 @@ final class AssistantRunnerTests: XCTestCase {
         XCTAssertFalse(chat.running)
     }
 
-    func testFakeMarksAnEarlyLine() throws {
+    func testFakeMarksAnEarlyLine() async throws {
         let process = Process()
         process.executableURL = URL(fileURLWithPath: "/bin/bash")
         process.arguments = [Self.fake]
@@ -72,8 +72,9 @@ final class AssistantRunnerTests: XCTestCase {
         try process.run()
         input.fileHandleForWriting.write(Data("{\"text\":\"a\"}\n{\"text\":\"b\"}\n".utf8))
         try input.fileHandleForWriting.close()
+        await waitFor("the fake to exit") { !process.isRunning }
+        if process.isRunning { process.terminate() }
         let text = String(decoding: output.fileHandleForReading.readDataToEndOfFile(), as: UTF8.self)
-        process.waitUntilExit()
         let answers = text.split(separator: "\n").flatMap { AssistantStream.decode(.claude, line: String($0)) }
             .compactMap { if case let .text(text) = $0 { text } else { nil } }
         XCTAssertTrue(answers.first?.replacingOccurrences(of: " leaked", with: "").hasSuffix(" early") == true, "\(answers)")
@@ -103,7 +104,10 @@ final class AssistantRunnerTests: XCTestCase {
         let answer = try XCTUnwrap(entries(.assistant).first)
         let bundled = Bundle.main.bundleURL.appendingPathComponent("Contents/MacOS").path
         XCTAssertTrue(answer.hasPrefix("\(stateDir.path) \(bundled):"), answer)
-        XCTAssertFalse(answer.hasSuffix(" leaked"), answer)
+        ask(runner, "a")
+        await waitFor("the plain answer") { entries(.assistant).count == 2 }
+        let plain = try XCTUnwrap(entries(.assistant).last)
+        XCTAssertTrue(plain.hasSuffix(": a"), plain)
     }
 
     func testMissingBinaryYieldsOneErrorAndStopsRunning() async {
