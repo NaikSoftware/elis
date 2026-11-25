@@ -130,6 +130,19 @@ final class AssistantComposerTests: XCTestCase {
         XCTAssertEqual(composer.string, "@\(handle) ")
     }
 
+    func testAnAnswersReplyFrameRendersAsATagWithoutTheSessionID() {
+        let id = "A8BA15A4-73FE-45D7-89A9-9D764EDF9389"
+        let directory = AssistantDirectory([AssistantPeer(sessionID: id, window: "w", workspaceID: "ws", workspaceName: "elis",
+                                                          name: "sidebar-filter")])
+        let marked = AssistantMarkdown.mark("[reply from @side-filter \(id)] The chip is **wired**, ask \(id).", in: directory)
+        let shown = AssistantMarkdown.blocks(marked.source).map { String($0.content.characters) }.joined()
+
+        XCTAssertFalse(shown.contains(id), shown)
+        XCTAssertFalse(shown.contains("reply from"), shown)
+        XCTAssertTrue(shown.contains("The chip is wired, ask "), shown)
+        XCTAssertEqual(marked.mentions, Array(repeating: .mention(sessionID: id, handle: "side-filter"), count: 2))
+    }
+
     func testAnAnswerLinkOpensOnlyAWebOrMailScheme() throws {
         let blocks = AssistantMarkdown.blocks("[a](file:///Applications/Calculator.app) [b](x-elis://run) [c](https://example.com)")
         let links = blocks.flatMap { $0.content.runs.compactMap(\.link) }
