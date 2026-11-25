@@ -17,11 +17,10 @@ struct AssistantMarkdown: View {
     }
 
     var body: some View {
-        let marked = Self.mark(text, in: directory)
-        let blocks = Self.blocks(marked.source)
+        let blocks = Self.blocks(text, in: directory)
         VStack(alignment: .leading, spacing: 0) {
             ForEach(blocks) { block in
-                view(block, mentions: marked.mentions)
+                view(block)
                     .padding(.bottom, spacing(after: block, in: blocks))
             }
         }
@@ -39,8 +38,8 @@ struct AssistantMarkdown: View {
         return block.list != nil && block.list == next.list ? 4 : 8
     }
 
-    @ViewBuilder private func view(_ block: Block, mentions: [AssistantMentionSegment]) -> some View {
-        let content = Self.text(block.content, mentions: mentions)
+    @ViewBuilder private func view(_ block: Block) -> some View {
+        let content = Self.text(block.content)
         switch block.kind {
         case .paragraph:
             line(content)
@@ -70,60 +69,69 @@ struct AssistantMarkdown: View {
 
     // MARK: - Mentions
 
-    private static let open: Character = "\u{E000}", close: Character = "\u{E001}"
-
-    /// mark swaps each session an answer names for a private-use placeholder that markdown parsing leaves alone.
-    static func mark(_ text: String, in directory: AssistantDirectory) -> (source: String, mentions: [AssistantMentionSegment]) {
-        var source = "", mentions: [AssistantMentionSegment] = []
-        for segment in AssistantMentions.segments(text, in: directory) {
-            guard case .text(let plain) = segment else {
-                source += "\(open)\(mentions.count)\(close)"
-                mentions.append(segment)
-                continue
-            }
-            source += plain
-        }
-        return (source, mentions)
-    }
-
     /// An error line: no markdown, but its sessions named as in an answer.
     static func plain(_ text: String, in directory: AssistantDirectory) -> Text {
-        let marked = mark(text, in: directory)
-        return self.text(AttributedString(marked.source), mentions: marked.mentions)
+        self.text(mentioning(AttributedString(text), in: directory))
     }
 
     /// text joins a block's runs and its mentions' tags; `mentionChips()` draws the chips behind the tags.
-    static func text(_ content: AttributedString, mentions: [AssistantMentionSegment]) -> Text {
+    static func text(_ content: AttributedString) -> Text {
         var result = Text(verbatim: "")
-        var rest = content[content.startIndex..<content.endIndex]
-        while let start = rest.characters.firstIndex(of: open), let end = rest.characters[start...].firstIndex(of: close) {
-            let index = Int(String(rest.characters[rest.characters.index(after: start)..<end])) ?? -1
-            result = Text("\(result)\(Text(AttributedString(rest[rest.startIndex..<start])))\(mention(index, in: mentions))")
-            rest = rest[rest.characters.index(after: end)..<rest.endIndex]
+        for run in content.runs {
+            let piece = run.assistantMention == nil ? Text(AttributedString(content[run.range]))
+                : mention(String(content[run.range].characters))
+            result = Text("\(result)\(piece)")
         }
-        return Text("\(result)\(Text(AttributedString(rest)))")
+        return result
+    }
+
+    /// mentioning swaps the sessions plain text names for their tags, after parsing, so code and link
+    /// destinations keep their ids verbatim; a link's visible text keeps them too, since a tag inside a link reads as one.
+    static func mentioning(_ parsed: AttributedString, in directory: AssistantDirectory) -> AttributedString {
+        var result = AttributedString()
+        for run in parsed.runs {
+            let piece = AttributedString(parsed[run.range])
+            let code = run.inlinePresentationIntent?.contains(.code) == true
+                || run.presentationIntent?.components.contains { if case .codeBlock = $0.kind { true } else { false } } == true
+            guard !code, run.link == nil else {
+                result.append(piece)
+                continue
+            }
+            for segment in AssistantMentions.segments(String(piece.characters), in: directory) {
+                switch segment {
+                case .text(let text):
+                    result.append(AttributedString(text, attributes: run.attributes))
+                case .mention(let id, let handle?):
+                    var tag = AttributedString("@\(handle)", attributes: run.attributes)
+                    tag.assistantMention = id
+                    result.append(tag)
+                case .mention(_, nil):
+                    // a session that ended has no tag to show, as its cards say
+                    result.append(AttributedString("ended session", attributes: run.attributes))
+                }
+            }
+        }
+        return result
     }
 
     /// The chip's padding: a 1pt-high image, so it widens the line without heightening it.
     private static let chipPad = Text(Image(nsImage: NSImage(size: NSSize(width: AssistantTagStyle.chipPad, height: 1))))
 
-    private static func mention(_ index: Int, in mentions: [AssistantMentionSegment]) -> Text {
-        guard mentions.indices.contains(index), case .mention(_, let handle) = mentions[index] else { return Text(verbatim: "") }
-        // a session that ended has no tag to show, as its cards say
-        guard let handle else { return Text(verbatim: "ended session") }
-        let tag = Text(verbatim: "@\(handle)").fontWeight(.medium)
+    private static func mention(_ tag: String) -> Text {
+        let tag = Text(verbatim: tag).fontWeight(.medium)
         guard #available(macOS 15.0, *) else { return tag }
         return Text("\(chipPad)\(tag.customAttribute(MentionChip()))\(chipPad)")
     }
 
-    static func blocks(_ source: String) -> [Block] {
+    static func blocks(_ source: String, in directory: AssistantDirectory = AssistantDirectory([])) -> [Block] {
         guard var parsed = try? AttributedString(markdown: source, options: .init(interpretedSyntax: .full)) else {
-            return [Block(id: 0, kind: .paragraph, list: nil, content: AttributedString(source))]
+            return [Block(id: 0, kind: .paragraph, list: nil, content: mentioning(AttributedString(source), in: directory))]
         }
         for run in parsed.runs where run.inlinePresentationIntent?.contains(.code) == true {
             parsed[run.range].swiftUI.font = .system(size: 12, design: .monospaced)
             parsed[run.range].swiftUI.backgroundColor = Color.primary.opacity(0.065)
         }
+        parsed = mentioning(parsed, in: directory)
         var blocks: [Block] = []
         var current: (intent: PresentationIntent?, content: AttributedString)?
         func flush() {
@@ -192,5 +200,23 @@ private struct MentionChipRenderer: TextRenderer {
                 context.draw(run)
             }
         }
+    }
+}
+
+/// AssistantMentionKey marks the text standing for a session an answer names; its value is the session id.
+enum AssistantMentionKey: AttributedStringKey {
+    typealias Value = String
+    static let name = "ElisAssistantMention"
+}
+
+extension AttributeScopes {
+    struct AssistantAttributes: AttributeScope {
+        let assistantMention: AssistantMentionKey
+    }
+}
+
+extension AttributeDynamicLookup {
+    subscript<T: AttributedStringKey>(dynamicMember keyPath: KeyPath<AttributeScopes.AssistantAttributes, T>) -> T {
+        self[T.self]
     }
 }

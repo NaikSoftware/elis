@@ -130,17 +130,39 @@ final class AssistantComposerTests: XCTestCase {
         XCTAssertEqual(composer.string, "@\(handle) ")
     }
 
+    private static let mentioned = "A8BA15A4-73FE-45D7-89A9-9D764EDF9389"
+    private static let mentionDirectory = AssistantDirectory([AssistantPeer(sessionID: mentioned, window: "w", workspaceID: "ws",
+                                                                            workspaceName: "elis", name: "sidebar-filter")])
+
+    private func mentions(_ blocks: [AssistantMarkdown.Block]) -> [String] {
+        blocks.flatMap { block in block.content.runs.compactMap { run in run.assistantMention.map { _ in String(block.content[run.range].characters) } } }
+    }
+
     func testAnAnswersReplyFrameRendersAsATagWithoutTheSessionID() {
-        let id = "A8BA15A4-73FE-45D7-89A9-9D764EDF9389"
-        let directory = AssistantDirectory([AssistantPeer(sessionID: id, window: "w", workspaceID: "ws", workspaceName: "elis",
-                                                          name: "sidebar-filter")])
-        let marked = AssistantMarkdown.mark("[reply from @side-filter \(id)] The chip is **wired**, ask \(id).", in: directory)
-        let shown = AssistantMarkdown.blocks(marked.source).map { String($0.content.characters) }.joined()
+        let id = Self.mentioned
+        let blocks = AssistantMarkdown.blocks("[reply from @side-filter \(id)] The chip is **wired**, ask \(id).", in: Self.mentionDirectory)
+        let shown = blocks.map { String($0.content.characters) }.joined()
 
         XCTAssertFalse(shown.contains(id), shown)
         XCTAssertFalse(shown.contains("reply from"), shown)
         XCTAssertTrue(shown.contains("The chip is wired, ask "), shown)
-        XCTAssertEqual(marked.mentions, Array(repeating: .mention(sessionID: id, handle: "side-filter"), count: 2))
+        XCTAssertEqual(mentions(blocks), ["@side-filter", "@side-filter"])
+    }
+
+    func testCodeAndLinkDestinationsKeepASessionIDVerbatim() throws {
+        let id = Self.mentioned
+        let source = "```\nelisctl session go \(id)\n```\n\nRun `go \(id)`, see [the log](https://example.com/\(id)), or ask \(id)."
+        let blocks = AssistantMarkdown.blocks(source, in: Self.mentionDirectory)
+
+        let code = try XCTUnwrap(blocks.first { $0.kind == .code })
+        XCTAssertTrue(String(code.content.characters).contains(id), String(code.content.characters))
+        let paragraph = try XCTUnwrap(blocks.last)
+        let inline = paragraph.content.runs.first { $0.inlinePresentationIntent?.contains(.code) == true }.map { String(paragraph.content[$0.range].characters) }
+        XCTAssertEqual(inline, "go \(id)")
+        let link = paragraph.content.runs.compactMap(\.link).first
+        XCTAssertEqual(link?.absoluteString, "https://example.com/\(id)")
+        XCTAssertFalse(String(paragraph.content.characters).contains("\u{E000}"))
+        XCTAssertEqual(mentions(blocks), ["@side-filter"], "only the plain-text id becomes a tag")
     }
 
     func testAnAnswerLinkOpensOnlyAWebOrMailScheme() throws {
