@@ -113,6 +113,8 @@ public struct ControlTree: Codable, Sendable, Equatable {
     /// launchers are the `SessionLauncher` raw values the workspace "+" menu offers, Terminal plus the agents found
     /// on the login shell's PATH; app-wide, omitted from a host without that menu.
     public var launchers: [String]?
+    /// assistantShown is true while the projected window shows the Elis chat, omitted otherwise.
+    public let assistantShown: Bool?
 
     public init(workspaces: [ControlWorkspaceNode], idleMs: Int? = nil, autoFollowMs: Int? = nil,
                 attentionIncludesActive: Bool? = nil, attentionNavigationAcrossWindows: Bool? = nil,
@@ -125,8 +127,9 @@ public struct ControlTree: Codable, Sendable, Equatable {
                 dashboardFontMode: String? = nil, pickPending: String? = nil, askPending: String? = nil,
                 app: AppIdentity? = nil, liveReset: ControlLiveResetReadback? = nil,
                 indexUnsaved: Bool? = nil, snapshotUnsaved: Bool? = nil, linkOpenMode: String? = nil,
-                sidebarDensity: String? = nil, keepAwake: Bool? = nil) {
+                sidebarDensity: String? = nil, keepAwake: Bool? = nil, assistantShown: Bool? = nil) {
         self.workspaces = workspaces
+        self.assistantShown = assistantShown
         self.keepAwake = keepAwake
         self.snapshotUnsaved = snapshotUnsaved
         self.sidebarDensity = sidebarDensity
