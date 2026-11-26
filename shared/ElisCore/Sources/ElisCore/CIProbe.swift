@@ -77,13 +77,15 @@ public struct CIRepo: Hashable, Sendable {
         return values
     }
 
-    /// githubRepo reads `host/owner/repo` from an https, `ssh://` or scp-style `git@host:owner/repo` URL.
+    /// githubRepo reads `github.com/owner/repo` from an https, `ssh://` or scp-style `git@host:owner/repo` URL.
+    /// A cloned repository's remote is untrusted, so any other host is nil: gh is never pointed at it.
     static func githubRepo(_ url: String) -> String? {
         var url = url
         if !url.contains("://"), let colon = url.firstIndex(of: ":"), !url[..<colon].contains("/") {
             url = "ssh://" + url[..<colon] + "/" + url[url.index(after: colon)...]
         }
-        guard let components = URLComponents(string: url), let host = components.host, !host.isEmpty else { return nil }
+        guard let components = URLComponents(string: url), let host = components.host?.lowercased(),
+              host == "github.com" else { return nil }
         var path = components.path.trimmingCharacters(in: CharacterSet(charactersIn: "/"))
         if path.hasSuffix(".git") { path.removeLast(4) }
         let parts = path.split(separator: "/")

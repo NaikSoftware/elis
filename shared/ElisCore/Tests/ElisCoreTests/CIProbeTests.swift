@@ -48,7 +48,7 @@ struct CIProbeTests {
 
     @Test(arguments: [
         ("https://github.com/NaikSoftware/elis.git", "github.com/NaikSoftware/elis"),
-        ("https://user@ghe.example.com/o/r", "ghe.example.com/o/r"),
+        ("https://user@GitHub.com/o/r", "github.com/o/r"),
         ("git@github.com:o/r.git", "github.com/o/r"),
         ("ssh://git@github.com/o/r.git", "github.com/o/r"),
         ("ssh://git@github.com:22/o/r", "github.com/o/r"),
@@ -61,6 +61,8 @@ struct CIProbeTests {
         #expect(CIRepo.githubRepo("/srv/git/r.git") == nil)
         #expect(CIRepo.githubRepo("file:///srv/git/o/r") == nil)
         #expect(CIRepo.githubRepo("https://github.com/o") == nil)
+        #expect(CIRepo.githubRepo("https://evil.example/o/r") == nil)
+        #expect(CIRepo.githubRepo("git@github.com.evil.example:o/r.git") == nil)
     }
 
     private func checkout(config: String) throws -> URL {
