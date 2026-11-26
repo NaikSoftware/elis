@@ -763,7 +763,7 @@ void main() {
       final c = _C(t, _g('idle-placeholder-45'));
       await c.pump();
       await c.attach();
-      expect(find.descendant(of: c.chip('a.png'), matching: find.byType(Image)), findsOneWidget);
+      expect(t.widget<Image>(find.descendant(of: c.chip('a.png'), matching: find.byType(Image))).semanticLabel, 'a.png');
       expect(find.descendant(of: c.chip('b.txt'), matching: find.byType(Image)), findsNothing);
       expect(find.descendant(of: c.chip('b.txt'), matching: find.text('b.txt')), findsOneWidget);
       expect(find.descendant(of: c.chip('b.txt'), matching: find.text('4 KB')), findsOneWidget);
@@ -838,7 +838,7 @@ void main() {
       final c = _C(t, idle);
       const line = "fix this Attached: '/h/u/S/b.txt'";
       c.script((w) => switch (w) {
-            PasteWrite(text: line) => _withInput(idle, line),
+            PasteWrite(text: line) || TextWrite(text: ' ') => _withInput(idle, line),
             PasteWrite() => _withInput(idle, '$line [Image #1]'),
             _ => idle,
           });
@@ -846,8 +846,10 @@ void main() {
       await c.attach();
       await c.type('fix this ');
       await c.send();
-      expect([for (final w in c.writer.writes.take(2)) (w as PasteWrite).text], [line, "'/h/u/S/a.png'"]);
-      expect((c.writer.writes.length, _enter(c.writer.writes.last)), (3, true));
+      expect([for (final w in c.writer.writes.take(3)) switch (w) { PasteWrite(:final text) || TextWrite(:final text) => text, _ => null }],
+          [line, ' ', "'/h/u/S/a.png'"]);
+      expect(c.writer.writes[1], isA<TextWrite>());
+      expect((c.writer.writes.length, _enter(c.writer.writes.last)), (4, true));
       expect(c.field, '');
       expect(c.chip('a.png'), findsNothing);
       expect(c.chip('b.txt'), findsNothing);
@@ -858,7 +860,7 @@ void main() {
       final c = _C(t, idle)..picks = const [_a];
       const line = 'see [Image #1] again';
       c.script((w) => switch (w) {
-            PasteWrite(text: line) => _withInput(idle, line),
+            PasteWrite(text: line) || TextWrite(text: ' ') => _withInput(idle, line),
             PasteWrite() => _withInput(idle, '$line [Image #2]'),
             _ => idle,
           });
@@ -866,7 +868,7 @@ void main() {
       await c.attach();
       await c.type(line);
       await c.send();
-      expect((c.writer.writes.length, _enter(c.writer.writes.last)), (3, true));
+      expect((c.writer.writes.length, _enter(c.writer.writes.last)), (4, true));
       expect(c.chip('a.png'), findsNothing);
     });
 
@@ -909,7 +911,7 @@ void main() {
       await c.send();
       expect(c.writer.writes.length, 3);
       expect((c.writer.writes[0] as PasteWrite).text, 'hello');
-      expect((c.writer.writes[1] as TextWrite).text, "\x1b[200~'/h/u/S/a.png'\x1b[201~");
+      expect((c.writer.writes[1] as TextWrite).text, " \x1b[200~'/h/u/S/a.png'\x1b[201~");
       expect(_enter(c.writer.writes.last), isTrue);
     });
 
@@ -946,7 +948,7 @@ void main() {
       c.onUpload = (u) => scheduleMicrotask(u.finish);
       const line = "fix this Attached: '/h/u/S/b.txt'";
       c.script((w) => switch (w) {
-            PasteWrite(text: line) => _withInput(idle, line),
+            PasteWrite(text: line) || TextWrite(text: ' ') => _withInput(idle, line),
             PasteWrite() => _withInput(idle, '$line [Image #1]'),
             _ => idle,
           });

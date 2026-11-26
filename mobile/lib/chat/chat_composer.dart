@@ -308,7 +308,7 @@ class ChatComposerState extends State<ChatComposer> {
               borderRadius: BorderRadius.circular(12),
               child: Stack(fit: StackFit.expand, children: [
                 if (isPicture(f.name))
-                  Image.file(File(f.path), fit: BoxFit.cover, cacheWidth: 192, errorBuilder: (_, _, _) => doc)
+                  Image.file(File(f.path), fit: BoxFit.cover, cacheWidth: 192, semanticLabel: f.name, errorBuilder: (_, _, _) => doc)
                 else
                   doc,
                 if (a.channel != null)
@@ -377,13 +377,19 @@ class ChatComposerState extends State<ChatComposer> {
       await q.send(_write(PasteWrite(text), text));
     }
     if (images.isNotEmpty) {
+      // its own key, not in the paste: a paste holding more than quoted paths stays text
+      if (text.isNotEmpty) {
+        q.addSteps(1);
+        // the draft reads trimmed, so the space shows no change: any repaint after it will do
+        await q.send(GateStep(TextWrite(' '), ready: (g) => ClaudeScreen.read(g).bottomStack, done: (_) => true));
+      }
       // the typed text can hold `[Image #` itself
-      int shown(Grid g) => '[Image #'.allMatches(ClaudeScreen.read(g).draft).length;
-      var before = 0;
+      int imageCount(Grid g) => '[Image #'.allMatches(ClaudeScreen.read(g).draft).length;
+      var imagesBefore = 0;
       await q.send(GateStep(PasteWrite(imagePaste(images)), ready: (g) {
-        before = shown(g);
+        imagesBefore = imageCount(g);
         return ClaudeScreen.read(g).bottomStack;
-      }, done: (g) => shown(g) - before >= images.length));
+      }, done: (g) => imageCount(g) - imagesBefore >= images.length));
     }
     bool human(ChatItem i) => i.kind == 'user' && i.isHumanPrompt;
     final humans = widget.feed.items.where(human).length;
@@ -430,9 +436,11 @@ class ChatComposerState extends State<ChatComposer> {
     }
 
     if (text.isNotEmpty) await q.send(GateStep(PasteWrite(text), ready: ready, done: (g) => all(g) != before));
-    // Claude Code always enables bracketed paste, and `session.type` sends the text as is
+    // Claude Code always enables bracketed paste, and `session.type` sends the text as is; the space after the text is a
+    // key outside the paste, in this write because a polled grid shows no change for it
     if (images.isNotEmpty) {
-      await q.send(GateStep(TextWrite('\x1b[200~${imagePaste(images)}\x1b[201~'), ready: ready, done: (g) => all(g) != before));
+      final space = text.isEmpty ? '' : ' ';
+      await q.send(GateStep(TextWrite('$space\x1b[200~${imagePaste(images)}\x1b[201~'), ready: ready, done: (g) => all(g) != before));
     }
     await q.send(GateStep(KeyWrite(VtKey.enter), ready: ready, done: (g) => all(g) != before));
   }
