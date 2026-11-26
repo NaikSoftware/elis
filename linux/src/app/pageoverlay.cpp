@@ -1,6 +1,8 @@
 #include "pageoverlay.h"
 #include "elis_bridge.h"
 
+#include <algorithm>
+
 #include <QApplication>
 #include <QClipboard>
 #include <QDesktopServices>
@@ -148,8 +150,10 @@ PageOverlay::PageOverlay(const QJsonObject &source, const QJsonObject &flags, co
     script.setInjectionPoint(QWebEngineScript::DocumentCreation);
     script.setWorldId(QWebEngineScript::ApplicationWorld);
     m_page->scripts().insert(script);
-    if (file) // painted behind the page, so an authored body background still fills the canvas
-        m_page->setBackgroundColor(QColor(theme.value("background").toString()));
+    // no canvas: the frame paints the theme behind it, so an authored body background still fills the canvas.
+    // An opaque colour would not do: under the theme's color-scheme Chromium swaps it for its own dark canvas.
+    if (file)
+        m_page->setBackgroundColor(Qt::transparent);
 
     m_view = new QWebEngineView(this);
     m_view->setPage(m_page);
@@ -209,7 +213,9 @@ PageOverlay::PageOverlay(const QJsonObject &source, const QJsonObject &flags, co
                 button(QStringLiteral("elisPageCopy"), QStringLiteral("edit-copy"), tr("Copy Link"),
                        [this] { QApplication::clipboard()->setText(browserUrl().toString()); });
         }
-        button(QStringLiteral("elisPageClose"), QStringLiteral("window-close"), tr("Close"), [this] { Q_EMIT closeRequested(); });
+        button(QStringLiteral("elisPageClose"), QStringLiteral("window-close"), tr("Close"), [this] {
+            QTimer::singleShot(0, this, [this] { Q_EMIT closeRequested(); }); // the close deletes this button mid-click
+        });
         box->addWidget(m_strip);
         auto *rule = new QFrame(this);
         rule->setFrameShape(QFrame::HLine);
@@ -326,9 +332,15 @@ void PageOverlay::loadOriginal()
             fail(tr("cannot read %1").arg(path));
             return;
         }
+        const QByteArray html = f.readAll();
+        // shortcut: setHtml travels as a data: URL Chromium caps at 2 MB; a custom scheme handler would lift it
+        if (html.toPercentEncoding().size() > 2 * 1024 * 1024) {
+            fail(tr("%1 is too large to show without --cwd").arg(path));
+            return;
+        }
         m_textLoaded = true;
         m_page->ownLoad = true;
-        m_page->setHtml(QString::fromUtf8(f.readAll()));
+        m_page->setHtml(QString::fromUtf8(html));
     }
 }
 
@@ -397,6 +409,11 @@ void PageOverlay::hideEvent(QHideEvent *event)
     QWidget::hideEvent(event);
 }
 
+static bool carriesFiles(const QMimeData *data)
+{
+    return data && std::ranges::any_of(data->urls(), &QUrl::isLocalFile);
+}
+
 bool PageOverlay::eventFilter(QObject *watched, QEvent *event)
 {
     switch (event->type()) {
@@ -405,14 +422,14 @@ bool PageOverlay::eventFilter(QObject *watched, QEvent *event)
         m_silenced = false; // a native input event ends a decline's silence
         if (event->type() == QEvent::KeyPress) {
             auto *key = static_cast<QKeyEvent *>(event);
-            if (key->matches(QKeySequence::Paste) && QApplication::clipboard()->mimeData() && QApplication::clipboard()->mimeData()->hasUrls())
+            if (key->matches(QKeySequence::Paste) && carriesFiles(QApplication::clipboard()->mimeData()))
                 return true; // a paste carrying files never reaches the page
         }
         break;
     case QEvent::DragEnter:
     case QEvent::DragMove:
     case QEvent::Drop:
-        if (static_cast<QDropEvent *>(event)->mimeData()->hasUrls()) {
+        if (carriesFiles(static_cast<QDropEvent *>(event)->mimeData())) {
             event->ignore();
             return true;
         }

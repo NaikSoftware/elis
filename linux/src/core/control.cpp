@@ -246,7 +246,14 @@ static bool isColor(const QString &c)
 // session.overlay.open's source by ElisCore's check, first as on the Mac: a page lands in args as "page"
 static QString overlayPageError(QJsonObject *args)
 {
-    char *raw = elis_overlay_page_arguments(QJsonDocument(*args).toJson(QJsonDocument::Compact).constData());
+    // only the fields the check reads: the rest (width, height as doubles) would fail ControlArgs' decoding
+    static const QStringList keys{"command", "html", "url", "image", "markdownFile", "textFile", "cwd", "wait", "line", "tail",
+                                  "followFile", "navigation", "javascript", "chromeless", "persistent", "browse"};
+    QJsonObject checked;
+    for (const QString &key : keys)
+        if (args->contains(key))
+            checked.insert(key, args->value(key));
+    char *raw = elis_overlay_page_arguments(QJsonDocument(checked).toJson(QJsonDocument::Compact).constData());
     const QJsonObject reply = QJsonDocument::fromJson(raw ? QByteArray(raw) : QByteArray()).object();
     elis_free(raw);
     if (!reply.value("ok").toBool())
@@ -256,6 +263,9 @@ static QString overlayPageError(QJsonObject *args)
         return {};
     if (const QString kind = page.value("kind").toString(); kind != QLatin1String("file") && kind != QLatin1String("url"))
         return QStringLiteral("session.overlay.open: --%1 pages are not ported to Elis yet").arg(kind);
+    for (const char *flag : {"browse", "persistent"})
+        if (args->value(QLatin1String(flag)).toBool())
+            return QStringLiteral("session.overlay.open: --%1 pages are not ported to Elis yet").arg(QLatin1String(flag));
     args->insert("page", page);
     return {};
 }

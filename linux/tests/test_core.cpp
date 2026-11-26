@@ -1056,6 +1056,11 @@ private Q_SLOTS:
         QCOMPARE(error("session.overlay.open", {{"html", "/a.html"}, {"browse", true}}), QStringLiteral("session.overlay.open: --browse requires --url"));
         QCOMPARE(error("session.overlay.open", {{"navigation", true}}), QStringLiteral("session.overlay.open: --navigation requires --html, --url or --markdown"));
         QCOMPARE(error("session.overlay.open", {{"image", "/a.png"}}), QStringLiteral("session.overlay.open: --image pages are not ported to Elis yet"));
+        QCOMPARE(error("session.overlay.open", {{"url", "https://example.org"}, {"browse", true}}),
+                 QStringLiteral("session.overlay.open: --browse pages are not ported to Elis yet"));
+        QCOMPARE(error("session.overlay.open", {{"url", "https://example.org"}, {"persistent", true}}),
+                 QStringLiteral("session.overlay.open: --persistent pages are not ported to Elis yet"));
+        QVERIFY(call(s, t, "session.overlay.open", id, {{"command", "top"}, {"sizePercent", 50}, {"width", 400.5}})["ok"].toBool());
         QCOMPARE(error("session.overlay.navigate", {{"to", "up"}}), QStringLiteral("session.overlay.navigate requires back, forward, browser or finder"));
         QCOMPARE(error("session.overlay.submit", {}), QStringLiteral("session.overlay.submit requires a value"));
         QCOMPARE(call(s, t, "session.overlay.result", {}, {{"page", "nope"}})["error"].toString(), QStringLiteral("invalid page id"));

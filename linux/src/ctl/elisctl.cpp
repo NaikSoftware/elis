@@ -753,7 +753,11 @@ int main(int argc, char **argv)
         copy("detail", "detail");
         copy("position", "position");
         copy("spinner-style", "spinner");
-        copy("html", "html");
+        if (opt.contains(QStringLiteral("html"))) { // the page and its grant as the caller's shell sees them, as the Mac CLI sends
+            args.insert("html", callerPath(opt.value(QStringLiteral("html"))));
+            if (opt.contains(QStringLiteral("cwd")))
+                args.insert("cwd", callerPath(opt.value(QStringLiteral("cwd"))));
+        }
         copy("url", "url");
         flag("wait", "wait");
         flag("follow", "follow");

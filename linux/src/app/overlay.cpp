@@ -193,14 +193,28 @@ QWidget *MainWindow::coverWidget(const QString &id) const
     return main ? main->widget() : nullptr;
 }
 
-bool MainWindow::closeFocusedPage()
+bool MainWindow::closeFrontCover(const QString &id)
 {
+    if (closeHud(id))
+        return true;
+    // the key that asked is still being delivered to the cover's widget, so the cover goes on the next pass
+    const auto close = [this](const QString &key) {
+        QTimer::singleShot(0, this, [this, key, frame = m_overlays.value(key).frame] {
+            if (frame && m_overlays.value(key).frame == frame)
+                closeOverlay(key);
+        });
+        return true;
+    };
+    if (const Overlay full = m_overlays.value(slotKey(id, {})); full.frame && !full.hidden)
+        return close(slotKey(id, {}));
+    // a pane's overlay only while the keys are in that pane: the other pane's is not in front of the user
     const QWidget *focus = QApplication::focusWidget();
-    for (auto it = m_overlays.cbegin(); it != m_overlays.cend(); ++it)
-        if (it->page && !it->hidden && focus && (it->page == focus || it->page->isAncestorOf(focus))) {
-            closeOverlay(it.key());
-            return true;
-        }
+    for (const QString &pane : {QStringLiteral("left"), QStringLiteral("right")}) {
+        const Overlay ov = m_overlays.value(slotKey(id, pane));
+        const QWidget *under = paneWidget(id, pane);
+        if (ov.frame && !ov.hidden && focus && (ov.frame->isAncestorOf(focus) || (under && (under == focus || under->isAncestorOf(focus)))))
+            return close(slotKey(id, pane));
+    }
     return false;
 }
 
@@ -311,19 +325,23 @@ bool MainWindow::openPage(const QString &id, const QString &pane, const QJsonObj
     frame->setAutoFillBackground(true); // a page has no terminal to paint the whole cover, as a program's does
     auto *box = new QVBoxLayout(frame);
     box->setContentsMargins(ov.sizePercent > 0 ? QMargins(1, 1, 1, 1) : QMargins());
-    if (ov.sizePercent > 0) {
+    if (ov.sizePercent > 0)
         frame->setFrameShape(QFrame::StyledPanel);
-        if (const QString color = args.value("color").toString(); !color.isEmpty()) {
-            QPalette pal = frame->palette();
-            pal.setColor(QPalette::Window, QColor(color));
-            frame->setPalette(pal);
-        }
+    // a file page draws no canvas: the frame paints --background-color or the terminal's behind it, as the Mac's panel
+    const QJsonObject theme = terminalTheme();
+    QString paint = ov.sizePercent > 0 ? args.value("color").toString() : QString();
+    if (paint.isEmpty() && args.value("page").toObject().value("kind").toString() == QLatin1String("file"))
+        paint = theme.value("background").toString();
+    if (!paint.isEmpty()) {
+        QPalette pal = frame->palette();
+        pal.setColor(QPalette::Window, QColor(paint));
+        frame->setPalette(pal);
     }
     PageOverlay::setZoom(m_store.settings.htmlOverlayZoom);
     const QJsonObject flags{{"navigation", args.value("navigation").toBool()},
                             {"javascript", args.value("javascript").toBool()},
                             {"chromeless", ov.chromeless}};
-    auto *page = new PageOverlay(args.value("page").toObject(), flags, pageID, terminalTheme(), frame);
+    auto *page = new PageOverlay(args.value("page").toObject(), flags, pageID, theme, frame);
     box->addWidget(page);
     ov.page = page;
     ov.frame = frame;
@@ -411,7 +429,7 @@ bool MainWindow::openHud(const QString &id, const QJsonObject &spec, QString *er
     if (!p.view || !s)
         return *error = QStringLiteral("session has no terminal"), false;
     const Overlay ov = m_overlays.value(slotKey(id, {}));
-    if (ov.part)
+    if (ov.part || ov.page)
         return *error = QStringLiteral("overlay already open"), false;
     if (spec.value("pane").toString() == QLatin1String("right") && !s->splitVisible)
         return *error = QStringLiteral("pane not visible"), false;

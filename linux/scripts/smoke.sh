@@ -136,13 +136,15 @@ ctl tree --json | grep -q '"overlaySizePercent":60' || fail "floating overlay re
 ctl tree --json | grep -q '"hiddenOverlays":\["session"\]' || fail "hidden overlay read-back"
 ctl session hud 'hi' --target "$id" 2>/dev/null && fail "a hud over a running program"
 ctl session overlay close --target "$id"
-err=$(ctl session overlay open --html x.html --target "$id" 2>&1) && fail "a relative page opened"
+err=$(ctl session overlay open --html /x.html --cwd /tmp --target "$id" 2>&1) && fail "a page outside its grant opened"
 if [[ $err != *qt6-webengine-dev* ]]; then # a build with page overlays
+  [[ $err == *"outside cwd"* ]] || fail "page grant refusal ($err)"
   site=$ELIS_STATE_DIR/site
   mkdir -p "$site"
   printf '<title>Smoke</title><p>ok</p>' >"$site/index.html"
   loaded() { for _ in $(seq 150); do ctl tree --json | grep -q '"state":"loaded"' && return; sleep 0.2; done; fail "page never loaded"; }
-  ctl session overlay open --html "$site/index.html" --cwd "$site" --navigation --target "$id" >/dev/null
+  (cd "$site" && ctl session overlay open --html index.html --cwd . --navigation --target "$id" >/dev/null)
+  ctl tree --json | grep -q "\"file\":\"$site/index.html\"" || fail "relative page path resolves against the caller"
   loaded
   ctl tree --json | grep -q '"title":"Smoke"' || fail "page title read-back"
   page=$(ctl tree --json | python3 -I -c 'import json,sys

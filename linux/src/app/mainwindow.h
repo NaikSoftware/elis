@@ -138,7 +138,7 @@ private:
     bool overlayCommand(const QString &cmd, const QString &id, const QJsonObject &args, QJsonObject *result, QString *error);
     bool openPage(const QString &id, const QString &pane, const QJsonObject &args, QJsonObject *result, QString *error);
     QWidget *coverWidget(const QString &id) const; // what takes the keyboard: a shown page or program, else the main pane
-    bool closeFocusedPage();                       // closes the shown page holding the keyboard; false with none
+    bool closeFrontCover(const QString &id);       // the HUD or shown session cover, else the focused pane's; false with none
     bool pageCovers(const QString &id, const QString &pane) const; // a shown page hides that pane's terminal
     void overlayExited(const QString &key, KParts::ReadOnlyPart *part);
     void closeOverlay(const QString &key);

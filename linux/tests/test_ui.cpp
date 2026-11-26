@@ -914,6 +914,40 @@ private Q_SLOTS:
         qunsetenv("VISUAL");
     }
 
+    void closeSessionTakesZoomThenTheFrontCover()
+    {
+        Store store;
+        MainWindow w(store, dir.filePath("closeladder.json"));
+        w.restore({});
+        const QString id = store.addSession(store.addWorkspace("w"), {}, {});
+        store.select(id);
+        w.show();
+        w.activateWindow();
+        QVERIFY(QTest::qWaitForWindowActive(&w));
+        auto run = [&](const QString &cmd, const QJsonObject &args = {}) {
+            QJsonObject result;
+            QString error;
+            return w.appCommand(cmd, id, args, &result, &error) ? result : QJsonObject{{"error", error}};
+        };
+        QAction *close = w.namedAction(QStringLiteral("close_session"));
+
+        QVERIFY(!run("session.overlay.open", {{"command", "sleep 30"}}).contains("error"));
+        w.namedAction(QStringLiteral("toggle_terminal_zoom"))->trigger();
+        close->trigger();
+        QVERIFY(w.sessionExtras(id)["overlay"].toBool());
+        close->trigger();
+        QTRY_VERIFY(!w.sessionExtras(id)["overlay"].toBool());
+
+        QVERIFY(!run("session.hud.open", {{"message", "building"}}).contains("error"));
+        close->trigger();
+        QVERIFY(!w.sessionExtras(id).contains("hud"));
+
+        QVERIFY(!run("session.overlay.open", {{"command", "sleep 30"}, {"pane", "left"}}).contains("error"));
+        QTest::keyClick(display(w), Qt::Key_W, Qt::ControlModifier | Qt::ShiftModifier);
+        QTRY_VERIFY(!w.sessionExtras(id).contains("paneOverlays"));
+        QVERIFY(store.session(id));
+    }
+
 #ifdef ELIS_HAS_WEBENGINE
     void aFilePageLoadsReadsBackHidesAndAnswers()
     {
@@ -961,9 +995,10 @@ private Q_SLOTS:
 
         QCOMPARE(run("session.overlay.toggle")["text"].toString(), QStringLiteral("hidden"));
         QCOMPARE(page()["hidden"].toBool(), true);
-        QCOMPARE(page()["state"].toString(), QStringLiteral("loaded")); // hiding keeps the page loaded
+        QCOMPARE(page()["state"].toString(), QStringLiteral("loaded"));
         QCOMPARE(run("session.overlay.toggle")["text"].toString(), QStringLiteral("shown"));
         QVERIFY(!page().contains("hidden"));
+        QCOMPARE(run("session.hud.open", {{"message", "building"}})["error"].toString(), QStringLiteral("overlay already open"));
 
         QVERIFY(!run("session.overlay.submit", {{"value", "ok"}}).contains("error"));
         QVERIFY(!w.sessionExtras(id).contains("htmlOverlays"));
@@ -1044,6 +1079,48 @@ private Q_SLOTS:
         QTRY_COMPARE_WITH_TIMEOUT(page()["state"].toString(), QStringLiteral("failed"), 30000);
         QCOMPARE(page()["error"].toString(), QStringLiteral("navigation blocked: %1").arg(b.url()));
         QVERIFY(w.findChild<QWidget *>(QStringLiteral("elisPageError"))->isVisible());
+        QTest::mouseClick(w.findChild<QToolButton *>(QStringLiteral("elisPageClose")), Qt::LeftButton);
+        QTRY_VERIFY(!w.sessionExtras(id).contains("htmlOverlays"));
+    }
+
+    void aGrantedFilePageReadsOnlyInsideItsFolder()
+    {
+        QTemporaryDir root;
+        QVERIFY(QDir(root.path()).mkdir(QStringLiteral("site")));
+        const QByteArray svg = "<svg xmlns='http://www.w3.org/2000/svg' width='10' height='10'/>";
+        for (const QString &name : {QStringLiteral("site/in.svg"), QStringLiteral("out.svg")}) {
+            QFile f(root.filePath(name));
+            QVERIFY(f.open(QIODevice::WriteOnly));
+            f.write(svg);
+        }
+        const QString file = root.filePath(QStringLiteral("site/index.html"));
+        QFile f(file);
+        QVERIFY(f.open(QIODevice::WriteOnly));
+        f.write("<img id=in src='in.svg'><img id=out src='../out.svg'>");
+        f.close();
+        Store store;
+        MainWindow w(store, dir.filePath("grant.json"));
+        w.restore({});
+        const QString id = store.addSession(store.addWorkspace("w"), {}, {});
+        store.select(id);
+        w.show();
+        QJsonObject result;
+        QString error;
+        QVERIFY2(w.appCommand("session.overlay.open", id, {{"page", QJsonObject{{"kind", "file"}, {"path", file}, {"cwd", root.filePath("site")}}}}, &result, &error),
+                 qPrintable(error));
+        QTRY_COMPARE_WITH_TIMEOUT(w.sessionExtras(id)["htmlOverlays"].toArray().first().toObject()["state"].toString(), QStringLiteral("loaded"), 30000);
+        // shared: answers still queued when the test returns land after its locals are gone
+        const auto widths = std::make_shared<QVariantList>();
+        QTRY_VERIFY_WITH_TIMEOUT(
+            [&] {
+                w.findChild<PageOverlay *>()->view()->page()->runJavaScript(
+                    QStringLiteral("[...document.images].map(i => i.complete ? i.naturalWidth : -1)"), QWebEngineScript::ApplicationWorld,
+                    [widths](const QVariant &v) { *widths = v.toList(); });
+                return widths->size() == 2 && !widths->contains(-1);
+            }(),
+            10000);
+        QCOMPARE(widths->value(0).toInt(), 10);
+        QCOMPARE(widths->value(1).toInt(), 0);
     }
 
     void keysCloseAndZoomThePageTheyAreIn()
