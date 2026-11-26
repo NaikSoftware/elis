@@ -47,15 +47,24 @@ public enum SessionProgress: Sendable, Equatable, Codable {
         case "indeterminate": return .indeterminate
         default: break
         }
-        if text.hasSuffix("%"), let value = Int(text.dropLast()), (0...100).contains(value) {
-            return .percent(value)
-        }
         let parts = text.split(separator: "/", omittingEmptySubsequences: false)
-        if parts.count == 2, let done = Int(parts[0]), let total = Int(parts[1]),
-           (1...maxSteps).contains(total), (0...total).contains(done) {
-            return .steps(done: done, total: total)
+        let parsed: SessionProgress? = if text.hasSuffix("%") {
+            Int(text.dropLast()).map { .percent($0) }
+        } else if parts.count == 2, let done = Int(parts[0]), let total = Int(parts[1]) {
+            .steps(done: done, total: total)
+        } else {
+            nil
         }
-        throw .invalid
+        guard let parsed, parsed.isValid else { throw .invalid }
+        return parsed
+    }
+
+    private var isValid: Bool {
+        switch self {
+        case let .steps(done, total): (1...Self.maxSteps).contains(total) && (0...total).contains(done)
+        case let .percent(value): (0...100).contains(value)
+        case .indeterminate: true
+        }
     }
 
     /// terminal maps ConEmu OSC 9;4 state and progress; nil for an unknown state.
@@ -89,6 +98,9 @@ public enum SessionProgress: Sendable, Equatable, Codable {
         } else {
             self = .steps(done: try container.decode(Int.self, forKey: .done),
                           total: try container.decode(Int.self, forKey: .total))
+        }
+        guard isValid else {
+            throw DecodingError.dataCorrupted(.init(codingPath: decoder.codingPath, debugDescription: "invalid progress"))
         }
     }
 

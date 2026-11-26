@@ -64,4 +64,10 @@ struct SessionProgressTests {
             #expect(try JSONDecoder().decode(SessionProgress.self, from: encoder.encode(value)) == value)
         }
     }
+
+    @Test(arguments: [#"{"done":3,"total":0}"#, #"{"done":8,"total":7}"#, #"{"done":1,"total":10001}"#,
+                      #"{"percent":101}"#, #"{"percent":-1}"#])
+    func decodingRefusesOutOfRange(json: String) {
+        #expect(throws: DecodingError.self) { try JSONDecoder().decode(SessionProgress.self, from: Data(json.utf8)) }
+    }
 }
