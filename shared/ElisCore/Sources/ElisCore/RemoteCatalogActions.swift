@@ -210,6 +210,12 @@ public enum RemoteOperation: Equatable, Sendable {
         }
     }
 
+    /// holdsBackRepeats is false for progress, which is last-writer-wins: a held clear would leave a fill nothing expires.
+    var holdsBackRepeats: Bool {
+        if case .setProgress = self { return false }
+        return true
+    }
+
     /// key groups the repeats a pending operation holds back: the same action on the same row.
     var key: String {
         let row = switch target {
@@ -459,7 +465,7 @@ public final class RemoteCatalogActions {
     public func send(_ prepared: PreparedRemoteOperation, selectingCreated: Bool = false) async -> ControlResponse {
         let operation = prepared.operation
         guard !stopped, mirror.state == .connected else { return ControlResponse(ok: false, error: "\(host) is not connected") }
-        if entries.values.contains(where: { $0.operation.key == operation.key && $0.holdsRepeat }) {
+        if operation.holdsBackRepeats, entries.values.contains(where: { $0.operation.key == operation.key && $0.holdsRepeat }) {
             return ControlResponse(ok: false, error: "\(operation.label) is still pending on \(host)")
         }
         var words = operation.words
