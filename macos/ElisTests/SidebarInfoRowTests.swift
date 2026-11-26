@@ -276,6 +276,22 @@ final class SidebarInfoRowTests: XCTestCase {
         XCTAssertEqual(try height(of: session.id), plainHeight)
     }
 
+    func testTheCIPanelAnchorsAtTheTextNotTheWholeRow() async throws {
+        let store = try XCTUnwrap(library.activeStore)
+        let session = try seed(store)
+        store.setCI(ci(), forSession: session.id)
+        try mountSidebar(for: store)
+        try await waitUntil { (try? self.height(of: session.id)) == self.infoHeight }
+        let field = try infoCell(forSession: session.id).infoField
+        field.superview?.layoutSubtreeIfNeeded()
+
+        let anchor = field.textRect
+        XCTAssertEqual(anchor.minX, field.bounds.minX)
+        XCTAssertEqual(anchor.height, field.bounds.height)
+        XCTAssertGreaterThanOrEqual(anchor.width, field.attributedStringValue.size().width)
+        XCTAssertLessThan(anchor.width, field.bounds.width / 2)
+    }
+
     func testACILineOpensThePanelOnlyForTheShownSession() async throws {
         let store = try XCTUnwrap(library.activeStore)
         let shown = try seed(store)

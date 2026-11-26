@@ -24,14 +24,14 @@ enum CIStatusLine {
         self.poller = poller
     }
 
-    static func showPanel(for session: Session, from anchor: NSView) {
+    static func showPanel(for session: Session, from anchor: SidebarInfoField) {
         panel?.close()
         let popover = NSPopover()
         popover.behavior = .transient
         popover.contentViewController = NSHostingController(rootView: CIStatusPanel(session: session) { [weak popover] in
             popover?.close()
         })
-        popover.show(relativeTo: anchor.bounds, of: anchor, preferredEdge: .maxX)
+        popover.show(relativeTo: anchor.textRect, of: anchor, preferredEdge: .maxX)
         panel = popover
     }
 }
