@@ -21,7 +21,7 @@ extension PresentationFrame: Codable {
         case "agent.session": body = .agentSession(try container.decodeIfPresent(String.self, forKey: .agentSession))
         case "agent": body = .agent(try container.decodeIfPresent(PresentationAgent.self, forKey: .agent))
         case "ci": body = .ci(try container.decodeIfPresent(CIStatus.self, forKey: .ci))
-        case "progress": body = .progress(try container.decodeIfPresent(SessionProgress.self, forKey: .progress))
+        case "progress": body = .progress(try? container.decode(SessionProgress.self, forKey: .progress))
         case "layout": body = .layout((try? container.decode(PresentationLayout.self, forKey: .layout)) ?? .invalid)
         case "hud": body = .hud(try container.decodeIfPresent(PresentationHud.self, forKey: .hud))
         case "notify": body = .notify(try container.decode(PresentationNotify.self, forKey: .notify))

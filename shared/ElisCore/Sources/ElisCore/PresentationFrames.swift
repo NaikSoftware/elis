@@ -707,6 +707,23 @@ public struct PresentationSnapshot: Codable, Equatable, Sendable {
     }
 }
 
+extension PresentationSnapshot {
+    /// A progress shape this build cannot read decodes as none rather than failing the whole snapshot.
+    public init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        self.init(status: try container.decodeIfPresent(PresentationStatus.self, forKey: .status),
+                  hud: try container.decodeIfPresent(PresentationHud.self, forKey: .hud),
+                  context: try container.decodeIfPresent(String.self, forKey: .context),
+                  layout: try container.decodeIfPresent(PresentationLayout.self, forKey: .layout),
+                  respawns: try container.decodeIfPresent(PresentationRespawns.self, forKey: .respawns),
+                  ci: try container.decodeIfPresent(CIStatus.self, forKey: .ci),
+                  mail: try container.decodeIfPresent(PresentationMail.self, forKey: .mail),
+                  agentSession: try container.decodeIfPresent(String.self, forKey: .agentSession),
+                  agent: try container.decodeIfPresent(PresentationAgent.self, forKey: .agent),
+                  progress: try? container.decode(SessionProgress.self, forKey: .progress))
+    }
+}
+
 /// PresentationAgent is the coding agent an origin's session runs and the pane (`left`/`right`) it runs in.
 public struct PresentationAgent: Codable, Sendable, Equatable {
     public var name: String

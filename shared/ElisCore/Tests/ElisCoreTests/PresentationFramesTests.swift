@@ -477,6 +477,16 @@ struct PresentationFramesTests {
         #expect(snapshot.progress == nil)
     }
 
+    @Test func aProgressShapeFromANewerOriginDecodesAsNone() throws {
+        let frame = try PresentationCodec.decode(Data(#"{"kind":"progress","gen":1,"rev":1,"progress":{"ratio":0.5}}"#.utf8))
+        let line = Data(#"{"kind":"snapshot","gen":1,"rev":2,"snapshot":{"context":"PR #517","progress":{"ratio":0.5}}}"#.utf8)
+
+        let snapshot = try PresentationCodec.decode(line)
+
+        #expect(frame.body == .progress(nil))
+        #expect(snapshot.body == .snapshot(PresentationSnapshot(status: nil, hud: nil, context: "PR #517")))
+    }
+
     @MainActor @Test func aPeerWithoutTheProgressKindGetsNoProgressFrame() throws {
         let store = makeStore()
         let hub = PresentationHub(staleTimeout: 30)
