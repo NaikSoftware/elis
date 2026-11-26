@@ -2522,7 +2522,7 @@ elisctl session progress clear</code></pre>
 <li>A program in any pane, the scratch terminal included, can report progress with OSC 9;4. It is not a notification. The row shows the <code>elisctl</code> value while one is set, else the terminal's.</li>
 <li>Each kind clears only itself. An <code>elisctl</code> value clears on <code>clear</code> or when the session's status changes to completed or idle. A terminal value clears when the pane sends OSC 9;4;0, when that pane closes, or 15 seconds after its last update, so a killed program leaves no fill behind.</li>
 <li>With the <a href="#status-hooks">agent hooks</a> installed, Claude Code's todo list and tasks fill the row: done tasks out of all of them, cleared when all are done. A subagent's list never fills the lead's row. An agent-team lead counts the team's task list. Hooks installed before this feature need the next hook update.</li>
-<li>It works the same on a session attached from another Mac and on an elis-server session, and on Linux.</li>
+<li>It works the same on a session attached from another Mac and on an elis-server session, on Linux, and in the <a href="#phone-app">phone app</a>.</li>
 <li><code>tree</code> reports it as the session's <code>progress</code>: <code>value</code>, <code>fraction</code> (absent for indeterminate) and <code>source</code> (<code>control</code> or <code>terminal</code>); omitted when the row shows none. <code>events</code> emits <code>progress</code>.</li>
 </ul>
 <p>The command reference lists every field: <a href="commands.html#session">session progress</a>.</p>
