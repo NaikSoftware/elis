@@ -56,9 +56,9 @@ enum CIStatusLine {
             for run in ci.runs where run.state == state {
                 let item = link(title: run.workflow, url: run.url)
                 item.image = NSImage(systemSymbolName: symbol(state), accessibilityDescription: description(state))?
-                    .withSymbolConfiguration(.init(hierarchicalColor: color(state)))
-                // the image is the run's state, so it shows even where macOS 27 hides menu images by default
-                if #available(macOS 27, *) { item.preferredImageVisibility = .visible }
+                    .withSymbolConfiguration(NSImage.SymbolConfiguration(pointSize: NSFont.menuFont(ofSize: 0).pointSize, weight: .medium)
+                        .applying(.init(paletteColors: [color(state)])))
+                item.keepsImageVisible()
                 if state == .skipped {
                     item.attributedTitle = NSAttributedString(string: run.workflow, attributes: [.font: NSFont.menuFont(ofSize: 0),
                                                                                               .foregroundColor: NSColor.secondaryLabelColor])
@@ -88,10 +88,10 @@ enum CIStatusLine {
 
     private static func symbol(_ state: CIRunState) -> String {
         switch state {
-        case .failed: "xmark.circle.fill"
-        case .running: "clock.fill"
-        case .passed: "checkmark.circle.fill"
-        case .skipped: "minus.circle.fill"
+        case .failed: "xmark"
+        case .running: "clock"
+        case .passed: "checkmark"
+        case .skipped: "minus"
         }
     }
 
