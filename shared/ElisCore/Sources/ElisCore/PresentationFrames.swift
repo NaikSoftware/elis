@@ -688,10 +688,12 @@ public struct PresentationSnapshot: Codable, Equatable, Sendable {
     public var agentSession: String?
     /// agent is the origin's running agent, nil for none or from an origin that predates it.
     public var agent: PresentationAgent?
+    /// progress is the origin's control progress; terminal progress reaches a viewer through its own pane.
+    public var progress: SessionProgress?
 
     public init(status: PresentationStatus?, hud: PresentationHud?, context: String? = nil, layout: PresentationLayout? = nil,
                 respawns: PresentationRespawns? = nil, ci: CIStatus? = nil, mail: PresentationMail? = nil,
-                agentSession: String? = nil, agent: PresentationAgent? = nil) {
+                agentSession: String? = nil, agent: PresentationAgent? = nil, progress: SessionProgress? = nil) {
         self.status = status
         self.hud = hud
         self.context = context
@@ -701,6 +703,24 @@ public struct PresentationSnapshot: Codable, Equatable, Sendable {
         self.mail = mail
         self.agentSession = agentSession
         self.agent = agent
+        self.progress = progress
+    }
+}
+
+extension PresentationSnapshot {
+    /// A progress shape this build cannot read decodes as none rather than failing the whole snapshot.
+    public init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        self.init(status: try container.decodeIfPresent(PresentationStatus.self, forKey: .status),
+                  hud: try container.decodeIfPresent(PresentationHud.self, forKey: .hud),
+                  context: try container.decodeIfPresent(String.self, forKey: .context),
+                  layout: try container.decodeIfPresent(PresentationLayout.self, forKey: .layout),
+                  respawns: try container.decodeIfPresent(PresentationRespawns.self, forKey: .respawns),
+                  ci: try container.decodeIfPresent(CIStatus.self, forKey: .ci),
+                  mail: try container.decodeIfPresent(PresentationMail.self, forKey: .mail),
+                  agentSession: try container.decodeIfPresent(String.self, forKey: .agentSession),
+                  agent: try container.decodeIfPresent(PresentationAgent.self, forKey: .agent),
+                  progress: try? container.decode(SessionProgress.self, forKey: .progress))
     }
 }
 
@@ -785,6 +805,7 @@ public struct PresentationFrame: Equatable, Sendable {
         case agentSession(String?)
         case agent(PresentationAgent?)
         case ci(CIStatus?)
+        case progress(SessionProgress?)
         case layout(PresentationLayout)
         case hud(PresentationHud?)
         case notify(PresentationNotify)
@@ -857,6 +878,7 @@ public struct PresentationFrame: Equatable, Sendable {
             case .agentSession: return "agent.session"
             case .agent: return "agent"
             case .ci: return "ci"
+            case .progress: return "progress"
             case .layout: return "layout"
             case .hud: return "hud"
             case .notify: return "notify"

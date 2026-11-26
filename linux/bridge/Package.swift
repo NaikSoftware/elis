@@ -25,6 +25,7 @@ let package = Package(
             name: "elisctl-linux",
             dependencies: ["ElisLinuxRelay", .product(name: "elisctlKit", package: "ElisCore")]
         ),
+        .testTarget(name: "ElisBridgeTests", dependencies: ["ElisBridge"]),
         .testTarget(
             name: "ElisLinuxRelayTests",
             dependencies: [

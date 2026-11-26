@@ -57,6 +57,15 @@ struct CatalogCommandsTests {
         #expect(throws: (any Error).self) { try Session.Swap.parse(["--target", "s1"] + flags) }
     }
 
+    @Test func aProgressCarriesItsOperationIdAndEpoch() throws {
+        let request = try Session.Progress.parse(["40%", "--target", "s1", "--op-id", "op-1", "--epoch", "e1"]).makeRequest()
+
+        #expect(request.cmd == .sessionProgress)
+        #expect(request.args?.opID == "op-1")
+        #expect(request.args?.epoch == "e1")
+        #expect(request.args?.progress == "40%")
+    }
+
     @Test func aStructuralCommandCarriesItsOperationIdAndEpoch() throws {
         let rename = try Session.Rename.parse(["build", "--target", "s1", "--op-id", "op-1", "--epoch", "e1"])
 

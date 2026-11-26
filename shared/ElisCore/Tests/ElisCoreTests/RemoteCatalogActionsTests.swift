@@ -304,6 +304,18 @@ final class RemoteCatalogActionsTests {
         #expect(script.commandCalls.count == 2)
     }
 
+    @Test func aProgressIsSentWhileAnEarlierOneForTheRowIsPending() async {
+        install(snapshot())
+        queue(reply(.applied, rev: 5))
+        queue(reply(.noop))
+        _ = await send(.setProgress(sessionID, "3/7"))
+
+        let clear = await send(.setProgress(sessionID, "clear"))
+
+        #expect(clear.ok)
+        #expect(script.commandCalls.count == 2)
+    }
+
     @Test func aLostReplyIsSettledByALookupWhereItWasSent() async {
         install(snapshot(rev: 3))
         queue({ _ in "" })

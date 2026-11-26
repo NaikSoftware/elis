@@ -392,6 +392,10 @@ public extension ControlActions {
         ControlResponse(ok: false, error: ControlActionsUnsupported.message("session.context"))
     }
 
+    func setSessionProgress(_: String?, window _: String?, progress _: SessionProgress?) async -> ControlResponse {
+        ControlResponse(ok: false, error: ControlActionsUnsupported.message("session.progress"))
+    }
+
     func setSessionTint(_: String?, window _: String?, update _: ControlTintUpdate) -> ControlResponse {
         ControlResponse(ok: false, error: ControlActionsUnsupported.message("session.tint"))
     }

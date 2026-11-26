@@ -31,4 +31,40 @@ struct SidebarBandTests {
                                      activeHex: "#AAAAAA", accentHex: "#BBBBBB")
         #expect(plain == SidebarWave(base: "#AAAAAA", second: "#BBBBBB"))
     }
+
+    @Test func fillUsesSessionThenWorkspaceThenActive() {
+        func fill(_ session: String?, _ workspace: String?) -> SidebarProgressFill? {
+            SidebarBand.progressFill(progress: .steps(done: 3, total: 7), status: .active, sessionTintHex: session,
+                                     workspaceTintHex: workspace, activeHex: "#3ccf64")
+        }
+        #expect(fill("#a970ff", "#ff9f43") == SidebarProgressFill(colorHex: "#a970ff", fraction: 3.0 / 7))
+        #expect(fill(nil, "#ff9f43")?.colorHex == "#ff9f43")
+        #expect(fill(nil, nil)?.colorHex == "#3ccf64")
+        #expect(SidebarProgressFill.alpha == 0.16)
+    }
+
+    @Test func blockedAndIndeterminateDrawNoFill() {
+        #expect(SidebarBand.progressFill(progress: .percent(40), status: .blocked, sessionTintHex: nil,
+                                         workspaceTintHex: nil, activeHex: "#3ccf64") == nil)
+        #expect(SidebarBand.progressFill(progress: .indeterminate, status: .active, sessionTintHex: nil,
+                                         workspaceTintHex: nil, activeHex: "#3ccf64") == nil)
+        #expect(SidebarBand.progressFill(progress: nil, status: .active, sessionTintHex: nil,
+                                         workspaceTintHex: nil, activeHex: "#3ccf64") == nil)
+    }
+
+    @Test func fillFractionClampsToOne() {
+        #expect(SidebarBand.progressFill(progress: .percent(100), status: .idle, sessionTintHex: nil,
+                                         workspaceTintHex: nil, activeHex: "#3ccf64")?.fraction == 1.0)
+        #expect(SidebarBand.progressFill(progress: .percent(250), status: .idle, sessionTintHex: nil,
+                                         workspaceTintHex: nil, activeHex: "#3ccf64")?.fraction == 1.0)
+    }
+
+    @Test func indeterminateShowsTheWaveWithoutAgentStatus() {
+        #expect(SidebarBand.wave(status: .idle, indeterminate: true, sessionTintHex: nil, workspaceTintHex: nil,
+                                 activeHex: "#3ccf64", accentHex: "#6b9bff") == SidebarWave(base: "#3ccf64", second: "#6b9bff"))
+        #expect(SidebarBand.wave(status: .blocked, indeterminate: true, sessionTintHex: nil, workspaceTintHex: nil,
+                                 activeHex: "#3ccf64", accentHex: "#6b9bff") == nil)
+        #expect(SidebarBand.wave(status: .idle, indeterminate: false, sessionTintHex: nil, workspaceTintHex: nil,
+                                 activeHex: "#3ccf64", accentHex: "#6b9bff") == nil)
+    }
 }

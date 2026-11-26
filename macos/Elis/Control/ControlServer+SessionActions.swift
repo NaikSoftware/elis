@@ -670,6 +670,14 @@ extension ControlServer: ControlActions {
         }
     }
 
+    /// Set or (nil) clear a session's `session progress`; a row attached from another host is routed to its origin first.
+    func setSessionProgress(_ target: String?, window: String?, progress: SessionProgress?) async -> ControlResponse {
+        resolver.resolveSession(target, window: window) { store, id in
+            store.setControlProgress(progress, forSession: id)
+            return ControlResponse(ok: true, result: ControlResult(id: id.uuidString))
+        }
+    }
+
     /// Clear a session's unseen-notification badge without touching selection, focus, or agent status — the
     /// counterpart to `notify`, whose badge nothing else lowers without visiting. Idempotent, and the count
     /// is ephemeral so it triggers no save.

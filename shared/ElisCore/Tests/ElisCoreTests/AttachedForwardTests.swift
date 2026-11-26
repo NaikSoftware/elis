@@ -44,6 +44,23 @@ struct AttachedForwardTests {
             == .refused("the command failed on box"))
     }
 
+    @Test func aProgressGoesToTheOriginSessionAsAnOperand() throws {
+        let progress = AttachedForward.progress(session: "s1", value: "3/7")
+        let unknown = ControlResponse(ok: false, error: "invalid request: Cannot initialize Command from invalid String value session.progress")
+
+        #expect(progress.words == ["session", "progress", "--target", "s1"])
+        #expect(progress.operands == ["3/7"])
+        #expect(progress.outcome(of: try printed(unknown, status: 1), host: "box") == tooOld)
+    }
+
+    @Test func aProgressTheDispatcherWouldRefuseStaysForIt() {
+        let request = { (value: String) in ControlRequest(cmd: .sessionProgress, target: "s1", args: ControlArgs(progress: value)) }
+
+        #expect(ControlDispatcher.refusesArguments(request("8/7")))
+        #expect(!ControlDispatcher.refusesArguments(request("clear")))
+        #expect(!ControlDispatcher.refusesArguments(request("40%")))
+    }
+
     @Test func aCompanionMoveNamesBothOriginSessionsAndIsTooOldWhereTheOriginLacksIt() throws {
         let move = AttachedForward.moveCompanion(session: "c1", parent: "p2")
         let unknown = ControlResponse(ok: false, error: "invalid request: Cannot initialize Command from invalid String value session.companion.move")

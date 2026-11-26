@@ -30,6 +30,13 @@ extension ServerActions {
         }
     }
 
+    public func setSessionProgress(_ target: String?, window: String?, progress: SessionProgress?) async -> ControlResponse {
+        withSession(target, window: window) { session in
+            store.setControlProgress(progress, forSession: session.id)
+            return ControlResponse(ok: true, result: ControlResult(id: session.id.uuidString))
+        }
+    }
+
     /// markSessionSeen lowers the badge `notify` raised and an auto-reset status; the server has no selection to do it.
     public func markSessionSeen(_ target: String?, window: String?) -> ControlResponse {
         withSession(target, window: window) { session in

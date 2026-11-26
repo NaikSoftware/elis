@@ -5,6 +5,7 @@
 #   elis-agent-status.sh completed         # agent finished a turn
 #   elis-agent-status.sh blocked           # agent is waiting on you
 #   elis-agent-status.sh idle              # clear the indicator
+#   elis-agent-status.sh progress 3/7      # fill the row: N/M, N%, indeterminate or clear
 #
 # States: idle | active | completed | blocked. An optional --blink / --auto-reset
 # (and any further args) is forwarded verbatim to `elisctl session status`.
@@ -45,6 +46,13 @@ pane_args=()
 
 socket_args=()
 [ -n "${ELIS_SOCKET:-}" ] && socket_args=(--socket "$ELIS_SOCKET")
+
+# a row's progress belongs to the session, not a pane
+if [ "$state" = progress ]; then
+  "${ELISCTL:-elisctl}" session progress "${1:-}" --target "$ELIS_SESSION_ID" \
+    "${socket_args[@]+"${socket_args[@]}"}" >/dev/null 2>&1
+  exit 0
+fi
 
 send() {
   "${ELISCTL:-elisctl}" session status "$state" --target "$ELIS_SESSION_ID" \

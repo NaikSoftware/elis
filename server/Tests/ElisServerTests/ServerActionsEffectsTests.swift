@@ -39,6 +39,14 @@ struct ServerActionsEffectsTests {
         #expect(session.agentIndicator.status == .blocked)
     }
 
+    @Test func aProgressIsSetOnTheSession() async throws {
+        let session = try newSession()
+
+        #expect(await harness.actions.setSessionProgress(session.id.uuidString, window: nil, progress: .percent(40)).ok)
+
+        #expect(session.controlProgress == .percent(40))
+    }
+
     @Test func anotherPanesWriteUnderABlockIsAcceptedAndKeepsTheBlockShown() async throws {
         let session = try newSession()
         _ = harness.actions.splitSession(session.id.uuidString, window: nil, mode: "on")

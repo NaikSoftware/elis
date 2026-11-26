@@ -10,6 +10,8 @@ paths:
 - OSC 9/777 reaches `GHOSTTY_ACTION_DESKTOP_NOTIFICATION`; copy its call-scoped C strings immediately,
   recover the `GhosttySurfaceView`, and call `NotificationManager.notify`. `GHOSTTY_ACTION_RING_BELL`
   is not a notification source.
+- OSC 9;4 is progress, not a notification: it reaches `GHOSTTY_ACTION_PROGRESS_REPORT`, never the badge or
+  a banner. [[control-api]] owns its handling.
 - `NotificationManager` is an `@MainActor` singleton and `@preconcurrency`
   `UNUserNotificationCenterDelegate`. It resolves `Session` and `PaneRole` by surface identity, applies
   suppression, always increments `unseenCount`, and posts only when `bannersEnabled`. Authorization is

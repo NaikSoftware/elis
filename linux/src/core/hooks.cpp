@@ -69,6 +69,15 @@ EventSource::EventSource(Store &store, QObject *parent)
                   {{"name", s->displayName()}, {"status", status}, {"blink", s->blink}, {"previous", m_status.value(id, QStringLiteral("idle"))}});
         m_status.insert(id, status);
     });
+    connect(&store, &Store::progressChanged, this, [this](const QString &id) {
+        const Session *s = m_store.session(id);
+        if (!s)
+            return;
+        QJsonObject payload{{"name", s->displayName()}};
+        if (const QJsonObject p = Store::progressNode(*s); !p.isEmpty()) // a cleared row sends neither, as master
+            payload.insert("progress", p.value("value")), payload.insert("source", p.value("source"));
+        emitEvent(QStringLiteral("progress"), m_store.workspaceOf(id)->id, id, payload);
+    });
     connect(&store, &Store::notified, this, [this](const QString &id, const QString &title, const QString &body) {
         const Session *s = m_store.session(id);
         if (s)

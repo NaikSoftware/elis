@@ -8,6 +8,7 @@
 #include "sidebar.h"
 #include "store.h"
 #include "zmx.h"
+#include "elis_bridge.h"
 
 #include <KConfig>
 #include <KConfigGroup>
@@ -437,8 +438,12 @@ void PartBridge::sessionAttribute(int what, const QString &text)
 {
     if (what == 0 || what == 2)
         m_window->paneTitle(m_id, parent(), text);
-    if (what == 9 && !text.isEmpty() && !text.startsWith(QLatin1String("4;"))) // 9;4 is ConEmu's progress report, not a message
-        m_store.notify(m_id, {}, text);
+    if (what != 9 || text.isEmpty())
+        return;
+    if (!text.startsWith(QLatin1String("4;"))) // 9;4 is ConEmu's progress report, not a message
+        return m_store.notify(m_id, {}, text);
+    if (const QJsonObject update = Store::bridgeText(elis_progress_terminal, text); !update.isEmpty())
+        m_store.setTerminalProgress(m_id, parent()->property("elisPaneId").toString(), update);
 }
 
 void PartBridge::osc777(const QStringList &params)

@@ -75,6 +75,16 @@ struct ServerActionsReceiptsTests {
         #expect(reply.result?.receipt == CatalogReceipt(opID: "off", epoch: hub.epoch, outcome: .noop))
     }
 
+    @Test func aProgressFromAWindowIsSetAndAnsweredNoop() async throws {
+        let session = try harness.session(await plain(.sessionNew))
+
+        let reply = await serve(.sessionProgress, target: session.id.uuidString, ControlArgs(progress: "3/7"), op: "progress")
+
+        #expect(reply.ok)
+        #expect(reply.result?.receipt == CatalogReceipt(opID: "progress", epoch: hub.epoch, outcome: .noop))
+        #expect(session.controlProgress == .steps(done: 3, total: 7))
+    }
+
     @Test func aRepeatedOperationNeverRunsTwice() async throws {
         let first = await serve(.sessionNew, op: "once")
         let count = sessionCount

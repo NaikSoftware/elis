@@ -96,6 +96,9 @@ enum EventFormatter {
             if let color = event.payload.color { parts.append("color=\(color)") }
             if let shape = event.payload.shape { parts.append("shape=\(shape)") }
             return parts.joined(separator: " ")
+        case .progress:
+            return "\(time) \(event.kind.rawValue) \(name) \(event.payload.progress ?? "cleared")"
+                + (event.payload.source.map { " source=\($0)" } ?? "")
         case .notify:
             return "\(time) \(event.kind.rawValue) \(name) \(event.payload.title ?? name): \(event.payload.body ?? "")"
         case .sessionCreated:

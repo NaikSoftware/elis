@@ -26,6 +26,7 @@ public struct ControlDispatcher {
             return dispatchEventsRead(request)
         case .sessionNew, .sessionDuplicate, .sessionSelect, .sessionGo, .sessionClose, .sessionTerminate, .sessionRename,
                 .sessionReveal, .sessionMove, .sessionFlag, .sessionContext, .sessionSeen, .sessionStatus,
+                .sessionProgress,
                 .sessionRestore:
             return await dispatchSessionCommand(request)
         case .sessionTint, .workspaceTint:
@@ -236,6 +237,13 @@ public struct ControlDispatcher {
             return dispatchSessionContext(request)
         case .sessionSeen:
             return actions.markSessionSeen(request.target, window: request.args?.window)
+        case .sessionProgress:
+            do {
+                let progress = try SessionProgress.parse(request.args?.progress ?? "")
+                return await actions.setSessionProgress(request.target, window: request.args?.window, progress: progress)
+            } catch {
+                return ControlResponse(ok: false, error: error.description)
+            }
         case .sessionStatus:
             guard let status = AgentStatus(rawValue: request.args?.status ?? "") else {
                 return ControlResponse(ok: false, error: "invalid status")

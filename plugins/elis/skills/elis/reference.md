@@ -41,6 +41,8 @@ The event kinds and payloads are:
   overrides). An event fires whenever the whole indicator changes, not just the state name — so a
   change to `blink`, `pane`, `color` or `shape` alone is a real event you can watch, while re-asserting
   an identical indicator emits nothing. Clearing emits `idle`.
+- `progress`: `name`, `progress` (the value the row shows: `3/7`, `40%` or `indeterminate`; absent once
+  cleared) and `source` (`control` or `terminal`; absent once cleared).
 - `notify`: `name`, effective `title`, and `body`. It is emitted after target and foreground-focus
   suppression checks, including when desktop banners are disabled.
 - `session.created` / `session.closed`: session `name`, emitted when the session enters or leaves a
@@ -264,7 +266,9 @@ change of state, so a hook re-pushing `active` refreshes it and
 `now - statusChangedAt` reads as how long ago the status was last WRITTEN, including idle.
 Automatic and manual clears and pane promotion also count.
 Ephemeral like `unseen`: never persisted, so it is absent after a restart even for a restored session),
-`lastSelectedAt` (when the session last became or stopped being its window's selected session, in epoch
+`progress` (the row's progress fill: `value` — `3/7`, `40%` or `indeterminate` —, `fraction` 0..1, absent
+for indeterminate, and `source` — `control` from `session progress`, else `terminal` from a pane's OSC 9;4;
+omitted when the row shows none), `lastSelectedAt` (when the session last became or stopped being its window's selected session, in epoch
 seconds on the same clock; persisted, omitted when no selection has been recorded, which includes a
 session restored from a build that did not record it, so absence is not proof of never being used.
 Read it with `active`: an active session is selected right now),
