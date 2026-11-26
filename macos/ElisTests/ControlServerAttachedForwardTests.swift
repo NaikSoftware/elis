@@ -250,6 +250,22 @@ final class ControlServerAttachedForwardTests: XCTestCase {
         XCTAssertFalse(row.hasSplit)
     }
 
+    func testAProgressRunsOnTheOriginAndAnInvalidOneStaysForTheDispatcher() async throws {
+        let runner = ScriptedRunner([ok()])
+        let (server, store) = try makeServer(runner)
+        let row = try attachedRow(in: store)
+
+        XCTAssertNil(server.attachedRoute(ControlRequest(cmd: .sessionProgress, target: row.id.uuidString,
+                                                         args: ControlArgs(progress: "8/7"))))
+        let reply = try await run(server, ControlRequest(cmd: .sessionProgress, target: row.id.uuidString,
+                                                         args: ControlArgs(progress: "3/7")))
+
+        XCTAssertTrue(reply.ok, reply.error ?? "")
+        XCTAssertEqual(runner.invocations.count, 1)
+        XCTAssertTrue(line(runner, 0).contains("session progress --target origin-1 --json -- 3/7"), line(runner, 0))
+        XCTAssertNil(row.controlProgress, "the row shows the origin's frame, not a local write")
+    }
+
     // regression: two rows of one origin session gave their scratch surfaces the origin's scratch UUID as token and lead key
     func testTwoRowsOfOneOriginSessionGiveTheirScratchSurfacesTheirOwnKeys() throws {
         let (server, store) = try makeServer(ScriptedRunner([]))

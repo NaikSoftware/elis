@@ -33,6 +33,8 @@ public final class ServerActions: ControlActions {
     let operationBook = CatalogOperationBook()
     /// recentClosed is the history the store writes its closes into; nil serves no `recent.*`.
     var recentClosed: RecentClosedStore?
+    /// uploadDirectory is the state directory `session.upload` reserves paths under; nil serves no upload.
+    var uploadDirectory: URL?
     /// pendingCloses is rewritten after each served command, so a crash inside a close's grace is finished at start.
     var pendingCloses: PendingCloseJournal?
     /// recentItems caches `recentClosed` for the catalog, which projects it on every refresh; a served command drops it.

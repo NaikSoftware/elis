@@ -37,6 +37,7 @@ struct RemotePresentationClientTests {
         var snapshotStatuses: [PresentationStatus?] = []
         var huds: [PresentationHud?] = []
         var contexts: [String?] = []
+        var progresses: [SessionProgress?] = []
         var agentSessions: [String?] = []
         var agents: [PresentationAgent?] = []
         var notifies: [PresentationNotify] = []
@@ -85,6 +86,7 @@ struct RemotePresentationClientTests {
             context: { recorder.contexts.append($0) },
             agentSession: { recorder.agentSessions.append($0) },
             agent: { recorder.agents.append($0) },
+            progress: { recorder.progresses.append($0) },
             mode: { recorder.modes.append($0) },
             askRequest: {
                 recorder.asks.append($0)
@@ -235,6 +237,17 @@ struct RemotePresentationClientTests {
         transport.deliver(line(.context(nil), rev: 3))
 
         #expect(recorder.contexts == ["PR #517", "PR #518", nil])
+    }
+
+    @Test func theSnapshotsProgressIsAppliedThenEachChangeBehindIt() {
+        let client = makeClient()
+        client.start()
+
+        connect(client, snapshot: PresentationSnapshot(status: nil, hud: nil, progress: .percent(40)))
+        transport.deliver(line(.progress(.steps(done: 3, total: 7)), rev: 2))
+        transport.deliver(line(.progress(nil), rev: 3))
+
+        #expect(recorder.progresses == [.percent(40), .steps(done: 3, total: 7), nil])
     }
 
     @Test func theSnapshotsAgentSessionIsAppliedThenEachChangeBehindIt() {

@@ -28,6 +28,7 @@ public enum Command: String, Codable, Sendable, CaseIterable {
     case workspaceFolder = "workspace.folder"
     case sessionType = "session.type"
     case sessionStatus = "session.status"
+    case sessionProgress = "session.progress"
     case sessionFlag = "session.flag"
     case sessionContext = "session.context"
     case sessionTint = "session.tint"
@@ -62,6 +63,7 @@ public enum Command: String, Codable, Sendable, CaseIterable {
     case sessionSelectAll = "session.selectall"
     case sessionText = "session.text"
     case sessionTranscript = "session.transcript"
+    case sessionUpload = "session.upload"
     case sessionGrid = "session.grid"
     case sessionScroll = "session.scroll"
     case sessionAttach = "session.attach"
@@ -478,6 +480,8 @@ public struct ControlArgs: Codable, Sendable, Equatable {
     /// `ifIdle` applies the `session.status` write only while the session's status is idle; otherwise it is an
     /// ok no-op.
     public var ifIdle: Bool?
+    /// Raw `session.progress` value (`3/7`, `40%`, `indeterminate`, `clear`); the dispatcher parses it.
+    public var progress: String?
     /// One-shot sound for `session.status` (caller-driven, not stored on the indicator): `default`/`beep`
     /// = the system alert, anything else a named `NSSound(named:)` sound (e.g. `Glass`, also resolving
     /// custom `~/Library/Sounds`). nil/empty = none; the Settings "Blocked sound" may still play on `blocked`.
@@ -558,6 +562,8 @@ public struct ControlArgs: Codable, Sendable, Equatable {
     public var transcript: String?
     /// maxBytes is `session.transcript`'s page budget, clamped to `ClaudeTranscript.pageBudget`.
     public var maxBytes: Int?
+    /// size is the byte count `session.upload` will write.
+    public var size: Int?
     /// last is how many of the newest entries `assistant.read` returns; nil returns all.
     public var last: Int?
     /// provider is the assistant CLI `assistant.provider` selects, a `SessionLauncher` raw value.
@@ -582,7 +588,7 @@ public struct ControlArgs: Codable, Sendable, Equatable {
                 title: String? = nil, body: String? = nil,
                 width: Int? = nil, height: Int? = nil, sidebarWidth: Double? = nil,
                 filePanelWidth: Double? = nil, x: Int? = nil, y: Int? = nil, display: Int? = nil,
-                status: String? = nil, blink: Bool? = nil, autoReset: Bool? = nil, ifIdle: Bool? = nil, sound: String? = nil,
+                status: String? = nil, blink: Bool? = nil, autoReset: Bool? = nil, ifIdle: Bool? = nil, progress: String? = nil, sound: String? = nil,
                 ratio: Double? = nil, ratioDelta: Double? = nil,
                 path: String? = nil, color: String? = nil, textColor: String? = nil, shape: String? = nil,
                 opacity: Double? = nil, fit: String? = nil,
@@ -662,6 +668,7 @@ public struct ControlArgs: Codable, Sendable, Equatable {
         self.blink = blink
         self.autoReset = autoReset
         self.ifIdle = ifIdle
+        self.progress = progress
         self.sound = sound
         self.ratio = ratio
         self.ratioDelta = ratioDelta
@@ -868,6 +875,7 @@ public struct ControlResult: Codable, Sendable, Equatable {
     public var commands: [ControlTranscriptCommand]?
     public var skipped: Int?
     public var assistant: ControlAssistantResult?
+    public var upload: ControlUpload?
 
     public init(id: String? = nil, tree: ControlTree? = nil, text: String? = nil,
                 windows: [ControlWindowNode]? = nil, exitCode: Int? = nil, count: Int? = nil,

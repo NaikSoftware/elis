@@ -49,6 +49,7 @@ final class MockControlActions: ControlActions {
         case sessionTint(target: String?, window: String?, ControlTintUpdate)
         case workspaceTint(target: String?, window: String?, ControlTintUpdate)
         case markSessionSeen(target: String?, window: String?)
+        case sessionProgress(target: String?, SessionProgress?)
         case sessionStatus(target: String?, window: String?, ControlSessionStatusUpdate)
         case sessionRestore(target: String?, window: String?, ControlSessionRestoreUpdate)
         case sessionRestart(target: String?, window: String?, ControlSessionRestartOptions)
@@ -136,6 +137,7 @@ final class MockControlActions: ControlActions {
         case sessionBackground(target: String?, window: String?, ControlSessionBackgroundOptions)
         case sessionText(target: String?, window: String?, ControlSessionTextOptions)
         case transcriptSource(target: String?, window: String?, pane: StatusPane?, paneID: String?)
+        case uploadDestination(target: String?, window: String?, name: String, size: Int)
         case sessionGrid(target: String?, window: String?, pane: StatusPane, ControlGrid?)
         case sessionScroll(target: String?, window: String?, pane: StatusPane, lines: Int)
         case sessionAttach(target: String?, pane: StatusPane, paneID: String?, window: String?)
@@ -466,6 +468,11 @@ final class MockControlActions: ControlActions {
 
     func markSessionSeen(_ target: String?, window: String?) -> ControlResponse {
         calls.append(.markSessionSeen(target: target, window: window))
+        return ControlResponse(ok: true)
+    }
+
+    func setSessionProgress(_ target: String?, window _: String?, progress: SessionProgress?) -> ControlResponse {
+        calls.append(.sessionProgress(target: target, progress))
         return ControlResponse(ok: true)
     }
 
@@ -943,6 +950,11 @@ final class MockControlActions: ControlActions {
     func transcriptSource(_ target: String?, window: String?, pane: StatusPane?, paneID: String?) -> ControlTranscriptLookup {
         calls.append(.transcriptSource(target: target, window: window, pane: pane, paneID: paneID))
         return nextTranscriptLookup
+    }
+
+    func uploadDestination(_ target: String?, window: String?, name: String, size: Int) -> ControlResponse {
+        calls.append(.uploadDestination(target: target, window: window, name: name, size: size))
+        return ControlResponse(ok: true)
     }
 
     func setSessionGrid(_ target: String?, window: String?, pane: StatusPane, grid: ControlGrid?) -> ControlResponse {

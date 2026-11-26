@@ -544,7 +544,7 @@ extension ControlServer: ControlActions {
                                        autoReset: update.autoReset ?? false,
                                        color: update.color, shape: update.shape, statusPane: resolvedPane)
         // a skipped write must return before playback: no status change means no sound.
-        if store.applyControlStatus(indicator, forSession: id, ifIdle: update.ifIdle) == .skipped {
+        if store.applyControlStatus(indicator, forSession: id, ifIdle: update.ifIdle, cwd: update.cwd) == .skipped {
             return ControlResponse(ok: true, result: ControlResult(id: id.uuidString))
         }
         // the blocked marker goes even when this Mac has no blocked sound: the presenter plays its own setting
@@ -666,6 +666,14 @@ extension ControlServer: ControlActions {
                 return ControlResponse(ok: false, error: "no such session: \(target ?? "active")")
             }
             store.setContext(context, forSession: id) // no-op, no save and no event when unchanged
+            return ControlResponse(ok: true, result: ControlResult(id: id.uuidString))
+        }
+    }
+
+    /// Set or (nil) clear a session's `session progress`; a row attached from another host is routed to its origin first.
+    func setSessionProgress(_ target: String?, window: String?, progress: SessionProgress?) async -> ControlResponse {
+        resolver.resolveSession(target, window: window) { store, id in
+            store.setControlProgress(progress, forSession: id)
             return ControlResponse(ok: true, result: ControlResult(id: id.uuidString))
         }
     }

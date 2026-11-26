@@ -48,6 +48,8 @@ public:
     bool saveIndex();
     // every pane identity of every window, the closed ones read from their files; nullopt when one cannot be read
     std::optional<QStringList> paneIds() const;
+    // every session id a window holds or a Recent Closed entry reopens; nullopt when a window file cannot be read
+    std::optional<QStringList> sessionIds() const;
     AssistantSink *assistantSink = nullptr; // the provider process assistant.* feeds; null fails its inputs
     QList<Assistant::Window> assistantWindows() const; // the open ones, in library order: it sets the handles
     QStringList assistantProviders() const;            // detected at launch, never probed per request

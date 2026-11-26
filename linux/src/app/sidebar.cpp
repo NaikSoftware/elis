@@ -1,6 +1,7 @@
 #include "sidebar.h"
 
 #include "assistant.h"
+#include "elis_bridge.h"
 #include "store.h"
 
 #include <QApplication>
@@ -342,7 +343,7 @@ void SidebarDelegate::paint(QPainter *p, const QStyleOptionViewItem &opt, const 
 
     QColor under = pal.color(QPalette::Window); // what the info line sits on, fill by fill below
     if (band.isValid()) {
-        under = over(under, faded(band, 0.10));
+        under = over(under, faded(band, 0.06));
         // one rounded outline across the group: each row's piece runs past the edges the group continues over, clipped to the row
         const QRectF row(opt.rect);
         const qreal top = edge == Sidebar::First || edge == Sidebar::Single ? row.top() + Sidebar::groupGap : row.top() - 13;
@@ -350,8 +351,8 @@ void SidebarDelegate::paint(QPainter *p, const QStyleOptionViewItem &opt, const 
         const QRectF shape(r.left() - Sidebar::groupPadding, top, r.width() + 2 * Sidebar::groupPadding, bottom - top);
         p->save();
         p->setClipRect(opt.rect);
-        p->setPen(QPen(faded(band, 0.16), 1));
-        p->setBrush(faded(band, 0.10));
+        p->setPen(QPen(faded(band, 0.09), 1));
+        p->setBrush(faded(band, 0.06));
         p->drawRoundedRect(shape.adjusted(0.5, 0.5, -0.5, -0.5), 10.5, 10.5);
         p->restore();
     }
@@ -374,25 +375,20 @@ void SidebarDelegate::paint(QPainter *p, const QStyleOptionViewItem &opt, const 
         p->drawPath(shape(r, 8));
         under = over(under, faded(tint, 0.09));
     }
-    // Elis stands alone at a group card's size, so its edges and the gap under it match the cards below
-    const qreal pad = assistant ? Sidebar::groupPadding : 0;
-    const QRectF fill = r.adjusted(-pad, -pad, pad, pad);
-    if (selected) {
-        // the group's tint, else the row's own, else the accent; dimmer while the window is in the background
-        const QColor c = band.isValid() ? band : tint.isValid() ? tint : pal.color(QPalette::Highlight);
-        const bool key = m_sidebar->isActiveWindow();
-        p->setPen(QPen(faded(c, key ? 0.55 : 0.35), 1));
-        p->setBrush(faded(c, key ? 0.20 : 0.12));
-        under = over(under, faded(c, key ? 0.20 : 0.12));
-        p->drawPath(shape(fill.adjusted(0.5, 0.5, -0.5, -0.5), assistant ? 10.5 : 7.5));
-    } else if (opt.state & QStyle::State_MouseOver) {
-        p->setBrush(faded(text, 0.07));
-        under = over(under, faded(text, 0.07));
-        p->drawPath(shape(fill, assistant ? 10.5 : 8));
+    QColor filled; // the progress fill's strongest colour, which the info line may also sit on
+    if (const QVariant fraction = index.data(ProgressFill); session && fraction.isValid()) {
+        // the done share of the row, a flat wash with a hard edge, inside the row's own outline
+        const qreal w = r.width() * fraction.toDouble();
+        if (w > 0) {
+            filled = index.data(ProgressColor).value<QColor>();
+            p->save();
+            p->setClipPath(shape(r, 8));
+            p->fillRect(QRectF(r.left(), r.top(), w, r.height()), filled);
+            p->restore();
+        }
     }
-
-    QList<QColor> unders{under};
-    if (session && index.data(Status).toString() == QLatin1String("active")) {
+    QColor waveBase, waveSecond; // the wave's strongest stops, for the info line's contrast
+    if (session && index.data(Wave).toBool()) {
         // in progress: the row's tint (else the active colour) drifts across it with a second hue, one period every two row widths
         const QColor active = statusColor(m_sidebar->settings(), QStringLiteral("active"));
         const QColor base = tint.isValid() ? tint : active, second = tint.isValid() ? active : pal.color(QPalette::Highlight);
@@ -407,7 +403,34 @@ void SidebarDelegate::paint(QPainter *p, const QStyleOptionViewItem &opt, const 
         p->setPen(Qt::NoPen);
         p->setBrush(g);
         p->drawPath(shape(r, 8));
-        unders = {over(under, alpha(base, 51)), over(under, alpha(second, 41))}; // its strongest stops: the line holds still as it drifts
+        waveBase = alpha(base, 51), waveSecond = alpha(second, 41);
+    }
+    // Elis stands alone at a group card's size, so its edges and the gap under it match the cards below
+    const qreal pad = assistant ? Sidebar::groupPadding : 0;
+    const QRectF fill = r.adjusted(-pad, -pad, pad, pad);
+    if (selected) {
+        // the group's tint, else the row's own, else the accent; dimmer while the window is in the background
+        const QColor c = band.isValid() ? band : tint.isValid() ? tint : pal.color(QPalette::Highlight);
+        const bool key = m_sidebar->isActiveWindow();
+        p->setPen(QPen(faded(c, key ? 0.55 : 0.35), 1));
+        p->setBrush(faded(c, key ? 0.20 : 0.12));
+        under = over(under, faded(c, key ? 0.20 : 0.12));
+        p->drawPath(shape(fill.adjusted(0.5, 0.5, -0.5, -0.5), assistant ? 10.5 : 7.5));
+    } else if (opt.state & QStyle::State_MouseOver) {
+        p->setPen(Qt::NoPen);
+        p->setBrush(faded(text, 0.07));
+        under = over(under, faded(text, 0.07));
+        p->drawPath(shape(fill, assistant ? 10.5 : 8));
+    }
+
+    QList<QColor> unders{under};
+    if (filled.isValid())
+        unders << over(under, filled);
+    if (waveBase.isValid()) {
+        QList<QColor> waved; // the line holds still as the wave drifts
+        for (const QColor &u : std::as_const(unders))
+            waved << over(u, waveBase) << over(u, waveSecond);
+        unders = waved;
     }
 
     qreal x = r.left() + chevronX;
@@ -795,9 +818,29 @@ void Sidebar::rebuild()
             info += span.text + QChar(span.bold | span.italic << 1 | span.code << 2 | span.dim << 3) + span.color + QChar(0);
         item->setData(0, Info, showsInfo ? info : QString());
         item->setData(0, Split, !s.hasSplit ? QString() : s.splitAxis == QLatin1String("horizontal") ? QStringLiteral("splitH") : QStringLiteral("split"));
+        // ElisCore decides the fill and the wave once a progress shows; without one the wave is the active status's
+        bool wave = s.status == QLatin1String("active");
+        QVariant fill, fillColor;
+        if (const QJsonObject shown = s.controlProgress.isEmpty() ? s.terminalProgress : s.controlProgress; !shown.isEmpty()) {
+            QJsonObject request{{"progress", shown}, {"status", s.status}, {"active", statusColor(m_store.settings, QStringLiteral("active")).name()}};
+            if (const QColor c = tintColor(s.tint.color); c.isValid())
+                request.insert("sessionTint", c.name());
+            if (const QColor c = tintColor(m_store.workspaceOf(s.id)->tint.color); c.isValid())
+                request.insert("workspaceTint", c.name());
+            const QJsonObject row = Store::bridge(elis_progress_row, request);
+            wave = row.value("wave").toBool(wave);
+            if (const QJsonObject f = row.value("fill").toObject(); !f.isEmpty()) {
+                QColor c(f.value("color").toString());
+                c.setAlphaF(f.value("alpha").toDouble());
+                fill = f.value("fraction").toDouble(), fillColor = c;
+            }
+        }
+        item->setData(0, Wave, wave);
+        item->setData(0, ProgressFill, fill);
+        item->setData(0, ProgressColor, fillColor);
         item->setToolTip(0, s.title.isEmpty() ? s.cwd : s.title + QLatin1Char('\n') + s.cwd);
         item->setFlags(Qt::ItemIsEnabled | Qt::ItemIsSelectable | Qt::ItemIsEditable | Qt::ItemIsDragEnabled);
-        animating |= s.blink || s.status == QLatin1String("active");
+        animating |= s.blink || wave;
         if (s.id == m_store.selected)
             setCurrentItem(item, 0, QItemSelectionModel::NoUpdate);
         item->setSelected(s.id == m_store.selected || keepSelected.contains(s.id));

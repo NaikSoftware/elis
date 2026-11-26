@@ -2285,6 +2285,36 @@ private Q_SLOTS:
         QCOMPARE(tree->topLevelItem(1)->data(0, SidebarRole::TintColor).toString(), QStringLiteral("red"));
     }
 
+    void aProgressRowCarriesTheFillRoles()
+    {
+        Store store;
+        MainWindow w(store, dir.filePath("progressrow.json"));
+        w.restore({});
+        const QString a = store.addSession(store.addWorkspace("w"), {}, {});
+        store.select(a);
+        store.setTint(a, "#336699");
+        w.show();
+        auto *tree = w.findChild<Sidebar *>();
+        auto row = [&] { return tree->topLevelItem(1)->child(0); };
+        QVERIFY(!row()->data(0, SidebarRole::ProgressFill).isValid());
+        store.setControlProgress(a, QJsonObject{{"percent", 50}});
+        QCOMPARE(row()->data(0, SidebarRole::ProgressFill).toDouble(), 0.5);
+        const QColor color = row()->data(0, SidebarRole::ProgressColor).value<QColor>();
+        QCOMPARE(color.name(), QStringLiteral("#336699"));
+        QCOMPARE(color.alpha(), qRound(0.16 * 255));
+        QVERIFY(!row()->data(0, SidebarRole::Wave).toBool());
+        store.setStatus(a, "blocked");
+        QVERIFY(!row()->data(0, SidebarRole::ProgressFill).isValid());
+        QVERIFY(!row()->data(0, SidebarRole::Wave).toBool());
+        store.setStatus(a, "active");
+        store.setControlProgress(a, QJsonObject{{"indeterminate", true}});
+        QVERIFY(!row()->data(0, SidebarRole::ProgressFill).isValid());
+        QVERIFY(row()->data(0, SidebarRole::Wave).toBool());
+        store.setStatus(a, "completed");
+        store.setTerminalProgress(a, "p1", {{"update", "set"}, {"progress", QJsonObject{{"indeterminate", true}}}});
+        QVERIFY(row()->data(0, SidebarRole::Wave).toBool()); // indeterminate waves without an agent status
+    }
+
     void tintMenuListsTheMacPaletteAndAHexAsCustom()
     {
         Store store;
@@ -2430,7 +2460,7 @@ private Q_SLOTS:
             };
             const QColor active = statusColor(Settings{}, QStringLiteral("active"));
             for (const TintSwatch &t : Store::tintPalette()) {
-                const QColor tint(dark ? t.dark : t.light), band = over(window, tint, 0.10);
+                const QColor tint(dark ? t.dark : t.light), band = over(window, tint, 0.06);
                 // the info line's backgrounds: banded, row-tinted, hovered, selected, and both drifting active stops
                 const QList<QColor> unders{band, over(band, tint, 0.09), over(band, text, 0.07), over(over(band, tint, 0.09), tint, 0.20),
                                            over(band, tint, 0.20), over(band, active, 0.20), over(band, tint, 41 / 255.0)};

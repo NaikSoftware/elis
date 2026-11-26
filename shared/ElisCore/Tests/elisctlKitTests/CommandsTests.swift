@@ -621,6 +621,11 @@ struct CommandsTests {
         #expect(validationMessage(["session", "text", "--pane", "other"]) == "--pane must be left, right, or scratch")
     }
 
+    @Test func sessionProgressRequest() throws {
+        let req = try request(["session", "progress", "3/7", "--target", "a"])
+        #expect(req == ControlRequest(cmd: .sessionProgress, target: "a", args: ControlArgs(progress: "3/7")))
+    }
+
     @Test func sessionStatusWithBlink() throws {
         let req = try request(["session", "status", "active", "--blink"])
         #expect(req.cmd == .sessionStatus)
@@ -651,6 +656,12 @@ struct CommandsTests {
         let req = try request(["session", "status", "active", "--blink", "--if-idle"])
         #expect(req == ControlRequest(cmd: .sessionStatus, target: "active",
                                       args: ControlArgs(status: "active", blink: true, ifIdle: true)))
+    }
+
+    @Test func sessionStatusWithCwd() throws {
+        let req = try request(["session", "status", "active", "--cwd", "/repo/wt"])
+        #expect(req == ControlRequest(cmd: .sessionStatus, target: "active",
+                                      args: ControlArgs(cwd: "/repo/wt", status: "active")))
     }
 
     @Test func sessionStatusWithSound() throws {

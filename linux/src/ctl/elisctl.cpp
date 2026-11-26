@@ -71,6 +71,7 @@ static const char *usage = R"(usage: elisctl <command> [args] [--target T] [--so
   session type <text> | --stdin [--pane left|right]
   session text [--all | --lines N] [--pane left|right]   the visible screen; --all adds the scrollback;
                                         --lines: the last N non-blank rows of screen + scrollback
+  session upload --name NAME --size BYTES [--target T]   reserve a path and write stdin there
   session transcript [--pane left|right] [--pane-id ID] [--after N | --before N] [--transcript ID] [--max-bytes N]
                                         a page of the Claude Code conversation the pane runs; pass next as --after
                                         for what was appended, start as --before for older items
@@ -80,6 +81,7 @@ static const char *usage = R"(usage: elisctl <command> [args] [--target T] [--so
   session search [needle] [--next | --prev | --close]   Konsole's search bar; prints the match count
   surface zoom [show|hide|toggle] [--target active|surface:<session>:left|right]
   session status <idle|active|completed|blocked> [--auto-reset] [--blink] [--if-idle]
+  session progress <N/M|N%|indeterminate|clear>   fill the row; a status change into completed or idle clears it
   session go --to next|prev|first|last|next-attention|prev-attention
   sidebar [show|hide|toggle]
   sidebar mode [tree|flagged|toggle]
@@ -497,6 +499,10 @@ static QString eventLine(const QJsonObject &e)
                 line += QStringLiteral(" %1=%2").arg(QLatin1String(k), p.value(QLatin1String(k)).toString());
         if (p.value("blink").toBool())
             line += QStringLiteral(" blink");
+    } else if (kind == QLatin1String("progress")) {
+        line += QLatin1Char(' ') + p.value("progress").toString(QStringLiteral("cleared"));
+        if (p.contains("source"))
+            line += QStringLiteral(" source=") + p.value("source").toString();
     } else if (kind == QLatin1String("notify")) {
         line += QStringLiteral(" %1: %2").arg(p.value("title").toString(), p.value("body").toString());
     } else if (kind == QLatin1String("session.created") && p.contains("parent")) {
@@ -563,8 +569,9 @@ int main(int argc, char **argv)
 {
     QCoreApplication app(argc, argv);
     const bool attach = argc >= 3 && std::strcmp(argv[1], "session") == 0 && std::strcmp(argv[2], "attach") == 0;
+    const bool upload = argc >= 3 && std::strcmp(argv[1], "session") == 0 && std::strcmp(argv[2], "upload") == 0;
     const bool phone = argc >= 2 && std::strcmp(argv[1], "phone") == 0;
-    if (attach || phone || (argc >= 2 && std::strcmp(argv[1], "mobile") == 0)) {
+    if (attach || upload || phone || (argc >= 2 && std::strcmp(argv[1], "mobile") == 0)) {
         // the Swift elisctl owns attach, mobile and phone (the Mac's parsing, output and `link --qr`); both sides get
         // the state dir explicitly (paths.h and ControlResolve differ)
         const QString dir = QCoreApplication::applicationDirPath();
@@ -583,7 +590,7 @@ int main(int argc, char **argv)
             execArgs.push_back(argv[i]);
         }
         // only the commands that reach the app take --socket; mobile reset touches the state dir alone
-        if (!hasSocket && (attach || (argc >= 3 && (phone || std::strcmp(argv[2], "serve") == 0)))) {
+        if (!hasSocket && (attach || upload || (argc >= 3 && (phone || std::strcmp(argv[2], "serve") == 0)))) {
             execArgs.push_back(const_cast<char *>("--socket"));
             execArgs.push_back(const_cast<char *>(sock.constData()));
         }
@@ -731,6 +738,8 @@ int main(int argc, char **argv)
         args.insert("name", arg);
     if (cmd == QLatin1String("session.status"))
         args.insert("status", arg);
+    if (cmd == QLatin1String("session.progress"))
+        args.insert("progress", arg);
     if (cmd.endsWith(QLatin1String(".tint"))) {
         args.insert("mode", arg == QLatin1String("clear") ? QStringLiteral("clear") : QStringLiteral("set"));
         if (arg != QLatin1String("clear"))

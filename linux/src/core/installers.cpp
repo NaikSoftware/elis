@@ -117,7 +117,8 @@ static bool mergeClaude(const QString &home, const QString &pkg, QString *error)
         root = doc.object();
     }
     static const QList<std::tuple<const char *, const char *, const char *>> wanted{
-        {"UserPromptSubmit", nullptr, "active --blink"}, {"PostToolUse", nullptr, "active --blink"}, {"Stop", nullptr, "completed --auto-reset"},
+        {"UserPromptSubmit", nullptr, "active --blink"}, {"PostToolUse", nullptr, "active --blink"},
+        {"PostToolUse", "TodoWrite|TaskCreate|TaskUpdate", "progress"}, {"Stop", nullptr, "completed --auto-reset"},
         {"PermissionRequest", nullptr, "blocked"},       {"Notification", "permission_prompt", "blocked"}};
     if (root.contains("hooks") && !root.value("hooks").isObject())
         return false;
@@ -151,7 +152,8 @@ static bool mergeClaude(const QString &home, const QString &pkg, QString *error)
                     h.insert("command", c);
                     list[j] = h;
                 }
-                present |= c.contains(adapter) || c.contains(wrapper);
+                // an event's entries are told apart by matcher
+                present |= (c.contains(adapter) || c.contains(wrapper)) && entry.value("matcher").toString() == QLatin1String(matcher);
             }
             entry.insert("hooks", list);
             entries[i] = entry;

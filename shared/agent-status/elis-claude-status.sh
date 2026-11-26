@@ -16,7 +16,7 @@
 #
 # It fails OPEN (reports) whenever the chain is unreadable or severed, e.g. a detached worker whose
 # spawner already exited: a missed guard is the behavior without this adapter, while a false silence
-# is a bug with no symptom. The argv reaches the shared wrapper unchanged except for the two payload
+# is a bug with no symptom. The argv reaches the shared wrapper unchanged except for the payload
 # rewrites at the end.
 set -u
 
@@ -141,6 +141,44 @@ running_teammate() {
 # Each agent's SubagentStart marks it busy and its SubagentStop (fired whenever a teammate goes idle) clears it.
 safe_id() { case "$1" in '' | . | .. | */*) return 1 ;; esac; }
 
+# TodoWrite carries the whole plan; TaskCreate/TaskUpdate carry one task, so the plan is read from disk.
+if [ "${1:-}" = progress ]; then
+  sid=$(field session_id)
+  safe_id "$sid" && [ -z "$(field agent_id)" ] || exit 0
+  finished=0
+  if [ "$(field tool_name)" = TodoWrite ]; then
+    total=$(field tool_input.todos)
+    case "$total" in '' | *[!0-9]*) exit 0 ;; esac
+    i=0
+    while [ "$i" -lt "$total" ]; do
+      [ "$(field "tool_input.todos.$i.status")" = completed ] && finished=$((finished + 1))
+      i=$((i + 1))
+    done
+  else
+    config=${CLAUDE_CONFIG_DIR:-${HOME:-}/.claude}
+    tasks=$config/tasks/$sid
+    # an agent team keeps the lead's list under the team's name
+    for team in "$config"/teams/*/config.json; do
+      grep -q "\"leadSessionId\"[[:space:]]*:[[:space:]]*\"$sid\"" "$team" 2>/dev/null || continue
+      team=${team%/config.json}
+      team=${team##*/}
+      safe_id "$team" && ls "$config/tasks/$team"/*.json >/dev/null 2>&1 && tasks=$config/tasks/$team
+      break
+    done
+    total=0
+    for f in "$tasks"/*.json; do
+      [ -f "$f" ] || continue
+      total=$((total + 1))
+      grep -q '"status"[[:space:]]*:[[:space:]]*"completed"' "$f" 2>/dev/null && finished=$((finished + 1))
+    done
+    # a task tool always leaves a file, so none means the wrong directory (a teammate under the lead's id)
+    [ "$total" -gt 0 ] || exit 0
+  fi
+  value=clear
+  [ "$finished" -lt "$total" ] && value=$finished/$total
+  exec "$status_wrapper" progress "$value"
+fi
+
 if [ -n "$payload" ]; then
   event=$(field hook_event_name)
   sid=$(field session_id)
@@ -150,7 +188,11 @@ if [ -n "$payload" ]; then
   if safe_id "$sid" && safe_id "$aid"; then
     case "$event" in
       SubagentStart) mkdir -p "$busy_dir" 2>/dev/null && : > "$busy_dir/$aid" 2>/dev/null ;;
-      SubagentStop) rm -f "$busy_dir/$aid" ;;
+      # a fork (the away recap, the session title) sends SubagentStop with no SubagentStart, after the lead's Stop
+      SubagentStop)
+        [ -e "$busy_dir/$aid" ] || { [ "${1:-}" = active ] && exit 0; }
+        rm -f "$busy_dir/$aid"
+        ;;
     esac
   fi
   if [ -n "$aid" ]; then
@@ -165,6 +207,11 @@ if [ -n "$payload" ]; then
     elif safe_id "$sid"; then
       rm -rf "$busy_dir"
     fi
+  fi
+  # the lead's directory follows EnterWorktree while the pane's stays, and the CI line reads it
+  if [ -z "$aid" ]; then
+    cwd=$(field cwd)
+    case "$cwd" in /*) set -- "$@" --cwd "$cwd" ;; esac
   fi
 fi
 

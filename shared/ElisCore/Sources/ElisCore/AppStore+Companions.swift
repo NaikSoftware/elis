@@ -290,6 +290,7 @@ extension AppStore {
         session.teardownPaneOverlay(.left)
         session.paneActivity[.left] = nil
         session.paneActivity[.right] = nil
+        session.paneAgentCwd.removeAll()
         if session.agentIndicator.status != .idle, session.agentIndicator.statusPane != .scratch {
             showRemainingActivity(of: session)
         }

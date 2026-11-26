@@ -13,8 +13,16 @@ struct ServerCommandPolicyTests {
         #expect(ServerCommandPolicy.refusal(command) == nil)
     }
 
+    @Test func sessionProgressIsServed() {
+        #expect(ServerCommandPolicy.refusal(.sessionProgress) == nil)
+    }
+
     @Test func transcriptIsServed() {
         #expect(ServerCommandPolicy.refusal(.sessionTranscript) == nil)
+    }
+
+    @Test func uploadIsServed() {
+        #expect(ServerCommandPolicy.refusal(.sessionUpload) == nil)
     }
 
     @Test func aWindowCommandIsRefusedWithTheWindowReason() {

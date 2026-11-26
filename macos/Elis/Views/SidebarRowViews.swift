@@ -126,11 +126,13 @@ class SidebarCellView: NSTableCellView {
         repeatButtonGapConstraint?.constant = visible ? 6 : 0
     }
 
-    /// Reveals or collapses the session row's close button. It shows only while the row has no badge, status
-    /// glyph or companion marker, so it never covers one; configure resets it hidden.
+    /// Reveals or collapses the session row's close button, which takes the badge and status glyph's slot while it
+    /// shows. An active row keeps its glyph and shows none; configure resets it hidden.
     func setCloseButtonVisible(_ visible: Bool) {
         guard let closeButton, let closeButtonWidthConstraint else { return }
-        let show = visible && badge.count == 0 && !statusIcon.showsGlyph && companionMarker?.isHidden != false
+        let show = visible && !statusIcon.isActive
+        badge.hoverHidden = show
+        statusIcon.hoverHidden = show
         closeButton.isHidden = !show
         closeButtonWidthConstraint.constant = show ? Self.addButtonWidth : 0
     }
@@ -228,7 +230,7 @@ final class BadgeView: NSView {
         }
     }
 
-    /// hoverHidden collapses a nonzero badge while the workspace row's hover buttons take its slot.
+    /// hoverHidden collapses a nonzero badge while a row's hover buttons take its slot.
     var hoverHidden = false {
         didSet {
             guard hoverHidden != oldValue else { return }
@@ -331,6 +333,7 @@ final class StatusIconView: NSImageView {
     }
 
     private var indicator = AgentIndicator()
+    var isActive: Bool { indicator.status == .active }
 
     // Core Animation can drop a layer's animations while the view is out of a window, so re-add on return.
     override func viewDidMoveToWindow() {
@@ -344,7 +347,7 @@ final class StatusIconView: NSImageView {
         pulse(Self.fadeKey, indicator.status == .active && !indicator.blink && motion, to: 0.25, duration: 1.4)
     }
 
-    /// hoverHidden collapses a shown glyph while the workspace row's hover buttons take its slot.
+    /// hoverHidden collapses a shown glyph while a row's hover buttons take its slot.
     var hoverHidden = false {
         didSet { applyVisibility() }
     }
@@ -478,6 +481,7 @@ class SidebarRowView: NSTableRowView {
     override func prepareForReuse() {
         super.prepareForReuse()
         isHovered = false
+        setProgressFill(nil)
     }
 
     /// waveLayer clips the drifting gradient to the row rect; nil while the row shows no wave.
@@ -506,7 +510,7 @@ class SidebarRowView: NSTableRowView {
         if waveLayer == nil {
             clip.masksToBounds = true
             clip.addSublayer(CAGradientLayer())
-            layer?.insertSublayer(clip, at: 0)
+            if let progressLayer { layer?.insertSublayer(clip, above: progressLayer) } else { layer?.insertSublayer(clip, at: 0) }
             waveLayer = clip
         }
         let gradient = clip.sublayers?.first as? CAGradientLayer
@@ -520,9 +524,56 @@ class SidebarRowView: NSTableRowView {
         layoutWave()
     }
 
+    /// progressLayer clips the progress wash to the row rect, directly under the wave; nil while there is no fill.
+    private(set) var progressLayer: CALayer?
+    private(set) var progressFill: SidebarProgressFill?
+
+    /// setProgressFill shows a determinate progress as a flat wash across `fraction` of the row, or removes it for nil.
+    /// A fraction change on a shown fill slides over 0.2 s unless Reduce Motion is on.
+    func setProgressFill(_ fill: SidebarProgressFill?) {
+        guard fill != progressFill else { return }
+        let animate = progressFill != nil && fill?.colorHex == progressFill?.colorHex
+            && !NSWorkspace.shared.accessibilityDisplayShouldReduceMotion
+        progressFill = fill
+        defer { refreshInfoLine() }
+        guard let fill, let color = NSColor(elisHex: fill.colorHex) else {
+            progressLayer?.removeFromSuperlayer()
+            progressLayer = nil
+            return
+        }
+        wantsLayer = true
+        let clip = progressLayer ?? CALayer()
+        if progressLayer == nil {
+            clip.masksToBounds = true
+            let wash = CALayer()
+            wash.anchorPoint = .zero
+            clip.addSublayer(wash)
+            if let waveLayer { layer?.insertSublayer(clip, below: waveLayer) } else { layer?.insertSublayer(clip, at: 0) }
+            progressLayer = clip
+        }
+        clip.sublayers?.first?.backgroundColor = color.withAlphaComponent(SidebarProgressFill.alpha).cgColor
+        layoutProgress(animated: animate)
+    }
+
+    private func layoutProgress(animated: Bool = false) {
+        guard let clip = progressLayer, let wash = clip.sublayers?.first, let fill = progressFill else { return }
+        CATransaction.begin()
+        CATransaction.setDisableActions(true)
+        clipToRow(clip)
+        CATransaction.commit()
+        let width = clip.bounds.width * fill.fraction
+        CATransaction.begin()
+        CATransaction.setDisableActions(!animated)
+        CATransaction.setAnimationDuration(0.2)
+        wash.bounds = CGRect(x: 0, y: 0, width: width, height: clip.bounds.height)
+        wash.position = .zero
+        CATransaction.commit()
+    }
+
     override func layout() {
         super.layout()
         alignToContent()
+        layoutProgress()
         layoutWave()
     }
 
@@ -554,15 +605,7 @@ class SidebarRowView: NSTableRowView {
         let period = bounds.width * 2
         CATransaction.begin()
         CATransaction.setDisableActions(true)
-        // square where the group continues; at the group's outer ends it follows the band's inner radius
-        clip.frame = rowRect
-        let top: CACornerMask = isFlipped ? [.layerMinXMinYCorner, .layerMaxXMinYCorner] : [.layerMinXMaxYCorner, .layerMaxXMaxYCorner]
-        let bottom: CACornerMask = isFlipped ? [.layerMinXMaxYCorner, .layerMaxXMaxYCorner] : [.layerMinXMinYCorner, .layerMaxXMinYCorner]
-        var corners: CACornerMask = []
-        if groupEdge == .first || groupEdge == .single { corners.formUnion(top) }
-        if groupEdge == .last || groupEdge == .single { corners.formUnion(bottom) }
-        clip.maskedCorners = corners
-        clip.cornerRadius = corners.isEmpty ? 0 : Self.bandRadius - Self.groupPadding
+        clipToRow(clip)
         gradient.frame = CGRect(x: -clip.frame.minX, y: 0, width: period * 2, height: clip.bounds.height)
         CATransaction.commit()
         guard period != wavePeriod || (!waveStill && gradient.animation(forKey: Self.waveKey) == nil) else { return }
@@ -577,9 +620,24 @@ class SidebarRowView: NSTableRowView {
         gradient.add(drift, forKey: Self.waveKey)
     }
 
+    /// clipToRow frames `clip` on the row rect: square where the group continues, and at the group's outer ends
+    /// following the band's inner radius.
+    private func clipToRow(_ clip: CALayer) {
+        clip.frame = rowRect
+        let top: CACornerMask = isFlipped ? [.layerMinXMinYCorner, .layerMaxXMinYCorner] : [.layerMinXMaxYCorner, .layerMaxXMaxYCorner]
+        let bottom: CACornerMask = isFlipped ? [.layerMinXMaxYCorner, .layerMaxXMaxYCorner] : [.layerMinXMinYCorner, .layerMaxXMinYCorner]
+        var corners: CACornerMask = []
+        if groupEdge == .first || groupEdge == .single { corners.formUnion(top) }
+        if groupEdge == .last || groupEdge == .single { corners.formUnion(bottom) }
+        clip.maskedCorners = corners
+        clip.cornerRadius = corners.isEmpty ? 0 : Self.bandRadius - Self.groupPadding
+    }
+
     /// Half the gap between workspace groups, and the group's padding around its rows.
     static let groupGap: CGFloat = 4
     static let groupPadding: CGFloat = 3
+    /// Kept faint so the tinted selection pill inside the group reads as the accent, not as another card.
+    static let bandFillAlpha: CGFloat = 0.06, bandStrokeAlpha: CGFloat = 0.09
 
     /// bandRect is the group's frame in this row: `groupPadding` around the row rect, and `groupGap` short of
     /// the row's edge at the group's outer ends.
@@ -639,7 +697,7 @@ class SidebarRowView: NSTableRowView {
     override func drawBackground(in dirtyRect: NSRect) {
         super.drawBackground(in: dirtyRect)
         if let band {
-            fillBand(band.color.withAlphaComponent(0.10), edge: band.edge, stroke: band.color.withAlphaComponent(0.16))
+            fillBand(band.color.withAlphaComponent(Self.bandFillAlpha), edge: band.edge, stroke: band.color.withAlphaComponent(Self.bandStrokeAlpha))
         }
         let rect = rowRect, radius = Self.rowRadius
         if let rowWash {
@@ -663,7 +721,7 @@ class SidebarRowView: NSTableRowView {
             // the outline is clear over the terminal background; translucency is ignored
             var stack = (app.terminalBackgroundColor ?? .windowBackgroundColor).withAlphaComponent(1).rgba
             func over(_ color: NSColor) { stack = RGBA.composite(color.rgba, over: stack) }
-            if let band { over(band.color.withAlphaComponent(0.10)) }
+            if let band { over(band.color.withAlphaComponent(Self.bandFillAlpha)) }
             if let rowWash { over(rowWash) }
             if isSelected {
                 over(selectionColor.withAlphaComponent(isEmphasized ? 0.20 : 0.12))
@@ -671,9 +729,14 @@ class SidebarRowView: NSTableRowView {
                 over((app.terminalForegroundColor ?? .labelColor).withAlphaComponent(0.07))
             }
             backdrops = [stack]
+            // the line may sit on the fill or past its end
+            if let progressFill, let color = NSColor(elisHex: progressFill.colorHex) {
+                backdrops.append(RGBA.composite(color.withAlphaComponent(SidebarProgressFill.alpha).rgba, over: stack))
+            }
             guard let wave, let base = NSColor(elisHex: wave.base), let second = NSColor(elisHex: wave.second) else { return }
-            backdrops = [RGBA.composite(base.withAlphaComponent(0.20).rgba, over: stack),
-                         RGBA.composite(second.withAlphaComponent(0.16).rgba, over: stack)]
+            backdrops = backdrops.flatMap {
+                [RGBA.composite(base.withAlphaComponent(0.20).rgba, over: $0), RGBA.composite(second.withAlphaComponent(0.16).rgba, over: $0)]
+            }
         }
         return backdrops
     }

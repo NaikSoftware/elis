@@ -12,6 +12,11 @@ char *elis_transcript_arguments(const char *argsJSON);
 // One session.transcript page as the Mac's whole reply. Blocks on file reads, and traps on the process main thread.
 // agent is "claude" or "antigravity"; dir and sessionID are that agent's directory and conversation.
 char *elis_transcript_read(const char *argsJSON, const char *agent, const char *dir, const char *sessionID, const char *pane);
+// session.upload for a local row: {"ok":true,"result":{"upload":{"path":…}}} with a reserved file under
+// <stateDir>/uploads/<sessionID>/, or the Mac's refusal. argsJSON is the request's args ({"name","size"}).
+char *elis_upload_reserve(const char *stateDir, const char *sessionID, const char *argsJSON);
+// Removes upload folders no id in keepJSON (an array of session ids) names, and files older than a week; "null" keeps every folder.
+void elis_upload_sweep(const char *stateDir, const char *keepJSON);
 // sidebar.density's mode against the current density: {"ok":true,"density":"default|compact"} or the Mac's refusal.
 // Input {"mode"?,"current"}; an absent mode toggles.
 char *elis_sidebar_density(const char *json);
@@ -106,6 +111,10 @@ char *elis_page_outcome_register(void); // {"pageID"}
 char *elis_page_outcome_submit(const char *pageID, const char *value); // {"ok"}: false when it was not pending
 void elis_page_outcome_dismiss(const char *pageID);
 char *elis_page_outcome_result(const char *pageID);
+// session progress (Sources/ElisBridge/Progress.swift); every result is JSON freed with elis_free
+char *elis_progress_parse(const char *text);    // 3/7, 40%, indeterminate, clear: {"ok":true,"progress":{…}|null} or {"ok":false,"error"}
+char *elis_progress_terminal(const char *body); // OSC 9 body "4;1;40": {"update":"clear"|"set","progress"?} or null
+char *elis_progress_row(const char *json);      // {"progress"?,"status","sessionTint"?,"workspaceTint"?,"active"}: {"fill":{color,fraction,alpha}|null,"wave":bool}
 
 #ifdef __cplusplus
 }

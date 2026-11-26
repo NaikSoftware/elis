@@ -36,10 +36,13 @@ extension Session {
             when it resolves; falls back to --pane otherwise.
             """)
         var paneID: String?
+        @Option(name: .long, help: "The reporting agent's absolute working directory; the CI line follows it over the pane's.")
+        var cwd: String?
         @OptionGroup var target: TargetOptions
         @OptionGroup var options: ClientOptions
 
         func validate() throws {
+            if let cwd, !cwd.hasPrefix("/") { throw ValidationError("cwd must be an absolute path") }
             if let color, !WatermarkConfig.isValidColorHex(color) {
                 throw ValidationError("color must be a #rrggbb hex value")
             }
@@ -51,11 +54,25 @@ extension Session {
 
         func makeRequest() throws -> ControlRequest {
             ControlRequest(cmd: .sessionStatus, target: target.target,
-                           args: options.withWindow(ControlArgs(pane: pane, paneID: paneID, status: state,
+                           args: options.withWindow(ControlArgs(cwd: cwd, pane: pane, paneID: paneID, status: state,
                                                                  blink: blink ? true : nil,
                                                                  autoReset: autoReset ? true : nil,
                                                                  ifIdle: ifIdle ? true : nil, sound: sound,
                                                                  color: color, shape: shape)))
+        }
+    }
+
+    struct Progress: RequestCommand {
+        static let configuration = CommandConfiguration(
+            abstract: "Fill a session row with progress: N/M, N%, indeterminate, or clear.")
+        @Argument(help: "3/7, 40%, indeterminate, or clear.") var value: String
+        @OptionGroup var target: TargetOptions
+        @OptionGroup var options: ClientOptions
+        @OptionGroup var operation: OperationOptions
+
+        func makeRequest() throws -> ControlRequest {
+            operation.stamp(ControlRequest(cmd: .sessionProgress, target: target.target,
+                                           args: options.withWindow(ControlArgs(progress: value))))
         }
     }
 

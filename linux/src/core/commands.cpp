@@ -7,6 +7,7 @@
 #include "paths.h"
 #include "store.h"
 #include "transcript.h"
+#include "upload.h"
 #include "zmx.h"
 
 #include <QDateTime>
@@ -101,6 +102,14 @@ static QJsonObject sessionTranscript(Store &store, Terminals &terminals, const Q
         return transcriptPage(args, agent, dir, conversation, pane);
     };
     return {{"deferred", true}};
+}
+
+// session.upload: ElisCore checks the arguments and reserves the file; Linux has no remote or page rows
+static QJsonObject sessionUpload(Store &store, const QString &target, const QJsonObject &args)
+{
+    QString error;
+    const QString id = store.resolveSession(target, &error);
+    return id.isEmpty() ? fail(error) : uploadReserve(stateDir(), id, args);
 }
 
 // workspace.go: the visible workspaces in order, wrapping; lands on the workspace's first session (or selects the empty workspace)
@@ -770,6 +779,8 @@ QJsonObject moreCommands(Store &store, Terminals &terminals, const QString &cmd,
     }
     if (cmd == QLatin1String("session.transcript"))
         return sessionTranscript(store, terminals, target, args);
+    if (cmd == QLatin1String("session.upload"))
+        return sessionUpload(store, target, args);
     if (cmd == QLatin1String("session.attach"))
         return sessionAttach(store, terminals, target, args);
     static const QStringList sessionCmds{"session.context", "session.collapse", "session.expand", "session.resize", "session.grid", "session.scroll", "session.text", "session.focus",

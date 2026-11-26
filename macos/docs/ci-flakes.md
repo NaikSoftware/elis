@@ -215,6 +215,23 @@ Each entry separates a demonstrated cause from one that is only consistent with 
   `PhoneLinkPresenter.tiedToInput` wait again after its trap kills the child, which `ForwardChildTests` hit the
   same way.
 
+### Linux `PhoneLinkForwardTests.aDeadServerRefusesTheChannelAndKeepsThePage`
+
+- **Symptom.** Fails at `PhoneLinkForwardTests.swift:87` with `OPENED` and error nil: the "unused" port answered.
+- **Runs.** Local, Linux: 1 of 20 isolated runs on base `fff42903`, 2 of 12 on the NAI-24 branch.
+- **Cause, consistent with the evidence.** Another test running in parallel binds the port this one treats as
+  unused. Not confirmed.
+- **Fix.** None yet.
+
+### Linux `elis-server` test process aborts in `PresentationMailRelay.schedule()`
+
+- **Symptom.** SIGABRT `Attempted to read an unowned reference but object ... was already destroyed` in
+  `closure #1 in ServerStreams.mailRelay.getter`, called from `PresentationMailRelay.schedule()`
+  (`shared/ElisCore/Sources/ElisCore/PresentationMailRelay.swift:33-37`).
+- **Runs.** Once in a full `swift test` in `server/` on Linux (NAI-24 branch); the rerun passed, 454 of 454.
+- **Cause.** Not investigated.
+- **Fix.** None yet.
+
 ### macOS watchdog hang with no test started
 
 - **Symptom.** The watchdog fires while the log's last line is a compile step.

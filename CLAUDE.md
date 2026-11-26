@@ -5,7 +5,7 @@ Read `site/docs.html` for product behavior and `ARCHITECTURE.md` for modules, su
 C-boundary concurrency before changing the bridge.
 `README.md` is the product synopsis, not the reference.
 The macOS app lives in `macos/`: run every command there, and read every path below relative to it,
-except the repository-root `README.md`, `CONTRIBUTING.md`, `CLAUDE.md`, `.claude/`, `.github/`,
+except the repository-root `README.md`, `CONTRIBUTING.md`, `CLAUDE.md`, `PARITY.md`, `.claude/`, `.github/`,
 `.claude-plugin/`, `.agents/`, `plugins/`, `cookbook/`, `site/`, `tools/`, `shared/`, `server/`, `docs/screenshots/` and `docs/superpowers/`.
 `linux/` holds the Qt6/KDE app and `mobile/` the Flutter Android app; each has its own README.
 `shared/` holds what they share: the `ElisCore` package, the agent-status scripts and the phone link golden vectors.
@@ -330,6 +330,10 @@ except the repository-root `README.md`, `CONTRIBUTING.md`, `CLAUDE.md`, `.claude
   `plugins/elis/skills/elis/`, the sole source for installed Claude/Codex copies.
   A capability agents should discover unprompted needs a trigger in SKILL.md's `description` and a section
   or pointer there; a reference.md entry alone is insufficient for discovery.
+- `PARITY.md` owns the feature and behavior differences between the macOS and Linux desktop apps.
+  A change that adds, removes or alters a user-visible feature or behavior in `macos/` or `linux/` updates it in
+  the same change: a new Mac feature lands in Mac only until Linux has it, and a port removes its line.
+  Keep `plugins/elis/skills/elis/linux.md` in agreement for CLI differences.
 - `site/docs.html` is the canonical user guide and `site/commands.html` the canonical command reference.
   `README.md` is the product synopsis: pitch, install, the model, and the control-API demo.
   `site/llms.txt` is the crawler-oriented summary and discovery index.

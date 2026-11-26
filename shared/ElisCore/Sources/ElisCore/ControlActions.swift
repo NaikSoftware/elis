@@ -78,6 +78,8 @@ public protocol ControlActions {
     /// Sets or clears a workspace row's own tint.
     func setWorkspaceTint(_ target: String?, window: String?, update: ControlTintUpdate) -> ControlResponse
     func markSessionSeen(_ target: String?, window: String?) -> ControlResponse
+    /// Sets a session's control progress; nil clears it. The dispatcher has parsed the value.
+    func setSessionProgress(_ target: String?, window: String?, progress: SessionProgress?) async -> ControlResponse
     func setSessionStatus(_ target: String?, window: String?, update: ControlSessionStatusUpdate) async -> ControlResponse
     /// Write a pane's PERSISTED restore-command override (consumed on the NEXT launch, never this run).
     /// The host resolves the target session and the live pane slot, then stores the tri-state value; it
@@ -237,6 +239,8 @@ public protocol ControlActions {
     func readSessionTextAsync(_ target: String?, window: String?, options: ControlSessionTextOptions) async -> ControlResponse
     /// transcriptSource names the Claude transcript the addressed pane runs, or the refusal the reply carries.
     func transcriptSource(_ target: String?, window: String?, pane: StatusPane?, paneID: String?) -> ControlTranscriptLookup
+    /// uploadDestination reserves where `session.upload`'s bytes go: `{upload: {path}}`, or `{upload: {host, session}}`.
+    func uploadDestination(_ target: String?, window: String?, name: String, size: Int) -> ControlResponse
     /// setSessionGrid gives the pane a grid apart from its view, or with nil hands it back; answers `{id, pane, columns, rows}`.
     func setSessionGrid(_ target: String?, window: String?, pane: StatusPane, grid: ControlGrid?) -> ControlResponse
     /// scrollSession wheels the pane like a mouse over it; answers `{id, pane, lines}`.

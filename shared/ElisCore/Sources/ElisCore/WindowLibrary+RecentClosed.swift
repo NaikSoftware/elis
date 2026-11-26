@@ -215,9 +215,14 @@ extension RecentClosedItem {
     /// restoresSession says the entry rebuilds session `id`: a recorded parent may sit inside an entry as a companion,
     /// since Convert to Companion nests it after the record.
     public func restoresSession(_ id: UUID) -> Bool {
+        restoredSessionIDs.contains(id)
+    }
+
+    /// restoredSessionIDs are the sessions a reopen rebuilds, with the ids they had; never the entry's own `id`.
+    public var restoredSessionIDs: [UUID] {
         switch kind {
-        case .session: session?.snapshot.id == id || session?.companions?.contains { $0.id == id } == true
-        case .workspace: workspace?.snapshot.sessions.contains { $0.id == id } == true
+        case .session: (session.map { [$0.snapshot.id] } ?? []) + (session?.companions?.map(\.id) ?? [])
+        case .workspace: workspace?.snapshot.sessions.map(\.id) ?? []
         }
     }
 }

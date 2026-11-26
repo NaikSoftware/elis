@@ -261,6 +261,8 @@ struct EventCommandsTests {
             ControlEvent(seq: 18, ts: 0, kind: .message,
                          payload: ControlEventPayload(name: "api", paneID: "tok", from: "S:Q", messageID: "m1")),
             ControlEvent(seq: 19, ts: 0, kind: .message, payload: ControlEventPayload(name: "api", paneID: "tok", messageID: "m2")),
+            ControlEvent(seq: 22, ts: 0, kind: .progress, payload: ControlEventPayload(name: "api", progress: "3/7", source: "control")),
+            ControlEvent(seq: 23, ts: 0, kind: .progress, payload: ControlEventPayload(name: "api", source: "control")),
         ]
         let human = events.map { EventFormatter.human($0, timeZone: TimeZone(secondsFromGMT: 0)!) }
         #expect(human[0] == "00:00:00 status api blocked pane=right blink")
@@ -285,6 +287,8 @@ struct EventCommandsTests {
         #expect(human[16] == "00:00:00 pane.focused api left pane-id=-")
         #expect(human[17] == "00:00:00 message api pane-id=tok from=S:Q id=m1")
         #expect(human[18] == "00:00:00 message api pane-id=tok from=- id=m2")
+        #expect(human[19] == "00:00:00 progress api 3/7 source=control")
+        #expect(human[20] == "00:00:00 progress api cleared source=control")
         let phone = [ControlEventKind.phoneConnected, .phoneDisconnected, .phoneRefused].map {
             EventFormatter.human(ControlEvent(seq: 20, ts: 0, kind: $0, payload: ControlEventPayload(ip: "10.0.0.3")),
                                  timeZone: TimeZone(secondsFromGMT: 0)!)

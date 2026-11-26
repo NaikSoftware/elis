@@ -155,7 +155,7 @@ public final class AppStore {
     @ObservationIgnored var pendingCloseRecords: [UUID: PendingCloseRecord] = [:]
     @ObservationIgnored var pendingCloseOrder: [UUID] = []
     @ObservationIgnored var pendingCloseTasks: [UUID: Task<Void, Never>] = [:]
-
+    @ObservationIgnored var terminalProgressTimeout: Duration = .seconds(15)
     @ObservationIgnored let persistence: PersistenceStore
     /// catalogOperations is the operation table of the catalog this store serves, written in every save; nil before its first operation.
     @ObservationIgnored public var catalogOperations: CatalogOperationTable?
@@ -459,7 +459,7 @@ public final class AppStore {
                                           statusColor: idle ? nil : session.agentIndicator.color,
                                           statusShape: idle ? nil : session.agentIndicator.shape?.rawValue,
                                           statusChangedAt: session.statusChangedAt?.timeIntervalSince1970, activePanes: activePanes(of: session),
-                                          background: session.backgroundWatermark,
+                                          background: session.backgroundWatermark, progress: progressNode(of: session),
                                           paneBackgrounds: session.paneBackgrounds.isEmpty ? nil : session.paneBackgrounds,
                                           unseen: session.unseenCount > 0 ? session.unseenCount : nil,
                                           fontSize: fontSize(session),

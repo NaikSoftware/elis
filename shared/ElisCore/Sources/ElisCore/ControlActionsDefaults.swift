@@ -333,6 +333,10 @@ public extension ControlActions {
         .tooOld
     }
 
+    func uploadDestination(_: String?, window _: String?, name _: String, size _: Int) -> ControlResponse {
+        ControlResponse(ok: false, error: "the Elis on this host is too old for session.upload")
+    }
+
     func sessionAttach(target _: String?, pane _: StatusPane, paneID _: String?, window _: String?) async -> ControlResponse {
         ControlResponse(ok: false, error: "session.attach is not supported by this host")
     }
@@ -390,6 +394,10 @@ public extension ControlActions {
 
     func setSessionContext(_: String?, window _: String?, context _: String?) -> ControlResponse {
         ControlResponse(ok: false, error: ControlActionsUnsupported.message("session.context"))
+    }
+
+    func setSessionProgress(_: String?, window _: String?, progress _: SessionProgress?) async -> ControlResponse {
+        ControlResponse(ok: false, error: ControlActionsUnsupported.message("session.progress"))
     }
 
     func setSessionTint(_: String?, window _: String?, update _: ControlTintUpdate) -> ControlResponse {

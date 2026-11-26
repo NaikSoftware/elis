@@ -407,6 +407,42 @@ struct ServerActionsSessionsTests {
         #expect(reply.result?.items?.map(\.text) == ["hello"])
     }
 
+    @Test func uploadReservesAPathUnderTheStateDirectory() async throws {
+        let session = try harness.session(newSession())
+
+        var args = ControlArgs()
+        args.name = "a.png"
+        args.size = 3
+        let reply = await harness.actions.serve(ControlRequest(cmd: .sessionUpload, target: session.id.uuidString, args: args))
+
+        let path = try #require(reply.result?.upload?.path)
+        #expect(reply.ok, "\(reply)")
+        #expect(path.hasPrefix(harness.scratch.state + "/uploads/" + session.id.uuidString + "/"))
+        #expect(FileManager.default.fileExists(atPath: path))
+    }
+
+    @Test func theUploadSweepKeepsListedAndRecentClosedFoldersOnly() throws {
+        let history = try ServerHarness(history: true)
+        let state = URL(fileURLWithPath: history.scratch.state)
+        let listed = try history.session(history.actions.createSession(ControlSessionCreateOptions(
+            window: nil, cwd: nil, workspace: nil, workspaceName: nil, createWorkspace: nil, command: nil, wait: nil,
+            name: nil, after: nil, before: nil, noSelect: false)))
+        let closed = try history.session(history.actions.createSession(ControlSessionCreateOptions(
+            window: nil, cwd: nil, workspace: nil, workspaceName: nil, createWorkspace: nil, command: nil, wait: nil,
+            name: nil, after: nil, before: nil, noSelect: false)))
+        #expect(history.store.softCloseSession(closed.id, grace: 60))
+        #expect(history.store.finalizePendingClose(ofSession: closed.id))
+        let unknown = UUID()
+        for id in [listed.id, closed.id, unknown] {
+            _ = try UploadStorage.reserve(stateDir: state, sessionID: id.uuidString, name: "a", now: Date())
+        }
+
+        history.actions.sweepUploads()
+
+        let left = try FileManager.default.contentsOfDirectory(atPath: state.appendingPathComponent("uploads").path)
+        #expect(Set(left) == [listed.id.uuidString, closed.id.uuidString])
+    }
+
     @Test func aLoopbackPageRowIsRefusedAtCreation() async throws {
         let anchor = try harness.session(newSession())
         let count = harness.store.workspaces.flatMap(\.sessions).count

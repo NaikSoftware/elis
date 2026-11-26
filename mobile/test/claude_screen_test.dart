@@ -68,6 +68,17 @@ void main() {
       }
     }
   });
+  test('collapsedCallGroupIsNotStreamingText', () {
+    final g = _g('working-mcp-45');
+    VtRow row(String t) => VtRow([for (final c in t.runes) VtCell(String.fromCharCode(c))]);
+    g.rows[5] = row('  item 5 label');
+    g.rows[6] = row('  ⎿  \$ flutter test 2>&1 | tail -1 (1m 23s)');
+    for (final header in ['⏺ Fixing review findings via TDD; checking', '  Fixing review findings via TDD; checking']) {
+      g.rows[4] = row(header);
+      final (a, b) = ClaudeScreen.read(g).streaming!;
+      expect((g.text(a), b), ("⏺ I'll check the project memory first.", a), reason: header);
+    }
+  });
   test('wrappedWorkingLineJoins', () {
     final s = _s('working-wrapped-45');
     expect(s.working, 'Incubating… (running PreToolUse hooks… 2/3 · 1s · ↓ 25 tokens)');

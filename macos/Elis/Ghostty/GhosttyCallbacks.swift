@@ -76,6 +76,23 @@ final class GhosttyCallbacks: @unchecked Sendable {
             let body = note.body.flatMap { String(cString: $0) } ?? ""
             DispatchQueue.main.async { NotificationManager.shared.notify(surface: view, title: title, body: body) }
             return true
+        case GHOSTTY_ACTION_PROGRESS_REPORT:
+            // OSC 9;4 from a pane or the scratch; an overlay has neither, so its report is dropped
+            guard let view = surfaceView(from: target) else { return true }
+            let report = action.action.progress_report
+            guard let update = SessionProgress.terminal(state: Int(report.state.rawValue), progress: Int(report.progress)) else {
+                return true
+            }
+            DispatchQueue.main.async {
+                guard let library = NotificationManager.shared.library else { return }
+                // the scratch has no `view.session`; its owner is the session holding it
+                let scratchOwner = view.session == nil
+                    ? library.allOpenSessions().first { ($0.scratchSurface as? GhosttySurfaceView) === view } : nil
+                guard let session = view.session ?? scratchOwner, let store = library.store(forSession: session.id) else { return }
+                let pane: StatusPane = scratchOwner != nil ? .scratch : view.isSplitPane ? .right : .left
+                store.setTerminalProgress(update, forSession: session.id, pane: pane)
+            }
+            return true
         case GHOSTTY_ACTION_SHOW_CHILD_EXITED:
             // ghostty prints its "Process exited. Press any key to close" fallback unless the host consumes
             // this action: an overlay that should vanish returns true to suppress the prompt; a wait-opt-in

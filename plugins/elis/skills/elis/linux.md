@@ -42,6 +42,7 @@ An elis-server host is not this app: SKILL.md's "Remote windows and elis-server"
   the pairing QR code and link; `mobile reset` replaces the token. `--no-bluetooth` turns Bluetooth off; stderr says
   `bluetooth: advertising` or `off (<reason>)`, as Connect a Phone…'s Bluetooth row does.
   `phone status|on|off|toggle|port|host|revoke|link` and `tree.phone` work as on the Mac.
+  Chat attachments land in `<state dir>/uploads/<session id>/` through `session upload`.
   `session attach [--pane left|right] [--claim] [--json]` attaches to a Live pane (no `origin`).
 
 ## Not supported

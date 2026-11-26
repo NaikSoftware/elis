@@ -94,7 +94,7 @@ add_custom_command(OUTPUT ${ELIS_ZMX} ${ELIS_ZMX}.BUILD
   COMMENT "Building the patched zmx" USES_TERMINAL VERBATIM)
 add_custom_target(elis-zmx ALL DEPENDS ${ELIS_ZMX}) # not `zmx`, the output's own name
 
-add_library(elis-core STATIC src/core/store.cpp src/core/control.cpp src/core/launcher.cpp src/core/keymap.cpp src/core/hooks.cpp src/core/restore.cpp src/core/commands.cpp src/core/installers.cpp src/core/zmx.cpp src/core/transcript.cpp src/core/ci.cpp src/core/assistant.cpp)
+add_library(elis-core STATIC src/core/store.cpp src/core/control.cpp src/core/launcher.cpp src/core/keymap.cpp src/core/hooks.cpp src/core/restore.cpp src/core/commands.cpp src/core/installers.cpp src/core/zmx.cpp src/core/transcript.cpp src/core/upload.cpp src/core/ci.cpp src/core/assistant.cpp)
 target_include_directories(elis-core PUBLIC src/core)
 target_link_libraries(elis-core PUBLIC Qt6::Core ElisBridge PRIVATE Qt6::Sql)
 

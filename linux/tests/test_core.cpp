@@ -463,6 +463,105 @@ private Q_SLOTS:
         QVERIFY(!call(s, t, "session.status", b, {{"status", "bogus"}, {"ifIdle", true}})["ok"].toBool());
     }
 
+    void controlWinsOverTerminal()
+    {
+        Store s;
+        const QString a = s.addSession(s.addWorkspace("w"), "a", {});
+        QSignalSpy spy(&s, &Store::progressChanged);
+        s.setTerminalProgress(a, "p1", {{"update", "set"}, {"progress", QJsonObject{{"percent", 40}}}});
+        QCOMPARE(Store::progressNode(*s.session(a)), (QJsonObject{{"value", "40%"}, {"fraction", 0.4}, {"source", "terminal"}}));
+        s.setControlProgress(a, QJsonObject{{"done", 3}, {"total", 7}});
+        QCOMPARE(Store::progressNode(*s.session(a))["source"].toString(), QStringLiteral("control"));
+        QCOMPARE(Store::progressNode(*s.session(a))["value"].toString(), QStringLiteral("3/7"));
+        s.setTerminalProgress(a, "p1", {{"update", "set"}, {"progress", QJsonObject{{"percent", 60}}}});
+        QCOMPARE(spy.size(), 2); // a terminal update under a control progress shows nothing new
+        s.setControlProgress(a, std::nullopt);
+        QCOMPARE(Store::progressNode(*s.session(a))["value"].toString(), QStringLiteral("60%"));
+    }
+
+    void completedEdgeClearsControlOnly()
+    {
+        Store s;
+        const QString a = s.addSession(s.addWorkspace("w"), "a", {});
+        s.setStatus(a, "active");
+        s.setControlProgress(a, QJsonObject{{"percent", 40}});
+        s.setTerminalProgress(a, "p1", {{"update", "set"}, {"progress", QJsonObject{{"indeterminate", true}}}});
+        s.setStatus(a, "active", false, true);
+        QVERIFY(!s.session(a)->controlProgress.isEmpty()); // a blink change is no status change
+        s.setStatus(a, "completed");
+        QVERIFY(s.session(a)->controlProgress.isEmpty());
+        QCOMPARE(Store::progressNode(*s.session(a)), (QJsonObject{{"value", "indeterminate"}, {"source", "terminal"}}));
+        s.setControlProgress(a, QJsonObject{{"percent", 40}});
+        s.setStatus(a, "blocked");
+        QVERIFY(!s.session(a)->controlProgress.isEmpty());
+        s.setStatus(a, "idle");
+        QVERIFY(s.session(a)->controlProgress.isEmpty());
+    }
+
+    void terminalClearFromTheOtherPaneIsIgnored()
+    {
+        Store s;
+        const QString a = s.addSession(s.addWorkspace("w"), "a", {});
+        s.setTerminalProgress(a, "left", {{"update", "set"}, {"progress", QJsonObject{{"percent", 40}}}});
+        s.setTerminalProgress(a, "right", {{"update", "clear"}});
+        QVERIFY(!s.session(a)->terminalProgress.isEmpty());
+        s.clearTerminalProgress(a, "left"); // its pane closed
+        QVERIFY(Store::progressNode(*s.session(a)).isEmpty());
+    }
+
+    void terminalProgressExpires()
+    {
+        Store s;
+        s.progressExpiryMs = 50;
+        const QString a = s.addSession(s.addWorkspace("w"), "a", {});
+        s.setControlProgress(a, QJsonObject{{"done", 1}, {"total", 2}});
+        s.setTerminalProgress(a, "p1", {{"update", "set"}, {"progress", QJsonObject{{"percent", 40}}}});
+        QVERIFY(!s.session(a)->terminalProgress.isEmpty());
+        QTRY_VERIFY(s.session(a)->terminalProgress.isEmpty());
+        QCOMPARE(Store::progressNode(*s.session(a))["value"].toString(), QStringLiteral("1/2"));
+    }
+
+    void anUndoneCloseDropsTheTerminalProgress()
+    {
+        Store s;
+        const QString ws = s.addWorkspace("w");
+        const QString a = s.addSession(ws, "a", {}), b = s.addSession(ws, "b", {});
+        s.select(a);
+        s.setControlProgress(b, QJsonObject{{"percent", 10}});
+        s.setTerminalProgress(b, "p1", {{"update", "set"}, {"progress", QJsonObject{{"percent", 40}}}});
+        QVERIFY(s.softClose({b}));
+        QVERIFY(s.undoClose());
+        QVERIFY(s.session(b)->terminalProgress.isEmpty());
+        QCOMPARE(Store::progressNode(*s.session(b))["source"].toString(), QStringLiteral("control"));
+    }
+
+    void sessionProgressCommandReadsBack()
+    {
+        Store s;
+        FakeTerminals t;
+        const QString a = call(s, t, "session.new", {}, {{"name", "x"}})["result"]["id"].toString();
+        EventSource events(s);
+        QSignalSpy spy(&events, &EventSource::event);
+        QVERIFY(call(s, t, "session.progress", a, {{"progress", "3/7"}})["ok"].toBool());
+        const QJsonObject node = call(s, t, "tree")["result"]["tree"]["workspaces"][0]["sessions"][0].toObject()["progress"].toObject();
+        QCOMPARE(node["value"].toString(), QStringLiteral("3/7"));
+        QCOMPARE(node["fraction"].toDouble(), 3.0 / 7);
+        QCOMPARE(node["source"].toString(), QStringLiteral("control"));
+        QCOMPARE(call(s, t, "session.progress", a, {{"progress", "8/7"}})["error"].toString(), QStringLiteral("invalid progress"));
+        QVERIFY(call(s, t, "session.progress", a, {{"progress", "clear"}})["ok"].toBool());
+        const QJsonObject cleared = call(s, t, "tree")["result"]["tree"]["workspaces"][0]["sessions"][0].toObject();
+        QCOMPARE(cleared["id"].toString(), a);
+        QVERIFY(!cleared.contains("progress"));
+        QList<QJsonObject> progress;
+        for (const QList<QVariant> &e : std::as_const(spy))
+            if (e.first().toJsonObject()["kind"].toString() == QLatin1String("progress"))
+                progress << e.first().toJsonObject()["payload"].toObject();
+        QCOMPARE(progress.size(), 2);
+        QCOMPARE(progress[0], (QJsonObject{{"name", "x"}, {"progress", "3/7"}, {"source", "control"}}));
+        QCOMPARE(progress[1], (QJsonObject{{"name", "x"}}));
+        QVERIFY(EventSource::kinds.contains("progress"));
+    }
+
     void claudeAdapterRewritesForSubagents()
     {
         if (QStandardPaths::findExecutable("python3").isEmpty())
@@ -699,6 +798,40 @@ private Q_SLOTS:
         QVERIFY(s.session(a)->hasSplit && !s.session(a)->splitVisible); // hidden, second shell kept
         s.toggleSplit(a, "vertical");
         QVERIFY(s.session(a)->splitVisible);
+    }
+
+    void reopenClosedKeepsTheSessionId()
+    {
+        Store s;
+        const QString ws = s.addWorkspace("w");
+        s.addSession(ws, {}, {});
+        const QString b = s.addSession(ws, "pinned", QDir::tempPath());
+        s.removeSession(b);
+        QCOMPARE(s.reopenClosed(), b);
+        QVERIFY(s.session(b));
+    }
+
+    void sessionUploadReservesUnderTheStateDir()
+    {
+        QTemporaryDir state;
+        const bool wasSet = qEnvironmentVariableIsSet("ELIS_STATE_DIR");
+        const QByteArray old = qgetenv("ELIS_STATE_DIR");
+        qputenv("ELIS_STATE_DIR", state.path().toUtf8());
+        Store s;
+        FakeTerminals t;
+        const QString id = s.addSession(s.addWorkspace("w"), {}, {});
+        const QJsonObject r = call(s, t, "session.upload", id, {{"name", "a b.txt"}, {"size", 3}});
+        const QString path = r["result"]["upload"]["path"].toString();
+        if (wasSet)
+            qputenv("ELIS_STATE_DIR", old);
+        else
+            qunsetenv("ELIS_STATE_DIR");
+        QVERIFY2(r.value("ok").toBool(), qPrintable(r.value("error").toString()));
+        QVERIFY(path.startsWith(state.path() + "/uploads/" + id + "/"));
+        QVERIFY(path.endsWith("-a_b.txt"));
+        QVERIFY(QFileInfo::exists(path));
+        const QJsonObject big = call(s, t, "session.upload", id, {{"name", "a"}, {"size", 20971521}});
+        QCOMPARE(big.value("error").toString(), QStringLiteral("file too large (max 20 MiB)"));
     }
 
     void reopenClosedRestoresNameDirAndPlace()
@@ -2284,6 +2417,9 @@ private Q_SLOTS:
         QCOMPARE(root["hooks"]["Stop"][0]["hooks"][0]["command"].toString(), adapter + " completed --auto-reset");
         QCOMPARE(root["hooks"]["Notification"][0]["matcher"].toString(), QStringLiteral("permission_prompt"));
         QCOMPARE(root["hooks"]["UserPromptSubmit"][0]["hooks"][0]["command"].toString(), adapter + " active --blink");
+        QCOMPARE(root["hooks"]["PostToolUse"].toArray().size(), 2);
+        QCOMPARE(root["hooks"]["PostToolUse"][1]["matcher"].toString(), QStringLiteral("TodoWrite|TaskCreate|TaskUpdate"));
+        QCOMPARE(root["hooks"]["PostToolUse"][1]["hooks"][0]["command"].toString(), adapter + " progress");
         QCOMPARE(root["hooks"]["PreCompact"][0]["hooks"][0]["command"].toString(), QStringLiteral("mine"));
         QVERIFY(root["env"]["CLAUDE_CODE_PLUGIN_DIRS"].toString().endsWith("/claude-mods/swarm-companion"));
         QVERIFY(slurp(settings + ".bak").contains("/old/share"));

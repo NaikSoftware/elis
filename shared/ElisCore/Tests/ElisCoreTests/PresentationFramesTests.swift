@@ -459,6 +459,50 @@ struct PresentationFramesTests {
         #expect(snapshot.agentSession == nil)
     }
 
+    @Test(arguments: [
+        PresentationFrame(gen: 1, rev: 1, body: .progress(.steps(done: 3, total: 7))),
+        PresentationFrame(gen: 1, rev: 2, body: .progress(nil)),
+        PresentationFrame(gen: 1, rev: 3, body: .snapshot(PresentationSnapshot(status: nil, hud: nil, progress: .percent(40)))),
+    ])
+    func progressFrameAndSnapshotRoundTrip(_ frame: PresentationFrame) throws {
+        #expect(try PresentationCodec.decode(PresentationCodec.encode(frame).dropLast()) == frame)
+    }
+
+    @Test func anOlderOriginsSnapshotLacksProgress() throws {
+        let line = Data(#"{"kind":"snapshot","gen":1,"rev":1,"snapshot":{"context":"PR #517"}}"#.utf8)
+
+        let frame = try PresentationCodec.decode(line)
+
+        guard case .snapshot(let snapshot) = frame.body else { Issue.record("not a snapshot"); return }
+        #expect(snapshot.progress == nil)
+    }
+
+    @Test func aProgressShapeFromANewerOriginDecodesAsNone() throws {
+        let frame = try PresentationCodec.decode(Data(#"{"kind":"progress","gen":1,"rev":1,"progress":{"ratio":0.5}}"#.utf8))
+        let line = Data(#"{"kind":"snapshot","gen":1,"rev":2,"snapshot":{"context":"PR #517","progress":{"ratio":0.5}}}"#.utf8)
+
+        let snapshot = try PresentationCodec.decode(line)
+
+        #expect(frame.body == .progress(nil))
+        #expect(snapshot.body == .snapshot(PresentationSnapshot(status: nil, hud: nil, context: "PR #517")))
+    }
+
+    @MainActor @Test func aPeerWithoutTheProgressKindGetsNoProgressFrame() throws {
+        let store = makeStore()
+        let hub = PresentationHub(staleTimeout: 30)
+        let session = try Viewers.origin(store, hub: hub)
+        let current = try Viewers.viewer(hub, session)
+        let older = try Viewers.viewer(hub, session, kinds: PresentationHub.supportedKinds.filter { $0 != "progress" })
+
+        store.setTerminalProgress(.set(.percent(10)), forSession: session.id, pane: .left)
+        store.setControlProgress(.steps(done: 3, total: 7), forSession: session.id)
+
+        let progress = { (sink: Viewers.Sink) in sink.bodies.filter { if case .progress = $0 { true } else { false } } }
+        #expect(progress(current.sink) == [.progress(.steps(done: 3, total: 7))])
+        #expect(progress(older.sink).isEmpty)
+        #expect(store.presentationSnapshot(forSession: session.id).progress == .steps(done: 3, total: 7))
+    }
+
     @Test func aSnapshotWithoutCIDecodesWithNone() throws {
         let line = Data(#"{"kind":"snapshot","gen":1,"rev":1,"snapshot":{"context":"PR #517"}}"#.utf8)
 

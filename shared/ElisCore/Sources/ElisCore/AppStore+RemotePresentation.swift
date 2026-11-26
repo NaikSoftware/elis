@@ -40,6 +40,12 @@ extension AppStore {
         scheduleTreeChanged()
     }
 
+    /// applyRemoteProgress shows the origin's control progress as this row's own.
+    public func applyRemoteProgress(_ progress: SessionProgress?, forSession id: UUID) {
+        guard let session = session(withID: id), session.remotePresentation != nil else { return }
+        setControlProgress(progress, forSession: id)
+    }
+
     /// applyRemoteMail records the origin's mail counts for the row's tree read-back; nil means it sends none.
     public func applyRemoteMail(_ mail: PresentationMail?, forSession id: UUID) {
         guard let session = session(withID: id), session.remotePresentation != nil else { return }
@@ -176,6 +182,7 @@ extension AppStore {
         let id = session.id
         applyRemoteContext(nil, forSession: id)
         applyRemoteCI(nil, forSession: id)
+        applyRemoteProgress(nil, forSession: id)
         session.remotePresentation?.mail = nil
         if session.remotePresentation?.statusBridged == true { showRemainingActivity(of: session) }
         session.remotePresentation?.activePanes = nil

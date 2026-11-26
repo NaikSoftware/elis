@@ -90,6 +90,33 @@ std::optional<QStringList> WindowLibrary::paneIds() const
     return out;
 }
 
+std::optional<QStringList> WindowLibrary::sessionIds() const
+{
+    QStringList out;
+    for (const Entry &e : m_entries) {
+        if (e.store) {
+            for (const Session *s : e.store->allSessions())
+                out << s->id;
+            for (const auto &c : e.store->closed)
+                out << c.id;
+            continue;
+        }
+        QFile f(path(e.id));
+        if (!f.exists())
+            continue;
+        const QJsonDocument doc = f.open(QIODevice::ReadOnly) ? QJsonDocument::fromJson(f.readAll()) : QJsonDocument();
+        if (!doc.isObject())
+            return std::nullopt;
+        for (const auto &w : doc.object().value("workspaces").toArray())
+            for (const auto &s : w.toObject().value("sessions").toArray())
+                out << s.toObject().value("id").toString();
+        for (const auto &c : doc.object().value("closed").toArray())
+            out << c.toObject().value("id").toString();
+    }
+    out.removeAll(QString());
+    return out;
+}
+
 void WindowLibrary::load()
 {
     QDir().mkpath(m_dir + QStringLiteral("/windows"));

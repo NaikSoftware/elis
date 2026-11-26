@@ -26,6 +26,23 @@ struct AppStoreTreeProjectionTests {
         #expect(paneIDs() == ["left": nil, "right": "one"])
     }
 
+    @Test func controlTreeReportsProgress() throws {
+        let store = makeStore()
+        let ws = store.addWorkspace(name: "work")
+        let session = try #require(store.addSession(toWorkspace: ws.id, cwd: "/a"))
+        #expect(store.controlTree().workspaces[0].sessions[0].progress == nil)
+
+        store.setControlProgress(.steps(done: 3, total: 7), forSession: session.id)
+
+        let node = store.controlTree().workspaces[0].sessions[0]
+        #expect(node.progress == ControlProgressNode(value: "3/7", fraction: 3.0 / 7, source: "control"))
+        store.setTerminalProgress(.set(.indeterminate), forSession: session.id, pane: .left)
+        store.setControlProgress(nil, forSession: session.id)
+        let json = String(decoding: try JSONEncoder().encode(store.controlTree().workspaces[0].sessions[0]), as: UTF8.self)
+        #expect(json.contains(#""progress":{"source":"terminal","value":"indeterminate"}"#)
+            || json.contains(#""progress":{"value":"indeterminate","source":"terminal"}"#))
+    }
+
     @Test func controlTreeReportsTheRunningAgentAndOmitsNone() throws {
         let store = makeStore()
         let ws = store.addWorkspace(name: "work")

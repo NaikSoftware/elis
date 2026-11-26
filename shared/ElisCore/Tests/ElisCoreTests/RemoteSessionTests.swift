@@ -317,6 +317,29 @@ struct RemoteSessionTests {
         #expect(try fake.calls() == [["session", "rename", "--target", "s1", "--json", "--", "-x it's"]])
     }
 
+    @Test func uploadRefusesAnOptionShapedHostAndAnImplausibleSession() {
+        #expect(throws: RemoteSession.InvocationError.invalidHost) {
+            try RemoteSession.uploadCommand(host: "-oProxyCommand=x", session: "s1", name: "a", size: 1)
+        }
+        #expect(throws: RemoteSession.InvocationError.invalidSession) {
+            try RemoteSession.uploadCommand(host: "buildbox", session: "s 1", name: "a", size: 1)
+        }
+    }
+
+    @Test(arguments: ["/bin/sh", "/bin/zsh", "/bin/tcsh", "/opt/homebrew/bin/fish", "/usr/local/bin/fish", "/usr/bin/fish"]
+        .filter(FileManager.default.isExecutableFile))
+    func uploadReachesTheCliWithEveryArgumentIntactUnderAnyLoginShell(shell: String) throws {
+        let fake = try FakeRemote()
+        defer { fake.cleanUp() }
+        try fake.installElisctl(exitCodes: [0])
+
+        let run = try fake.runRemote(RemoteSession.uploadCommand(host: "buildbox", session: "s1", name: "a'b\\c", size: 42),
+                                     shell: shell, exporting: ["ZDOTDIR": fake.root.path])
+
+        #expect(run.status == 0)
+        #expect(try fake.calls() == [["session", "upload", "--target=s1", "--name=a'b\\c", "--size=42"]])
+    }
+
     @Test func treeWidensPathWithEveryDocumentedInstallDirectory() throws {
         let remote = try #require(RemoteSession.treeCommand(host: "buildbox").last)
 

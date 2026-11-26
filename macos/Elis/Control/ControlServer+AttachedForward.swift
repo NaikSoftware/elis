@@ -42,7 +42,8 @@ extension ControlServer {
     func attachedRoute(_ request: ControlRequest) -> RemoteRoute? {
         if request.cmd == .sessionTerminate { return terminateRoute(request) }
         let forwarded: Set<Command> = [.sessionRestart, .zmxKill, .zmxKillPane, .sessionCompanionConvert, .sessionCompanionMove,
-                                       .sessionDuplicate, .sessionSplit, .sessionSplitClose, .sessionScratch, .sessionRestore]
+                                       .sessionDuplicate, .sessionSplit, .sessionSplitClose, .sessionScratch, .sessionRestore,
+                                       .sessionProgress]
         // a request the command's own checks refuse goes on to the dispatcher, which answers it in its own words
         guard forwarded.contains(request.cmd), !ControlDispatcher.refusesArguments(request) else { return nil }
         // zmx.kill refuses `active` itself; resolving it here would aim the kill at whatever is in front
@@ -126,6 +127,8 @@ extension ControlServer {
                              args?.follow == true ? .select : .none))
         case .sessionRestore:
             return restoreForward(args, row: row, origin: origin).map { ($0, .none) }
+        case .sessionProgress:
+            return .success((.progress(session: session, value: args?.progress ?? ""), .none))
         default:
             return .failure(AttachedRefusal(message: "\(request.cmd.rawValue) is not available on a session attached from another host"))
         }

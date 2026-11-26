@@ -12,7 +12,7 @@ extension RemoteOperation {
     public static let structuralCommands: Set<Command> = [
         .sessionNew, .sessionDuplicate, .sessionCompanionNew, .sessionCompanionPage, .sessionPage, .sessionSplit, .sessionSplitClose, .sessionSwap, .sessionRename, .sessionClose, .sessionTerminate,
         .sessionMove, .sessionScratch, .workspaceNew, .workspaceRename, .workspaceDelete, .workspaceMove,
-        .sessionFlag, .sessionTint, .workspaceFlag, .workspaceTint,
+        .sessionFlag, .sessionTint, .workspaceFlag, .workspaceTint, .sessionProgress,
         .sessionRestart, .sessionCompanionDuplicate, .sessionCompanionConvert, .sessionCompanionMove, .zmxKill, .zmxKillPane,
     ]
 
@@ -146,6 +146,10 @@ extension RemoteOperation {
             case .success(let update):
                 return session(request.target, in: store) { .operation(.setTint($0, update), select: false) }
             }
+        case .sessionProgress:
+            let value = args.progress ?? ""
+            do { _ = try SessionProgress.parse(value) } catch { return refuse(error.description) }
+            return session(request.target, in: store) { .operation(.setProgress($0, value), select: false) }
         case .workspaceFlag:
             guard let mode = ControlToggleMode.parse(args.mode) else { return refuse("invalid workspace flag mode: \(args.mode ?? "toggle")") }
             return workspace(request.target, in: store) { id in

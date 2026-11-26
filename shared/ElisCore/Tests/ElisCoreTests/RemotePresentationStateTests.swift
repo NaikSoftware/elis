@@ -300,6 +300,17 @@ struct RemotePresentationStateTests {
         #expect(session.mirroredCI == nil)
     }
 
+    @Test func aMirroredProgressLandsOnTheViewerRow() throws {
+        let (store, session) = try attached()
+        store.setRemoteConnection(.connected, forSession: session.id)
+
+        store.applyRemoteProgress(.percent(40), forSession: session.id)
+
+        #expect(session.controlProgress == .percent(40))
+        store.setRemoteConnection(.failed("gone"), forSession: session.id)
+        #expect(session.controlProgress == nil)
+    }
+
     @Test func aMirroredContextShowsOnARowWithNoneOfItsOwn() throws {
         let (store, session) = try attached()
 

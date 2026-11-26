@@ -1164,6 +1164,24 @@ final class ControlServerRemotePresentationTests: XCTestCase {
         XCTAssertEqual(origin.agentIndicator.status, .blocked)
     }
 
+    func testProgressTravelsFromAnOriginSessionToItsViewer() throws {
+        let pair = try bridgedPair()
+        let (server, origin, viewer) = (pair.server, pair.origin, pair.viewer)
+        let originStore = try XCTUnwrap(server.library.store(forSession: origin.id))
+
+        originStore.setControlProgress(.steps(done: 3, total: 7), forSession: origin.id)
+        waitUntil("the origin's progress reaches the viewer row") { viewer.controlProgress == .steps(done: 3, total: 7) }
+
+        originStore.setControlProgress(nil, forSession: origin.id)
+        waitUntil("the origin's clear reaches the viewer row") { viewer.controlProgress == nil }
+
+        originStore.setControlProgress(.percent(40), forSession: origin.id)
+        waitUntil("a second progress arrives") { viewer.controlProgress == .percent(40) }
+        server.shutdownPresentationStreams()
+        waitUntil("the mirrored progress leaves with the stream") { viewer.controlProgress == nil }
+        XCTAssertEqual(origin.controlProgress, .percent(40), "the origin keeps its own")
+    }
+
     func testCITravelsFromAnOriginSessionToItsViewerAndLeavesWithTheStream() throws {
         let pair = try bridgedPair()
         let (server, origin, viewer) = (pair.server, pair.origin, pair.viewer)

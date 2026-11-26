@@ -6,8 +6,8 @@ enum FileTreeRoot: Equatable {
     case noSession, noLocalFolder, folder(URL)
 
     @MainActor init(session: Session?) {
-        guard let session, !session.focusedCwd.isEmpty else { self = .noSession; return }
-        let reported = session.focusedCwd
+        guard let session, !session.workingCwd.isEmpty else { self = .noSession; return }
+        let reported = session.workingCwd
         let local = session.localWorkingDirectory(reported: reported, homeDirectory: NSHomeDirectory())
         self = session.remoteHost != nil && local != reported
             ? .noLocalFolder : .folder(URL(fileURLWithPath: local, isDirectory: true))

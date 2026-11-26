@@ -6,6 +6,7 @@ import 'package:flutter/material.dart';
 import '../model.dart';
 import '../terminal/vt.dart';
 import '../theme.dart';
+import 'attachments.dart';
 import 'bottom_stack.dart';
 import 'chat_composer.dart';
 import 'claude_screen.dart';
@@ -137,7 +138,10 @@ class ChatView extends StatefulWidget {
       this.onKey = _noKey,
       this.onAnswer = _noAnswer,
       this.openImage,
-      this.agent = 'Claude'});
+      this.agent = 'Claude',
+      this.pick,
+      this.upload,
+      this.attachBlocked});
 
   static const staleText = 'Reconnecting…';
 
@@ -161,6 +165,9 @@ class ChatView extends StatefulWidget {
   final void Function(String? seq, VtKey? key, int mods) onKey; // the panel's keys: straight to the program, past the gate
   final void Function(String key) onAnswer;
   final Future<String?> Function(String path)? openImage; // a picture file a tool call read, in the page sheet
+  final PickFiles? pick;
+  final UploadFile? upload;
+  final String? attachBlocked;
 
   @override
   State<ChatView> createState() => _ChatViewState();
@@ -621,6 +628,10 @@ extension on _ChatViewState {
                 disabledBy: ChatView.blockedReason(exited: widget.exited, stale: widget.stale, agent: widget.agent),
                 held: held,
                 onOpen: onOpen,
+                session: widget.s.id,
+                pick: widget.pick,
+                upload: widget.upload,
+                attachBlocked: widget.attachBlocked,
                 // like any chat: what the user sent shows at the newest end
                 onSending: () {
                   if (_scroll.hasClients) _scroll.jumpTo(0);

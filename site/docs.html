@@ -483,7 +483,7 @@ command &quot;Session here&quot; ctrl+a&gt;n elisctl session new --cwd &quot;$AG
 <li>A session is named after its working directory's last folder. Renaming pins a name of your own; clearing it restores automatic naming. Rename inline by double-clicking a row's name.</li>
 <li>The four icons at the bottom of the sidebar add a workspace, add a session, and toggle the workspace filter and the flagged view.</li>
 <li>A click on a workspace's icon folds it at once.</li>
-<li>Hovering a session row with no badge or status shows an × that closes it, as Close Session does.</li>
+<li>Hovering a session row shows an × in place of its badge and status that closes it, as Close Session does. A session with an active agent keeps its status instead.</li>
 <li><strong>Copy Name</strong> on a session or workspace row copies its name.</li>
 <li><strong>Duplicate Session</strong> in a session's context menu opens a fresh shell right after it, in the same workspace and its current directory. Only the directory carries over.</li>
 <li><strong>Reveal in Finder</strong> opens the focused pane's directory, and is greyed out when that directory no longer exists.</li>
@@ -723,7 +723,7 @@ elisctl reply &quot;all tests pass&quot;</code></pre>
 <li>It differs from macOS window zoom and full screen, which size the window itself.</li>
 </ul>
 <h3 id="terminals-file-panel">File panel</h3>
-<p>A column right of the sidebar shows the active session's current folder as a tree, in the app theme, and refreshes as files change.</p>
+<p>A column right of the sidebar shows the active session's current folder as a tree, in the app theme, and refreshes as files change. The folder is the one the focused pane's coding agent works in, else the pane's own: a Claude Code session that moves into a worktree shows that worktree.</p>
 <ul>
 <li>Toggle it with ⌃⌘E, the folder button left of the sidebar toggle, View ▸ Show/Hide File Panel, the palette, or the <code>toggle_file_panel</code> keymap action. A remote session shows "No local folder".</li>
 <li>Double-click or Return opens a file: Markdown, text and images in the built-in viewer, anything else in its default macOS app.</li>
@@ -907,6 +907,10 @@ s=$(elisctl zmx tree studio.local --json \
 <tr>
 <td>status</td>
 <td>clearing the row's status or badge here (typing, selecting, Clear Status) clears it there too, under that Mac's reset settings, when the status came from there; a status set on this Mac's row clears here only, and one pane here finishing leaves the other Mac's active shown</td>
+</tr>
+<tr>
+<td>progress</td>
+<td>a value set with <code>elisctl</code> on either Mac shows on both; terminal progress arrives in the pane's output</td>
 </tr>
 <tr>
 <td>session context</td>
@@ -1182,7 +1186,7 @@ s=$(elisctl zmx tree studio.local --json \
           <section id="phone-chat" class="doc-v2" style="scroll-margin-top: 88px; padding-top: 56px">
 <h2>Chat on the phone</h2>
 <p>A pane running Claude Code can show on the phone as a chat instead of a terminal. Chat builds the conversation from Claude Code's transcript file and reads Claude's live screen only for what the file does not hold: the working line, the statusline, the mode and any open dialog.</p>
-<p>A pane running the Antigravity CLI (<code>agy</code>) gets Chat too, from agy's conversation log: prompts, replies, thinking and tool calls with their output, the working line with <strong>Stop</strong>, agy's footer as the statusline, and the composer. Prompt cards, the mode chip and the <code>/</code> menu are Claude Code's; agy's dialogs open the panel sheet. Until agy's first prompt the chat is empty, and that prompt can come from the phone.</p>
+<p>A pane running the Antigravity CLI (<code>agy</code>) gets Chat too, from agy's conversation log: prompts, replies, thinking and tool calls with their output, the working line with <strong>Stop</strong>, agy's footer as the statusline, and the composer. Prompt cards, the permission modes and the <code>/</code> menu are Claude Code's, so agy's <strong>+</strong> menu holds Attach files alone; agy's dialogs open the panel sheet. Until agy's first prompt the chat is empty, and that prompt can come from the phone.</p>
 <h3 id="phone-chat-modes">Switch between Chat and Term</h3>
 <p>The mode button in the session's app bar shows the mode a tap switches to: a terminal in Chat, a chat bubble in Term. Chat is available while Claude Code or agy runs in the pane; otherwise the button is disabled, and a long press tells why. By default a pane running Claude or agy opens in Chat and any other pane in Term. In Term, a pane running an agent shows its live terminal; a plain shell shows its history until a full-screen program starts. A tap keeps that choice for the session while the phone app runs; the session's ⋯ menu item <strong>Choose mode automatically</strong> goes back to the default. On a split, the pane button next to it points at the pane a tap shows, in Chat and in Term.</p>
 <h3 id="phone-chat-read">Read the conversation</h3>
@@ -1196,11 +1200,12 @@ s=$(elisctl zmx tree studio.local --json \
 <h3 id="phone-chat-send">Send and queue</h3>
 <p>The composer at the bottom has autocorrect and grows to 6 lines. When Chat opens, it takes over the text already typed at Claude's prompt on the computer. Send clears Claude's prompt, pastes your text and presses Enter. If the text at Claude's prompt changed on the computer in the meantime, the phone sends nothing and offers <strong>Replace</strong> and <strong>Keep</strong>.</p>
 <p>While Claude works, Send reads <strong>Queue</strong>, and your message waits in Claude's queue as it does when you press Enter in the terminal. Queued messages show as gray rows. <code>/model</code>, <code>/effort</code>, <code>/fast</code>, <code>/status</code>, <code>/tasks</code> and <code>/usage</code> run at once instead. When Send is disabled with text in the field, a line under it says why, for example <em>Claude shows a dialog</em> or <em>Waiting for Claude's screen</em>.</p>
+<p><strong>Attach files.</strong> The <strong>+</strong> button inside the field opens a menu with <strong>Attach files</strong> and the <a href="#phone-chat-mode-model">permission mode</a>. Attach files picks up to 10 files of at most 20 MiB each. Each shows as a tile above the field: an image as its thumbnail, another file with its name and size. × removes it. Send uploads them to the computer that runs the session, one at a time with a progress ring on each tile, then sends your text. In a Claude session, images arrive as image attachments (<code>[Image #N]</code>). Other files are named after your text in <code>Attached: '/path' …</code>, so the agent reads them. Every file goes that way for Antigravity, and for a message that starts with <code>/</code>, <code>!</code> or <code>#</code>. The text and tiles clear only after the message is sent; after a lost connection they stay, and files already uploaded are not sent again. Files wait under the Elis state directory's <code>uploads/</code> folder (<code>elisctl session upload</code> is the command behind it) for as long as the session is open, saved or in Recent Closed, and at its next start Elis removes the folders of other sessions and any file older than 7 days. Attach files is disabled while sending is, and after <em>Update Elis on &lt;host&gt; to attach files</em> until the phone reconnects. It works on a local session and on an elis-server session, not yet on one attached from another Mac.</p>
 <p>Above the composer, the working line mirrors Claude's spinner text with a <strong>Stop</strong> button, which presses Esc. A usage-limit banner has <strong>Cancel</strong>. The reply Claude is still writing shows below the last message until it lands in the transcript. The statusline shows its first row; a tap shows every row. While subagents or teammates run, the first row ends with <em>· N agents</em>, and the expanded statusline lists them under <strong>Agents</strong>: each running agent with its teammate colour and elapsed time, then the last three that finished, dimmed. A tap on an agent scrolls the chat to the call that started it.</p>
 <h3 id="phone-chat-slash">The "/" menu</h3>
 <p>Typing <code>/</code> as the first character opens a list of Claude's built-in commands and the commands and skills of this conversation, filtered as you type. A pick puts <code>/name </code> in the field, and Send sends it. Commands that open a panel in Claude, such as <code>/model</code> or <code>/usage</code>, are marked <em>opens in panel</em>.</p>
 <h3 id="phone-chat-mode-model">Change the mode or the model</h3>
-<p>The chip at the start of the composer's row shows Claude's permission mode (<em>manual</em>, <em>accept edits</em>, <em>plan</em>, <em>auto</em>, <em>bypass</em>). A tap opens a list of modes; a pick presses Shift+Tab until Claude shows that mode. Auto and bypass need a second tap. The chip works only while Claude is idle with no dialog open, because Shift+Tab also answers some prompts. A badge beside it shows how many background shells Claude runs.</p>
+<p>The <strong>+</strong> menu in the composer lists Claude's permission modes (<em>manual</em>, <em>accept edits</em>, <em>plan</em>, <em>auto</em>, <em>bypass</em>) under <strong>Permission mode</strong>, with a check on the current one. A pick presses Shift+Tab until Claude shows that mode. Auto and bypass need a second tap. The modes work only while Claude is idle with no dialog open, because Shift+Tab also answers some prompts. Under them, a line shows how many background shells Claude runs. The <strong>+</strong> button is disabled only when neither the modes nor Attach files can act.</p>
 <p>A tap on the model in the app bar offers <strong>Change model…</strong>, which sends <code>/model</code> and opens Claude's model picker in a panel.</p>
 <h3 id="phone-chat-panels">Panels and prompts</h3>
 <p>When Claude shows a dialog or a panel that has no <a href="#phone-chat-cards">card</a> (<code>/usage</code>, <code>/model</code>, folder trust and the like), a panel sheet opens over the chat with Claude's live screen, answer buttons for numbered options and the key row. It closes by itself when Claude's prompt is back. Swipe it down to read the chat; the composer then reads <em>Claude shows a panel · Open</em> and stays disabled until the panel is gone.</p>
@@ -1217,7 +1222,7 @@ s=$(elisctl zmx tree studio.local --json \
 <h3 id="phone-chat-mac">What Chat never does to the computer</h3>
 <p>Chat never resizes Claude's pane and never scrolls it: scrolling moves only the phone's list. The phone takes the lead of a Live pane only at its first input, at the size the pane already has, and the computer shows its usual <em>In use on your phone</em> cover (<a href="#phone-app">Direct input</a>). A pane fitted to the phone in Term keeps that size when you switch to Chat. Every key Chat sends is checked against Claude's screen right before it goes, and a sequence stops when the screen is not what it expects.</p>
 <h3 id="phone-chat-remote">Remote sessions</h3>
-<p>Chat works the same on a session attached from another Mac and on an elis-server session; the conversation is read on the host that runs Claude and refreshes every 2 s instead of 700 ms. Sending, Queue and the mode chip work on an elis-server session. On a session attached from another Mac they stay disabled for now, with the line <em>Sending from the phone is not verified on remote sessions yet</em>. A host whose Elis is too old to serve the transcript leaves Chat disabled with <em>Update Elis on &lt;host&gt;</em>. A pane that is not in <a href="#restore-live">Live sessions</a> mode shows Chat without colors: it never takes over Claude's draft, and dialogs always open the panel sheet.</p>
+<p>Chat works the same on a session attached from another Mac and on an elis-server session; the conversation is read on the host that runs Claude and refreshes every 2 s instead of 700 ms. Sending, Queue and the permission modes work on an elis-server session. On a session attached from another Mac they stay disabled for now, with the line <em>Sending from the phone is not verified on remote sessions yet</em>. A host whose Elis is too old to serve the transcript leaves Chat disabled with <em>Update Elis on &lt;host&gt;</em>. A pane that is not in <a href="#restore-live">Live sessions</a> mode shows Chat without colors: it never takes over Claude's draft, and dialogs always open the panel sheet.</p>
 <h3 id="phone-chat-states">States</h3>
 <table>
 <colgroup>
@@ -1575,6 +1580,10 @@ elisctl notify &quot;needs input&quot; --target &quot;$AGT_SESSION_ID&quot; --so
 <tr>
 <td><code>notify</code></td>
 <td>a notification is raised</td>
+</tr>
+<tr>
+<td><code>progress</code></td>
+<td>the progress a session's row shows changes; carries <code>progress</code> and <code>source</code>, both absent once cleared</td>
 </tr>
 <tr>
 <td><code>session.created</code>, <code>session.closed</code></td>
@@ -2495,12 +2504,29 @@ elisctl session context --clear --target &quot;$ELIS_SESSION_ID&quot;</code></pr
 <ul>
 <li>The line counts the workflow runs of the branch's last pushed commit: <code>◷ build</code> for one run, <code>✓ 3 passed</code> when all agree, <code>✗ build  ◷ 1  ✓ 2</code> when they differ, a single failure by name.</li>
 <li>With an open pull request the line starts with its number and reviews: <code>#56 👍1 👎1 · ✓ build</code> counts approvals and change requests.</li>
-<li>Click the shown session's line for the details; a click on another session's line selects it. The details are the pull request with who approved and who asked for changes, then every run. Click the pull request or a run to open it on GitHub. A Control-, Shift- or Command-click on the line acts on the row (menu, selection) and opens no details.</li>
+<li>Click the shown session's line for a menu of details; a click on another session's line selects it. The menu lists the pull request with who approved and who asked for changes, then every run. Click the pull request or a run to open it on GitHub. A Control-, Shift- or Command-click on the line acts on the row (menu, selection) and opens no details.</li>
+<li>The branch is the one the focused pane's coding agent works in, else the pane's own directory's. A Claude Code session that moves into a worktree shows that worktree's branch; its subagents' worktrees do not count.</li>
 <li>Elis checks every 30 seconds while a run is going and every 3 minutes once all are done, once for all sessions on the same branch.</li>
 <li><strong>Settings ▸ Interface ▸ CI status</strong> shows it Always (the default), only in the flagged view (Flagged), or never (Off). Off stops asking GitHub.</li>
 <li>A session attached from another Mac or an elis-server host shows the CI the host sees.</li>
 <li><code>tree</code> reports it as the session's <code>ci</code>: <code>branch</code>, <code>sha</code>, <code>pr</code> (<code>number</code>, <code>title</code>, <code>url</code>, <code>approved</code>, <code>changesRequested</code>) and <code>runs</code> (<code>workflow</code>, <code>state</code> <code>running</code>|<code>failed</code>|<code>passed</code>|<code>skipped</code>, <code>url</code>); omitted when there is none.</li>
 </ul>
+<h3 id="status-progress">Progress</h3>
+<p>A session row can fill from the left to show how far a job has come: an agent's plan, a build, a long copy.</p>
+<img src="assets/docs-status-progress.webp" alt="Sidebar rows partly filled with progress" width="218" height="333" loading="lazy">
+<pre class="bash"><code>elisctl session progress 3/7 --target &quot;$ELIS_SESSION_ID&quot;
+elisctl session progress 40%
+elisctl session progress indeterminate
+elisctl session progress clear</code></pre>
+<ul>
+<li>The fill takes the session's tint, else its workspace's, else the active status color. <code>indeterminate</code> shows the active wave instead of a fill, even with no agent status. A blocked row shows only its status.</li>
+<li>A program in any pane, the scratch terminal included, can report progress with OSC 9;4. It is not a notification. The row shows the <code>elisctl</code> value while one is set, else the terminal's.</li>
+<li>Each kind clears only itself. An <code>elisctl</code> value clears on <code>clear</code> or when the session's status changes to completed or idle. A terminal value clears when the pane sends OSC 9;4;0, when that pane closes, or 15 seconds after its last update, so a killed program leaves no fill behind.</li>
+<li>With the <a href="#status-hooks">agent hooks</a> installed, Claude Code's todo list and tasks fill the row: done tasks out of all of them, cleared when all are done. A subagent's list never fills the lead's row. An agent-team lead counts the team's task list. Hooks installed before this feature need the next hook update.</li>
+<li>It works the same on a session attached from another Mac and on an elis-server session, and on Linux.</li>
+<li><code>tree</code> reports it as the session's <code>progress</code>: <code>value</code>, <code>fraction</code> (absent for indeterminate) and <code>source</code> (<code>control</code> or <code>terminal</code>); omitted when the row shows none. <code>events</code> emits <code>progress</code>.</li>
+</ul>
+<p>The command reference lists every field: <a href="commands.html#session">session progress</a>.</p>
 <h3 id="status-transcript">Read Claude's conversation</h3>
 <p>A script can read the Claude Code conversation running in a session as a list of prompts, replies and tool calls, taken from Claude Code's own transcript rather than the screen, so a finished reply reads whole however far it scrolled away.</p>
 <pre class="bash"><code>elisctl session transcript --target &quot;$ID&quot;
@@ -2543,7 +2569,7 @@ elisctl session tint clear --target &quot;$ELIS_SESSION_ID&quot;</code></pre>
 </tr>
 <tr>
 <td>Claude Code</td>
-<td>seven hooks: prompt and tool run → active, Stop → completed, permission request and permission prompt → blocked, subagent start and stop → track working teammates</td>
+<td>eight hooks: prompt and tool run → active, Stop → completed, permission request and permission prompt → blocked, subagent start and stop → track working teammates, todo and task tools → <a href="#status-progress">progress</a></td>
 </tr>
 <tr>
 <td>Codex</td>
