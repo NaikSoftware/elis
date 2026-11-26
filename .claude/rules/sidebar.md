@@ -249,6 +249,11 @@ paths:
   4.8 s per period, the period two row widths.
   The active status glyph fades under key `agent-status-fade` (1.4 s), distinct from blink.
   Reduce Motion leaves both static.
+- A row's progress fill is a flat `0.16` alpha rect, hard edged, its width the progress fraction, clipped like the wave.
+  Its color is the session tint, else the workspace tint, else the `active` status color.
+  Layers, bottom to top: band, row wash, progress fill, wave, hover/selection, cell.
+  A blocked row shows neither fill nor wave; indeterminate shows the wave alone, with or without a status.
+  [[control-api]] owns its sources and clearing.
 - `focus-filter-toggle` replaces the deleted single-workspace pill. It uses a filled grid when active,
   manual 0.35 opacity and disabled state when the set is empty, and accessibility value `on`/`off`.
   It remains usable while filtering is off and is gated by `InterfaceElement.focusFilter`.

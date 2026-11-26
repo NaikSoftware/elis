@@ -62,6 +62,10 @@ paths:
   `SubagentStart` after the lead's Stop, and on a row already reset to idle it would stay active. Teammate task ids are not agent ids,
   so a mark is not matched to its task: one any agent leaves without `SubagentStop` (killed, interrupted)
   holds the row while any teammate is alive.
+- Claude's `PostToolUse` matcher `TodoWrite|TaskCreate|TaskUpdate` posts `progress`. `TodoWrite` carries the
+  whole list; the task tools carry one task, so the script counts `${CLAUDE_CONFIG_DIR:-~/.claude}/tasks/<session>/`,
+  or for an agent-team lead (`leadSessionId` in `teams/*/config.json`) `tasks/<team>/`.
+  All done or none sends `clear`; an event carrying `agent_id` posts nothing, so a subagent never writes the lead's row.
 - Codex maps SessionStart idle; prompt/pre/post tool active; Stop ending `?` blocked, otherwise completed.
   Those first four report nothing for a null `transcript_path`: Codex's ephemeral memory consolidation
   thread fires them but never a user Stop, so they would leave the pane active.
@@ -1776,6 +1780,15 @@ the spec `docs/superpowers/specs/2026-11-20-phone-chat-mode-design.md` owns the 
   emits `tree.changed` when the shown value changed; re-setting the same value does neither. The tree's
   `context` is the shown value: an attached row also shows its origin's context, and the Remote sessions
   section owns that rule.
+- `session.progress` takes `N/M`, `P%`, `indeterminate` or `clear`; `SessionProgress.parse` refuses the rest
+  as `invalid progress`. Read `progress` on the session node, emit `progress`.
+  A session holds two values: `control` from this command and `terminal` from OSC 9;4 (ConEmu states, any pane).
+  The row shows `control` when set, else `terminal`, and each source clears only itself.
+  `control` clears on a status change into `completed` or `idle`, so it never outlives the agent turn.
+  `terminal` clears on state 0 from the pane that set it, on that pane's close, and 15 s after its last update,
+  since a killed program sends no state 0. An undone close drops it.
+  `AttachedForward.progress` and `RemoteOperation.setProgress` are new public cases the agterm-linux fork's
+  exhaustive switches must add.
 - The sidebar's second line is the session's GitHub CI (`CIStatus`), internal with no setter: the owner removed
   `session.info` on 2026-11-21. `CITracker` (ElisCore) owns the schedule: one fetch per repository and branch read
   from `.git` (no git process), `gh run list` and `gh pr view` through `CIProbe.gh`, blocking up to its 15 s timeout.
@@ -2483,6 +2496,9 @@ the spec `docs/superpowers/specs/2026-11-20-phone-chat-mode-design.md` owns the 
   effective value: setting the text the mirror already shows emits nothing. Attach does not seed the
   context from `zmx.tree`, which would make the origin's label a local override that wins forever, so an
   origin predating the `context` frame mirrors none.
+- `control` progress travels origin to viewer as the `progress` presentation kind and snapshot field.
+  `session.progress` on an attached row runs on the origin, and on a server window's row on its server.
+  `terminal` progress needs no transport: the OSC bytes reach the viewer's own surface, and elis-server parses none.
 - The CI line follows the local, mirrored and effective split (`Session.ci`, `mirroredCI`, `effectiveCI`): the
   origin sends its local status in the `ci` frame and the snapshot, and the viewer never polls a remote row.
   Stream end clears only the mirror.

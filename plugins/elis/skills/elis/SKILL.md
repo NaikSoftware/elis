@@ -22,6 +22,7 @@ when_to_use: >
   attach a script to a pane's terminal stream, lead or take over a pane from a script, does the phone lead a pane,
   show this on my phone, show a page where I am, show the dev server on my phone,
   message other sessions through Elis, reply to Elis, ask the Elis assistant,
+  show progress on the session row,
   keep the computer awake (or let it sleep) while agents work,
   the keymap editor will not open.
 allowed-tools: Bash(elisctl *)
@@ -263,7 +264,8 @@ the configured color or shape — the tint and the silhouette report the per-cal
 `statusChangedAt` (when that status was last set, in epoch seconds — the same clock as an event's `ts`;
 omitted before any set, and refreshed by every set including idle and a re-push of the SAME status, so
 `now - statusChangedAt` is how long ago the status was last written; automatic and manual clears count
-too; ephemeral, so it does not survive a restart), `lastSelectedAt` (when the session last became or
+too; ephemeral, so it does not survive a restart), `progress` (the row's progress fill: `value` `3/7`|`40%`|`indeterminate`, `fraction` 0..1 absent for
+indeterminate, `source` `control`|`terminal`; omitted when none), `lastSelectedAt` (when the session last became or
 stopped being its window's selected session, on the same clock; persisted, omitted when no selection has
 been recorded, so find sessions nobody has looked at in a while by age, not by absence), `background` (the background
 spec — image/text watermark or solid color — set via `session background`, omitted when none — the read side of set/clear),
@@ -501,6 +503,10 @@ omitted when expanded).
   0.05..0.95). The grow options are
   aliases for growing the primary or split pane. Prints the applied fraction.
 - `session status <idle|active|completed|blocked> [--blink] [--auto-reset] [--if-idle] [--sound NAME] [--color #rrggbb] [--shape SHAPE] [--pane left|right|scratch] [--pane-id TOKEN] [--cwd DIR]` — set the sidebar agent glyph (`--cwd` is the agent's absolute directory, which the session's CI line follows while that pane has focus; `--if-idle` applies it only to an idle row and is otherwise an ok no-op; `--sound default` or a system sound name plays a one-shot sound; `--color` tints the glyph for this call only, reverting on the next status set without it; `--shape` (one of the names `reference.md` lists) picks its silhouette for this call only and reverts the same way, read back as the tree `statusShape` field; `--pane` records which pane set it — `left`=main, `right`=split, `scratch` — so foreground typing in another pane won't clear it, and while the session is `blocked` a status from another pane that is not itself `blocked` leaves the block shown (still ok) so one pane's agent cannot erase the other's request for input, `idle` included since the bundled hooks emit it unprompted, and one pane finishing leaves the row on the other's work, the working panes reading back as the tree `activePanes` list; any user-initiated GUI selection (auto-follow, attention-nav ⌃⌥↑/↓, plain session nav, the command palettes, a Dock-menu session, a sidebar row click) reveals that pane when the status needs attention (`blocked`/`completed`); `active` preserves the existing pane selection; the pane reads back as the tree `statusPane` field; the socket `session go next-attention` only steps the selection, it does not itself reveal the pane; `--pane-id` is the hook-forwarded stable surface token (`$ELIS_PANE_ID`) that resolves the pane's live slot and overrides a stale `--pane` after a promote + re-split — scripts set `--pane` directly and leave `--pane-id` to the hook).
+- `session progress <N/M|P%|indeterminate|clear>` — fill the session's sidebar row with how far a job has come
+  (`indeterminate` shows the active wave; anything else errors `invalid progress`). It clears on `clear` or a
+  status change to `completed`/`idle`; OSC 9;4 from a pane sets a separate terminal value the row shows only
+  while this one is unset. Read back as the tree `progress` field; emits a `progress` event.
 - `session wait --until STATUS [--until STATUS ...] [--timeout SECONDS]` — block until the session's agent
   status is one of the values, returning at once when it already is. Exit 0 and print the status on a match,
   2 when the session closes, 124 on timeout, 1 on failure. Use it to wait for a worker started with
