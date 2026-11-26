@@ -343,7 +343,7 @@ void SidebarDelegate::paint(QPainter *p, const QStyleOptionViewItem &opt, const 
 
     QColor under = pal.color(QPalette::Window); // what the info line sits on, fill by fill below
     if (band.isValid()) {
-        under = over(under, faded(band, 0.10));
+        under = over(under, faded(band, 0.06));
         // one rounded outline across the group: each row's piece runs past the edges the group continues over, clipped to the row
         const QRectF row(opt.rect);
         const qreal top = edge == Sidebar::First || edge == Sidebar::Single ? row.top() + Sidebar::groupGap : row.top() - 13;
@@ -351,8 +351,8 @@ void SidebarDelegate::paint(QPainter *p, const QStyleOptionViewItem &opt, const 
         const QRectF shape(r.left() - Sidebar::groupPadding, top, r.width() + 2 * Sidebar::groupPadding, bottom - top);
         p->save();
         p->setClipRect(opt.rect);
-        p->setPen(QPen(faded(band, 0.16), 1));
-        p->setBrush(faded(band, 0.10));
+        p->setPen(QPen(faded(band, 0.09), 1));
+        p->setBrush(faded(band, 0.06));
         p->drawRoundedRect(shape.adjusted(0.5, 0.5, -0.5, -0.5), 10.5, 10.5);
         p->restore();
     }
