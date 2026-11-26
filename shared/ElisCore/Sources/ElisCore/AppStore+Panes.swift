@@ -199,6 +199,7 @@ extension AppStore {
     /// survives), its background label, since a respawn runs another program, its mailbox, and its directory.
     func releaseScratchOwnedState(of session: Session, token: String) {
         clearPaneStatus(.scratch, of: session)
+        clearTerminalProgress(of: session, pane: .scratch)
         dropPaneBackground(.scratch, of: session)
         disposeMailbox(token: token)
         session.scratchCwd = nil

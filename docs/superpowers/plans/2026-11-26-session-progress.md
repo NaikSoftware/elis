@@ -98,7 +98,7 @@ https://claude.ai/artifact/4UfLJ2bngZGQgTk3LZo7Fr — variant **A · Flat wash**
   - `public static func conEmu(_ body: String) -> TerminalProgressUpdate?` — the OSC 9 body, e.g. `"4;1;40"`;
     nil when it does not start with `4;`.
   - `public enum ProgressSource: String, Sendable, Codable { case control, terminal }`
-  - `public struct SidebarProgressFill: Sendable, Equatable { public let colorHex: String; public let fraction: Double; public static let alpha = 0.22; public static let feather = 26.0 }`
+  - `public struct SidebarProgressFill: Sendable, Equatable { public let colorHex: String; public let fraction: Double; public static let alpha = 0.16 }`
   - `SidebarBand.progressFill(progress: SessionProgress?, status: AgentStatus, sessionTintHex: String?, workspaceTintHex: String?, activeHex: String) -> SidebarProgressFill?`
   - `SidebarBand.wave(status:indeterminate:sessionTintHex:workspaceTintHex:activeHex:accentHex:)` — new
     `indeterminate: Bool = false` parameter after `status`.
@@ -298,10 +298,9 @@ Extend `formattersCoverEveryKindAndNDJSONIsOneBareEvent` with a `progress` event
   (pattern of the `DESKTOP_NOTIFICATION` case `:71-78`); on main: `view.session`, pane via
   `NotificationManager.paneRole(of:in:)`, store via `library?.store(forSession:)`, then
   `store.setTerminalProgress(update, forSession:pane:)` when `SessionProgress.terminal(state:progress:)` is non-nil.
-- [ ] **Step 2: Implement the layer.** One clip `CALayer` + `CAGradientLayer`, clipped and cornered like
-  `layoutWave()`, always directly below the wave layer. Colors `[c@0.22, c@0.22, c@0]`, locations
-  `[0, max(0, (w - 26) / w), 1]` for fill width `w = rowRect.width × fraction`. Width changes animate 0.2 s unless
-  Reduce Motion is on.
+- [ ] **Step 2: Implement the layer.** One clip `CALayer` holding one solid `CALayer` of color c@0.16 (hard edge),
+  clipped and cornered like `layoutWave()`, always directly below the wave layer. Fill width
+  `w = rowRect.width × fraction`. Width changes animate 0.2 s unless Reduce Motion is on.
 - [ ] **Step 3: Wire `decorate`.** Compute `SidebarBand.progressFill` with the wave's tint and `activeHex` inputs. Pass
   `indeterminate: session.shownProgress?.progress == .indeterminate` to `wave`, and replace the
   `indicator.status == .active` early return so an indeterminate idle row can show the wave.
@@ -355,7 +354,7 @@ state `progress`.
   - `char *elis_progress_parse(const char *text)` → `{"ok":true,"progress":{…}|null}` or `{"ok":false,"error":"invalid progress"}`
   - `char *elis_progress_terminal(const char *body)` → `{"update":"clear"}` | `{"update":"set","progress":{…}}` | `null`
   - `char *elis_progress_row(const char *json)`, input `{"progress"?,"status","sessionTint"?,"workspaceTint"?,"active"}`
-    → `{"fill":{"color","fraction","alpha":0.22,"feather":26}|null,"wave":bool}`
+    → `{"fill":{"color","fraction","alpha":0.16}|null,"wave":bool}`
 
 - [ ] **Step 1:** Tests for each call's shapes, with the values from Task 1's tests.
 - [ ] **Step 2:** `cd linux/bridge && swift test --filter ProgressBridgeTests` — FAIL.
@@ -384,8 +383,8 @@ state `progress`.
   `terminalClearFromTheOtherPaneIsIgnored`, `terminalProgressExpires`, `sessionProgressCommandReadsBack`) and in
   `test_ui.cpp` `aProgressRowCarriesTheFillRoles` (role values set; a blocked row has none).
 - [ ] **Step 2:** `cmake --build linux/build -j && ctest --test-dir linux/build -R 'core|ui'` — FAIL.
-- [ ] **Step 3:** Implement. Fill paint: `QLinearGradient` stops `0` and `(w-26)/w` at alpha 0.22, `1` at 0, clipped
-  to the row's rounded rect.
+- [ ] **Step 3:** Implement. Fill paint: one solid rect of fraction × row width at the bridge's alpha (0.16), hard edge,
+  clipped to the row's rounded rect.
 - [ ] **Step 4:** Same command — PASS. Without a Linux host, push the branch and use the CI Linux job.
 - [ ] **Step 5:** `git commit -m "feat(linux): session progress fill, command and OSC 9;4"`
 

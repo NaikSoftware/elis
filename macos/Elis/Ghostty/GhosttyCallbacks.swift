@@ -77,16 +77,20 @@ final class GhosttyCallbacks: @unchecked Sendable {
             DispatchQueue.main.async { NotificationManager.shared.notify(surface: view, title: title, body: body) }
             return true
         case GHOSTTY_ACTION_PROGRESS_REPORT:
-            // OSC 9;4 from a pane; the scratch and overlays carry no `view.session`, so theirs is dropped
+            // OSC 9;4 from a pane or the scratch; an overlay has neither, so its report is dropped
             guard let view = surfaceView(from: target) else { return true }
             let report = action.action.progress_report
             guard let update = SessionProgress.terminal(state: Int(report.state.rawValue), progress: Int(report.progress)) else {
                 return true
             }
             DispatchQueue.main.async {
-                guard let session = view.session,
-                      let store = NotificationManager.shared.library?.store(forSession: session.id) else { return }
-                store.setTerminalProgress(update, forSession: session.id, pane: view.isSplitPane ? .right : .left)
+                guard let library = NotificationManager.shared.library else { return }
+                // the scratch has no `view.session`; its owner is the session holding it
+                let scratchOwner = view.session == nil
+                    ? library.allOpenSessions().first { ($0.scratchSurface as? GhosttySurfaceView) === view } : nil
+                guard let session = view.session ?? scratchOwner, let store = library.store(forSession: session.id) else { return }
+                let pane: StatusPane = scratchOwner != nil ? .scratch : view.isSplitPane ? .right : .left
+                store.setTerminalProgress(update, forSession: session.id, pane: pane)
             }
             return true
         case GHOSTTY_ACTION_SHOW_CHILD_EXITED:

@@ -178,6 +178,17 @@ struct AppStoreProgressTests {
         #expect(source == .control)
     }
 
+    @Test func theScratchsProgressLeavesWithTheScratch() {
+        session.scratchSurface = SpySurface()
+        terminal(.set(.percent(40)), pane: .scratch)
+        terminal(.clear, pane: .left)
+        #expect(shown == .percent(40))
+
+        #expect(store.closeScratch(session.id))
+
+        #expect(shown == nil)
+    }
+
     @Test func claudesOwnOSCClearKeepsPlanProgress() {
         store.setControlProgress(.steps(done: 3, total: 7), forSession: session.id)
 

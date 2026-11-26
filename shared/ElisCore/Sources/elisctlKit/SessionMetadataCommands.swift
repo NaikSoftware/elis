@@ -68,10 +68,11 @@ extension Session {
         @Argument(help: "3/7, 40%, indeterminate, or clear.") var value: String
         @OptionGroup var target: TargetOptions
         @OptionGroup var options: ClientOptions
+        @OptionGroup var operation: OperationOptions
 
         func makeRequest() throws -> ControlRequest {
-            ControlRequest(cmd: .sessionProgress, target: target.target,
-                           args: options.withWindow(ControlArgs(progress: value)))
+            operation.stamp(ControlRequest(cmd: .sessionProgress, target: target.target,
+                                           args: options.withWindow(ControlArgs(progress: value))))
         }
     }
 

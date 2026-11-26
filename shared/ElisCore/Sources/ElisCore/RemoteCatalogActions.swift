@@ -122,6 +122,8 @@ public enum RemoteOperation: Equatable, Sendable {
     /// clearFlags unflags every session on the server, the rows this window detached included.
     case clearFlags
     case setTint(UUID, ControlTintUpdate)
+    /// setProgress is `session progress` with its value as typed, which the server parses.
+    case setProgress(UUID, String)
     case setWorkspaceFlag(UUID, on: Bool)
     case setWorkspaceTint(UUID, ControlTintUpdate)
     /// newWorkspace starts collapsed on this Mac when `collapsed` is set; folds are each Mac's own.
@@ -161,6 +163,7 @@ public enum RemoteOperation: Equatable, Sendable {
         case .setFlag(_, let on): on ? "Flag Session" : "Unflag Session"
         case .clearFlags: "Clear Flagged"
         case .setTint: "Tint Session"
+        case .setProgress: "Set Progress"
         case .setWorkspaceFlag(_, let on): on ? "Flag All Sessions" : "Unflag All Sessions"
         case .setWorkspaceTint: "Tint Workspace"
         case .newWorkspace: "New Workspace"
@@ -182,7 +185,8 @@ public enum RemoteOperation: Equatable, Sendable {
         switch self {
         case .newSession(let workspace, _, _): .workspace(workspace)
         case .newCompanion(let id, _), .newPage(let id, _, _), .setSplit(let id, _, _), .setScratch(let id, _, _), .closeSplit(let id), .swap(let id),
-             .renameSession(let id, _), .moveSession(let id, _), .closeSession(let id, _), .setFlag(let id, _), .setTint(let id, _), .restart(let id, _, _),
+             .renameSession(let id, _), .moveSession(let id, _), .closeSession(let id, _), .setFlag(let id, _), .setTint(let id, _), .setProgress(let id, _),
+             .restart(let id, _, _),
              .duplicateCompanion(let id), .convertCompanion(let id), .moveCompanion(let id, _, _), .killDaemon(let id, _, _): .session(id)
         // a batch is marked on its first row
         case .closeSessions(let ids, _), .moveSessions(let ids, _): ids.first.map { .session($0) }
@@ -249,6 +253,7 @@ public enum RemoteOperation: Equatable, Sendable {
         case .setFlag(let id, let on): ["session", "flag", on ? "on" : "off", "--target", id.uuidString]
         case .clearFlags: ["session", "flag", "clear"]
         case .setTint(let id, let update): ["session", "tint"] + update.words + ["--target", id.uuidString]
+        case .setProgress(let id, _): ["session", "progress", "--target", id.uuidString]
         case .setWorkspaceFlag(let id, let on): ["workspace", "flag", on ? "on" : "off", "--target", id.uuidString]
         case .setWorkspaceTint(let id, let update): ["workspace", "tint"] + update.words + ["--target", id.uuidString]
         case .newWorkspace(_, let collapsed, let tint): ["workspace", "new"] + (collapsed ? ["--collapsed"] : []) + (tint?.creationWords ?? [])
@@ -268,7 +273,7 @@ public enum RemoteOperation: Equatable, Sendable {
 
     var operands: [String] {
         switch self {
-        case .renameSession(_, let name), .renameWorkspace(_, let name): [name]
+        case .renameSession(_, let name), .renameWorkspace(_, let name), .setProgress(_, let name): [name]
         case .newWorkspace(let name, _, _): name.map { [$0] } ?? []
         case .moveSession(_, .workspace(let workspace)), .moveSessions(_, .workspace(let workspace)): [workspace.uuidString]
         case .reopenRecent(let id?): [id]
