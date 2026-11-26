@@ -117,6 +117,31 @@ struct AppStoreProgressTests {
         #expect(session.terminalProgress == nil)
     }
 
+    @Test func closingThePrimaryPaneClearsItsProgressAndPromotesTheSplits() {
+        let (store, session) = makeHeadlessSession(split: true)
+        store.setTerminalProgress(.set(.percent(40)), forSession: session.id, pane: .left)
+        #expect(store.closePrimaryPane(session.id) == .promoted)
+        #expect(session.terminalProgress == nil)
+
+        let (other, promoted) = makeHeadlessSession(split: true)
+        other.setTerminalProgress(.set(.percent(40)), forSession: promoted.id, pane: .right)
+        #expect(other.closePrimaryPane(promoted.id) == .promoted)
+        #expect(promoted.terminalProgress?.pane == .left)
+        other.setTerminalProgress(.clear, forSession: promoted.id, pane: .left)
+        #expect(promoted.terminalProgress == nil)
+    }
+
+    @Test func swappingPanesMovesTerminalProgressWithItsPane() {
+        let (store, session) = makeHeadlessSession(split: true)
+        store.setTerminalProgress(.set(.percent(40)), forSession: session.id, pane: .left)
+
+        #expect(store.swapPanes(session.id, allowingUnrealized: true) == nil)
+
+        #expect(session.terminalProgress?.pane == .right)
+        store.setTerminalProgress(.clear, forSession: session.id, pane: .left)
+        #expect(session.terminalProgress != nil)
+    }
+
     @Test func terminalProgressExpiresWithoutUpdates() async throws {
         store.terminalProgressTimeout = .milliseconds(50)
         terminal(.set(.percent(40)))
@@ -131,12 +156,12 @@ struct AppStoreProgressTests {
     }
 
     @Test func aTerminalUpdateRearmsTheExpiry() async throws {
-        store.terminalProgressTimeout = .milliseconds(500)
+        store.terminalProgressTimeout = .seconds(2)
         terminal(.set(.percent(40)))
-        try await Task.sleep(for: .milliseconds(300))
+        try await Task.sleep(for: .seconds(1))
         terminal(.set(.percent(50)))
 
-        try await Task.sleep(for: .milliseconds(300))
+        try await Task.sleep(for: .seconds(1.2))
 
         #expect(shown == .percent(50))
     }

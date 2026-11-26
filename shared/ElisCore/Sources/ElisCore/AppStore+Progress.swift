@@ -46,6 +46,14 @@ extension AppStore {
         changeProgress(of: session) { $0.terminalProgress = nil }
     }
 
+    /// moveTerminalProgress re-tags the slot when panes swap or promote; a nil result means its pane is gone.
+    func moveTerminalProgress(of session: Session, _ move: (StatusPane) -> StatusPane?) {
+        guard let slot = session.terminalProgress else { return }
+        let pane = slot.pane ?? .left
+        guard let moved = move(pane) else { return clearTerminalProgress(of: session, pane: pane) }
+        session.terminalProgress = TerminalProgressSlot(progress: slot.progress, pane: moved, token: slot.token)
+    }
+
     func progressNode(of session: Session) -> ControlProgressNode? {
         session.shownProgress.map {
             ControlProgressNode(value: $0.progress.label, fraction: $0.progress.fraction, source: $0.source.rawValue)
