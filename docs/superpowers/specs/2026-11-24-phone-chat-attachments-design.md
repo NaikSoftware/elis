@@ -32,7 +32,8 @@ reads them with its own file tools.
 
 ## Design
 
-**Prompt.** The phone sends one line: the user's text, then ` Attached: '<path1>' '<path2>'`. With no text, the line
+**Prompt.** Images in a Claude session now go as a separate paste: see `2026-11-26-phone-attachments-image-paste-design.md`.
+The phone sends one line: the user's text, then ` Attached: '<path1>' '<path2>'`. With no text, the line
 starts with `Attached:`. This format is deliberate:
 - A paste is never a bare path. Claude can turn a lone image path into `[Image #N]`.
 - It stays on one line, because TypeWriter refuses newlines.

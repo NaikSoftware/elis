@@ -6,6 +6,7 @@ import 'package:flutter_markdown_plus/flutter_markdown_plus.dart';
 
 import '../notice.dart';
 import '../theme.dart';
+import 'attachments.dart';
 import 'rows.dart';
 import 'transcript.dart';
 
@@ -233,8 +234,6 @@ String markText(String? mark) => switch (mark) {
 const _toolStyle = TextStyle(color: C.muted, fontSize: 13);
 const _monoStyle = TextStyle(fontFamily: mono, fontFamilyFallback: monoFallback, fontSize: 12, color: C.termText);
 
-const _pictures = {'png', 'jpg', 'jpeg', 'gif', 'webp'}; // LinkPolicy.imageExtensions, what an --image page takes
-
 Widget _toolRow(BuildContext c, ChatItem i,
     {required bool stopped, String? Function(String)? promptMark, Future<String?> Function(String)? openImage}) {
   final agent = i.isAgent;
@@ -246,7 +245,7 @@ Widget _toolRow(BuildContext c, ChatItem i,
           SubagentState.finished => markText(i.mark ?? 'done'),
         };
   final patch = i.patch, output = i.output, file = i.file;
-  final picture = file != null && openImage != null && _pictures.contains(file.split('.').last.toLowerCase());
+  final picture = file != null && openImage != null && isPicture(file);
   return _Expandable(
     key: ValueKey('tool-${i.uuid}'),
     // a picture it read has no text to expand: the file opens instead

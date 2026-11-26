@@ -21,9 +21,9 @@ Grid _g(String name) => gridFromAnsi(File('test/fixtures/grid/$name.ansi').readA
 VtRow _row(String text) => VtRow([for (final r in text.runes) VtCell(String.fromCharCode(r))]);
 
 /// [g] with Claude's input showing [text] on its first row and no further input rows.
-Grid _withInput(Grid g, String text) {
+Grid _withInput(Grid g, String text, {String prompt = '❯'}) {
   final (a, b) = ClaudeScreen.read(g).inputRows!;
-  final rows = [...g.rows]..replaceRange(a, b, [_row('❯ $text')]);
+  final rows = [...g.rows]..replaceRange(a, b, [_row('$prompt $text')]);
   return Grid([for (var n = 0; n < b - a - 1; n++) VtRow(const []), ...rows]);
 }
 
@@ -752,34 +752,67 @@ void main() {
       expect((c.attachEnabled, c.attachTip), (false, 'Claude shows a dialog'));
     });
 
-    testWidgets('sendPastesTheTextAndTheHostPaths', (t) async {
+    testWidgets('sendPastesTextThenTheImagesAlone', (t) async {
       final idle = _g('idle-placeholder-45');
       final c = _C(t, idle);
-      const line = "fix this Attached: '/h/u/S/a.png' '/h/u/S/b.txt'";
-      c.script((w) => _enter(w) ? idle : _withInput(idle, line));
+      const line = "fix this Attached: '/h/u/S/b.txt'";
+      c.script((w) => switch (w) {
+            PasteWrite(text: line) => _withInput(idle, line),
+            PasteWrite() => _withInput(idle, '$line [Image #1]'),
+            _ => idle,
+          });
       await c.pump();
       await c.attach();
       await c.type('fix this ');
       await c.send();
-      expect((c.writer.writes.first as PasteWrite).text, line);
-      expect(_enter(c.writer.writes.last), isTrue);
+      expect([for (final w in c.writer.writes.take(2)) (w as PasteWrite).text], [line, "'/h/u/S/a.png'"]);
+      expect((c.writer.writes.length, _enter(c.writer.writes.last)), (3, true));
       expect(c.field, '');
       expect(c.chip('a.png'), findsNothing);
       expect(c.chip('b.txt'), findsNothing);
     });
 
-    testWidgets('withNoTextSendPastesOnlyThePaths', (t) async {
+    testWidgets('imagesOnlyPasteOnceThenEnter', (t) async {
       final idle = _g('idle-placeholder-45');
       final c = _C(t, idle)..picks = const [_a];
-      const line = "Attached: '/h/u/S/a.png'";
-      c.script((w) => _enter(w) ? idle : _withInput(idle, line));
+      c.script((w) => _enter(w) ? idle : _withInput(idle, '[Image #1]'));
       await c.pump();
       expect(c.sendEnabled, isFalse);
       await c.attach();
       expect(c.sendEnabled, isTrue);
       await c.send();
-      expect((c.writer.writes.first as PasteWrite).text, line);
+      expect((c.writer.writes.first as PasteWrite).text, "'/h/u/S/a.png'");
+      expect((c.writer.writes.length, _enter(c.writer.writes.last)), (2, true));
       expect(c.chip('a.png'), findsNothing);
+    });
+
+    testWidgets('antigravityKeepsTheSingleLine', (t) async {
+      final idle = _g('agy-idle-70');
+      final c = _C(t, idle);
+      const line = "fix this Attached: '/h/u/S/a.png' '/h/u/S/b.txt'";
+      c.script((w) => _enter(w) ? idle : _withInput(idle, line, prompt: '>'));
+      await c.pump();
+      await c.attach();
+      await c.type('fix this');
+      await c.send();
+      expect((c.writer.writes.first as PasteWrite).text, line);
+      expect((c.writer.writes.length, _enter(c.writer.writes.last)), (2, true));
+    });
+
+    testWidgets('typedImagePasteIsBracketed', (t) async {
+      final colour = _g('idle-placeholder-45');
+      final screen = [for (var r = 0; r < colour.rows.length; r++) colour.text(r)].join('\n');
+      final c = _C(t, Grid.text(screen))..picks = const [_a];
+      var n = 0;
+      c.script((w) => Grid.text(_enter(w) ? screen : screen.replaceFirst(RegExp(r'Try ".*"'), 'x${n++}')));
+      await c.pump();
+      await c.attach();
+      await c.type('hello');
+      await c.send();
+      expect(c.writer.writes.length, 3);
+      expect((c.writer.writes[0] as PasteWrite).text, 'hello');
+      expect((c.writer.writes[1] as TextWrite).text, "\x1b[200~'/h/u/S/a.png'\x1b[201~");
+      expect(_enter(c.writer.writes.last), isTrue);
     });
 
     for (final runs in [true, false]) {
@@ -813,11 +846,15 @@ void main() {
       expect(c.chip('b.txt'), findsOneWidget);
       expect(find.text('cannot read b.txt'), findsOneWidget);
       c.onUpload = (u) => scheduleMicrotask(u.finish);
-      const line = "fix this Attached: '/h/u/S/a.png' '/h/u/S/b.txt'";
-      c.script((w) => _enter(w) ? idle : _withInput(idle, line));
+      const line = "fix this Attached: '/h/u/S/b.txt'";
+      c.script((w) => switch (w) {
+            PasteWrite(text: line) => _withInput(idle, line),
+            PasteWrite() => _withInput(idle, '$line [Image #1]'),
+            _ => idle,
+          });
       await c.send();
       expect([for (final u in c.ups) u.file.name], ['a.png', 'b.txt', 'b.txt']);
-      expect((c.writer.writes.first as PasteWrite).text, line);
+      expect([for (final w in c.writer.writes.whereType<PasteWrite>()) w.text], [line, "'/h/u/S/a.png'"]);
     });
 
     testWidgets('removingAnUploadingChipStopsTheSendSilently', (t) async {

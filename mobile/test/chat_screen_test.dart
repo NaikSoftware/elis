@@ -317,7 +317,7 @@ void main() {
   testWidgets('chipsPickedWhileTheLinkIsDownUploadAfterTheReconnect', (t) async {
     final dir = Directory.systemTemp.createTempSync('attach');
     addTearDown(() => dir.deleteSync(recursive: true));
-    File('${dir.path}/a.png').writeAsBytesSync([1, 2, 3]);
+    File('${dir.path}/a.txt').writeAsBytesSync([1, 2, 3]);
     final picked = Completer<List<PickedFile>>();
     final h = Harness(t, treeOf(session: _claude))..pick = () => picked.future;
     await h.start();
@@ -332,7 +332,7 @@ void main() {
     final first = h.r;
     await pauseResume(h, watch: false, paused: () async {
       expect(h.m.mux, isNull);
-      picked.complete([PickedFile(name: 'a.png', path: '${dir.path}/a.png', size: 3)]);
+      picked.complete([PickedFile(name: 'a.txt', path: '${dir.path}/a.txt', size: 3)]);
       await t.pump();
     });
     await t.pump(const Duration(milliseconds: 10));
@@ -340,19 +340,19 @@ void main() {
     expect(r, isNot(same(first)));
     await h.opened();
     await _show(h, 'idle-placeholder-45');
-    expect(find.widgetWithText(InputChip, 'a.png'), findsOneWidget);
+    expect(find.widgetWithText(InputChip, 'a.txt'), findsOneWidget);
     expect((attach().onPressed != null, attach().tooltip), (true, 'Attach files'));
     await t.enterText(find.byKey(const Key('composer')), 'fix this');
     await t.pump();
     await t.tap(find.byKey(const Key('send')));
     await t.pump();
     final open = r.of(LinkKind.open).last;
-    expect(jsonDecode(utf8.decode(open.payload)), {'type': 'upload', 'target': 's1', 'name': 'a.png', 'size': 3});
+    expect(jsonDecode(utf8.decode(open.payload)), {'type': 'upload', 'target': 's1', 'name': 'a.txt', 'size': 3});
     final up = open.channel;
     r.send([
       ...json(LinkKind.opened, up, {}),
       ...frame(LinkKind.credit, up, LinkFrame.credit(up, 3).payload),
-      ...json(LinkKind.close, up, {'reason': 'uploaded', 'path': '/h/uploads/s1/a.png'}),
+      ...json(LinkKind.close, up, {'reason': 'uploaded', 'path': '/h/uploads/s1/a.txt'}),
     ]);
     await t.pump();
     await t.pump();
@@ -365,7 +365,7 @@ void main() {
     await t.pump();
     await t.pump();
     final pasted = utf8.decode([for (final f in r.of(LinkKind.data)) if (f.channel == claim.channel) ...f.payload]);
-    expect(pasted, contains("fix this Attached: '/h/uploads/s1/a.png'"));
+    expect(pasted, contains("fix this Attached: '/h/uploads/s1/a.txt'"));
     await t.pump(const Duration(seconds: 3));
     await h.stop();
   });

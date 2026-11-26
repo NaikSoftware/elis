@@ -173,15 +173,20 @@ class ChatComposerState extends State<ChatComposer> {
   // [chips], uploaded, are named in the line and clear with it
   Future<void> _send(String text, {bool replace = false, List<_Attachment> chips = const []}) async {
     text = text.trimRight();
-    final line = attachedLine(text, [for (final a in chips) a.hostPath!]);
-    if (line.isEmpty) return;
+    final paths = [for (final a in chips) a.hostPath!];
+    // an image inside a command, a `!` shell line or a `#` memory entry would split it
+    final split = widget.screen()?.agy != true && !RegExp(r'^\s*[/!#]').hasMatch(text);
+    final images = split ? paths.where(isPicture).toList() : const <String>[];
+    final line = attachedLine(text, [for (final p in paths) if (!images.contains(p)) p]);
+    if (line.isEmpty && images.isEmpty) return;
     if (_blocked(widget.screen()) case final why?) return _tell(why);
     widget.onSending?.call();
     setState(() {
       _sending = true;
       _offer = null;
     });
-    final r = await widget.gate.run(2, (q) => widget.colours ? _live(q, line, replace) : _typed(q, line));
+    final r = await widget.gate.run(
+        (line.isEmpty ? 1 : 2) + (images.isEmpty ? 0 : 1), (q) => widget.colours ? _live(q, line, replace, images) : _typed(q, line, images));
     if (!mounted) return;
     final draft = norm(widget.screen()?.draft ?? '');
     final offer = r.reason == _changed && draft.isNotEmpty;
@@ -312,7 +317,7 @@ class ChatComposerState extends State<ChatComposer> {
     );
   }
 
-  Future<void> _live(GateSequence q, String text, bool replace) async {
+  Future<void> _live(GateSequence q, String text, bool replace, List<String> images) async {
     final draft = ClaudeScreen.read(q.grid).draft;
     if (draft.isNotEmpty) {
       if (!replace && norm(draft) != norm(_adopted ?? '')) throw GateStop(GateOutcome.mismatch, _changed);
@@ -333,8 +338,13 @@ class ChatComposerState extends State<ChatComposer> {
       }, done: (g) => _inputRows(g) != before));
       shown = text.substring(1);
       await q.send(GateStep(PasteWrite(shown), ready: (g) => ClaudeScreen.read(g).bottomStack, done: (g) => pasteShown(ClaudeScreen.read(g), shown)));
-    } else {
+    } else if (text.isNotEmpty) {
       await q.send(_write(PasteWrite(text), text));
+    }
+    if (images.isNotEmpty) {
+      await q.send(GateStep(PasteWrite(imagePaste(images)),
+          ready: (g) => ClaudeScreen.read(g).bottomStack,
+          done: (g) => '[Image #'.allMatches(ClaudeScreen.read(g).draft).length == images.length));
     }
     bool human(ChatItem i) => i.kind == 'user' && i.isHumanPrompt;
     final humans = widget.feed.items.where(human).length;
@@ -372,7 +382,7 @@ class ChatComposerState extends State<ChatComposer> {
   }
 
   // a `session.text` grid has no SGR: a placeholder reads as text, so no draft check and no clear
-  Future<void> _typed(GateSequence q, String text) async {
+  Future<void> _typed(GateSequence q, String text, List<String> images) async {
     String? before;
     String all(Grid g) => [for (var r = 0; r < g.rows.length; r++) g.text(r)].join('\n');
     bool ready(Grid g) {
@@ -380,7 +390,11 @@ class ChatComposerState extends State<ChatComposer> {
       return ClaudeScreen.read(g).bottomStack;
     }
 
-    await q.send(GateStep(PasteWrite(text), ready: ready, done: (g) => all(g) != before));
+    if (text.isNotEmpty) await q.send(GateStep(PasteWrite(text), ready: ready, done: (g) => all(g) != before));
+    // Claude Code always enables bracketed paste, and `session.type` sends the text as is
+    if (images.isNotEmpty) {
+      await q.send(GateStep(TextWrite('\x1b[200~${imagePaste(images)}\x1b[201~'), ready: ready, done: (g) => all(g) != before));
+    }
     await q.send(GateStep(KeyWrite(VtKey.enter), ready: ready, done: (g) => all(g) != before));
   }
 

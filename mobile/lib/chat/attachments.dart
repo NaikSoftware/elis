@@ -43,6 +43,13 @@ String attachedLine(String text, List<String> paths) {
   return t.isEmpty ? attached : '$t $attached';
 }
 
+const pictureExtensions = {'png', 'jpg', 'jpeg', 'gif', 'webp'}; // LinkPolicy.imageExtensions, what an --image page takes
+
+bool isPicture(String path) => pictureExtensions.contains(path.split('.').last.toLowerCase());
+
+/// What Claude Code turns into one `[Image #N]` per path: a paste of only the quoted paths.
+String imagePaste(List<String> paths) => paths.map((p) => "'$p'").join(' ');
+
 /// `1.2 MB`, `4 KB`, `512 B`.
 String humanSize(int bytes) => bytes < 1024
     ? '$bytes B'
