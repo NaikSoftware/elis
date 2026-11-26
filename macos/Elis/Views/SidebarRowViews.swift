@@ -481,6 +481,7 @@ class SidebarRowView: NSTableRowView {
     override func prepareForReuse() {
         super.prepareForReuse()
         isHovered = false
+        setProgressFill(nil)
     }
 
     /// waveLayer clips the drifting gradient to the row rect; nil while the row shows no wave.
@@ -509,7 +510,7 @@ class SidebarRowView: NSTableRowView {
         if waveLayer == nil {
             clip.masksToBounds = true
             clip.addSublayer(CAGradientLayer())
-            layer?.insertSublayer(clip, at: 0)
+            if let progressLayer { layer?.insertSublayer(clip, above: progressLayer) } else { layer?.insertSublayer(clip, at: 0) }
             waveLayer = clip
         }
         let gradient = clip.sublayers?.first as? CAGradientLayer
@@ -523,9 +524,60 @@ class SidebarRowView: NSTableRowView {
         layoutWave()
     }
 
+    /// progressLayer clips the progress gradient to the row rect, directly under the wave; nil while there is no fill.
+    private(set) var progressLayer: CALayer?
+    private(set) var progressFill: SidebarProgressFill?
+
+    /// setProgressFill shows a determinate progress as a gradient across `fraction` of the row, or removes it for nil.
+    /// A fraction change on a shown fill slides over 0.2 s unless Reduce Motion is on.
+    func setProgressFill(_ fill: SidebarProgressFill?) {
+        guard fill != progressFill else { return }
+        let animate = progressFill != nil && fill?.colorHex == progressFill?.colorHex
+            && !NSWorkspace.shared.accessibilityDisplayShouldReduceMotion
+        progressFill = fill
+        defer { refreshInfoLine() }
+        guard let fill, let color = NSColor(elisHex: fill.colorHex) else {
+            progressLayer?.removeFromSuperlayer()
+            progressLayer = nil
+            return
+        }
+        wantsLayer = true
+        let clip = progressLayer ?? CALayer()
+        if progressLayer == nil {
+            clip.masksToBounds = true
+            let gradient = CAGradientLayer()
+            gradient.anchorPoint = .zero
+            gradient.startPoint = CGPoint(x: 0, y: 0.5)
+            gradient.endPoint = CGPoint(x: 1, y: 0.5)
+            clip.addSublayer(gradient)
+            if let waveLayer { layer?.insertSublayer(clip, below: waveLayer) } else { layer?.insertSublayer(clip, at: 0) }
+            progressLayer = clip
+        }
+        let tone = color.withAlphaComponent(SidebarProgressFill.alpha)
+        (clip.sublayers?.first as? CAGradientLayer)?.colors = [tone, tone, color.withAlphaComponent(0)].map(\.cgColor)
+        layoutProgress(animated: animate)
+    }
+
+    private func layoutProgress(animated: Bool = false) {
+        guard let clip = progressLayer, let gradient = clip.sublayers?.first as? CAGradientLayer, let fill = progressFill else { return }
+        CATransaction.begin()
+        CATransaction.setDisableActions(true)
+        clipToRow(clip)
+        CATransaction.commit()
+        let width = clip.bounds.width * fill.fraction
+        CATransaction.begin()
+        CATransaction.setDisableActions(!animated)
+        CATransaction.setAnimationDuration(0.2)
+        gradient.bounds = CGRect(x: 0, y: 0, width: width, height: clip.bounds.height)
+        gradient.position = .zero
+        gradient.locations = [0, NSNumber(value: width > 0 ? max(0, (width - SidebarProgressFill.feather) / width) : 0), 1]
+        CATransaction.commit()
+    }
+
     override func layout() {
         super.layout()
         alignToContent()
+        layoutProgress()
         layoutWave()
     }
 
@@ -557,15 +609,7 @@ class SidebarRowView: NSTableRowView {
         let period = bounds.width * 2
         CATransaction.begin()
         CATransaction.setDisableActions(true)
-        // square where the group continues; at the group's outer ends it follows the band's inner radius
-        clip.frame = rowRect
-        let top: CACornerMask = isFlipped ? [.layerMinXMinYCorner, .layerMaxXMinYCorner] : [.layerMinXMaxYCorner, .layerMaxXMaxYCorner]
-        let bottom: CACornerMask = isFlipped ? [.layerMinXMaxYCorner, .layerMaxXMaxYCorner] : [.layerMinXMinYCorner, .layerMaxXMinYCorner]
-        var corners: CACornerMask = []
-        if groupEdge == .first || groupEdge == .single { corners.formUnion(top) }
-        if groupEdge == .last || groupEdge == .single { corners.formUnion(bottom) }
-        clip.maskedCorners = corners
-        clip.cornerRadius = corners.isEmpty ? 0 : Self.bandRadius - Self.groupPadding
+        clipToRow(clip)
         gradient.frame = CGRect(x: -clip.frame.minX, y: 0, width: period * 2, height: clip.bounds.height)
         CATransaction.commit()
         guard period != wavePeriod || (!waveStill && gradient.animation(forKey: Self.waveKey) == nil) else { return }
@@ -578,6 +622,19 @@ class SidebarRowView: NSTableRowView {
         drift.duration = 4.8
         drift.repeatCount = .greatestFiniteMagnitude
         gradient.add(drift, forKey: Self.waveKey)
+    }
+
+    /// clipToRow frames `clip` on the row rect: square where the group continues, and at the group's outer ends
+    /// following the band's inner radius.
+    private func clipToRow(_ clip: CALayer) {
+        clip.frame = rowRect
+        let top: CACornerMask = isFlipped ? [.layerMinXMinYCorner, .layerMaxXMinYCorner] : [.layerMinXMaxYCorner, .layerMaxXMaxYCorner]
+        let bottom: CACornerMask = isFlipped ? [.layerMinXMaxYCorner, .layerMaxXMaxYCorner] : [.layerMinXMinYCorner, .layerMaxXMinYCorner]
+        var corners: CACornerMask = []
+        if groupEdge == .first || groupEdge == .single { corners.formUnion(top) }
+        if groupEdge == .last || groupEdge == .single { corners.formUnion(bottom) }
+        clip.maskedCorners = corners
+        clip.cornerRadius = corners.isEmpty ? 0 : Self.bandRadius - Self.groupPadding
     }
 
     /// Half the gap between workspace groups, and the group's padding around its rows.
@@ -674,9 +731,14 @@ class SidebarRowView: NSTableRowView {
                 over((app.terminalForegroundColor ?? .labelColor).withAlphaComponent(0.07))
             }
             backdrops = [stack]
+            // the line may sit on the fill or past its end
+            if let progressFill, let color = NSColor(elisHex: progressFill.colorHex) {
+                backdrops.append(RGBA.composite(color.withAlphaComponent(SidebarProgressFill.alpha).rgba, over: stack))
+            }
             guard let wave, let base = NSColor(elisHex: wave.base), let second = NSColor(elisHex: wave.second) else { return }
-            backdrops = [RGBA.composite(base.withAlphaComponent(0.20).rgba, over: stack),
-                         RGBA.composite(second.withAlphaComponent(0.16).rgba, over: stack)]
+            backdrops = backdrops.flatMap {
+                [RGBA.composite(base.withAlphaComponent(0.20).rgba, over: $0), RGBA.composite(second.withAlphaComponent(0.16).rgba, over: $0)]
+            }
         }
         return backdrops
     }
