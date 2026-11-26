@@ -49,6 +49,7 @@ final class MockControlActions: ControlActions {
         case sessionTint(target: String?, window: String?, ControlTintUpdate)
         case workspaceTint(target: String?, window: String?, ControlTintUpdate)
         case markSessionSeen(target: String?, window: String?)
+        case sessionProgress(target: String?, SessionProgress?)
         case sessionStatus(target: String?, window: String?, ControlSessionStatusUpdate)
         case sessionRestore(target: String?, window: String?, ControlSessionRestoreUpdate)
         case sessionRestart(target: String?, window: String?, ControlSessionRestartOptions)
@@ -466,6 +467,11 @@ final class MockControlActions: ControlActions {
 
     func markSessionSeen(_ target: String?, window: String?) -> ControlResponse {
         calls.append(.markSessionSeen(target: target, window: window))
+        return ControlResponse(ok: true)
+    }
+
+    func setSessionProgress(_ target: String?, window _: String?, progress: SessionProgress?) -> ControlResponse {
+        calls.append(.sessionProgress(target: target, progress))
         return ControlResponse(ok: true)
     }
 

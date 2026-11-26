@@ -62,6 +62,19 @@ extension Session {
         }
     }
 
+    struct Progress: RequestCommand {
+        static let configuration = CommandConfiguration(
+            abstract: "Fill a session row with progress: N/M, N%, indeterminate, or clear.")
+        @Argument(help: "3/7, 40%, indeterminate, or clear.") var value: String
+        @OptionGroup var target: TargetOptions
+        @OptionGroup var options: ClientOptions
+
+        func makeRequest() throws -> ControlRequest {
+            ControlRequest(cmd: .sessionProgress, target: target.target,
+                           args: options.withWindow(ControlArgs(progress: value)))
+        }
+    }
+
     /// The per-session, per-pane restore-command override. Nested under `Session`, a different verb from the
     /// top-level `restore clear` (app-global and capture-scoped; this one per-session and override-scoped).
     struct Restore: RequestCommand {

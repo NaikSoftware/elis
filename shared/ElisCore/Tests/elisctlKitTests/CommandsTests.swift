@@ -621,6 +621,11 @@ struct CommandsTests {
         #expect(validationMessage(["session", "text", "--pane", "other"]) == "--pane must be left, right, or scratch")
     }
 
+    @Test func sessionProgressRequest() throws {
+        let req = try request(["session", "progress", "3/7", "--target", "a"])
+        #expect(req == ControlRequest(cmd: .sessionProgress, target: "a", args: ControlArgs(progress: "3/7")))
+    }
+
     @Test func sessionStatusWithBlink() throws {
         let req = try request(["session", "status", "active", "--blink"])
         #expect(req.cmd == .sessionStatus)
