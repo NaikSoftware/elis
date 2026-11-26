@@ -549,7 +549,9 @@ private Q_SLOTS:
         QCOMPARE(node["source"].toString(), QStringLiteral("control"));
         QCOMPARE(call(s, t, "session.progress", a, {{"progress", "8/7"}})["error"].toString(), QStringLiteral("invalid progress"));
         QVERIFY(call(s, t, "session.progress", a, {{"progress", "clear"}})["ok"].toBool());
-        QVERIFY(!call(s, t, "session.get", a)["result"]["session"].toObject().contains("progress"));
+        const QJsonObject cleared = call(s, t, "tree")["result"]["tree"]["workspaces"][0]["sessions"][0].toObject();
+        QCOMPARE(cleared["id"].toString(), a);
+        QVERIFY(!cleared.contains("progress"));
         QList<QJsonObject> progress;
         for (const QList<QVariant> &e : std::as_const(spy))
             if (e.first().toJsonObject()["kind"].toString() == QLatin1String("progress"))
