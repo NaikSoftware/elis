@@ -2246,7 +2246,7 @@ private Q_SLOTS:
             };
             const QColor active = statusColor(Settings{}, QStringLiteral("active"));
             for (const TintSwatch &t : Store::tintPalette()) {
-                const QColor tint(dark ? t.dark : t.light), band = over(window, tint, 0.10);
+                const QColor tint(dark ? t.dark : t.light), band = over(window, tint, 0.06);
                 // the info line's backgrounds: banded, row-tinted, hovered, selected, and both drifting active stops
                 const QList<QColor> unders{band, over(band, tint, 0.09), over(band, text, 0.07), over(over(band, tint, 0.09), tint, 0.20),
                                            over(band, tint, 0.20), over(band, active, 0.20), over(band, tint, 41 / 255.0)};

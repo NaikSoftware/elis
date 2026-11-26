@@ -636,6 +636,8 @@ class SidebarRowView: NSTableRowView {
     /// Half the gap between workspace groups, and the group's padding around its rows.
     static let groupGap: CGFloat = 4
     static let groupPadding: CGFloat = 3
+    /// Kept faint so the tinted selection pill inside the group reads as the accent, not as another card.
+    static let bandFillAlpha: CGFloat = 0.06, bandStrokeAlpha: CGFloat = 0.09
 
     /// bandRect is the group's frame in this row: `groupPadding` around the row rect, and `groupGap` short of
     /// the row's edge at the group's outer ends.
@@ -695,7 +697,7 @@ class SidebarRowView: NSTableRowView {
     override func drawBackground(in dirtyRect: NSRect) {
         super.drawBackground(in: dirtyRect)
         if let band {
-            fillBand(band.color.withAlphaComponent(0.10), edge: band.edge, stroke: band.color.withAlphaComponent(0.16))
+            fillBand(band.color.withAlphaComponent(Self.bandFillAlpha), edge: band.edge, stroke: band.color.withAlphaComponent(Self.bandStrokeAlpha))
         }
         let rect = rowRect, radius = Self.rowRadius
         if let rowWash {
@@ -719,7 +721,7 @@ class SidebarRowView: NSTableRowView {
             // the outline is clear over the terminal background; translucency is ignored
             var stack = (app.terminalBackgroundColor ?? .windowBackgroundColor).withAlphaComponent(1).rgba
             func over(_ color: NSColor) { stack = RGBA.composite(color.rgba, over: stack) }
-            if let band { over(band.color.withAlphaComponent(0.10)) }
+            if let band { over(band.color.withAlphaComponent(Self.bandFillAlpha)) }
             if let rowWash { over(rowWash) }
             if isSelected {
                 over(selectionColor.withAlphaComponent(isEmphasized ? 0.20 : 0.12))
