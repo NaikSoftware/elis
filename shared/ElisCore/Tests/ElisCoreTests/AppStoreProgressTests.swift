@@ -1,4 +1,5 @@
 import Foundation
+import Observation
 import Testing
 @testable import ElisCore
 
@@ -159,11 +160,21 @@ struct AppStoreProgressTests {
         store.terminalProgressTimeout = .seconds(2)
         terminal(.set(.percent(40)))
         try await Task.sleep(for: .seconds(1))
-        terminal(.set(.percent(50)))
+        terminal(.set(.percent(40)))
 
         try await Task.sleep(for: .seconds(1.2))
 
-        #expect(shown == .percent(50))
+        #expect(shown == .percent(40))
+    }
+
+    @Test func anUnchangedTerminalReportDoesNotRedrawTheRow() {
+        terminal(.set(.percent(40)))
+        nonisolated(unsafe) var redrawn = false
+        withObservationTracking { _ = session.terminalProgress } onChange: { redrawn = true }
+
+        terminal(.set(.percent(40)))
+
+        #expect(!redrawn)
     }
 
     @Test func anUndoneCloseDropsTheTerminalProgress() {

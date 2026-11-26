@@ -1,10 +1,9 @@
 import Foundation
 
-/// The terminal's progress and the pane that reported it; `token` tells a stale expiry from the latest update.
+/// The terminal's progress and the pane that reported it.
 public struct TerminalProgressSlot: Sendable, Equatable {
     public let progress: SessionProgress
     public let pane: StatusPane?
-    public let token: UUID
 }
 
 extension Session {
@@ -31,12 +30,14 @@ extension AppStore {
         case .clear:
             clearTerminalProgress(of: session, pane: pane ?? .left)
         case .set(let progress):
-            let token = UUID()
-            changeProgress(of: session) { $0.terminalProgress = TerminalProgressSlot(progress: progress, pane: pane, token: token) }
+            // programs repeat an unchanged report often; only a change may redraw the row
+            let slot = TerminalProgressSlot(progress: progress, pane: pane)
+            if session.terminalProgress != slot { changeProgress(of: session) { $0.terminalProgress = slot } }
+            session.terminalProgressExpiry?.cancel()
             let timeout = terminalProgressTimeout
-            Task { @MainActor [weak self] in
+            session.terminalProgressExpiry = Task { @MainActor [weak self] in
                 try? await Task.sleep(for: timeout)
-                guard let self, let session = self.session(withID: id), session.terminalProgress?.token == token else { return }
+                guard !Task.isCancelled, let self, let session = self.session(withID: id), session.terminalProgress != nil else { return }
                 self.changeProgress(of: session) { $0.terminalProgress = nil }
             }
         }
@@ -52,7 +53,7 @@ extension AppStore {
         guard let slot = session.terminalProgress else { return }
         let pane = slot.pane ?? .left
         guard let moved = move(pane) else { return clearTerminalProgress(of: session, pane: pane) }
-        session.terminalProgress = TerminalProgressSlot(progress: slot.progress, pane: moved, token: slot.token)
+        session.terminalProgress = TerminalProgressSlot(progress: slot.progress, pane: moved)
     }
 
     func progressNode(of session: Session) -> ControlProgressNode? {

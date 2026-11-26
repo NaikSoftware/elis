@@ -48,6 +48,7 @@ public final class Session: Identifiable {
     /// Progress from `session progress` and from OSC 9;4; see `shownProgress`. Ephemeral.
     public internal(set) var controlProgress: SessionProgress?
     public internal(set) var terminalProgress: TerminalProgressSlot?
+    @ObservationIgnored var terminalProgressExpiry: Task<Void, Never>?
 
     /// The coding agent either pane runs in the foreground, the focused pane's first, sampled by the app; the sidebar
     /// row shows its logo. Ephemeral, and nil again once the agent exits.
