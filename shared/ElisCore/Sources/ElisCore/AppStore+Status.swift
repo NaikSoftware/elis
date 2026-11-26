@@ -64,6 +64,7 @@ extension AppStore {
     /// surface that could keystroke-clear it. A nil tag counts as `.left`.
     func clearPaneStatus(_ pane: StatusPane, of session: Session) {
         session.paneAgentCwd[pane] = nil
+        clearTerminalProgress(of: session, pane: pane)
         let dropped = session.paneActivity.removeValue(forKey: pane) != nil
         if session.agentIndicator.status != .idle, (session.agentIndicator.statusPane ?? .left) == pane {
             showRemainingActivity(of: session)
@@ -136,6 +137,9 @@ extension AppStore {
                 previous: previous.status.rawValue
             )
         )
+        if previous.status != indicator.status, indicator.status == .completed || indicator.status == .idle {
+            changeProgress(of: session) { $0.controlProgress = nil }
+        }
     }
 
     /// clearStatus ends a session's status by hand or by selection. By hand clears every pane's activity; a selection

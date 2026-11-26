@@ -3,6 +3,7 @@ import Foundation
 /// Event kinds retained by the app-run control event ring.
 public enum ControlEventKind: String, Codable, CaseIterable, Sendable, Equatable {
     case status
+    case progress
     case notify
     case sessionCreated = "session.created"
     case sessionClosed = "session.closed"
@@ -65,13 +66,20 @@ public struct ControlEventPayload: Codable, Sendable, Equatable {
     public var handle: String?
     /// The `assistant.message` event's message text.
     public var text: String?
+    /// The `progress` event's shown value (`3/7`, `40%`, `indeterminate`); nil when the row shows none.
+    public var progress: String?
+    /// The `progress` event's source (`control`, `terminal`); nil when the row shows none.
+    public var source: String?
 
     public init(name: String? = nil, status: String? = nil, pane: String? = nil,
                 blink: Bool? = nil, color: String? = nil, shape: String? = nil,
                 previous: String? = nil, title: String? = nil, body: String? = nil,
                 host: String? = nil, paneID: String? = nil, parent: String? = nil,
                 from: String? = nil, messageID: String? = nil, remoteSessionID: String? = nil, ip: String? = nil,
-                kind: String? = nil, handle: String? = nil, text: String? = nil) {
+                kind: String? = nil, handle: String? = nil, text: String? = nil,
+                progress: String? = nil, source: String? = nil) {
+        self.progress = progress
+        self.source = source
         self.ip = ip
         self.kind = kind
         self.handle = handle

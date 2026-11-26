@@ -45,6 +45,9 @@ public final class Session: Identifiable {
     /// Each pane's agent's own directory from `session.status --cwd`, which a worktree moves while the shell's stays.
     /// Kept while the pane's agent sample shows an agent, so status changes never clear it.
     @ObservationIgnored var paneAgentCwd: [StatusPane: String] = [:]
+    /// Progress from `session progress` and from OSC 9;4; see `shownProgress`. Ephemeral.
+    public internal(set) var controlProgress: SessionProgress?
+    public internal(set) var terminalProgress: TerminalProgressSlot?
 
     /// The coding agent either pane runs in the foreground, the focused pane's first, sampled by the app; the sidebar
     /// row shows its logo. Ephemeral, and nil again once the agent exits.

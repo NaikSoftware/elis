@@ -44,6 +44,8 @@ struct ControlEventProtocolTests {
             ControlEvent(seq: 22, ts: 22.5, kind: .assistantMessage,
                          payload: ControlEventPayload(from: "sess-1", kind: "reply", handle: "claude-1", text: "done")),
             ControlEvent(seq: 23, ts: 23.5, kind: .assistantCleared),
+            ControlEvent(seq: 24, ts: 24.5, kind: .progress, window: "win", workspace: "work", session: "sess",
+                         payload: ControlEventPayload(name: "api", progress: "3/7", source: "control")),
         ]
 
         let data = try JSONEncoder().encode(events)

@@ -199,6 +199,19 @@ public struct ControlSessionPick: Codable, Sendable, Equatable {
     }
 }
 
+/// A session's shown progress in the `tree` response; `fraction` is omitted for an indeterminate one.
+public struct ControlProgressNode: Codable, Sendable, Equatable {
+    public let value: String
+    public let fraction: Double?
+    public let source: String
+
+    public init(value: String, fraction: Double?, source: String) {
+        self.value = value
+        self.fraction = fraction
+        self.source = source
+    }
+}
+
 /// A session as projected into the `tree` response.
 public struct ControlSessionNode: Codable, Sendable, Equatable {
     public let id: String
@@ -350,6 +363,8 @@ public struct ControlSessionNode: Codable, Sendable, Equatable {
     /// a pane's turn end leaves the row on another pane's work, and this says which panes are working. Omitted
     /// only for a row mirroring an origin that does not send the list.
     public let activePanes: [String]?
+    /// progress is what the row's fill shows, `session progress` before OSC 9;4; omitted when none.
+    public let progress: ControlProgressNode?
     /// lastSelectedAt is `Session.lastSelectedAt` as epoch seconds; omitted when no selection timestamp has
     /// been recorded.
     public let lastSelectedAt: Double?
@@ -447,7 +462,7 @@ public struct ControlSessionNode: Codable, Sendable, Equatable {
                 restoreCommand: String? = nil, splitRestoreCommand: String? = nil, status: String? = nil,
                 statusPane: String? = nil, statusBlink: Bool? = nil, statusColor: String? = nil,
                 statusShape: String? = nil, statusChangedAt: Double? = nil, activePanes: [String]? = nil,
-                background: BackgroundWatermark? = nil, paneBackgrounds: PaneBackgrounds? = nil, unseen: Int? = nil,
+                background: BackgroundWatermark? = nil, progress: ControlProgressNode? = nil, paneBackgrounds: PaneBackgrounds? = nil, unseen: Int? = nil,
                 fontSize: Double? = nil, splitFontSize: Double? = nil, scratchFontSize: Double? = nil,
                 surfaces: [ControlSurfaceNode]? = nil, realized: Bool? = nil,
                 context: String? = nil, remoteHost: String? = nil, splitCwd: String? = nil, scratchCwd: String? = nil,
@@ -511,6 +526,7 @@ public struct ControlSessionNode: Codable, Sendable, Equatable {
         self.statusShape = statusShape
         self.statusChangedAt = statusChangedAt
         self.activePanes = activePanes
+        self.progress = progress
         self.lastSelectedAt = lastSelectedAt
         self.tint = tint
         self.tintOn = tintOn
