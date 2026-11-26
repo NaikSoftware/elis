@@ -8,6 +8,9 @@ for v in $(env | sed -n 's/^\(ELIS_[A-Z_]*\|ZMX_[A-Z_]*\|AGTERM_[A-Z_]*\)=.*/\1/
 ctl() { "$bin/elisctl" "$@"; }
 pid=
 mpid=
+# a page overlay's Chromium draws offscreen only in software, and refuses root without its sandbox off
+export QTWEBENGINE_CHROMIUM_FLAGS=--disable-gpu QT_QUICK_BACKEND=software
+[ "$(id -u)" = 0 ] && export QTWEBENGINE_DISABLE_SANDBOX=1
 start() {
   CLAUDE_CONFIG_DIR=$ELIS_STATE_DIR/claude QT_QPA_PLATFORM=offscreen "$bin/elis" >"$ELIS_STATE_DIR/app.log" 2>&1 &
   pid=$!
@@ -133,6 +136,33 @@ ctl tree --json | grep -q '"overlaySizePercent":60' || fail "floating overlay re
 ctl tree --json | grep -q '"hiddenOverlays":\["session"\]' || fail "hidden overlay read-back"
 ctl session hud 'hi' --target "$id" 2>/dev/null && fail "a hud over a running program"
 ctl session overlay close --target "$id"
+err=$(ctl session overlay open --html x.html --target "$id" 2>&1) && fail "a relative page opened"
+if [[ $err != *qt6-webengine-dev* ]]; then # a build with page overlays
+  site=$ELIS_STATE_DIR/site
+  mkdir -p "$site"
+  printf '<title>Smoke</title><p>ok</p>' >"$site/index.html"
+  loaded() { for _ in $(seq 150); do ctl tree --json | grep -q '"state":"loaded"' && return; sleep 0.2; done; fail "page never loaded"; }
+  ctl session overlay open --html "$site/index.html" --cwd "$site" --navigation --target "$id" >/dev/null
+  loaded
+  ctl tree --json | grep -q '"title":"Smoke"' || fail "page title read-back"
+  page=$(ctl tree --json | python3 -I -c 'import json,sys
+for w in json.load(sys.stdin)["result"]["tree"]["workspaces"]:
+    for s in w["sessions"]:
+        for p in s.get("htmlOverlays", []): print(p["id"])')
+  [ -n "$page" ] || fail "page id read-back"
+  ctl session overlay reload --current --target "$id"
+  [ "$(ctl session overlay toggle --target "$id")" = hidden ] || fail "page hides"
+  ctl tree --json | grep -q '"hidden":true' || fail "hidden page read-back"
+  ctl session overlay toggle --target "$id" >/dev/null
+  ctl session overlay submit done --target "$id"
+  out=$(ctl session overlay result --page "$page") || fail "page result exits 0 once submitted"
+  [[ $out == *'"outcome":"submitted"'* && $out == *'"value":"done"'* ]] || fail "page outcome ($out)"
+  (for _ in $(seq 150); do ctl tree --json | grep -q '"state":"loaded"' && break; sleep 0.2; done; ctl session overlay close --target "$id") &
+  closer=$!
+  rc=0; ctl session overlay open --html "$site/index.html" --block --target "$id" >/dev/null || rc=$?
+  wait "$closer"
+  [ "$rc" = 2 ] || fail "page --block exits 2 when the page closes unanswered ($rc)"
+fi
 ctl session hud 'building' --position top --spinner --target "$id"
 ctl tree --json | grep -q '"position":"top-center"' || fail "hud read-back"
 ctl session hud close --target "$id"

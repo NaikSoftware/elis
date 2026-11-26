@@ -107,6 +107,24 @@ find_package(KF6Notifications REQUIRED)
 find_package(KF6SyntaxHighlighting REQUIRED)
 find_package(KF6WindowSystem REQUIRED)
 target_link_libraries(elis-ui PUBLIC elis-core Qt6::Widgets Qt6::DBus Qt6::Svg KF6::Parts KF6::Notifications KF6::SyntaxHighlighting KF6::WindowSystem KF6::ConfigCore KF6::WidgetsAddons ${CMAKE_DL_LIBS})
+
+# Page overlays (session.overlay.open --html/--url) need Qt WebEngine; without it the build refuses them as before.
+set(ELIS_WEBENGINE AUTO CACHE STRING "Build page overlays with Qt WebEngine: AUTO, ON or OFF")
+set_property(CACHE ELIS_WEBENGINE PROPERTY STRINGS AUTO ON OFF)
+if(NOT ELIS_WEBENGINE STREQUAL "OFF")
+  find_package(Qt6 QUIET COMPONENTS WebEngineWidgets)
+  if(ELIS_WEBENGINE STREQUAL "ON" AND NOT TARGET Qt6::WebEngineWidgets)
+    message(FATAL_ERROR "ELIS_WEBENGINE=ON but Qt6WebEngineWidgets was not found: install qt6-webengine-dev")
+  endif()
+endif()
+if(NOT ELIS_WEBENGINE STREQUAL "OFF" AND TARGET Qt6::WebEngineWidgets)
+  message(STATUS "Page overlays: on (Qt WebEngine)")
+  target_compile_definitions(elis-core PUBLIC ELIS_HAS_WEBENGINE)
+  target_sources(elis-ui PRIVATE src/app/pageoverlay.cpp)
+  target_link_libraries(elis-ui PUBLIC Qt6::WebEngineWidgets)
+else()
+  message(STATUS "Page overlays: off (no Qt WebEngine)")
+endif()
 add_executable(elis src/app/main.cpp)
 target_link_libraries(elis PRIVATE elis-ui Qt6::Network KF6::ConfigCore)
 
@@ -131,7 +149,9 @@ target_link_libraries(test_ui PRIVATE elis-ui Qt6::Network Qt6::Test)
 target_compile_definitions(test_ui PRIVATE ELIS_TEST_FIXTURES="${CMAKE_SOURCE_DIR}/tests/fixtures"
   ELIS_TEST_ASSISTANT_FIXTURES="${CMAKE_SOURCE_DIR}/../shared/fixtures/assistant")
 add_test(NAME ui COMMAND test_ui)
-set_tests_properties(ui PROPERTIES ENVIRONMENT "QT_QPA_PLATFORM=offscreen;ELIS_STATE_DIR=/tmp/elis-test-ui")
+# Chromium refuses to run as root with its sandbox (CI containers), and draws nothing offscreen without software GL
+set_tests_properties(ui PROPERTIES ENVIRONMENT
+  "QT_QPA_PLATFORM=offscreen;ELIS_STATE_DIR=/tmp/elis-test-ui;QTWEBENGINE_DISABLE_SANDBOX=1;QTWEBENGINE_CHROMIUM_FLAGS=--disable-gpu;QT_QUICK_BACKEND=software")
 
 target_sources(elis-core PRIVATE src/core/filetree.cpp src/core/fileicons.cpp)
 target_sources(elis-ui PRIVATE src/app/filepanel.cpp src/app/fileviewer.cpp resources/fileicons.qrc)

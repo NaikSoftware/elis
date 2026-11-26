@@ -99,6 +99,7 @@ struct Settings {
     QString cursorBlink; // blink | steady
     double sidebarFontSize = 0, interfaceFontSize = 0;
     double windowTransparency = 0;          // percent see-through of the window and terminal backgrounds; 0 = opaque
+    double htmlOverlayZoom = 0;             // the one page zoom every page overlay shows at; 0 = actual size
     bool windowBlur = false;                // KWin blurs what shows through
     // Interface: master's InterfaceElement raw names; workspaceName and customCommands are off until shown
     QStringList hiddenInterfaceElements, shownInterfaceElements;

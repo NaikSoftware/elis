@@ -182,6 +182,37 @@ static ProfileLook profileLook()
     return look;
 }
 
+QJsonObject MainWindow::terminalTheme() const
+{
+    // the active Konsole scheme's colours, read from its file: the part does not expose them
+    const QString name = !m_previewTheme.isEmpty() ? m_previewTheme : m_store.settings.theme.isEmpty() ? profileLook().scheme : m_store.settings.theme;
+    QString path = QStandardPaths::locate(QStandardPaths::GenericDataLocation, QStringLiteral("konsole/%1.colorscheme").arg(name));
+    QFile f(path.isEmpty() ? QStringLiteral(":/konsole/color-schemes/%1.colorscheme").arg(name) : path);
+    QHash<QString, QString> colors; // group -> #rrggbb
+    if (f.open(QIODevice::ReadOnly | QIODevice::Text)) {
+        QString group;
+        for (const QString &line : QString::fromUtf8(f.readAll()).split(QLatin1Char('\n'))) {
+            const QString t = line.trimmed();
+            if (t.startsWith(QLatin1Char('[')) && t.endsWith(QLatin1Char(']')))
+                group = t.mid(1, t.size() - 2);
+            else if (t.startsWith(QLatin1String("Color="))) {
+                const QStringList rgb = t.mid(6).split(QLatin1Char(','));
+                if (rgb.size() == 3)
+                    colors.insert(group, QColor(rgb[0].toInt(), rgb[1].toInt(), rgb[2].toInt()).name());
+            }
+        }
+    }
+    QJsonArray palette;
+    for (const QString &suffix : {QString(), QStringLiteral("Intense")})
+        for (int i = 0; i < 8; ++i)
+            palette << colors.value(QStringLiteral("Color%1%2").arg(i).arg(suffix));
+    const QColor bg(colors.value(QStringLiteral("Background"), QStringLiteral("#232627")));
+    return {{"background", bg.name()},
+            {"foreground", colors.value(QStringLiteral("Foreground"), QStringLiteral("#fcfcfc"))},
+            {"dark", bg.lightness() < 128},
+            {"palette", palette}};
+}
+
 void MainWindow::applyAppearance(KParts::ReadOnlyPart *part)
 {
     const Settings &s = m_store.settings;

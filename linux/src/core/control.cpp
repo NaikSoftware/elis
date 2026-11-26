@@ -240,10 +240,41 @@ static bool isColor(const QString &c)
     return re.match(c).hasMatch();
 }
 
+#ifdef ELIS_HAS_WEBENGINE
+// session.overlay.open's source by ElisCore's check, first as on the Mac: a page lands in args as "page"
+static QString overlayPageError(QJsonObject *args)
+{
+    char *raw = elis_overlay_page_arguments(QJsonDocument(*args).toJson(QJsonDocument::Compact).constData());
+    const QJsonObject reply = QJsonDocument::fromJson(raw ? QByteArray(raw) : QByteArray()).object();
+    elis_free(raw);
+    if (!reply.value("ok").toBool())
+        return reply.value("error").toString(QStringLiteral("the page check gave no answer"));
+    const QJsonObject page = reply.value("page").toObject();
+    if (page.isEmpty())
+        return {};
+    if (const QString kind = page.value("kind").toString(); kind != QLatin1String("file") && kind != QLatin1String("url"))
+        return QStringLiteral("session.overlay.open: --%1 pages are not ported to Elis yet").arg(kind);
+    args->insert("page", page);
+    return {};
+}
+#endif
+
 QString overlayArgsError(const QString &cmd, QJsonObject *args)
 {
     QJsonObject &a = *args;
     const QString name = cmd;
+#ifdef ELIS_HAS_WEBENGINE
+    if (cmd == QLatin1String("session.overlay.open"))
+        if (QString e = overlayPageError(args); !e.isEmpty())
+            return e;
+    if (cmd == QLatin1String("session.overlay.navigate")) {
+        static const QStringList to{"back", "forward", "browser", "finder"};
+        if (!to.contains(a.value("to").toString()))
+            return QStringLiteral("session.overlay.navigate requires back, forward, browser or finder");
+    }
+    if (cmd == QLatin1String("session.overlay.submit") && !a.value("value").isString())
+        return QStringLiteral("session.overlay.submit requires a value");
+#endif
     if (a.contains("pane")) {
         static const QStringList left{"left", "primary", "top"}, right{"right", "split", "bottom"};
         const QString p = a.value("pane").toString().toLower();
@@ -265,10 +296,15 @@ QString overlayArgsError(const QString &cmd, QJsonObject *args)
     if (a.contains("color") && !isColor(a.value("color").toString()))
         return QStringLiteral("invalid color: %1 (#rrggbb)").arg(a.value("color").toString());
     if (cmd == QLatin1String("session.overlay.open")) {
+#ifdef ELIS_HAS_WEBENGINE
+        if (!a.contains("page") && a.value("command").toString().trimmed().isEmpty())
+            return QStringLiteral("session.overlay.open requires a command");
+#else
         if (a.contains("html") || a.contains("url") || a.contains("image") || a.contains("markdownFile") || a.contains("textFile"))
             return QStringLiteral("page overlays need Qt WebEngine, which this build lacks (install qt6-webengine-dev and rebuild)");
         if (a.value("command").toString().trimmed().isEmpty())
             return QStringLiteral("session.overlay.open requires a command");
+#endif
         if (a.contains("pane") && a.contains("sizePercent"))
             return QStringLiteral("session.overlay.open: --pane is mutually exclusive with --size-percent");
         if ((a.contains("width") || a.contains("height")) && !a.contains("sizePercent"))
@@ -631,6 +667,14 @@ QJsonObject dispatch(Store &store, Terminals &terminals, const QJsonObject &requ
         return ok({{"id", id}});
     }
 
+#ifdef ELIS_HAS_WEBENGINE
+    if (cmd == QLatin1String("session.overlay.result") && args.contains("page")) { // by page id, outliving its session
+        char *raw = elis_page_outcome_result(args.value("page").toString().toUtf8().constData());
+        const QJsonObject reply = QJsonDocument::fromJson(raw ? QByteArray(raw) : QByteArray()).object();
+        elis_free(raw);
+        return reply;
+    }
+#endif
     if (cmd.startsWith(QLatin1String("session.overlay.")) || cmd.startsWith(QLatin1String("session.hud."))) {
         const QString id = store.resolveSession(target, &error);
         if (id.isEmpty())

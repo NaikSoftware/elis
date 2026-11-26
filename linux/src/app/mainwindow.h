@@ -83,6 +83,7 @@ public:
     class HookRunner *hooks() const { return m_hooks; }
     class EventSource *events() const { return m_events; }
     QStringList themes() const; // Konsole colour schemes: the bundled ones and the user's
+    QJsonObject terminalTheme() const; // the active scheme as {background, foreground, dark, palette[16]}
     void selectTheme();
     void previewTheme(const QString &name); // "" ends the preview
     void runCustomCommand(const QString &name, const QString &sessionId);
@@ -122,6 +123,9 @@ private:
     struct Overlay {
         QPointer<QWidget> frame;
         KParts::ReadOnlyPart *part = nullptr;
+        QPointer<QWidget> page; // a PageOverlay in place of the part (pageoverlay.h)
+        QString pageID;
+        bool chromeless = false;
         QString command, codeFile;
         int sizePercent = 0; // 0 = full
         double width = 0, height = 0; // points overriding the percent per axis
@@ -132,6 +136,10 @@ private:
     QHash<QString, int> m_overlayResults; // same key -> the exit status of the last program that closed there
     QHash<QString, QPointer<QWidget>> m_huds;
     bool overlayCommand(const QString &cmd, const QString &id, const QJsonObject &args, QJsonObject *result, QString *error);
+    bool openPage(const QString &id, const QString &pane, const QJsonObject &args, QJsonObject *result, QString *error);
+    QWidget *coverWidget(const QString &id) const; // what takes the keyboard: a shown page or program, else the main pane
+    bool closeFocusedPage();                       // closes the shown page holding the keyboard; false with none
+    bool pageCovers(const QString &id, const QString &pane) const; // a shown page hides that pane's terminal
     void overlayExited(const QString &key, KParts::ReadOnlyPart *part);
     void closeOverlay(const QString &key);
     bool closeHud(const QString &id);
@@ -141,7 +149,6 @@ private:
     bool hasHideableOverlay(const QString &id, bool *anyShown) const;
     QWidget *paneWidget(const QString &id, const QString &pane) const;
     QRect overlayTarget(const QString &id, const QString &pane) const;
-    KParts::ReadOnlyPart *coverPart(const QString &id) const;
     // dashboard.cpp
     struct DashCell {
         QString ref; // "<session>:left|right"

@@ -36,9 +36,11 @@ QString unsupportedReason(const QString &cmd)
         {"browser", "Elis has no built-in browser: links open in the system browser"},
         {"session.page", "page sessions need Qt WebEngine, which Elis does not have"},
         {"session.companion.page", "page companions need Qt WebEngine, which Elis does not have"},
+#ifndef ELIS_HAS_WEBENGINE
         {"session.overlay.reload", "page overlays need Qt WebEngine, which Elis does not have"},
         {"session.overlay.navigate", "page overlays need Qt WebEngine, which Elis does not have"},
         {"session.overlay.submit", "page overlays need Qt WebEngine, which Elis does not have"},
+#endif
         {"session.overlay.follow", "it acts on a text page, a page overlay, which needs Qt WebEngine"},
         {"session.overlay.search", "it acts on a text page, a page overlay, which needs Qt WebEngine"},
         {"session.overlay.changes", "it acts on a text page, a page overlay, which needs Qt WebEngine"},
