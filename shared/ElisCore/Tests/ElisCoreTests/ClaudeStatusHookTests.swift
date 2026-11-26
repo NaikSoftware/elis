@@ -471,6 +471,25 @@ struct ClaudeStatusHookTests {
         #expect(try progress(payload, env: ["CLAUDE_CONFIG_DIR": config.path]) == ["progress 2/3"])
     }
 
+    @Test func aTeamLeadCountsTheTeamTaskDirectory() throws {
+        let config = URL(fileURLWithPath: NSTemporaryDirectory()).appendingPathComponent("elis-tasks-\(UUID().uuidString)")
+        defer { try? FileManager.default.removeItem(at: config) }
+        let fm = FileManager.default
+        for dir in ["teams/other", "teams/my-team", "tasks/my-team", "tasks/s1"] {
+            try fm.createDirectory(at: config.appendingPathComponent(dir), withIntermediateDirectories: true)
+        }
+        try #"{"leadSessionId":"s9"}"#.write(to: config.appendingPathComponent("teams/other/config.json"), atomically: true, encoding: .utf8)
+        try "{\n  \"name\": \"my-team\",\n  \"leadSessionId\": \"s1\"\n}"
+            .write(to: config.appendingPathComponent("teams/my-team/config.json"), atomically: true, encoding: .utf8)
+        for (name, status) in [("1", "completed"), ("2", "pending"), ("3", "pending"), ("4", "pending")] {
+            try #"{"id":"\#(name)","status":"\#(status)"}"#
+                .write(to: config.appendingPathComponent("tasks/my-team/\(name).json"), atomically: true, encoding: .utf8)
+        }
+        try #"{"id":"1","status":"completed"}"#.write(to: config.appendingPathComponent("tasks/s1/1.json"), atomically: true, encoding: .utf8)
+        let payload = #"{"session_id":"s1","hook_event_name":"PostToolUse","tool_name":"TaskCreate","tool_input":{}}"#
+        #expect(try progress(payload, env: ["CLAUDE_CONFIG_DIR": config.path]) == ["progress 1/4"])
+    }
+
     @Test(arguments: [["completed", "completed", "completed"], []])
     func allDoneSendsClear(_ statuses: [String]) throws {
         #expect(try progress(Self.todoPayload(statuses)) == ["progress clear"])
