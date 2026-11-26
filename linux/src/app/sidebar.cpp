@@ -375,6 +375,7 @@ void SidebarDelegate::paint(QPainter *p, const QStyleOptionViewItem &opt, const 
         p->drawPath(shape(r, 8));
         under = over(under, faded(tint, 0.09));
     }
+    QColor filled; // the progress fill's strongest colour, which the info line may also sit on
     if (const QVariant fraction = index.data(ProgressFill); session && fraction.isValid()) {
         // the done share of the row, its last 26 px feathered out, inside the row's own outline
         const qreal w = r.width() * fraction.toDouble();
@@ -384,6 +385,7 @@ void SidebarDelegate::paint(QPainter *p, const QStyleOptionViewItem &opt, const 
             c.setAlphaF(0.22);
             g.setColorAt(0, c);
             g.setColorAt(qMax(0.0, (w - 26) / w), c);
+            filled = c;
             c.setAlphaF(0);
             g.setColorAt(1, c);
             p->save();
@@ -410,6 +412,8 @@ void SidebarDelegate::paint(QPainter *p, const QStyleOptionViewItem &opt, const 
     }
 
     QList<QColor> unders{under};
+    if (filled.isValid())
+        unders << over(under, filled);
     if (session && index.data(Wave).toBool()) {
         // in progress: the row's tint (else the active colour) drifts across it with a second hue, one period every two row widths
         const QColor active = statusColor(m_sidebar->settings(), QStringLiteral("active"));
@@ -425,7 +429,10 @@ void SidebarDelegate::paint(QPainter *p, const QStyleOptionViewItem &opt, const 
         p->setPen(Qt::NoPen);
         p->setBrush(g);
         p->drawPath(shape(r, 8));
-        unders = {over(under, alpha(base, 51)), over(under, alpha(second, 41))}; // its strongest stops: the line holds still as it drifts
+        QList<QColor> waved; // its strongest stops: the line holds still as it drifts
+        for (const QColor &u : std::as_const(unders))
+            waved << over(u, alpha(base, 51)) << over(u, alpha(second, 41));
+        unders = waved;
     }
 
     qreal x = r.left() + chevronX;
