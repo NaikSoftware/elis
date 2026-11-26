@@ -599,7 +599,7 @@ private final class AssistantMenuTarget: NSObject {
 }
 
 /// AssistantDropZone makes the whole field a drop target for sidebar rows, not only its text, and draws the
-/// standard focus ring around the field while the composer has focus in a key window.
+/// a thin focus ring around the field while the composer has focus in a key window.
 private struct AssistantDropZone: NSViewRepresentable {
     /// The room the zone extends past the field on each side, so the ring is not clipped.
     static let ringRoom: CGFloat = 4
@@ -624,10 +624,12 @@ private struct AssistantDropZone: NSViewRepresentable {
 
         override func draw(_: NSRect) {
             guard ring, window?.isKeyWindow == true else { return }
-            NSGraphicsContext.saveGraphicsState()
-            NSFocusRingPlacement.only.set()
-            NSBezierPath(roundedRect: bounds.insetBy(dx: AssistantDropZone.ringRoom, dy: AssistantDropZone.ringRoom), xRadius: 12, yRadius: 12).fill()
-            NSGraphicsContext.restoreGraphicsState()
+            // The system ring (NSFocusRingPlacement) is about 3.5 pt wide and reads too heavy on this large field.
+            let inset = AssistantDropZone.ringRoom - 0.75
+            let path = NSBezierPath(roundedRect: bounds.insetBy(dx: inset, dy: inset), xRadius: 12.75, yRadius: 12.75)
+            path.lineWidth = 1.5
+            NSColor.keyboardFocusIndicatorColor.setStroke()
+            path.stroke()
         }
 
         init(state: AssistantComposerState) {
