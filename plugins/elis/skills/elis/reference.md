@@ -41,8 +41,8 @@ The event kinds and payloads are:
   overrides). An event fires whenever the whole indicator changes, not just the state name — so a
   change to `blink`, `pane`, `color` or `shape` alone is a real event you can watch, while re-asserting
   an identical indicator emits nothing. Clearing emits `idle`.
-- `progress`: `name`, `progress` (the value the row shows: `3/7`, `40%` or `indeterminate`; null once
-  cleared) and `source` (`control` or `terminal`; null once cleared).
+- `progress`: `name`, `progress` (the value the row shows: `3/7`, `40%` or `indeterminate`; absent once
+  cleared) and `source` (`control` or `terminal`; absent once cleared).
 - `notify`: `name`, effective `title`, and `body`. It is emitted after target and foreground-focus
   suppression checks, including when desktop banners are disabled.
 - `session.created` / `session.closed`: session `name`, emitted when the session enters or leaves a

@@ -1787,6 +1787,7 @@ the spec `docs/superpowers/specs/2026-11-20-phone-chat-mode-design.md` owns the 
   `control` clears on a status change into `completed` or `idle`, so it never outlives the agent turn.
   `terminal` clears on state 0 from the pane that set it, on that pane's close, and 15 s after its last update,
   since a killed program sends no state 0. An undone close drops it.
+  `Command.sessionProgress`, `ControlEventKind.progress`, `PresentationFrame.Body.progress`,
   `AttachedForward.progress` and `RemoteOperation.setProgress` are new public cases the agterm-linux fork's
   exhaustive switches must add.
 - The sidebar's second line is the session's GitHub CI (`CIStatus`), internal with no setter: the owner removed

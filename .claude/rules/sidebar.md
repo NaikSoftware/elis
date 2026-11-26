@@ -252,6 +252,7 @@ paths:
 - A row's progress fill is a flat `0.16` alpha rect, hard edged, its width the progress fraction, clipped like the wave.
   Its color is the session tint, else the workspace tint, else the `active` status color.
   Layers, bottom to top: band, row wash, progress fill, wave, hover/selection, cell.
+  The Mac draws selection and hover under the row's sublayers, so there the fill and wave sit above the selection pill.
   A blocked row shows neither fill nor wave; indeterminate shows the wave alone, with or without a status.
   [[control-api]] owns its sources and clearing.
 - `focus-filter-toggle` replaces the deleted single-workspace pill. It uses a filled grid when active,

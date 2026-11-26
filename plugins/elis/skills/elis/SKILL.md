@@ -335,7 +335,7 @@ that window, omitted when no pick is pending.
 
 **events**: continuously print control events, subscribing from the current tail when no cursor is
 given. Use `--json` for one bare event object per line; filter with repeatable or comma-separated
-`--kind` over `status`, `notify`, `session.created` (carries `parent` for a companion), `session.closed`, `session.selected` (a window's
+`--kind` over `status`, `progress`, `notify`, `session.created` (carries `parent` for a companion), `session.closed`, `session.selected` (a window's
 selection moved; carries the session that lost it as `previous`), `tree.changed`, `pane.split`,
 `pane.scratch`, `pane.focused` (a session's selection moved between its two split panes; carries the
 pane and its `paneID`), `remote.opened`, `remote.closed`, `phone.connected|disconnected|refused` (carry `ip`), `phone.attached|detached` and `phone.claimed|released` (carry `ip`, `paneID`), `app.launched` (once per app run, when hooks and
