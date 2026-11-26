@@ -166,6 +166,18 @@ struct AppStoreProgressTests {
         #expect(shown == .percent(50))
     }
 
+    @Test func anUndoneCloseDropsTheTerminalProgress() {
+        store.setControlProgress(.percent(10), forSession: session.id)
+        terminal(.set(.percent(40)))
+
+        #expect(store.softCloseSession(session.id))
+        #expect(store.undoPendingClose())
+
+        #expect(session.terminalProgress == nil)
+        #expect(shown == .percent(10))
+        #expect(source == .control)
+    }
+
     @Test func claudesOwnOSCClearKeepsPlanProgress() {
         store.setControlProgress(.steps(done: 3, total: 7), forSession: session.id)
 

@@ -238,10 +238,11 @@ extension AppStore {
     }
 
     /// Ends what `session` handed out or took over before it leaves this store, soft close included: its
-    /// ask, its overlays shown on viewers, and the replicas it shows for an origin. Neither side's cleanup
-    /// can find a session once it is gone, and an undo must bring back neither a reservation nor a replica
-    /// whose held exit went unseen, so each ends now.
+    /// ask, its terminal progress, its overlays shown on viewers, and the replicas it shows for an origin. Neither
+    /// side's cleanup can find a session once it is gone, and an undo must bring back neither a reservation, a replica
+    /// whose held exit went unseen, nor a fill whose expiry missed it, so each ends now.
     func releaseLeavingSession(_ session: Session) {
+        session.terminalProgress = nil
         session.cancelPendingAsk()
         SessionPickBook.shared.sessionEnded(session.id)
         disposeMailboxes(of: session)
