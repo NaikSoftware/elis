@@ -668,9 +668,21 @@ QJsonObject dispatch(Store &store, Terminals &terminals, const QJsonObject &requ
         } else if (cmd == QLatin1String("session.rename")) {
             store.renameSession(id, args.value("name").toString()); // empty reverts to the directory name
         } else if (cmd == QLatin1String("session.status")) {
-            const QString status = args.value("status").toString();
+            const QString status = args.value("status").toString(), cwd = args.value("cwd").toString();
+            if (!cwd.isEmpty() && !cwd.startsWith(QLatin1Char('/')))
+                return fail(QStringLiteral("cwd must be an absolute path"));
+            Session *s = store.session(id);
+            const bool skipped = args.value("ifIdle").toBool() && s->status != QLatin1String("idle");
             if (!store.setStatus(id, status, args.value("autoReset").toBool(), args.value("blink").toBool(), args.value("ifIdle").toBool()))
                 return fail(QStringLiteral("status must be one of %1").arg(Store::statuses.join(QLatin1String(", "))));
+            // the writer's pane: its ELIS_PANE_ID, which survives a promotion that leaves the baked role stale, else the role
+            const QString token = args.value("paneID").toString(), role = args.value("pane").toString();
+            const QString pane = !token.isEmpty() && (token == s->paneId || (s->hasSplit && token == s->splitPaneId)) ? token
+                : role == QLatin1String("scratch")                                                                  ? QString()
+                : s->hasSplit && QStringList{"right", "bottom", "split"}.contains(role)                              ? s->splitPaneId
+                                                                                                                     : s->paneId;
+            if (!cwd.isEmpty() && !skipped && !pane.isEmpty())
+                s->agentCwd.insert(pane, cwd);
         } else if (cmd == QLatin1String("session.progress")) {
             const QJsonObject parsed = Store::bridgeText(elis_progress_parse, args.value("progress").toString());
             if (!parsed.value("ok").toBool())
