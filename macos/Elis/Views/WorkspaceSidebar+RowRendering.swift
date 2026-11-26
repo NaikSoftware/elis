@@ -359,7 +359,8 @@ extension WorkspaceSidebar.Coordinator {
             infoCell.infoTop = infoTop
             constraints += [
                 info.leadingAnchor.constraint(equalTo: field.leadingAnchor),
-                info.trailingAnchor.constraint(equalTo: cell.trailingAnchor, constant: -2),
+                // hugs its text so only the text, not the row's empty width, takes the CI click
+                info.trailingAnchor.constraint(lessThanOrEqualTo: cell.trailingAnchor, constant: -2),
                 infoTop,
             ]
         }
