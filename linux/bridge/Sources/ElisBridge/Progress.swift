@@ -20,7 +20,7 @@ public func elisProgressParse(_ text: UnsafePointer<CChar>) -> UnsafeMutablePoin
     do {
         return encoded(Parsed(progress: try SessionProgress.parse(String(cString: text))))
     } catch {
-        return encoded(Refusal(error: error.description))
+        return encoded(Refusal(error: "\(error)"))
     }
 }
 

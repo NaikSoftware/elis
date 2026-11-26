@@ -43,5 +43,8 @@ private func row(_ input: String) -> String { call(elisProgressRow(input)) }
         #expect(json(row(##"{"progress":{"indeterminate":true},"status":"idle","active":"#aa0000"}"##))
             == json(##"{"fill":null,"wave":true}"##))
         #expect(json(row(##"{"status":"active","active":"#aa0000"}"##)) == json(##"{"fill":null,"wave":true}"##))
+        #expect(json(row(##"{"progress":{"done":3,"total":7},"status":"idle","active":"#aa0000"}"##))
+            == json(##"{"fill":{"color":"#aa0000","fraction":\##(3.0 / 7.0),"alpha":0.22,"feather":26},"wave":false}"##))
+        #expect(row("not json") == "null")
     }
 }
