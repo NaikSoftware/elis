@@ -23,9 +23,9 @@ final class SidebarInfoCellView: SidebarCellView, NSGestureRecognizerDelegate {
     let infoField = SidebarInfoField(labelWithString: "")
     var titleBandHeight: NSLayoutConstraint?
     var infoTop: NSLayoutConstraint?
-    /// onInfoClick opens the CI panel. The line claims its click only while `claimsInfoClick` says so (the shown
+    /// onInfoClick opens the CI menu. The line claims its click only while `claimsInfoClick` says so (the shown
     /// session); any other click falls through to the row, which selects it, drags it or opens its menu.
-    var onInfoClick: ((NSView) -> Void)?
+    var onInfoClick: ((SidebarInfoField) -> Void)?
     var claimsInfoClick: (() -> Bool)?
     private var spans: [SessionInfoSpan] = []
     private var base = AppSettings.defaultSidebarFontSize

@@ -128,7 +128,7 @@ extension WorkspaceSidebar.Coordinator {
                 let store = store
                 infoCell.onInfoClick = { anchor in
                     guard let session = store.session(withID: node.id) else { return }
-                    CIStatusLine.showPanel(for: session, from: anchor)
+                    CIStatusLine.showMenu(for: session, from: anchor)
                 }
                 infoCell.claimsInfoClick = { store.selectedSessionID == node.id }
             }
