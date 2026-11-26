@@ -11,6 +11,11 @@ private final class SplitSurface: TerminalSurface {
 
 @MainActor
 struct AppStorePaneAgentCwdTests {
+    private final class Flag: @unchecked Sendable {
+        private(set) var isSet = false
+        func set() { isSet = true }
+    }
+
     private func splitSession() throws -> (AppStore, Session) {
         let store = makeStore()
         let session = try #require(store.addSession(toWorkspace: store.addWorkspace(name: "work").id, cwd: "/repo"))
@@ -109,12 +114,12 @@ struct AppStorePaneAgentCwdTests {
         #expect(session.paneAgentCwd.isEmpty)
     }
 
-    @Test func ciCwdIsTheFocusedPanesAgentCwdElseItsShellCwd() throws {
+    @Test func workingCwdIsTheFocusedPanesAgentCwdElseItsShellCwd() throws {
         let (store, session) = try splitSession()
         session.currentCwd = "/repo"
-        #expect(session.ciCwd == "/repo")
+        #expect(session.workingCwd == "/repo")
         report(store, session, .active, pane: .left, cwd: "/wt")
-        #expect(session.ciCwd == "/wt")
+        #expect(session.workingCwd == "/wt")
     }
 
     @Test func aFocusedSplitReadsOnlyItsOwnAgentCwd() throws {
@@ -123,8 +128,20 @@ struct AppStorePaneAgentCwdTests {
         session.splitFocused = true
         session.splitCwd = "/repo/sub"
         report(store, session, .active, pane: .left, cwd: "/a")
-        #expect(session.ciCwd == "/repo/sub")
+        #expect(session.workingCwd == "/repo/sub")
         report(store, session, .active, pane: .right, cwd: "/b")
-        #expect(session.ciCwd == "/b")
+        #expect(session.workingCwd == "/b")
+    }
+
+    @Test func onlyANewAgentCwdNotifiesObservers() throws {
+        let (store, session) = try splitSession()
+        report(store, session, .active, pane: .left, cwd: "/wt")
+        let changed = Flag()
+        withObservationTracking { _ = session.workingCwd } onChange: { changed.set() }
+        report(store, session, .idle, pane: .left, cwd: "/wt")
+        store.applyAgentSamples([AgentPaneSample(pane: .right, agent: nil, claudeSessionJSON: nil)], focused: .left, forSession: session.id)
+        #expect(!changed.isSet)
+        report(store, session, .active, pane: .left, cwd: "/wt2")
+        #expect(changed.isSet)
     }
 }
