@@ -39,7 +39,7 @@ public func elisProgressTerminal(_ body: UnsafePointer<CChar>) -> UnsafeMutableP
 }
 
 /// A row's progress fill and wave, from `{"progress"?,"status","sessionTint"?,"workspaceTint"?,"active"}`:
-/// `{"fill":{"color","fraction","alpha","feather"}|null,"wave":bool}`; null for an input that does not decode.
+/// `{"fill":{"color","fraction","alpha"}|null,"wave":bool}`; null for an input that does not decode.
 @_cdecl("elis_progress_row")
 public func elisProgressRow(_ json: UnsafePointer<CChar>) -> UnsafeMutablePointer<CChar>? {
     struct Input: Decodable {
@@ -53,7 +53,6 @@ public func elisProgressRow(_ json: UnsafePointer<CChar>) -> UnsafeMutablePointe
         let color: String
         let fraction: Double
         let alpha = SidebarProgressFill.alpha
-        let feather = SidebarProgressFill.feather
     }
     struct Row: Encodable {
         let fill: Fill?

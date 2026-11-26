@@ -35,16 +35,16 @@ private func row(_ input: String) -> String { call(elisProgressRow(input)) }
 
     @Test func rowFillAndWave() {
         #expect(json(row(##"{"progress":{"percent":50},"status":"idle","sessionTint":"#336699","active":"#aa0000"}"##))
-            == json(##"{"fill":{"color":"#336699","fraction":0.5,"alpha":0.22,"feather":26},"wave":false}"##))
+            == json(##"{"fill":{"color":"#336699","fraction":0.5,"alpha":0.16},"wave":false}"##))
         #expect(json(row(##"{"progress":{"percent":50},"status":"idle","workspaceTint":"#112233","active":"#aa0000"}"##))
-            == json(##"{"fill":{"color":"#112233","fraction":0.5,"alpha":0.22,"feather":26},"wave":false}"##))
+            == json(##"{"fill":{"color":"#112233","fraction":0.5,"alpha":0.16},"wave":false}"##))
         #expect(json(row(##"{"progress":{"percent":50},"status":"blocked","active":"#aa0000"}"##))
             == json(##"{"fill":null,"wave":false}"##))
         #expect(json(row(##"{"progress":{"indeterminate":true},"status":"idle","active":"#aa0000"}"##))
             == json(##"{"fill":null,"wave":true}"##))
         #expect(json(row(##"{"status":"active","active":"#aa0000"}"##)) == json(##"{"fill":null,"wave":true}"##))
         #expect(json(row(##"{"progress":{"done":3,"total":7},"status":"idle","active":"#aa0000"}"##))
-            == json(##"{"fill":{"color":"#aa0000","fraction":\##(3.0 / 7.0),"alpha":0.22,"feather":26},"wave":false}"##))
+            == json(##"{"fill":{"color":"#aa0000","fraction":\##(3.0 / 7.0),"alpha":0.16},"wave":false}"##))
         #expect(row("not json") == "null")
     }
 }

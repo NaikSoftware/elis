@@ -377,20 +377,13 @@ void SidebarDelegate::paint(QPainter *p, const QStyleOptionViewItem &opt, const 
     }
     QColor filled; // the progress fill's strongest colour, which the info line may also sit on
     if (const QVariant fraction = index.data(ProgressFill); session && fraction.isValid()) {
-        // the done share of the row, its last 26 px feathered out, inside the row's own outline
+        // the done share of the row, a flat wash with a hard edge, inside the row's own outline
         const qreal w = r.width() * fraction.toDouble();
         if (w > 0) {
-            QColor c(index.data(ProgressColor).toString());
-            QLinearGradient g(r.left(), 0, r.left() + w, 0);
-            c.setAlphaF(0.22);
-            g.setColorAt(0, c);
-            g.setColorAt(qMax(0.0, (w - 26) / w), c);
-            filled = c;
-            c.setAlphaF(0);
-            g.setColorAt(1, c);
+            filled = index.data(ProgressColor).value<QColor>();
             p->save();
             p->setClipPath(shape(r, 8));
-            p->fillRect(QRectF(r.left(), r.top(), w, r.height()), g);
+            p->fillRect(QRectF(r.left(), r.top(), w, r.height()), filled);
             p->restore();
         }
     }
@@ -836,8 +829,11 @@ void Sidebar::rebuild()
                 request.insert("workspaceTint", c.name());
             const QJsonObject row = Store::bridge(elis_progress_row, request);
             wave = row.value("wave").toBool(wave);
-            if (const QJsonObject f = row.value("fill").toObject(); !f.isEmpty())
-                fill = f.value("fraction").toDouble(), fillColor = f.value("color").toString();
+            if (const QJsonObject f = row.value("fill").toObject(); !f.isEmpty()) {
+                QColor c(f.value("color").toString());
+                c.setAlphaF(f.value("alpha").toDouble());
+                fill = f.value("fraction").toDouble(), fillColor = c;
+            }
         }
         item->setData(0, Wave, wave);
         item->setData(0, ProgressFill, fill);

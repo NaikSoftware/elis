@@ -13,7 +13,7 @@ through the JSON bridge (`linux/bridge`); its `Store` keeps a C++ mirror of the 
 **Tech Stack:** Swift 6 (`ElisCore`, `elisctlKit`, elis-server, AppKit app), C++/Qt6 (Linux), bash (agent-status hooks).
 
 **Spec:** this plan carries the owner's decisions (2026-11-26) below; there is no separate spec. Design canvas:
-https://claude.ai/artifact/4UfLJ2bngZGQgTk3LZo7Fr — variant **B · Feathered edge** was chosen.
+https://claude.ai/artifact/4UfLJ2bngZGQgTk3LZo7Fr — variant **A · Flat wash** was chosen.
 
 ## Decisions (the spec)
 
@@ -28,8 +28,8 @@ https://claude.ai/artifact/4UfLJ2bngZGQgTk3LZo7Fr — variant **B · Feathered e
     the app receives, not on the hook event: `elis-claude-status.sh` rewrites a Stop with a busy teammate, a
     running background agent or a session cron to `active --blink`.
   - `terminal` clears on OSC state 0 from the same pane, when that pane closes, and 15 s after its last update.
-- **Look (variant B):** fill width = fraction × row width, clipped to the row rect like the wave; color alpha `0.22`;
-  the last `26` px before the edge fade to alpha 0. Layers bottom to top: band, row wash, **progress fill**, wave,
+- **Look (variant A):** fill width = fraction × row width, clipped to the row rect like the wave; one flat color at
+  alpha `0.16` with a hard edge. Layers bottom to top: band, row wash, **progress fill**, wave,
   hover/selection, cell.
 - **Color:** session tint → workspace tint → the `active` status color.
 - **Blocked:** the row shows only the status: no fill, no wave.

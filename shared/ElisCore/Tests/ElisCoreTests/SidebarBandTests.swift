@@ -40,6 +40,7 @@ struct SidebarBandTests {
         #expect(fill("#a970ff", "#ff9f43") == SidebarProgressFill(colorHex: "#a970ff", fraction: 3.0 / 7))
         #expect(fill(nil, "#ff9f43")?.colorHex == "#ff9f43")
         #expect(fill(nil, nil)?.colorHex == "#3ccf64")
+        #expect(SidebarProgressFill.alpha == 0.16)
     }
 
     @Test func blockedAndIndeterminateDrawNoFill() {

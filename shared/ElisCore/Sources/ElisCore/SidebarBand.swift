@@ -47,8 +47,7 @@ public enum SidebarBand {
 public struct SidebarProgressFill: Sendable, Equatable {
     public let colorHex: String
     public let fraction: Double
-    public static let alpha = 0.22
-    public static let feather = 26.0
+    public static let alpha = 0.16
 
     public init(colorHex: String, fraction: Double) {
         self.colorHex = colorHex

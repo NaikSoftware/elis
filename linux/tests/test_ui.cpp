@@ -2085,7 +2085,9 @@ private Q_SLOTS:
         QVERIFY(!row()->data(0, SidebarRole::ProgressFill).isValid());
         store.setControlProgress(a, QJsonObject{{"percent", 50}});
         QCOMPARE(row()->data(0, SidebarRole::ProgressFill).toDouble(), 0.5);
-        QCOMPARE(row()->data(0, SidebarRole::ProgressColor).toString(), QStringLiteral("#336699"));
+        const QColor color = row()->data(0, SidebarRole::ProgressColor).value<QColor>();
+        QCOMPARE(color.name(), QStringLiteral("#336699"));
+        QCOMPARE(color.alpha(), qRound(0.16 * 255));
         QVERIFY(!row()->data(0, SidebarRole::Wave).toBool());
         store.setStatus(a, "blocked");
         QVERIFY(!row()->data(0, SidebarRole::ProgressFill).isValid());
