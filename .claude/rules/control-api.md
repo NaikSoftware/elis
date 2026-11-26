@@ -54,7 +54,9 @@ paths:
   so `--auto-reset` cannot idle the row. Anything else, an unreadable payload included, posts argv.
   A `teammate` task stays `running` while idle, so it counts only while busy: `SubagentStart` touches
   `$TMPDIR/elis-claude-busy/<session_id>/<agent_id>` and `SubagentStop`, which fires each time a teammate goes
-  idle, removes it; a Stop listing no teammate drops the session's directory. Teammate task ids are not agent ids,
+  idle, removes it; a Stop listing no teammate drops the session's directory.
+  A `SubagentStop` with no mark posts no `active`: Claude Code's forks (the away recap) send it without
+  `SubagentStart` after the lead's Stop, and on a row already reset to idle it would stay active. Teammate task ids are not agent ids,
   so a mark is not matched to its task: one any agent leaves without `SubagentStop` (killed, interrupted)
   holds the row while any teammate is alive.
 - Codex maps SessionStart idle; prompt/pre/post tool active; Stop ending `?` blocked, otherwise completed.

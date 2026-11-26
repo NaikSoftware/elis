@@ -150,7 +150,11 @@ if [ -n "$payload" ]; then
   if safe_id "$sid" && safe_id "$aid"; then
     case "$event" in
       SubagentStart) mkdir -p "$busy_dir" 2>/dev/null && : > "$busy_dir/$aid" 2>/dev/null ;;
-      SubagentStop) rm -f "$busy_dir/$aid" ;;
+      # a fork (the away recap, the session title) sends SubagentStop with no SubagentStart, after the lead's Stop
+      SubagentStop)
+        [ -e "$busy_dir/$aid" ] || { [ "${1:-}" = active ] && exit 0; }
+        rm -f "$busy_dir/$aid"
+        ;;
     esac
   fi
   if [ -n "$aid" ]; then
