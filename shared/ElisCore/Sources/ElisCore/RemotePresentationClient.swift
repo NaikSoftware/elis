@@ -31,6 +31,8 @@ public struct RemotePresentationEffects {
     public var agent: @MainActor (PresentationAgent?) -> Void
     /// ci carries the origin's CI status, nil for none; a snapshot sends it too.
     public var ci: @MainActor (CIStatus?) -> Void
+    /// progress carries the origin's control progress, nil for none; a snapshot sends it too.
+    public var progress: @MainActor (SessionProgress?) -> Void
     public var layout: @MainActor (PresentationLayout) -> Void
     public var mode: @MainActor (PresentationMode) -> Void
     /// Shows an ask the origin handed over; false when it cannot, which the client reports as a refusal.
@@ -68,6 +70,7 @@ public struct RemotePresentationEffects {
                 agentSession: @escaping @MainActor (String?) -> Void = { _ in },
                 agent: @escaping @MainActor (PresentationAgent?) -> Void = { _ in },
                 ci: @escaping @MainActor (CIStatus?) -> Void = { _ in },
+                progress: @escaping @MainActor (SessionProgress?) -> Void = { _ in },
                 mode: @escaping @MainActor (PresentationMode) -> Void = { _ in },
                 askRequest: @escaping @MainActor (PresentationAsk) -> Bool = { _ in false },
                 askDismiss: @escaping @MainActor (PresentationAskRef) -> Void = { _ in },
@@ -97,6 +100,7 @@ public struct RemotePresentationEffects {
         self.agentSession = agentSession
         self.agent = agent
         self.ci = ci
+        self.progress = progress
         self.layout = layout
         self.mode = mode
         self.askRequest = askRequest
@@ -277,6 +281,7 @@ public final class RemotePresentationClient {
             effects.agentSession(snapshot.agentSession)
             effects.agent(snapshot.agent)
             effects.ci(snapshot.ci)
+            effects.progress(snapshot.progress)
             effects.mail(snapshot.mail)
             if let respawns = snapshot.respawns { effects.respawns(respawns, true) }
         case .status(let status): effects.status(status)
@@ -284,6 +289,7 @@ public final class RemotePresentationClient {
         case .agentSession(let id): effects.agentSession(id)
         case .agent(let agent): effects.agent(agent)
         case .ci(let ci): effects.ci(ci)
+        case .progress(let progress): effects.progress(progress)
         case .layout(let layout): applyLayout(layout)
         case .hud(let hud): effects.hud(hud)
         case .notify(let notify): effects.notify(notify)

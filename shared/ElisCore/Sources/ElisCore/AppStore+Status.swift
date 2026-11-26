@@ -138,7 +138,7 @@ extension AppStore {
             )
         )
         if previous.status != indicator.status, indicator.status == .completed || indicator.status == .idle {
-            changeProgress(of: session) { $0.controlProgress = nil }
+            setControlProgress(nil, forSession: session.id)
         }
     }
 

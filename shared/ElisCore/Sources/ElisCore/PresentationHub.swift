@@ -70,7 +70,7 @@ public final class PresentationHub {
     }
 
     /// The frame kinds this origin can produce.
-    nonisolated public static let supportedKinds = ["status", "hud", "notify", "message", "mail", "context", "agent.session", "agent", "ci", "layout", "sound", askFormKind, askOtherKind,
+    nonisolated public static let supportedKinds = ["status", "hud", "notify", "message", "mail", "context", "agent.session", "agent", "ci", "progress", "layout", "sound", askFormKind, askOtherKind,
                                         overlayPointsKind, pageContentKind, pageDocumentKind, pageLinksKind, statusShapesKind,
                                         statusCheckmarkKind, linkClickKind, pendingSnapshotKind, jobTokenKind, pageForwardKind,
                                         pageTextKind, pageFilesKind, statusClearKind, restartRespawnKind, presenterVacantKind,
@@ -270,6 +270,8 @@ public final class PresentationHub {
 
     public func publish(_ body: PresentationFrame.Body, session: UUID) {
         for (id, subscriber) in subscribers where subscriber.session == session {
+            // progress is negotiated; the kinds that predate negotiation stay ungated for the peers that never list them
+            if case .progress = body, !subscriber.kinds.contains(body.kind) { continue }
             if subscriber.held != nil {
                 subscriber.held?.append(body)
                 continue

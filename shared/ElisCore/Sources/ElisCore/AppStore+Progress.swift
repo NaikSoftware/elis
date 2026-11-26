@@ -18,8 +18,9 @@ extension Session {
 extension AppStore {
     /// setControlProgress sets or (nil) clears `session progress`; a status change into completed or idle also clears it.
     public func setControlProgress(_ progress: SessionProgress?, forSession id: UUID) {
-        guard let session = session(withID: id) else { return }
+        guard let session = session(withID: id), session.controlProgress != progress else { return }
         changeProgress(of: session) { $0.controlProgress = progress }
+        presentationHub?.publish(.progress(progress), session: id)
     }
 
     /// setTerminalProgress applies OSC 9;4 from `pane`. A clear from another pane is ignored, and a set expires
