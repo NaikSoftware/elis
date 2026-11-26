@@ -34,16 +34,16 @@ public final class HtmlPageOutcomes {
 
     init() {}
 
-    func register(_ id: UUID) {
+    public func register(_ id: UUID) {
         pending.insert(id)
     }
 
     /// submit answers a pending page; false when it is not waiting, so the first answer stands.
-    @discardableResult func submit(_ id: UUID, value: String) -> Bool {
+    @discardableResult public func submit(_ id: UUID, value: String) -> Bool {
         finish(id, ControlHtmlPageOutcome(pageID: id.uuidString, outcome: .submitted, value: value))
     }
 
-    func dismiss(_ id: UUID) {
+    public func dismiss(_ id: UUID) {
         _ = finish(id, ControlHtmlPageOutcome(pageID: id.uuidString, outcome: .dismissed))
     }
 
@@ -63,7 +63,7 @@ public final class HtmlPageOutcomes {
     }
 
     /// response is the `session.overlay.result --page` reply for page `id`.
-    func response(for id: UUID) -> ControlResponse {
+    public func response(for id: UUID) -> ControlResponse {
         guard let outcome = outcome(for: id) else { return ControlResponse(ok: false, error: OverlayHtmlError.unknownPage) }
         return ControlResponse(ok: true, result: ControlResult(pageOutcome: outcome))
     }

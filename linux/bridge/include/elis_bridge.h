@@ -95,6 +95,18 @@ char *elis_phone_viewers(const char *paneID);  // a pane's viewer count and lead
 char *elis_phone_request(const char *requestJSON); // {cmd,target?,args?} checked: {"ok":true,"op",mode?|port?|host?}
 char *elis_phone_link_with_host(const char *link, const char *host, int port); // the Mac's PhonePairLink.withHost
 
+// Page overlays (Sources/ElisBridge/Pages.swift has the page shape: source and flags).
+char *elis_overlay_page_arguments(const char *argsJSON); // {"ok":true,"page":source|null} or the Mac's refusal
+char *elis_html_navigation_decide(const char *json);     // {source,flags,action:{url,target,userActivated}} -> {"decision"}
+char *elis_html_identity(const char *json);              // {source,flags,page?} -> {"identity"}
+char *elis_html_theme_script(const char *json);          // {background,foreground,dark,palette?,themed} -> {"script"}
+char *elis_html_zoom(const char *json);                  // {action,zoom} -> {"zoom"}, null for a non-font action
+// Outcomes, on the process main thread only: register a pending page, answer it once, read result --page's reply.
+char *elis_page_outcome_register(void); // {"pageID"}
+char *elis_page_outcome_submit(const char *pageID, const char *value); // {"ok"}: false when it was not pending
+void elis_page_outcome_dismiss(const char *pageID);
+char *elis_page_outcome_result(const char *pageID);
+
 #ifdef __cplusplus
 }
 #endif
