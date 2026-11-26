@@ -185,8 +185,8 @@ class ChatComposerState extends State<ChatComposer> {
       _sending = true;
       _offer = null;
     });
-    final r = await widget.gate.run(
-        (line.isEmpty ? 1 : 2) + (images.isEmpty ? 0 : 1), (q) => widget.colours ? _live(q, line, replace, images) : _typed(q, line, images));
+    final steps = (line.isEmpty ? 1 : 2) + (images.isEmpty ? 0 : 1);
+    final r = await widget.gate.run(steps, (q) => widget.colours ? _live(q, line, replace, images) : _typed(q, line, images));
     if (!mounted) return;
     final draft = norm(widget.screen()?.draft ?? '');
     final offer = r.reason == _changed && draft.isNotEmpty;
@@ -282,38 +282,73 @@ class ChatComposerState extends State<ChatComposer> {
 
   String? get _attachBlocked => widget.attachBlocked ?? AttachBlocks.tooOld[widget.session];
 
-  Widget _attach(bool held, String? blocked) => IconButton(
-        key: const Key('attach'),
-        tooltip: _attachBlocked ?? blocked ?? 'Attach files',
-        icon: const Icon(Icons.attach_file),
-        onPressed: held || blocked != null || _picking || _uploading || widget.gate.running || widget.upload == null || _attachBlocked != null
-            ? null
-            : _pick,
-      );
-
-  Widget _chip(_Attachment a) {
+  Widget _tile(_Attachment a) {
     final f = a.file;
-    return InputChip(
-      key: ObjectKey(a), // two picks can share a name
-      visualDensity: VisualDensity.compact,
-      label: Stack(clipBehavior: Clip.none, children: [
-        ConstrainedBox(
-          constraints: const BoxConstraints(maxWidth: 200),
-          child: Row(mainAxisSize: MainAxisSize.min, children: [
-            Flexible(child: Text(f.name, maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(fontSize: 12))),
-            Text(' ${humanSize(f.size)}', style: const TextStyle(fontSize: 12, color: C.muted)),
-          ]),
-        ),
-        // under the label, inside the chip's padding, so an uploading chip keeps the row's height
-        if (a.channel != null)
-          Positioned(
-            left: 0,
-            right: 0,
-            bottom: -2,
-            child: LinearProgressIndicator(value: f.size == 0 ? 0 : min(1, a.sent / f.size), minHeight: 2, backgroundColor: C.line),
-          ),
+    final doc = Container(
+      color: C.surface2,
+      padding: const EdgeInsets.symmetric(horizontal: 4),
+      child: Column(mainAxisAlignment: MainAxisAlignment.center, children: [
+        const Icon(Icons.description_outlined, size: 20, color: C.muted),
+        const SizedBox(height: 3),
+        Text(f.name, maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(fontSize: 10.5)),
+        Text(humanSize(f.size), style: const TextStyle(fontSize: 10, color: C.muted)),
       ]),
-      onDeleted: () => _remove(a),
+    );
+    return KeyedSubtree(
+      key: ObjectKey(a), // two picks can share a name
+      // the badge stays inside the Stack's bounds: a Stack takes no hit outside them
+      child: Stack(key: Key('tile-${f.name}'), children: [
+        Padding(
+          padding: const EdgeInsets.only(top: 10, right: 10),
+          child: Container(
+            width: 64,
+            height: 64,
+            foregroundDecoration: BoxDecoration(borderRadius: BorderRadius.circular(12), border: Border.all(color: C.line)),
+            child: ClipRRect(
+              borderRadius: BorderRadius.circular(12),
+              child: Stack(fit: StackFit.expand, children: [
+                if (isPicture(f.name))
+                  Image.file(File(f.path), fit: BoxFit.cover, cacheWidth: 192, errorBuilder: (_, _, _) => doc)
+                else
+                  doc,
+                if (a.channel != null)
+                  Container(
+                    color: const Color(0x99000000),
+                    alignment: Alignment.center,
+                    child: SizedBox.square(
+                      dimension: 22,
+                      child: CircularProgressIndicator(
+                          value: f.size == 0 ? 0 : min(1, a.sent / f.size), strokeWidth: 2.5, backgroundColor: C.line),
+                    ),
+                  ),
+              ]),
+            ),
+          ),
+        ),
+        Positioned(
+          top: 0,
+          right: 0,
+          child: Semantics(
+            button: true,
+            label: 'Remove ${f.name}',
+            child: GestureDetector(
+              behavior: HitTestBehavior.opaque,
+              onTap: () => _remove(a),
+              child: SizedBox.square(
+                dimension: 28,
+                child: Center(
+                  child: Container(
+                    width: 20,
+                    height: 20,
+                    decoration: BoxDecoration(color: C.surface2, shape: BoxShape.circle, border: Border.all(color: C.line)),
+                    child: const Icon(Icons.close, size: 12, color: C.text),
+                  ),
+                ),
+              ),
+            ),
+          ),
+        ),
+      ]),
     );
   }
 
@@ -342,9 +377,13 @@ class ChatComposerState extends State<ChatComposer> {
       await q.send(_write(PasteWrite(text), text));
     }
     if (images.isNotEmpty) {
-      await q.send(GateStep(PasteWrite(imagePaste(images)),
-          ready: (g) => ClaudeScreen.read(g).bottomStack,
-          done: (g) => '[Image #'.allMatches(ClaudeScreen.read(g).draft).length == images.length));
+      // the typed text can hold `[Image #` itself
+      int shown(Grid g) => '[Image #'.allMatches(ClaudeScreen.read(g).draft).length;
+      var before = 0;
+      await q.send(GateStep(PasteWrite(imagePaste(images)), ready: (g) {
+        before = shown(g);
+        return ClaudeScreen.read(g).bottomStack;
+      }, done: (g) => shown(g) - before >= images.length));
     }
     bool human(ChatItem i) => i.kind == 'user' && i.isHumanPrompt;
     final humans = widget.feed.items.where(human).length;
@@ -436,23 +475,29 @@ class ChatComposerState extends State<ChatComposer> {
                   sendIcon: queue ? Icons.schedule : Icons.arrow_forward,
                   reason: reason,
                   enabled: held == null && !_uploading,
-                  leading: _attach(held != null, blocked),
+                  prefix: ComposerMenu(
+                      screen: s,
+                      meta: widget.feed.meta,
+                      gate: widget.gate,
+                      remote: widget.remote,
+                      server: widget.server,
+                      disabledBy: widget.disabledBy,
+                      checks: widget.checks,
+                      onAttach: held != null ||
+                              blocked != null ||
+                              _picking ||
+                              _uploading ||
+                              widget.gate.running ||
+                              widget.upload == null ||
+                              _attachBlocked != null
+                          ? null
+                          : _pick,
+                      attachWhy: _attachBlocked ?? blocked),
                   accessory: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
-                    // Claude Code's mode cycle; agy's modes differ
-                    if (s?.agy != true)
-                      ModeChip(
-                          screen: s,
-                          meta: widget.feed.meta,
-                          gate: widget.gate,
-                          remote: widget.remote,
-                          server: widget.server,
-                          disabledBy: widget.disabledBy,
-                          checks: widget.checks,
-                          gap: _chips.isEmpty ? 6 : 2),
                     if (_chips.isNotEmpty)
                       Padding(
                         padding: const EdgeInsets.only(bottom: 6),
-                        child: Wrap(spacing: 8, runSpacing: 2, children: [for (final a in _chips) _chip(a)]),
+                        child: Wrap(children: [for (final a in _chips) _tile(a)]),
                       ),
                     if (_offer != null) _offerRow(),
                     if (held != null)
@@ -530,17 +575,11 @@ const _modeNames = {
   ClaudeMode.auto: 'auto',
   ClaudeMode.bypass: 'bypass',
 };
-const _permissionModes = {
-  'default': ClaudeMode.manual,
-  'acceptEdits': ClaudeMode.acceptEdits,
-  'plan': ClaudeMode.plan,
-  'auto': ClaudeMode.auto,
-  'bypassPermissions': ClaudeMode.bypass,
-};
 
-/// The composer's mode chip and shell badge: Shift+Tab through [gate] until Claude shows the picked mode.
-class ModeChip extends StatefulWidget {
-  const ModeChip(
+/// The composer's `+` menu: Attach files, then Claude's modes (Shift+Tab through [gate] until Claude shows the picked one)
+/// and its shell count. agy's modes differ: its menu holds Attach alone.
+class ComposerMenu extends StatefulWidget {
+  const ComposerMenu(
       {super.key,
       required this.screen,
       required this.meta,
@@ -549,7 +588,8 @@ class ModeChip extends StatefulWidget {
       this.server = false,
       this.disabledBy,
       this.checks = _checks,
-      this.gap = 6});
+      this.onAttach,
+      this.attachWhy});
 
   final ClaudeScreen? screen;
   final TranscriptMeta? meta;
@@ -557,13 +597,14 @@ class ModeChip extends StatefulWidget {
   final bool remote, server;
   final String? disabledBy;
   final Checks checks;
-  final double gap; // below the chip
+  final VoidCallback? onAttach; // null disables the Attach row
+  final String? attachWhy; // shown under a disabled Attach row
 
   @override
-  State<ModeChip> createState() => ModeChipState();
+  State<ComposerMenu> createState() => ComposerMenuState();
 }
 
-class ModeChipState extends State<ModeChip> {
+class ComposerMenuState extends State<ComposerMenu> {
   bool _bypassSeen = false;
 
   List<ClaudeMode> get _cycle =>
@@ -613,18 +654,39 @@ class ModeChipState extends State<ModeChip> {
     return [for (var i = (c.indexOf(from) + 1) % c.length; c[i] != to; i = (i + 1) % c.length) c[i]];
   }
 
-  Future<void> _pick() async {
+  Future<void> _pick({required bool agy, required bool modes}) async {
     final current = widget.screen?.mode;
+    final shells = widget.screen?.shells ?? 0;
+    final attach = widget.onAttach;
     final target = await showModalBottomSheet<ClaudeMode>(
         context: context,
+        isScrollControlled: true, // the default 9/16 cap cuts the last modes on a short screen
         builder: (context) {
           ClaudeMode? armed;
           return StatefulBuilder(
               builder: (context, setSheet) => SafeArea(
-                    child: Column(mainAxisSize: MainAxisSize.min, children: [
-                      for (final m in _cycle)
+                    child: SingleChildScrollView(
+                        child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
+                      ListTile(
+                        key: const Key('attach'),
+                        leading: const Icon(Icons.attach_file, color: C.muted),
+                        title: const Text('Attach files'),
+                        subtitle: attach == null ? switch (widget.attachWhy) { final w? => Text(w), null => null } : null,
+                        enabled: attach != null,
+                        minTileHeight: 52,
+                        onTap: () {
+                          Navigator.pop(context);
+                          attach!();
+                        },
+                      ),
+                      if (!agy) ...[
+                        const Divider(),
+                        const Padding(padding: EdgeInsets.fromLTRB(20, 14, 20, 4), child: Text('PERMISSION MODE', style: sectionLabel)),
+                      ],
+                      for (final m in agy ? const <ClaudeMode>[] : _cycle)
                         ListTile(
                           key: Key('mode-${m.name}'),
+                          enabled: modes,
                           title: Text(_modeLabels[m]!),
                           subtitle: armed == m
                               ? const Text('Tap again to switch')
@@ -641,7 +703,13 @@ class ModeChipState extends State<ModeChip> {
                             Navigator.pop(context, m);
                           },
                         ),
-                    ]),
+                      if (!agy && shells > 0)
+                        Padding(
+                          padding: const EdgeInsets.fromLTRB(20, 4, 20, 12),
+                          child: Text('$shells shell${shells == 1 ? '' : 's'}',
+                              key: const Key('shell-badge'), style: const TextStyle(fontSize: 12, color: C.muted)),
+                        ),
+                    ])),
                   ));
         });
     if (target == null || !mounted) return;
@@ -652,36 +720,25 @@ class ModeChipState extends State<ModeChip> {
   @override
   Widget build(BuildContext context) {
     final s = widget.screen;
-    final meta = widget.meta?.permissionMode;
-    if (s?.mode == ClaudeMode.bypass || meta == 'bypassPermissions') _bypassSeen = true;
-    final hidden = s?.modeText == null; // G hides the mode line: the transcript's mode, dimmed
-    final label = switch (s?.mode) {
-      final m? => _modeNames[m]!,
-      null when !hidden => s!.modeText!.split('·').first.replaceFirst(RegExp(r'^[⏸⏵\s]+'), '').trim(),
-      null => _modeNames[_permissionModes[meta]] ?? meta ?? 'mode',
-    };
-    final enabled = s != null &&
+    if (s?.mode == ClaudeMode.bypass || widget.meta?.permissionMode == 'bypassPermissions') _bypassSeen = true;
+    final agy = s?.agy == true;
+    final modes = !agy &&
+        s != null &&
         s.idle &&
         s.mode != null &&
         widget.disabledBy == null &&
         widget.checks.writeBlockedOn(remote: widget.remote, server: widget.server) == null &&
         !widget.gate.running;
-    final shells = s?.shells ?? 0;
-    return Padding(
-      padding: EdgeInsets.only(bottom: widget.gap),
-      child: Row(children: [
-        ActionChip(
-          key: const Key('mode-chip'),
-          label: Text(label, style: TextStyle(fontSize: 12, color: hidden ? C.muted : null)),
-          visualDensity: VisualDensity.compact,
-          onPressed: enabled ? _pick : null,
-        ),
-        if (shells > 0) ...[
-          const SizedBox(width: 8),
-          Text('$shells shell${shells == 1 ? '' : 's'}',
-              key: const Key('shell-badge'), style: const TextStyle(fontSize: 12, color: C.muted)),
-        ],
-      ]),
+    final on = modes || widget.onAttach != null;
+    final label = agy ? 'Attach files' : 'Attach files, permission mode';
+    return IconButton(
+      key: const Key('composerMenu'),
+      icon: const Icon(Icons.add),
+      // the field's decorator gives its prefix one colour for both states
+      color: C.muted,
+      disabledColor: C.muted.withValues(alpha: .38),
+      tooltip: on ? label : widget.attachWhy ?? label,
+      onPressed: on ? () => _pick(agy: agy, modes: modes) : null,
     );
   }
 }

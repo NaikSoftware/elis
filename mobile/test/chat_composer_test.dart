@@ -176,19 +176,46 @@ class _C {
     return u;
   }
 
-  IconButton get _attach => t.widget<IconButton>(find.byKey(const Key('attach')));
-  bool get attachEnabled => _attach.onPressed != null;
-  String? get attachTip => _attach.tooltip;
-  Finder chip(String name) => find.widgetWithText(InputChip, name);
+  IconButton get menu => t.widget<IconButton>(find.byKey(const Key('composerMenu')));
+  Finder chip(String name) => find.byKey(Key('tile-$name'));
   ChatComposerState get state => t.state<ChatComposerState>(find.byType(ChatComposer));
 
+  Future<void> openMenu() async {
+    await t.tap(find.byKey(const Key('composerMenu')));
+    await t.pumpAndSettle();
+  }
+
+  Future<void> closeMenu() async {
+    Navigator.pop(t.element(find.byKey(const Key('attach'))));
+    await t.pumpAndSettle();
+  }
+
+  /// The Attach row's state and its reason; a disabled menu gives its tooltip.
+  Future<(bool, String?)> attachRow() async {
+    if (menu.onPressed == null) return (false, menu.tooltip);
+    await openMenu();
+    final row = t.widget<ListTile>(find.byKey(const Key('attach')));
+    await closeMenu();
+    return (row.enabled, (row.subtitle as Text?)?.data);
+  }
+
+  /// Whether the mode rows take a tap; a disabled menu has none open.
+  Future<bool> modesEnabled() async {
+    if (menu.onPressed == null) return false;
+    await openMenu();
+    final on = t.widget<ListTile>(find.byKey(const Key('mode-manual'))).enabled;
+    await closeMenu();
+    return on;
+  }
+
   Future<void> attach() async {
+    await openMenu();
     await t.tap(find.byKey(const Key('attach')));
-    await t.pump();
+    await t.pumpAndSettle();
   }
 
   Future<void> unchip(String name) async {
-    await t.tap(find.descendant(of: chip(name), matching: find.byType(Icon)));
+    await t.tap(find.descendant(of: chip(name), matching: find.byIcon(Icons.close)));
     await t.pump();
   }
 
@@ -547,8 +574,7 @@ void main() {
     expect(find.text('Sending from the phone is not verified yet'), findsOneWidget);
   });
 
-  group('mode chip', () {
-    bool chipEnabled(WidgetTester t) => t.widget<ActionChip>(find.byKey(const Key('mode-chip'))).onPressed != null;
+  group('composer menu', () {
     bool shiftTab(GateWrite w) => w is KeyWrite && w.key == VtKey.tab && w.mods == vtShift;
 
     testWidgets('chipCyclesToTarget', (t) async {
@@ -556,9 +582,8 @@ void main() {
       final next = [_g('mode-accept-45'), _g('mode-plan-45'), _g('mode-auto-45')];
       c.script((w) => shiftTab(w) ? next.removeAt(0) : null);
       await c.pump();
-      expect(chipEnabled(t), isTrue);
-      await t.tap(find.byKey(const Key('mode-chip')));
-      await t.pumpAndSettle();
+      expect(await c.modesEnabled(), isTrue);
+      await c.openMenu();
       await t.tap(find.text('auto mode on'));
       await t.pumpAndSettle();
       expect(c.writer.writes, isEmpty);
@@ -574,8 +599,7 @@ void main() {
       final c = _C(t, _g('idle-placeholder-45'));
       c.script((_) => null);
       await c.pump();
-      await t.tap(find.byKey(const Key('mode-chip')));
-      await t.pumpAndSettle();
+      await c.openMenu();
       await t.tap(find.text('plan mode on'));
       await t.pump();
       await t.pump(const Duration(seconds: 3));
@@ -587,8 +611,7 @@ void main() {
     testWidgets('pickerNamesTheModesPassed', (t) async {
       final c = _C(t, _g('idle-placeholder-45'));
       await c.pump();
-      await t.tap(find.byKey(const Key('mode-chip')));
-      await t.pumpAndSettle();
+      await c.openMenu();
       expect(find.text('Passes accept edits'), findsOneWidget);
       expect(find.text('Passes accept edits, plan'), findsOneWidget);
     });
@@ -598,8 +621,7 @@ void main() {
       final next = [_g('mode-accept-45')];
       c.script((w) => next.isEmpty ? null : next.removeAt(0));
       await c.pump();
-      await t.tap(find.byKey(const Key('mode-chip')));
-      await t.pumpAndSettle();
+      await c.openMenu();
       await t.tap(find.text('plan mode on'));
       await t.pump();
       await t.pump(const Duration(seconds: 3));
@@ -612,8 +634,7 @@ void main() {
       final next = [_g('mode-accept-45'), _g('idle-placeholder-45')];
       c.script((w) => next.isEmpty ? null : next.removeAt(0));
       await c.pump();
-      await t.tap(find.byKey(const Key('mode-chip')));
-      await t.pumpAndSettle();
+      await c.openMenu();
       await t.tap(find.text('plan mode on'));
       await t.pumpAndSettle();
       expect(c.writer.writes.length, 2);
@@ -623,7 +644,7 @@ void main() {
     testWidgets('chipDisabledWhileWorking', (t) async {
       final c = _C(t, _g('working-45'));
       await c.pump();
-      expect(chipEnabled(t), isFalse);
+      expect(await c.modesEnabled(), isFalse);
     });
 
     testWidgets('chipDisabledWithoutAKnownMode', (t) async {
@@ -632,16 +653,16 @@ void main() {
       g.rows[r] = _row('  ⏸ ручний режим');
       final c = _C(t, g);
       await c.pump();
-      expect(chipEnabled(t), isFalse);
+      expect(await c.modesEnabled(), isFalse);
     });
 
     testWidgets('chipDisabledOnAnUnprovenRemoteRow', (t) async {
       final c = _C(t, _g('idle-placeholder-45'))..remote = true;
       await c.pump();
-      expect(chipEnabled(t), isFalse);
+      expect(await c.modesEnabled(), isFalse);
       c.checks = const Checks(keys: true, paste: true, attached: true);
       await c.pump();
-      expect(chipEnabled(t), isTrue);
+      expect(await c.modesEnabled(), isTrue);
     });
 
     testWidgets('chipEnabledOnAServerRowOnly', (t) async {
@@ -650,43 +671,102 @@ void main() {
         ..server = true
         ..checks = const Checks(keys: true, paste: true, server: true);
       await c.pump();
-      expect(chipEnabled(t), isTrue);
+      expect(await c.modesEnabled(), isTrue);
       c.server = false;
       await c.pump();
-      expect(chipEnabled(t), isFalse);
+      expect(await c.modesEnabled(), isFalse);
     });
 
-    testWidgets('chipShowsTheTranscriptModeWhileHidden', (t) async {
-      final c = _C(t, _g('dialog-bash-45'));
-      c.feed.meta = TranscriptMeta.fromJson(const {'permissionMode': 'plan'});
+    testWidgets('oneMenuButtonOpensAttachAndModes', (t) async {
+      final c = _C(t, _g('idle-placeholder-45'));
       await c.pump();
-      expect(find.text('plan'), findsOneWidget);
-      expect(chipEnabled(t), isFalse);
+      expect(find.byType(ActionChip), findsNothing);
+      expect(find.byIcon(Icons.attach_file), findsNothing);
+      await c.openMenu();
+      expect(find.text('Attach files'), findsOneWidget);
+      expect(find.text('PERMISSION MODE'), findsOneWidget);
+      expect(find.text('manual mode on'), findsOneWidget);
+      expect(find.text('auto mode on'), findsOneWidget);
     });
 
-    testWidgets('shellBadge', (t) async {
+    testWidgets('modeRowsKeepTheirGates', (t) async {
+      final c = _C(t, _g('working-45'));
+      await c.pump();
+      expect(await c.attachRow(), (true, null));
+      expect(await c.modesEnabled(), isFalse);
+      c.uploads = false;
+      await c.pump();
+      expect(c.menu.onPressed, isNull);
+    });
+
+    testWidgets('menuShowsShellsWhenAny', (t) async {
       final c = _C(t, _g('shell-45'));
       await c.pump();
+      expect(find.text('1 shell'), findsNothing);
+      await c.openMenu();
       expect(find.text('1 shell'), findsOneWidget);
+      await c.closeMenu();
       c.grids.set(_g('idle-placeholder-45'));
       await t.pump();
+      await c.openMenu();
       expect(find.text('1 shell'), findsNothing);
+    });
+
+    testWidgets('agyMenuHoldsAttachOnly', (t) async {
+      final c = _C(t, _g('agy-idle-70'));
+      await c.pump();
+      await c.openMenu();
+      expect(find.text('Attach files'), findsOneWidget);
+      expect(find.text('PERMISSION MODE'), findsNothing);
+      expect(find.byKey(const Key('mode-manual')), findsNothing);
     });
   });
 
   group('attachments', () {
     tearDown(AttachBlocks.tooOld.clear);
 
-    testWidgets('picksAddChipsAndTheCrossRemovesOne', (t) async {
+    testWidgets('attachRowPicksFiles', (t) async {
       final c = _C(t, _g('idle-placeholder-45'));
       await c.pump();
-      expect((c.attachEnabled, c.attachTip), (true, 'Attach files'));
+      expect(await c.attachRow(), (true, null));
       await c.attach();
-      expect(find.descendant(of: c.chip('a.png'), matching: find.textContaining('1.2 MB')), findsOneWidget);
-      expect(find.descendant(of: c.chip('b.txt'), matching: find.textContaining('4 KB')), findsOneWidget);
+      expect(find.text('Attach files'), findsNothing);
+      expect(c.chip('a.png'), findsOneWidget);
+      expect(c.chip('b.txt'), findsOneWidget);
       await c.unchip('a.png');
       expect(c.chip('a.png'), findsNothing);
       expect(c.chip('b.txt'), findsOneWidget);
+    });
+
+    testWidgets('theBadgeTakesATapPastTheTileCorner', (t) async {
+      final c = _C(t, _g('idle-placeholder-45'));
+      await c.pump();
+      await c.attach();
+      await t.tapAt(t.getCenter(find.descendant(of: c.chip('a.png'), matching: find.byIcon(Icons.close))) + const Offset(8, -8));
+      await t.pump();
+      expect(c.chip('a.png'), findsNothing);
+    });
+
+    testWidgets('modesStayReachableWhileUploading', (t) async {
+      final c = _C(t, _g('idle-placeholder-45'))..onUpload = (_) {};
+      await c.pump();
+      await c.attach();
+      await c.startSend();
+      expect(await c.attachRow(), (false, null));
+      expect(await c.modesEnabled(), isTrue);
+      await t.tap(find.byKey(const Key('composer')));
+      await t.pump();
+      expect(t.testTextInput.hasAnyClients, isFalse);
+    });
+
+    testWidgets('tilesShowThumbnailForImagesAndNameForFiles', (t) async {
+      final c = _C(t, _g('idle-placeholder-45'));
+      await c.pump();
+      await c.attach();
+      expect(find.descendant(of: c.chip('a.png'), matching: find.byType(Image)), findsOneWidget);
+      expect(find.descendant(of: c.chip('b.txt'), matching: find.byType(Image)), findsNothing);
+      expect(find.descendant(of: c.chip('b.txt'), matching: find.text('b.txt')), findsOneWidget);
+      expect(find.descendant(of: c.chip('b.txt'), matching: find.text('4 KB')), findsOneWidget);
     });
 
     testWidgets('twoPicksWithOneNameAreTwoChips', (t) async {
@@ -694,10 +774,11 @@ void main() {
       await c.pump();
       await c.attach();
       expect(c.chip('a.png'), findsNWidgets(2));
-      await t.tap(find.descendant(of: c.chip('a.png').first, matching: find.byType(Icon)));
+      await t.tap(find.descendant(of: c.chip('a.png').first, matching: find.byIcon(Icons.close)));
       await t.pump();
       expect(c.chip('a.png'), findsOneWidget);
-      expect(find.descendant(of: c.chip('a.png'), matching: find.textContaining('3 B')), findsOneWidget);
+      final shown = (t.widget<Image>(find.descendant(of: c.chip('a.png'), matching: find.byType(Image))).image as ResizeImage).imageProvider;
+      expect((shown as FileImage).file.path, '/q/a.png');
     });
 
     testWidgets('aFileOverTheCapIsNotAdded', (t) async {
@@ -735,21 +816,21 @@ void main() {
     testWidgets('attachIsOffWithoutUploadOrWhenBlocked', (t) async {
       final c = _C(t, _g('idle-placeholder-45'))..uploads = false;
       await c.pump();
-      expect(c.attachEnabled, isFalse);
+      expect((await c.attachRow()).$1, isFalse);
       c
         ..uploads = true
         ..attachBlocked = 'Sending from the phone is not verified on remote sessions yet';
       await c.pump();
-      expect((c.attachEnabled, c.attachTip), (false, 'Sending from the phone is not verified on remote sessions yet'));
+      expect(await c.attachRow(), (false, 'Sending from the phone is not verified on remote sessions yet'));
     });
 
     testWidgets('attachIsOffWhileSendingIsBlocked', (t) async {
       final c = _C(t, _g('dialog-bash-45'))..disabledBy = 'Agent exited';
       await c.pump();
-      expect((c.attachEnabled, c.attachTip), (false, 'Agent exited'));
+      expect(await c.attachRow(), (false, 'Agent exited'));
       c.disabledBy = null;
       await c.pump();
-      expect((c.attachEnabled, c.attachTip), (false, 'Claude shows a dialog'));
+      expect(await c.attachRow(), (false, 'Claude shows a dialog'));
     });
 
     testWidgets('sendPastesTextThenTheImagesAlone', (t) async {
@@ -770,6 +851,23 @@ void main() {
       expect(c.field, '');
       expect(c.chip('a.png'), findsNothing);
       expect(c.chip('b.txt'), findsNothing);
+    });
+
+    testWidgets('theImageStepCountsOnlyNewImages', (t) async {
+      final idle = _g('idle-placeholder-45');
+      final c = _C(t, idle)..picks = const [_a];
+      const line = 'see [Image #1] again';
+      c.script((w) => switch (w) {
+            PasteWrite(text: line) => _withInput(idle, line),
+            PasteWrite() => _withInput(idle, '$line [Image #2]'),
+            _ => idle,
+          });
+      await c.pump();
+      await c.attach();
+      await c.type(line);
+      await c.send();
+      expect((c.writer.writes.length, _enter(c.writer.writes.last)), (3, true));
+      expect(c.chip('a.png'), findsNothing);
     });
 
     testWidgets('imagesOnlyPasteOnceThenEnter', (t) async {
@@ -880,13 +978,13 @@ void main() {
       await c.attach();
       await c.type('hi');
       await c.startSend();
-      expect((c.sendEnabled, c.attachEnabled), (false, false));
+      expect((c.sendEnabled, (await c.attachRow()).$1), (false, false));
       unawaited(c.state.sendField('hi'));
       await t.pump();
       expect(c.ups.length, 1);
     });
 
-    testWidgets('anUploadingChipShowsTheCreditedShare', (t) async {
+    testWidgets('uploadingTileShowsProgress', (t) async {
       final c = _C(t, _g('idle-placeholder-45'))..onUpload = (_) {};
       await c.pump();
       await c.attach();
@@ -895,9 +993,9 @@ void main() {
         ..add(251658)
         ..add(251658);
       await t.pump();
-      expect(t.widget<LinearProgressIndicator>(find.descendant(of: c.chip('a.png'), matching: find.byType(LinearProgressIndicator))).value,
+      expect(t.widget<CircularProgressIndicator>(find.descendant(of: c.chip('a.png'), matching: find.byType(CircularProgressIndicator))).value,
           closeTo(.4, .001));
-      expect(find.descendant(of: c.chip('b.txt'), matching: find.byType(LinearProgressIndicator)), findsNothing);
+      expect(find.descendant(of: c.chip('b.txt'), matching: find.byType(CircularProgressIndicator)), findsNothing);
     });
 
     testWidgets('sendWaitsForAPickInProgress', (t) async {
@@ -952,7 +1050,7 @@ void main() {
       await c.attach();
       await c.send();
       expect(find.text(why), findsOneWidget);
-      expect((c.attachEnabled, c.attachTip), (false, why));
+      expect(await c.attachRow(), (false, why));
       expect(AttachBlocks.tooOld['S'], why);
     });
   });

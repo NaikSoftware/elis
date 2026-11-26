@@ -17,7 +17,7 @@ class Composer extends StatelessWidget {
       this.sendIcon = Icons.arrow_forward,
       this.reason,
       this.accessory,
-      this.leading,
+      this.prefix,
       this.hint = 'Type, then send with Enter',
       this.fill = C.surface,
       this.enabled = true});
@@ -31,19 +31,19 @@ class Composer extends StatelessWidget {
   final IconData sendIcon;
   final String? reason; // why Send is off, shown above the field
   final Widget? accessory; // a row above the field
-  final Widget? leading; // before the field, in its row
+  final Widget? prefix; // inside the field, before the text
 
   @override
   Widget build(BuildContext context) {
     final send = enabled ? onSend : null;
     final row = Row(children: [
-      if (leading case final l?) ...[l, const SizedBox(width: 8)],
       Expanded(
         child: TextField(
           key: const Key('composer'),
           controller: controller,
           focusNode: focus,
           enabled: enabled,
+          ignorePointers: prefix == null ? null : false, // a disabled field would ignore its prefix's taps too
           minLines: 1,
           maxLines: maxLines,
           textInputAction: TextInputAction.send,
@@ -53,6 +53,7 @@ class Composer extends StatelessWidget {
           decoration: InputDecoration(
             hintText: hint,
             fillColor: fill,
+            prefixIcon: prefix,
             border: OutlineInputBorder(borderRadius: BorderRadius.circular(14), borderSide: const BorderSide(color: C.line)),
             enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(14), borderSide: const BorderSide(color: C.line)),
             disabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(14), borderSide: const BorderSide(color: C.line)),

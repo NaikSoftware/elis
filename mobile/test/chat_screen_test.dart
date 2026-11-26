@@ -323,12 +323,28 @@ void main() {
     await h.start();
     await h.opened();
     await _show(h, 'idle-placeholder-45');
-    IconButton attach() => t.widget<IconButton>(find.byKey(const Key('attach')));
+    Future<void> settle() async {
+      await t.pump();
+      await t.pump(const Duration(milliseconds: 500));
+    }
+
+    // the Attach row's state and reason, read from the composer's menu
+    Future<(bool, String?)> attach() async {
+      await t.tap(find.byKey(const Key('composerMenu')));
+      await settle();
+      final row = t.widget<ListTile>(find.byKey(const Key('attach')));
+      Navigator.pop(t.element(find.byKey(const Key('attach'))));
+      await settle();
+      return (row.enabled, (row.subtitle as Text?)?.data);
+    }
+
+    await t.tap(find.byKey(const Key('composerMenu')));
+    await settle();
     await t.tap(find.byKey(const Key('attach')));
     AttachBlocks.tooOld['s1'] = 'Update Elis on the computer to attach files';
     addTearDown(AttachBlocks.tooOld.clear);
-    await t.pump();
-    expect((attach().onPressed, attach().tooltip), (null, 'Update Elis on the computer to attach files'));
+    await settle();
+    expect(await attach(), (false, 'Update Elis on the computer to attach files'));
     final first = h.r;
     await pauseResume(h, watch: false, paused: () async {
       expect(h.m.mux, isNull);
@@ -340,8 +356,8 @@ void main() {
     expect(r, isNot(same(first)));
     await h.opened();
     await _show(h, 'idle-placeholder-45');
-    expect(find.widgetWithText(InputChip, 'a.txt'), findsOneWidget);
-    expect((attach().onPressed != null, attach().tooltip), (true, 'Attach files'));
+    expect(find.byKey(const Key('tile-a.txt')), findsOneWidget);
+    expect(await attach(), (true, null));
     await t.enterText(find.byKey(const Key('composer')), 'fix this');
     await t.pump();
     await t.tap(find.byKey(const Key('send')));
