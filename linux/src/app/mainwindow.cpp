@@ -672,11 +672,13 @@ void MainWindow::createMenus()
     file->addSeparator();
     file->addAction(action(QStringLiteral("close_session"), tr("Close Session"), QStringLiteral("tab-close"), QKeySequence(QStringLiteral("Ctrl+Shift+W")),
                            [this] {
-                               // the Mac's ⌘W ladder: zoom, the session's HUD or shown cover, the focused pane's, the session
-                               if (m_zoomed)
-                                   toggleZoom();
-                               else if (!closeFrontCover(m_store.selected))
-                                   closeSessions({m_store.selected});
+                               // the ⌘W ladder, topmost first: the dashboard, the session's HUD or shown cover, the
+                               // focused pane's, then zoom, which here only hides the chrome around them, then the session
+                               if (m_dashboard)
+                                   return closeDashboard();
+                               if (closeFrontCover(m_store.selected))
+                                   return;
+                               m_zoomed ? toggleZoom() : closeSessions({m_store.selected});
                            }));
     // ⌘Z: the newest close inside its grace comes back with its shells; enabled only then, so Redo keeps the chord otherwise
     QAction *undo = action(QStringLiteral("undo_close"), tr("Reopen Closed Item"), QStringLiteral("edit-undo"),

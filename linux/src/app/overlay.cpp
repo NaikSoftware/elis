@@ -430,7 +430,7 @@ bool MainWindow::openHud(const QString &id, const QJsonObject &spec, QString *er
         return *error = QStringLiteral("session has no terminal"), false;
     const Overlay ov = m_overlays.value(slotKey(id, {}));
     if (ov.part || ov.page)
-        return *error = QStringLiteral("overlay already open"), false;
+        return *error = ov.hidden ? QStringLiteral("overlay hidden") : QStringLiteral("overlay already open"), false;
     if (spec.value("pane").toString() == QLatin1String("right") && !s->splitVisible)
         return *error = QStringLiteral("pane not visible"), false;
     closeHud(id); // a second open replaces the first

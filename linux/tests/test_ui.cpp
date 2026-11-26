@@ -914,7 +914,7 @@ private Q_SLOTS:
         qunsetenv("VISUAL");
     }
 
-    void closeSessionTakesZoomThenTheFrontCover()
+    void closeSessionTakesTheFrontCoverThenZoom()
     {
         Store store;
         MainWindow w(store, dir.filePath("closeladder.json"));
@@ -932,13 +932,26 @@ private Q_SLOTS:
         QAction *close = w.namedAction(QStringLiteral("close_session"));
 
         QVERIFY(!run("session.overlay.open", {{"command", "sleep 30"}}).contains("error"));
+        QVERIFY(!run("session.overlay.toggle").contains("error"));
+        QCOMPARE(run("session.hud.open", {{"message", "building"}})["error"].toString(), QStringLiteral("overlay hidden"));
+        QVERIFY(!run("session.overlay.toggle").contains("error"));
+        QVERIFY(w.menuBar()->isVisible());
         w.namedAction(QStringLiteral("toggle_terminal_zoom"))->trigger();
-        close->trigger();
-        QVERIFY(w.sessionExtras(id)["overlay"].toBool());
+        QVERIFY(!w.menuBar()->isVisible());
         close->trigger();
         QTRY_VERIFY(!w.sessionExtras(id)["overlay"].toBool());
+        QVERIFY(!w.menuBar()->isVisible());
+        close->trigger();
+        QVERIFY(w.menuBar()->isVisible());
 
         QVERIFY(!run("session.hud.open", {{"message", "building"}}).contains("error"));
+        QJsonObject result;
+        QString error;
+        QVERIFY2(w.appCommand("dashboard", {}, {{"cells", QJsonArray{id + ":left"}}, {"fontMode", "untouched"}}, &result, &error), qPrintable(error));
+        QVERIFY(w.chromeState().contains("dashboardMembers"));
+        close->trigger();
+        QVERIFY(!w.chromeState().contains("dashboardMembers"));
+        QVERIFY(w.sessionExtras(id).contains("hud"));
         close->trigger();
         QVERIFY(!w.sessionExtras(id).contains("hud"));
 
@@ -1121,6 +1134,17 @@ private Q_SLOTS:
             10000);
         QCOMPARE(widths->value(0).toInt(), 10);
         QCOMPARE(widths->value(1).toInt(), 0);
+
+        const QString big = root.filePath(QStringLiteral("big.html"));
+        QFile b(big);
+        QVERIFY(b.open(QIODevice::WriteOnly));
+        b.write(QByteArray(800 * 1024, '<'));
+        b.close();
+        QVERIFY(w.appCommand("session.overlay.close", id, {}, &result, &error));
+        QVERIFY(w.appCommand("session.overlay.open", id, {{"page", QJsonObject{{"kind", "file"}, {"path", big}}}}, &result, &error));
+        const QJsonObject page = w.sessionExtras(id)["htmlOverlays"].toArray().first().toObject();
+        QCOMPARE(page["state"].toString(), QStringLiteral("failed"));
+        QCOMPARE(page["error"].toString(), QStringLiteral("%1 is too large to show without --cwd").arg(big));
     }
 
     void keysCloseAndZoomThePageTheyAreIn()

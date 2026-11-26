@@ -53,7 +53,10 @@ Commands for these answer `<cmd> is not supported on this platform (<reason>)` o
 - `session overlay open` runs the program in a temporary Konsole terminal; `--background-color` tints only the
   floating frame.
 - `--html` and `--url` pages need a build with Qt WebEngine and open local pages only (no remote overlay jobs).
-  A file page without `--cwd` larger than about 2 MB fails instead of showing.
+  A file page without `--cwd` whose percent-encoded text passes 2 MB (as little as 700 KB of non-ASCII text) fails
+  instead of showing.
+- Ctrl+Shift+W closes the HUD or the overlay in front before it leaves terminal zoom, which hides only the chrome
+  around them; ⌘W leaves zoom first.
 - `session search` drives Konsole's search bar.
 - `tree` surfaces carry no per-pane status or `pendingMessages`.
 - `msg send --all` reaches the addressed window only.

@@ -334,7 +334,7 @@ void PageOverlay::loadOriginal()
         }
         const QByteArray html = f.readAll();
         // shortcut: setHtml travels as a data: URL Chromium caps at 2 MB; a custom scheme handler would lift it
-        if (html.toPercentEncoding().size() > 2 * 1024 * 1024) {
+        if (html.toPercentEncoding().size() + 32 > 2 * 1024 * 1024) { // 32: the data:text/html;charset=UTF-8, prefix
             fail(tr("%1 is too large to show without --cwd").arg(path));
             return;
         }

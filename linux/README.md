@@ -119,7 +119,7 @@ ctrl+alt+shift), next to plain `ctrl`, `shift`, `alt` and `super`.
 | Ctrl+Shift+N / Ctrl+Alt+Shift+N | New session / new workspace |
 | Ctrl+Alt+N | New window (Elis's ⌥⌘N; its literal mapping is taken by New Workspace) |
 | Ctrl+Shift+O | Open directory as a session |
-| Ctrl+Shift+W | Close session (leaves terminal zoom first) |
+| Ctrl+Shift+W | Close the HUD or the overlay in front, then leave terminal zoom, then close the session |
 | Ctrl+Shift+Z | Undo a close within its 3 s grace (Settings can turn the grace off) |
 | Ctrl+Alt+Shift+T | Reopen last closed item |
 | Ctrl+Shift+= / - / 0 | Terminal font size larger / smaller / reset |
