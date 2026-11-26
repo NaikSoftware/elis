@@ -166,6 +166,7 @@ extension AppStore {
             (session.paneBackgrounds.right, session.paneBackgrounds.left)
 
         (session.paneActivity[.left], session.paneActivity[.right]) = (session.paneActivity[.right], session.paneActivity[.left])
+        (session.paneAgentCwd[.left], session.paneAgentCwd[.right]) = (session.paneAgentCwd[.right], session.paneAgentCwd[.left])
         var indicator = session.agentIndicator
         if indicator.status == .idle {
             indicator.statusPane = nil
@@ -372,6 +373,7 @@ extension AppStore {
         // survivor and FOLLOWS it, re-tagged `.left` so `tree` (now `split:false`) and the survivor's
         // `.left`-role keystroke-clear agree instead of contradicting. `.scratch` is untouched.
         session.paneActivity[.left] = session.paneActivity.removeValue(forKey: .right)
+        session.paneAgentCwd[.left] = session.paneAgentCwd.removeValue(forKey: .right)
         if session.agentIndicator.status != .idle, session.remotePresentation?.statusOwnerUnknown != true {
             switch session.agentIndicator.statusPane ?? .left {
             case .left: showRemainingActivity(of: session)

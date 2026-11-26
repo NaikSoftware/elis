@@ -111,6 +111,15 @@ struct CIPollerTests {
         #expect(box.applied[hidden.id] == .some(nil))
     }
 
+    @Test func thePaneAgentsCwdWinsOverTheShellCwd() async {
+        let session = Session(initialCwd: "/tmp")
+        session.paneAgentCwd[.left] = "/repo/wt"
+        let box = Box()
+        await poller([session], into: box).tick()
+        #expect(fake.calls.filter { $0.hasPrefix("run") } == ["run /repo"])
+        #expect((box.applied[session.id] ?? nil) != nil)
+    }
+
     @Test func remoteRowsAreNotPolled() async {
         let remote = Session(initialCwd: "/repo", remoteHost: "other-mac")
         let box = Box()

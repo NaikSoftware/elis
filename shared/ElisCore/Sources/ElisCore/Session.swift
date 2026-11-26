@@ -42,6 +42,9 @@ public final class Session: Identifiable {
     /// status glyph reacts. Ephemeral, as is `paneActivity`: each working pane's last `active`, shown when another ends.
     public var agentIndicator = AgentIndicator()
     @ObservationIgnored var paneActivity: [StatusPane: AgentIndicator] = [:]
+    /// Each pane's agent's own directory from `session.status --cwd`, which a worktree moves while the shell's stays.
+    /// Kept while the pane's agent sample shows an agent, so status changes never clear it.
+    @ObservationIgnored var paneAgentCwd: [StatusPane: String] = [:]
 
     /// The coding agent either pane runs in the foreground, the focused pane's first, sampled by the app; the sidebar
     /// row shows its logo. Ephemeral, and nil again once the agent exits.
@@ -647,6 +650,11 @@ public final class Session: Identifiable {
     public var focusedCwd: String {
         if splitFocused, splitSurface != nil, let cwd = splitCwd { return cwd }
         return currentCwd ?? initialCwd
+    }
+
+    /// The directory the CI line reads: the focused pane's agent's, else `focusedCwd`, on the same pane.
+    public var ciCwd: String {
+        paneAgentCwd[splitFocused && splitSurface != nil ? .right : .left] ?? focusedCwd
     }
 
     /// The focused pane's terminal title: the split pane's while it has focus AND exists, else the primary's

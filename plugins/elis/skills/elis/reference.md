@@ -894,7 +894,7 @@ error keeps those names for compatibility.
   `0.05..0.95` and persisted, and the applied (clamped) fraction is printed (and returned as `result.ratio`
   under `--json`). Errors when the session has no split. Resizing a hidden split updates the stored
   fraction; it takes effect when the split is next shown.
-- `session status <idle|active|completed|blocked> [--blink] [--auto-reset] [--if-idle] [--sound NAME] [--color #rrggbb] [--shape circle|square|triangle|triangle-down|play|diamond|capsule|seal|star|bolt|bell|checkmark] [--pane left|right|scratch] [--pane-id TOKEN] [--target] [--window W]` —
+- `session status <idle|active|completed|blocked> [--blink] [--auto-reset] [--if-idle] [--sound NAME] [--color #rrggbb] [--shape circle|square|triangle|triangle-down|play|diamond|capsule|seal|star|bolt|bell|checkmark] [--pane left|right|scratch] [--pane-id TOKEN] [--cwd DIR] [--target] [--window W]` —
   set the sidebar agent-status glyph. Every APPLIED write stamps the session node's
   `statusChangedAt`, including idle and one that re-pushes the same status, so a poller can read the last
   set time without keeping state of its own; a call another pane's status keeps off the row
@@ -953,6 +953,9 @@ error keeps those names for compatibility.
   a status from a pane whose baked role went stale (a split survivor promoted into the main pane, then a
   re-split) lands on the pane's CURRENT slot instead of the stale role; an absent/unknown token falls back
   to `--pane`. Scripts normally set `--pane` directly and leave `--pane-id` to the hook.
+  `--cwd` is the reporting agent's absolute working directory: the session's CI line follows it, not the shell's, while that pane has focus,
+  until the pane's agent exits (a relative path errors). The bundled Claude Code hook sends it, so a session
+  that moved into a worktree shows the worktree's branch; read it back as the node's `ci.branch`.
   An unknown state errors. Agents/hooks set non-idle states; `idle` clears it (also available in the GUI).
   The GUI's Mark for Attention sets `completed` on an idle session; a script's equivalent reads `tree` and
   sends `completed` only where the session is idle.
@@ -991,7 +994,7 @@ error keeps those names for compatibility.
   bar it takes line two in normal mode (replacing the cwd/terminal-title detail) and follows the session and
   window names on line one in compact mode, where a long value tail-truncates before the names do. Settings
   ▸ Interface ▸ Title Bar ▸ "Session context" hides it without clearing it.
-- CI status is not a command: a session whose focused cwd is a GitHub checkout gets a second sidebar line with
+- CI status is not a command: a session whose focused cwd (its agent's `session status --cwd` first) is a GitHub checkout gets a second sidebar line with
   its branch's CI, refreshed every 30 s while a run is going and every 3 min after, read back as the node's `ci`.
   No `gh`, no login, no GitHub remote, a detached HEAD or a network error means no line and no `ci`.
   Settings ▸ Interface ▸ CI status shows it Always, in the flagged view only, or Off, which stops asking GitHub.

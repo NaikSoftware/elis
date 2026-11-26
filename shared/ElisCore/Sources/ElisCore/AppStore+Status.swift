@@ -21,13 +21,15 @@ extension AppStore {
     /// bundled hooks emit unprompted from their own pane), and a pane's completed or idle shows another pane's
     /// retained `active` while one is still working. Every write but an `ifIdle` skip is accepted, so a write the
     /// row does not show still counts and its sound still plays. Panes are compared AFTER `normalizedPane`, so a
-    /// promoted survivor's stale `.right` matches the `.left` it is stored as.
+    /// promoted survivor's stale `.right` matches the `.left` it is stored as. A non-empty `cwd` is recorded for the
+    /// writer whatever the row shows.
     @discardableResult
     public func applyControlStatus(_ indicator: AgentIndicator, forSession id: UUID,
-                                   ifIdle: Bool = false) -> StatusWriteResult {
+                                   ifIdle: Bool = false, cwd: String? = nil) -> StatusWriteResult {
         guard let session = session(withID: id) else { return .applied }
         if ifIdle, session.agentIndicator.status != .idle { return .skipped }
         let writer = indicator.normalizedPane(hasSplit: session.hasSplit) ?? .left
+        if let cwd, !cwd.isEmpty, writer != .scratch { session.paneAgentCwd[writer] = cwd }
         let before = session.paneActivity[writer] != nil
         session.paneActivity[writer] = indicator.status == .active ? indicator : nil
         let shown = session.agentIndicator
@@ -61,6 +63,7 @@ extension AppStore {
     /// it owns that, leaving what the other panes still run. Without it a pane-tagged block would outlive the only
     /// surface that could keystroke-clear it. A nil tag counts as `.left`.
     func clearPaneStatus(_ pane: StatusPane, of session: Session) {
+        session.paneAgentCwd[pane] = nil
         let dropped = session.paneActivity.removeValue(forKey: pane) != nil
         if session.agentIndicator.status != .idle, (session.agentIndicator.statusPane ?? .left) == pane {
             showRemainingActivity(of: session)

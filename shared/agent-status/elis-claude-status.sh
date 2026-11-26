@@ -16,7 +16,7 @@
 #
 # It fails OPEN (reports) whenever the chain is unreadable or severed, e.g. a detached worker whose
 # spawner already exited: a missed guard is the behavior without this adapter, while a false silence
-# is a bug with no symptom. The argv reaches the shared wrapper unchanged except for the two payload
+# is a bug with no symptom. The argv reaches the shared wrapper unchanged except for the payload
 # rewrites at the end.
 set -u
 
@@ -169,6 +169,11 @@ if [ -n "$payload" ]; then
     elif safe_id "$sid"; then
       rm -rf "$busy_dir"
     fi
+  fi
+  # the lead's directory follows EnterWorktree while the pane's stays, and the CI line reads it
+  if [ -z "$aid" ]; then
+    cwd=$(field cwd)
+    case "$cwd" in /*) set -- "$@" --cwd "$cwd" ;; esac
   fi
 fi
 

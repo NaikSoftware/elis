@@ -20,6 +20,7 @@ extension AppStore {
     /// applyAgentSamples records the focused pane's agent, else the other pane's, and the Claude or agy id that pane reports.
     public func applyAgentSamples(_ samples: [AgentPaneSample], focused: StatusPane, forSession id: UUID) {
         guard let session = session(withID: id) else { return }
+        for sample in samples where sample.agent == nil { session.paneAgentCwd[sample.pane] = nil }
         let pick = samples.first { $0.pane == focused && $0.agent != nil } ?? samples.first { $0.agent != nil }
         setRunningAgent(pick?.agent, pane: pick?.pane, forSession: id)
         guard let pick, let agent = pick.agent else { return }

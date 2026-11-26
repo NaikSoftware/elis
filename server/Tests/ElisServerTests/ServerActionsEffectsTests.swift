@@ -22,6 +22,15 @@ struct ServerActionsEffectsTests {
             ifIdle: ifIdle))
     }
 
+    @Test func aStatusCwdLeadsTheCILine() async throws {
+        let session = try newSession()
+
+        #expect(await harness.actions.setSessionStatus(session.id.uuidString, window: nil, update: ControlSessionStatusUpdate(
+            status: .active, blink: nil, autoReset: nil, sound: nil, cwd: "/repo/.claude/worktrees/a")).ok)
+
+        #expect(session.ciCwd == "/repo/.claude/worktrees/a")
+    }
+
     @Test func aStatusIsSetOnTheSession() async throws {
         let session = try newSession()
 

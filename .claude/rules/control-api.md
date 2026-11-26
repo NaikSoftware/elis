@@ -52,6 +52,9 @@ paths:
   an event carrying `agent_id` adds `--if-idle` to `active`, and a Stop whose `background_tasks` lists a
   running subagent, workflow or shell, or whose `session_crons` is non-empty, posts `active --blink` in place of `completed`, dropping the caller's flags
   so `--auto-reset` cannot idle the row. Anything else, an unreadable payload included, posts argv.
+  An event without `agent_id` whose `cwd` is absolute appends `--cwd`, which follows `EnterWorktree`.
+  The wrapper resends a failed call ending in `--cwd <dir>` without it: a PATH or `$ELISCTL` elisctl older
+  than the option rejects the whole call, and the status outranks the directory.
   A `teammate` task stays `running` while idle, so it counts only while busy: `SubagentStart` touches
   `$TMPDIR/elis-claude-busy/<session_id>/<agent_id>` and `SubagentStop`, which fires each time a teammate goes
   idle, removes it; a Stop listing no teammate drops the session's directory.
@@ -1780,6 +1783,12 @@ the spec `docs/superpowers/specs/2026-11-20-phone-chat-mode-design.md` owns the 
   Qt app through `elis_ci_statuses` on its thread pool. Any failure applies nil,
   so a stale line never outlives the fact. Remote rows are skipped; their origin polls. Read back `ci` from
   `effectiveCI`, omitted when nil; it is runtime-only and a change emits `tree.changed`.
+- `CIPoller` reads `Session.ciCwd`: the focused pane's `paneAgentCwd`, else `focusedCwd` on the same pane.
+  `session.status --cwd` writes it in `applyControlStatus` ahead of the block early return, so the Mac and
+  elis-server adapters both record it; an `ifIdle` skip and `.scratch` drop it. It lives while that pane's
+  agent sample shows an agent (`applyAgentSamples` clears it), never cleared by a status change, and follows
+  pane swap, promotion and close. Deliberate read-back exemption: no `agentCwd` field, since a remote
+  presentation frame would not carry it; `ci.branch` is the read-back.
 
 ## Message bus
 
