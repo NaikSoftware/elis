@@ -276,23 +276,49 @@ final class SidebarInfoRowTests: XCTestCase {
         XCTAssertEqual(try height(of: session.id), plainHeight)
     }
 
-    func testTheCIPanelAnchorsAtTheTextNotTheWholeRow() async throws {
-        let store = try XCTUnwrap(library.activeStore)
-        let session = try seed(store)
-        store.setCI(ci(), forSession: session.id)
-        try mountSidebar(for: store)
-        try await waitUntil { (try? self.height(of: session.id)) == self.infoHeight }
-        let field = try infoCell(forSession: session.id).infoField
-        field.superview?.layoutSubtreeIfNeeded()
+    func testTheCIMenuListsThePRReviewsThenRunsByState() {
+        let pr = CIPullRequest(number: 5, title: "Fix", url: "https://github.com/o/r/pull/5", approved: ["a", "b"], changesRequested: ["c"])
+        let runs = [run("lint", .passed), run("docs", .skipped), run("build", .failed), run("test", .running)]
+        let items = CIStatusLine.menuItems(for: CIStatus(branch: "main", sha: "abc", pr: pr, runs: runs))
 
-        let anchor = field.textRect
-        XCTAssertEqual(anchor.minX, field.bounds.minX)
-        XCTAssertEqual(anchor.height, field.bounds.height)
-        XCTAssertGreaterThanOrEqual(anchor.width, field.attributedStringValue.size().width)
-        XCTAssertLessThan(anchor.width, field.bounds.width / 2)
+        XCTAssertEqual(items.map(\.title), ["#5 Fix", "Approved: a, b", "Changes requested: c", "", "✗ build", "◷ test", "✓ lint", "– docs"])
+        XCTAssertEqual(items.map(\.isEnabled), [true, false, false, false, true, true, true, true])
+        XCTAssertEqual(items.filter(\.isSeparatorItem).count, 1)
+        XCTAssertEqual(items[0].representedObject as? String, pr.url)
+        XCTAssertEqual(items[4].attributedTitle?.string, "✗ build")
+        XCTAssertEqual(items[4].representedObject as? String, "https://github.com/o/r/actions/runs/build")
+        XCTAssertEqual(items[7].attributedTitle?.attribute(.foregroundColor, at: 2, effectiveRange: nil) as? NSColor, .secondaryLabelColor)
+
+        let quiet = CIStatusLine.menuItems(for: CIStatus(branch: "main", sha: "abc", pr: CIPullRequest(number: 5, title: "Fix", url: pr.url), runs: []))
+        XCTAssertEqual(quiet.map(\.title), ["#5 Fix", "No reviews yet"])
     }
 
-    func testACILineOpensThePanelOnlyForTheShownSession() async throws {
+    func testTheCIMenuWithoutAPRStartsWithRuns() {
+        let items = CIStatusLine.menuItems(for: CIStatus(branch: "main", sha: "abc", runs: [run("build", .passed), run("lint", .failed)]))
+        XCTAssertEqual(items.map(\.title), ["✗ lint", "✓ build"])
+        XCTAssertFalse(items.contains(where: \.isSeparatorItem))
+    }
+
+    func testTheCIMenuClosesWhenTheLineGoes() async throws {
+        let store = try XCTUnwrap(library.activeStore)
+        let session = try seed(store)
+        store.setCI(ci(pr: true), forSession: session.id)
+        store.selectSession(session.id)
+        try mountSidebar(for: store, key: true)
+        try await waitUntil { (try? self.height(of: session.id)) == self.infoHeight }
+        let spy = CIMenuSpy { _ in store.setCI(nil, forSession: session.id) }
+        defer { spy.stop() }
+
+        // a click, not a direct call: a menu opened inside a main-queue job never drains the queue while it tracks
+        try click(try infoCell(forSession: session.id).infoField)
+        try await waitUntil { spy.opened == 1 && CIStatusLine.menu == nil }
+
+        XCTAssertEqual(spy.opened, 1)
+        XCTAssertEqual(spy.forced, 0, "the menu outlived its line")
+        XCTAssertNil(CIStatusLine.menu)
+    }
+
+    func testACILineOpensTheMenuOnlyForTheShownSession() async throws {
         let store = try XCTUnwrap(library.activeStore)
         let shown = try seed(store)
         let other = try XCTUnwrap(store.addSession(toWorkspace: try XCTUnwrap(store.workspaces.last).id, cwd: "/tmp/other"))
@@ -301,18 +327,17 @@ final class SidebarInfoRowTests: XCTestCase {
         store.selectSession(shown.id)
         try mountSidebar(for: store, key: true)
         try await waitUntil { (try? self.height(of: other.id)) == self.infoHeight }
-        defer { CIStatusLine.panel?.close() }
+        let spy = CIMenuSpy()
+        defer { spy.stop() }
 
         try click(try infoCell(forSession: other.id).infoField)
         try await waitUntil { store.selectedSessionID == other.id }
         XCTAssertEqual(store.selectedSessionID, other.id)
-        XCTAssertNil(CIStatusLine.panel)
+        XCTAssertEqual(spy.opened, 0)
 
         try click(try infoCell(forSession: other.id).infoField)
-        try await waitUntil { CIStatusLine.panel != nil }
-        XCTAssertNotNil(CIStatusLine.panel)
-        CIStatusLine.panel?.close()
-        try await waitUntil { CIStatusLine.panel == nil }
+        try await waitUntil { spy.opened == 1 && CIStatusLine.menu == nil }
+        XCTAssertEqual(spy.opened, 1)
 
         let line = try infoCell(forSession: other.id)
         let recognizer = try XCTUnwrap(line.infoField.gestureRecognizers.first { $0 is NSClickGestureRecognizer })
@@ -321,11 +346,12 @@ final class SidebarInfoRowTests: XCTestCase {
         }
         try click(line.infoField, modifiers: .shift)
         try await Task.sleep(nanoseconds: 100_000_000)
-        XCTAssertNil(CIStatusLine.panel)
+        XCTAssertEqual(spy.opened, 1)
 
         XCTAssertTrue(try infoCell(forSession: shown.id).infoField.accessibilityPerformPress())
         XCTAssertEqual(store.selectedSessionID, shown.id)
-        XCTAssertNil(CIStatusLine.panel)
+        XCTAssertEqual(spy.opened, 1)
+        XCTAssertEqual(spy.forced, 0)
     }
 
     // regression: a line cleared while another row was being renamed stayed on screen after the rename ended
@@ -362,6 +388,10 @@ final class SidebarInfoRowTests: XCTestCase {
     private func ci(pr: Bool = false, workflow: String? = "build") -> CIStatus {
         CIStatus(branch: "main", sha: "abc", pr: pr ? CIPullRequest(number: 5, title: "t", url: "https://github.com/o/r/pull/5") : nil,
                  runs: workflow.map { [CIRun(workflow: $0, state: .passed, url: "https://github.com/o/r/actions/runs/1")] } ?? [])
+    }
+
+    private func run(_ workflow: String, _ state: CIRunState) -> CIRun {
+        CIRun(workflow: workflow, state: state, url: "https://github.com/o/r/actions/runs/\(workflow)")
     }
 
     private func seed(_ store: AppStore) throws -> Session {
@@ -488,4 +518,39 @@ final class SidebarInfoRowTests: XCTestCase {
 private final class KeyWindow: NSWindow {
     var isKey = true
     override var isKeyWindow: Bool { isKey }
+}
+
+/// CIMenuSpy counts CI menus that open and runs `whileOpen` on each once it tracks; any CI menu still open after 3 s
+/// is cancelled and counted as `forced`, so a broken close cannot hang the run.
+@MainActor
+private final class CIMenuSpy {
+    private(set) var opened = 0
+    private(set) var forced = 0
+    private var token: NSObjectProtocol?
+    private var watchdog: Timer?
+
+    init(whileOpen: @escaping @MainActor (NSMenu) -> Void = { $0.cancelTracking() }) {
+        token = NotificationCenter.default.addObserver(forName: NSMenu.didBeginTrackingNotification, object: nil, queue: nil) { [weak self] note in
+            let id = (note.object as AnyObject?).map(ObjectIdentifier.init)
+            MainActor.assumeIsolated {
+                guard let self, let menu = CIStatusLine.menu, ObjectIdentifier(menu) == id else { return }
+                self.opened += 1
+                DispatchQueue.main.async { whileOpen(menu) }
+            }
+        }
+        let watchdog = Timer(timeInterval: 3, repeats: true) { [weak self] _ in
+            MainActor.assumeIsolated {
+                guard let menu = CIStatusLine.menu else { return }
+                self?.forced += 1
+                menu.cancelTracking()
+            }
+        }
+        RunLoop.main.add(watchdog, forMode: .common)
+        self.watchdog = watchdog
+    }
+
+    func stop() {
+        watchdog?.invalidate()
+        token.map(NotificationCenter.default.removeObserver)
+    }
 }

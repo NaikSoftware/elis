@@ -23,7 +23,7 @@ final class SidebarInfoCellView: SidebarCellView, NSGestureRecognizerDelegate {
     let infoField = SidebarInfoField(labelWithString: "")
     var titleBandHeight: NSLayoutConstraint?
     var infoTop: NSLayoutConstraint?
-    /// onInfoClick opens the CI panel. The line claims its click only while `claimsInfoClick` says so (the shown
+    /// onInfoClick opens the CI menu. The line claims its click only while `claimsInfoClick` says so (the shown
     /// session); any other click falls through to the row, which selects it, drags it or opens its menu.
     var onInfoClick: ((SidebarInfoField) -> Void)?
     var claimsInfoClick: (() -> Bool)?
@@ -164,14 +164,6 @@ final class SidebarInfoCellView: SidebarCellView, NSGestureRecognizerDelegate {
 /// SidebarInfoField is the CI line's label, pressable by VoiceOver as the mouse clicks it.
 final class SidebarInfoField: NSTextField {
     var onPress: (() -> Void)?
-
-    /// textRect is the part of the field the text draws in, so a popover points at the text, not the row's edge.
-    var textRect: NSRect {
-        let title = cell?.titleRect(forBounds: bounds) ?? bounds
-        var rect = bounds
-        rect.size.width = min(bounds.width, title.minX - bounds.minX + ceil(attributedStringValue.size().width))
-        return rect
-    }
 
     override func accessibilityRole() -> NSAccessibility.Role? { .button }
 
