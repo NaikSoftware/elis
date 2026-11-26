@@ -320,8 +320,8 @@ kbd{font:500 13px var(--mono);padding:2px 7px;border-radius:6px;background:var(-
               <span class="pk"><svg class="i"><use href="#i-laptop"></use></svg>macOS</span>
               <h3>Apple Silicon, macOS 14 or later</h3>
               <ol class="steps">
-                <li><span><b>Download the DMG</b> from the latest release. Drag Elis to Applications.</span></li>
-                <li><span><b>Clear the quarantine flag once.</b> The build is not notarized.<span class="cmd">xattr -dr com.apple.quarantine /Applications/Elis.app</span></span></li>
+                <li><span><b>Install with Homebrew.</b> The cask clears the quarantine flag of the unnotarized build.<span class="cmd">brew tap naiksoftware/tap<br>brew trust --cask naiksoftware/tap/elis<br>brew install --cask naiksoftware/tap/elis</span></span></li>
+                <li><span><b>Or download the DMG</b> from the latest release, drag Elis to Applications, and clear the quarantine flag once.<span class="cmd">xattr -dr com.apple.quarantine /Applications/Elis.app</span></span></li>
                 <li><span><b>Start Elis.</b> The first launch installs <span class="mono">elisctl</span>, the agent status hooks and the agent skill.</span></li>
               </ol>
               <a class="btn pri sm" href="https://github.com/NaikSoftware/elis/releases/latest"><svg class="i"><use href="#i-dl"></use></svg>Download for macOS</a>

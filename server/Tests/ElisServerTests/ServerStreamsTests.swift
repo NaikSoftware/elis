@@ -333,6 +333,18 @@ struct ServerStreamsTests {
         guard case .notify? = next else { Issue.record("expected the marker notification, got \(String(describing: next))"); return }
     }
 
+    @Test func aProgressChangeReachesTheViewerStream() async throws {
+        let session = try newSession()
+        let viewer = try await presenter(for: session)
+        defer { viewer.disconnect() }
+
+        _ = await harness.actions.setSessionProgress(session.id.uuidString, window: nil, progress: .steps(done: 3, total: 7))
+
+        let frame = await offPool { viewer.first { if case .progress = $0 { true } else { false } } }
+        guard case .progress(let shown)? = frame else { Issue.record("no progress frame, got \(String(describing: frame))"); return }
+        #expect(shown == .steps(done: 3, total: 7))
+    }
+
     @Test func aPickThePresenterAnswersSettles() async throws {
         let session = try newSession()
         let viewer = try await presenter(for: session)

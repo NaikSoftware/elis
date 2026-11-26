@@ -29,6 +29,12 @@ extension AppStore {
         return normalized.contains(selectedSessionID) ? normalized : []
     }
 
+    /// selectionDidChange hides the Elis chat when a session is selected; a reload or remote change is not a selection.
+    func selectionDidChange(previous: UUID?) {
+        if selectedSessionID != nil, !restoringSelection { assistantShown = false }
+        emitSessionSelected(previous: previous)
+    }
+
     func pruneSidebarSelection() {
         sidebarSelectionRaw = sidebarSelectionIDs
     }

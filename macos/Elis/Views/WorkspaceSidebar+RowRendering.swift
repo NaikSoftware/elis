@@ -14,10 +14,11 @@ extension WorkspaceSidebar.Coordinator {
 
     func outlineView(_ outlineView: NSOutlineView, shouldSelectItem item: Any) -> Bool {
         guard let node = item as? SidebarNode else { return false }
-        return node.kind == .session
+        return node.kind != .workspace
     }
 
     func outlineView(_ outlineView: NSOutlineView, rowViewForItem item: Any) -> NSTableRowView? {
+        if (item as? SidebarNode)?.kind == .assistant { return assistantRowView(in: outlineView) }
         let identifier = NSUserInterfaceItemIdentifier("sidebar-row")
         if let reused = outlineView.makeView(withIdentifier: identifier, owner: self) as? SidebarRowView { return reused }
         let view = SidebarRowView()
@@ -57,6 +58,7 @@ extension WorkspaceSidebar.Coordinator {
 
     func outlineView(_ outlineView: NSOutlineView, viewFor tableColumn: NSTableColumn?, item: Any) -> NSView? {
         guard let node = item as? SidebarNode else { return nil }
+        if node.kind == .assistant { return assistantCell(in: outlineView) }
         let info = node.kind == .session ? sessionInfo(forSession: node.id) : nil
         let name = node.kind == .workspace ? "workspace-cell" : (info == nil ? "session-cell" : "session-info-cell")
         let identifier = NSUserInterfaceItemIdentifier(name)
@@ -126,9 +128,12 @@ extension WorkspaceSidebar.Coordinator {
                 let store = store
                 infoCell.onInfoClick = { anchor in
                     guard let session = store.session(withID: node.id) else { return }
-                    CIStatusLine.showPanel(for: session, from: anchor)
+                    CIStatusLine.showMenu(for: session, from: anchor)
                 }
+                infoCell.claimsInfoClick = { store.selectedSessionID == node.id }
             }
+        case .assistant:
+            break
         }
         // the selection pill is a soft tint, so a selected row keeps the theme colors; a row tint overrides
         // the parts it colors. refreshSelectionAppearance re-runs this on theme changes.
@@ -354,7 +359,8 @@ extension WorkspaceSidebar.Coordinator {
             infoCell.infoTop = infoTop
             constraints += [
                 info.leadingAnchor.constraint(equalTo: field.leadingAnchor),
-                info.trailingAnchor.constraint(equalTo: cell.trailingAnchor, constant: -2),
+                // hugs its text so only the text, not the row's empty width, takes the CI click
+                info.trailingAnchor.constraint(lessThanOrEqualTo: cell.trailingAnchor, constant: -2),
                 infoTop,
             ]
         }

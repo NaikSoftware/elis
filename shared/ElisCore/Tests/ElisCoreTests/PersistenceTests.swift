@@ -550,18 +550,31 @@ final class PersistenceTests {
         #expect(store.load().selectedSessionID == b.id)
     }
 
-    @Test func selectSessionNilDeselectsAndPersists() {
+    @Test func selectSessionNilDeselectsAndPersistsTheMostRecentSession() {
         let app = AppStore(persistence: store)
         let work = app.addWorkspace(name: "work")
         let a = try! #require(app.addSession(toWorkspace: work.id, cwd: "/a"))
+        let b = try! #require(app.addSession(toWorkspace: work.id, cwd: "/b"))
         // selection saves are debounced; flush via save() so the write lands before reading back.
+        app.selectSession(b.id)
         app.selectSession(a.id)
         app.save()
         #expect(store.load().selectedSessionID == a.id)
         app.selectSession(nil)
         app.save()
         #expect(app.selectedSessionID == nil)
-        #expect(store.load().selectedSessionID == nil)
+        #expect(store.load().selectedSessionID == a.id)
+    }
+
+    @Test func selectSessionNilWithNoRecencyPersistsTheFirstSession() {
+        let app = AppStore(persistence: store)
+        let work = app.addWorkspace(name: "work")
+        let a = try! #require(app.addSession(toWorkspace: work.id, cwd: "/a"))
+        _ = try! #require(app.addSession(toWorkspace: work.id, cwd: "/b"))
+        app.selectedSessionID = nil
+        app.sessionRecency = RecencyStack(limit: app.sessionRecency.limit)
+        app.save()
+        #expect(store.load().selectedSessionID == a.id)
     }
 
     @Test func loadMissingFileReturnsDefault() {

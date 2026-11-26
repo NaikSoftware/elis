@@ -122,6 +122,7 @@ struct elisApp: App {
         launchContext = restored.spawnContext
         _library = State(initialValue: library)
         let actions = AppActions(library: library)
+        actions.assistant = AssistantModel(stateDirectory: stateDirectory)
         _actions = State(initialValue: actions)
         // built before the control server so it can drive `keymap.reload`, safe since both need only the library.
         let settingsModel = SettingsModel(library: library, settingsStore: settingsStore)
@@ -158,6 +159,7 @@ struct elisApp: App {
             return library.store(for: target.windowID)?.session(withID: target.sessionID)?.displayName
         }
         controlServer.installRemoteLinkClicks()
+        controlServer.installAssistant()
         LinkOpener.shared.overlay = { [weak controlServer] url, session, percent in
             controlServer?.openLinkOverlay(url, session: session, sizePercent: percent) ?? false
         }

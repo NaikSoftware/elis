@@ -100,6 +100,11 @@ char *elis_phone_viewers(const char *paneID);  // a pane's viewer count and lead
 char *elis_phone_request(const char *requestJSON); // {cmd,target?,args?} checked: {"ok":true,"op",mode?|port?|host?}
 char *elis_phone_link_with_host(const char *link, const char *host, int port); // the Mac's PhonePairLink.withHost
 
+// session progress (Sources/ElisBridge/Progress.swift); every result is JSON freed with elis_free
+char *elis_progress_parse(const char *text);    // 3/7, 40%, indeterminate, clear: {"ok":true,"progress":{…}|null} or {"ok":false,"error"}
+char *elis_progress_terminal(const char *body); // OSC 9 body "4;1;40": {"update":"clear"|"set","progress"?} or null
+char *elis_progress_row(const char *json);      // {"progress"?,"status","sessionTint"?,"workspaceTint"?,"active"}: {"fill":{color,fraction,alpha}|null,"wave":bool}
+
 #ifdef __cplusplus
 }
 #endif

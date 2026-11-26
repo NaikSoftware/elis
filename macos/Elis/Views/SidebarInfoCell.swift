@@ -17,15 +17,16 @@ enum SidebarInfoMetrics {
     }
 }
 
-/// SidebarInfoCellView is a session cell with a styled info line under the name. Colors are rebuilt on every
-/// `setColors`, so the selection and theme refresh paths recolor each fragment. On a selected row uncolored
-/// fragments follow the selection foreground while colored ones keep their color, as a row tint does.
-final class SidebarInfoCellView: SidebarCellView {
+/// SidebarInfoCellView is a session cell with a styled info line under the name; `.claude/rules/sidebar.md`
+/// owns its color and click rules.
+final class SidebarInfoCellView: SidebarCellView, NSGestureRecognizerDelegate {
     let infoField = SidebarInfoField(labelWithString: "")
     var titleBandHeight: NSLayoutConstraint?
     var infoTop: NSLayoutConstraint?
-    /// onInfoClick opens the CI panel; the line claims its click, so it neither selects the row nor starts a drag.
-    var onInfoClick: ((NSView) -> Void)?
+    /// onInfoClick opens the CI menu. The line claims its click only while `claimsInfoClick` says so (the shown
+    /// session); any other click falls through to the row, which selects it, drags it or opens its menu.
+    var onInfoClick: ((SidebarInfoField) -> Void)?
+    var claimsInfoClick: (() -> Bool)?
     private var spans: [SessionInfoSpan] = []
     private var base = AppSettings.defaultSidebarFontSize
     private var selected = false
@@ -43,8 +44,9 @@ final class SidebarInfoCellView: SidebarCellView {
         super.init(frame: frameRect)
         let click = NSClickGestureRecognizer(target: self, action: #selector(infoClicked))
         click.delaysPrimaryMouseButtonEvents = true
+        click.delegate = self
         infoField.addGestureRecognizer(click)
-        infoField.onPress = { [weak self] in self?.infoClicked() }
+        infoField.onPress = { [weak self] in self?.infoPressed() }
     }
 
     required init?(coder _: NSCoder) { fatalError("init(coder:) is not supported") }
@@ -53,9 +55,31 @@ final class SidebarInfoCellView: SidebarCellView {
         onInfoClick?(infoField)
     }
 
+    // decided at mouse-down: a declined click reaches the outline whole, so its drag tracking, row menu
+    // (Control) and selection extension (Shift, Command) still work
+    func gestureRecognizer(_: NSGestureRecognizer, shouldAttemptToRecognizeWith event: NSEvent) -> Bool {
+        event.modifierFlags.isDisjoint(with: [.control, .shift, .command]) && claimsInfoClick?() ?? false
+    }
+
+    private func infoPressed() {
+        if claimsInfoClick?() ?? false { return infoClicked() }
+        guard let outline = enclosingScrollView?.documentView as? NSOutlineView else { return }
+        let row = outline.row(for: self)
+        if row >= 0 { outline.selectRowIndexes(IndexSet(integer: row), byExtendingSelection: false) }
+    }
+
     override func setColors(selected: Bool) {
         super.setColors(selected: selected)
         self.selected = selected
+        render()
+    }
+
+    /// refreshColors re-renders for the row's current fills; the row calls it when they change.
+    func refreshColors() { render() }
+
+    // the cell renders before the outline inserts it into its row, so the first render had no backdrops
+    override func viewDidMoveToSuperview() {
+        super.viewDidMoveToSuperview()
         render()
     }
 
@@ -67,12 +91,13 @@ final class SidebarInfoCellView: SidebarCellView {
 
     private func render() {
         let foreground = Self.themeTextColor(selected: selected)
+        let backdrops = (superview as? SidebarRowView)?.infoBackdrops ?? []
         let paragraph = NSMutableParagraphStyle()
         paragraph.lineBreakMode = .byTruncatingTail
         let text = NSMutableAttributedString()
         for span in spans {
             let font = font(for: span)
-            let color = color(for: span, foreground: foreground)
+            let color = color(for: span, foreground: foreground, backdrops: backdrops)
             for (piece, emoji) in Self.emojiRuns(span.text) {
                 var attributes: [NSAttributedString.Key: Any] = [.font: font, .foregroundColor: color, .paragraphStyle: paragraph]
                 if emoji {
@@ -118,8 +143,19 @@ final class SidebarInfoCellView: SidebarCellView {
         return NSFont(descriptor: font.fontDescriptor.withSymbolicTraits(.italic), size: size) ?? font
     }
 
-    private func color(for span: SessionInfoSpan, foreground: NSColor) -> NSColor {
-        if let tint = span.color { return NSColor.tint(tint).withAlphaComponent(span.dim ? 0.55 : 1) }
+    /// color eases a colored span just far enough to keep 4.5:1 on every backdrop (`legibleOn`).
+    private func color(for span: SessionInfoSpan, foreground: NSColor, backdrops: [RGBA]) -> NSColor {
+        if let tint = span.color {
+            let raw = NSColor.tint(tint).withAlphaComponent(span.dim ? 0.55 : 1)
+            guard !backdrops.isEmpty else { return raw }
+            var legible = raw
+            effectiveAppearance.performAsCurrentDrawingAppearance {
+                let color = raw.rgba, eased = legibleOn(color, under: backdrops, text: foreground.rgba)
+                // an unchanged color stays the dynamic one, so it still follows the appearance
+                if eased != color { legible = NSColor(eased) }
+            }
+            return legible
+        }
         let alpha: CGFloat = selected ? (span.dim ? 0.6 : 0.85) : (span.dim ? 0.38 : span.bold ? 1 : 0.58)
         return foreground.withAlphaComponent(alpha)
     }

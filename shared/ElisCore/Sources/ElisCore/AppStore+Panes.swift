@@ -166,6 +166,8 @@ extension AppStore {
             (session.paneBackgrounds.right, session.paneBackgrounds.left)
 
         (session.paneActivity[.left], session.paneActivity[.right]) = (session.paneActivity[.right], session.paneActivity[.left])
+        (session.paneAgentCwd[.left], session.paneAgentCwd[.right]) = (session.paneAgentCwd[.right], session.paneAgentCwd[.left])
+        moveTerminalProgress(of: session) { [.left: .right, .right: .left][$0] ?? $0 }
         var indicator = session.agentIndicator
         if indicator.status == .idle {
             indicator.statusPane = nil
@@ -197,6 +199,7 @@ extension AppStore {
     /// survives), its background label, since a respawn runs another program, its mailbox, and its directory.
     func releaseScratchOwnedState(of session: Session, token: String) {
         clearPaneStatus(.scratch, of: session)
+        clearTerminalProgress(of: session, pane: .scratch)
         dropPaneBackground(.scratch, of: session)
         disposeMailbox(token: token)
         session.scratchCwd = nil
@@ -372,6 +375,8 @@ extension AppStore {
         // survivor and FOLLOWS it, re-tagged `.left` so `tree` (now `split:false`) and the survivor's
         // `.left`-role keystroke-clear agree instead of contradicting. `.scratch` is untouched.
         session.paneActivity[.left] = session.paneActivity.removeValue(forKey: .right)
+        session.paneAgentCwd[.left] = session.paneAgentCwd.removeValue(forKey: .right)
+        moveTerminalProgress(of: session) { $0 == .left ? nil : ($0 == .right ? .left : $0) }
         if session.agentIndicator.status != .idle, session.remotePresentation?.statusOwnerUnknown != true {
             switch session.agentIndicator.statusPane ?? .left {
             case .left: showRemainingActivity(of: session)

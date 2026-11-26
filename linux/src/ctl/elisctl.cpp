@@ -81,6 +81,7 @@ static const char *usage = R"(usage: elisctl <command> [args] [--target T] [--so
   session search [needle] [--next | --prev | --close]   Konsole's search bar; prints the match count
   surface zoom [show|hide|toggle] [--target active|surface:<session>:left|right]
   session status <idle|active|completed|blocked> [--auto-reset] [--blink] [--if-idle]
+  session progress <N/M|N%|indeterminate|clear>   fill the row; a status change into completed or idle clears it
   session go --to next|prev|first|last|next-attention|prev-attention
   sidebar [show|hide|toggle]
   sidebar mode [tree|flagged|toggle]
@@ -494,6 +495,10 @@ static QString eventLine(const QJsonObject &e)
                 line += QStringLiteral(" %1=%2").arg(QLatin1String(k), p.value(QLatin1String(k)).toString());
         if (p.value("blink").toBool())
             line += QStringLiteral(" blink");
+    } else if (kind == QLatin1String("progress")) {
+        line += QLatin1Char(' ') + p.value("progress").toString(QStringLiteral("cleared"));
+        if (p.contains("source"))
+            line += QStringLiteral(" source=") + p.value("source").toString();
     } else if (kind == QLatin1String("notify")) {
         line += QStringLiteral(" %1: %2").arg(p.value("title").toString(), p.value("body").toString());
     } else if (kind == QLatin1String("session.created") && p.contains("parent")) {
@@ -726,6 +731,8 @@ int main(int argc, char **argv)
         args.insert("name", arg);
     if (cmd == QLatin1String("session.status"))
         args.insert("status", arg);
+    if (cmd == QLatin1String("session.progress"))
+        args.insert("progress", arg);
     if (cmd.endsWith(QLatin1String(".tint"))) {
         args.insert("mode", arg == QLatin1String("clear") ? QStringLiteral("clear") : QStringLiteral("set"));
         if (arg != QLatin1String("clear"))

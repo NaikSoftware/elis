@@ -123,6 +123,26 @@ final class SidebarControlClickTests: XCTestCase {
                                          clickCount: 1, pressure: 1))
     }
 
+    func testHoverCloseTakesTheBadgeAndStatusSlotExceptOnAnActiveRow() throws {
+        let store = try XCTUnwrap(library.activeStore)
+        let session = try XCTUnwrap(store.activeSession)
+        for (status, shows) in [(AgentStatus.completed, true), (.blocked, true), (.idle, true), (.active, false)] {
+            store.setAgentIndicator(AgentIndicator(status: status), forSession: session.id)
+            buildSidebar(for: store)
+            let row = try XCTUnwrap(rowIndex { $0.kind == .session && $0.id == session.id })
+            let cell = try XCTUnwrap(outline.view(atColumn: 0, row: row, makeIfNecessary: true) as? SidebarCellView)
+            let glyph = cell.statusIcon.isHidden
+
+            cell.setCloseButtonVisible(true)
+            XCTAssertEqual(cell.closeButton?.isHidden, !shows, "\(status)")
+            XCTAssertEqual(cell.statusIcon.isHidden, shows || glyph, "\(status)")
+
+            cell.setCloseButtonVisible(false)
+            XCTAssertEqual(cell.closeButton?.isHidden, true)
+            XCTAssertEqual(cell.statusIcon.isHidden, glyph)
+        }
+    }
+
     private func rowIndex(matching predicate: (SidebarNode) -> Bool) -> Int? {
         (0..<outline.numberOfRows).first { row in
             (outline.item(atRow: row) as? SidebarNode).map(predicate) ?? false

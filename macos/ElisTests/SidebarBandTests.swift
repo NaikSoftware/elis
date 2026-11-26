@@ -277,7 +277,8 @@ final class SidebarBandTests: XCTestCase {
 
     private func edges() -> [SidebarBandEdge?] {
         outline.layoutSubtreeIfNeeded()
-        return (0..<outline.numberOfRows).map { (outline.rowView(atRow: $0, makeIfNecessary: true) as? SidebarRowView)?.band?.edge }
+        return (0..<outline.numberOfRows).filter { (outline.item(atRow: $0) as? SidebarNode)?.kind != .assistant }
+            .map { (outline.rowView(atRow: $0, makeIfNecessary: true) as? SidebarRowView)?.band?.edge }
     }
 
     private func rowView(forItem id: UUID) throws -> SidebarRowView {

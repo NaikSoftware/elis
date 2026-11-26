@@ -35,6 +35,9 @@ final class SidebarOutlineView: NSOutlineView {
     /// selectionMinX is where a row's selection pill starts; a flat list has no strip to leave room for it.
     var selectionMinX: CGFloat { listsSessionsFlat ? 0 : usesSpecGeometry ? 3 : 8 }
 
+    /// assistantPillMinX is where the Elis row's pill starts: a flat list's card keeps 8pt from the sidebar's edge.
+    var assistantPillMinX: CGFloat { listsSessionsFlat ? 2 + SidebarRowView.groupPadding : selectionMinX }
+
     /// selectionMaxXInset is the pill's gap to the row's trailing edge.
     var selectionMaxXInset: CGFloat { usesSpecGeometry ? 11 : 8 }
 
@@ -89,6 +92,12 @@ final class SidebarOutlineView: NSOutlineView {
     private func horizontalCellFrame(atColumn column: Int, row: Int) -> NSRect {
         var frame = super.frameOfCell(atColumn: column, row: row)
         guard !frame.isEmpty, tableColumns.indices.contains(column), tableColumns[column] === outlineTableColumn else {
+            return frame
+        }
+        // the Elis row spans its pill: AppKit's level-0 frame leaves room for a chevron it never has
+        if (item(atRow: row) as? SidebarNode)?.kind == .assistant {
+            frame.size.width = max(0, bounds.width - selectionMaxXInset - assistantPillMinX)
+            frame.origin.x = assistantPillMinX
             return frame
         }
         if usesSpecGeometry {

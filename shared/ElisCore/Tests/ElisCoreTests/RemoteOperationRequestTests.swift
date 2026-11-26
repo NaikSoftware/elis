@@ -348,6 +348,18 @@ struct RemoteOperationRequestTests {
             == "session.tint clear takes no color or placement")
     }
 
+    @Test func aProgressIsSentToTheServerAsTypedAndAnInvalidOneIsRefusedHere() {
+        #expect(parse(.sessionProgress, target: first.id.uuidString) { $0.progress = "3/7" }
+            == .operation(.setProgress(first.id, "3/7"), select: false))
+        #expect(parse(.sessionProgress, target: first.id.uuidString) { $0.progress = "clear" }
+            == .operation(.setProgress(first.id, "clear"), select: false))
+        #expect(refusal(parse(.sessionProgress, target: first.id.uuidString) { $0.progress = "8/7" }) == "invalid progress")
+        #expect(RemoteOperation.structuralCommands.contains(.sessionProgress))
+        #expect(CatalogOperationBook.receiptCommands.contains(.sessionProgress))
+        #expect(RemoteOperation.setProgress(first.id, "3/7").words == ["session", "progress", "--target", first.id.uuidString])
+        #expect(RemoteOperation.setProgress(first.id, "3/7").operands == ["3/7"])
+    }
+
     @Test func eachOperationSpellsItsOptionsAsTheCLIDoes() {
         let id = first.id, other = second.id
         let tint = SidebarTint(color: .hex("#ff8800"), parts: [.icon, .name])

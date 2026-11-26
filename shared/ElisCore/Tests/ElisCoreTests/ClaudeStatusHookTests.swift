@@ -232,8 +232,10 @@ struct ClaudeStatusHookTests {
         }
     }
 
-    private static func payload(_ event: String, agentID: String? = nil, tasks: String? = nil, crons: String? = nil) -> String {
+    private static func payload(_ event: String, agentID: String? = nil, tasks: String? = nil, crons: String? = nil,
+                                cwd: String? = nil) -> String {
         var fields = [#""session_id":"s1""#, #""hook_event_name":"\#(event)""#]
+        if let cwd { fields.append(#""cwd":"\#(cwd)""#) }
         if let agentID { fields.append(#""agent_id":"\#(agentID)""#) }
         if let tasks { fields.append(#""background_tasks":\#(tasks)"#) }
         if let crons { fields.append(#""session_crons":\#(crons)"#) }
@@ -266,6 +268,25 @@ struct ClaudeStatusHookTests {
     @Test func mainActivePostsArgv() throws {
         let result = try run(chain: ["login", "claude"], args: ["active", "--blink"], input: .pipe(Self.payload("PostToolUse")))
         #expect(result.calls == ["active --blink"])
+    }
+
+    @Test func theLeadsCwdIsForwarded() throws {
+        let result = try run(chain: ["login", "claude"], args: ["active", "--blink"],
+                             input: .pipe(Self.payload("PostToolUse", cwd: "/repo/.claude/worktrees/a")))
+        #expect(result.calls == ["active --blink --cwd /repo/.claude/worktrees/a"])
+    }
+
+    @Test func theCwdFollowsTheStopRewrite() throws {
+        let result = try run(chain: ["login", "claude"], args: ["completed", "--auto-reset"],
+                             input: .pipe(Self.payload("Stop", tasks: Self.runningSubagent, cwd: "/wt")))
+        #expect(result.calls == ["active --blink --cwd /wt"])
+    }
+
+    @Test(arguments: [("a1", "/wt"), (nil, "relative")])
+    func aSubagentOrRelativeCwdIsNotForwarded(_ agentID: String?, _ cwd: String) throws {
+        let result = try run(chain: ["login", "claude"], args: ["blocked"],
+                             input: .pipe(Self.payload("PermissionRequest", agentID: agentID, cwd: cwd)))
+        #expect(result.calls == ["blocked"])
     }
 
     @Test func subagentActiveKeepsItsFlags() throws {
@@ -345,6 +366,20 @@ struct ClaudeStatusHookTests {
         }
     }
 
+    // Claude Code's forks (the away recap, the session title) end with SubagentStop and never send SubagentStart.
+    @Test func subagentStopWithoutStartStaysSilent() throws {
+        try withBusyDir { env in
+            try #expect(post("SubagentStop", agentID: "a-fork", env: env).isEmpty)
+        }
+    }
+
+    @Test func subagentStopAfterStartPostsActive() throws {
+        try withBusyDir { env in
+            _ = try post("SubagentStart", agentID: "a1", env: env)
+            try #expect(post("SubagentStop", agentID: "a1", env: env) == ["active --blink --if-idle"])
+        }
+    }
+
     @Test func stopWithNoTeammateDropsBusyMarks() throws {
         try withBusyDir { env in
             _ = try post("SubagentStart", agentID: "at1-0b61", env: env)
@@ -405,6 +440,78 @@ struct ClaudeStatusHookTests {
                              input: .pipe(Self.payload("PostToolUse", agentID: "a1")))
 
         #expect(result.calls == ["active"])
+    }
+
+    private static func todoPayload(_ statuses: [String], sessionID: String = "s1", agentID: String? = nil) -> String {
+        let todos = statuses.enumerated().map { #"{"content":"t\#($0.offset)","status":"\#($0.element)"}"# }
+        let agent = agentID.map { #","agent_id":"\#($0)""# } ?? ""
+        return #"{"session_id":"\#(sessionID)","hook_event_name":"PostToolUse","tool_name":"TodoWrite"\#(agent),"#
+            + #""tool_input":{"todos":[\#(todos.joined(separator: ","))]}}"#
+    }
+
+    private func progress(_ payload: String, env: [String: String] = [:]) throws -> [String] {
+        try run(chain: ["login", "claude"], args: ["progress"], extraEnv: env, input: .pipe(payload)).calls
+    }
+
+    @Test func todoWriteSendsDoneOverTotal() throws {
+        #expect(try progress(Self.todoPayload(["completed", "in_progress", "pending"])) == ["progress 1/3"])
+    }
+
+    @Test func taskUpdateCountsTheTaskDirectory() throws {
+        let config = URL(fileURLWithPath: NSTemporaryDirectory()).appendingPathComponent("elis-tasks-\(UUID().uuidString)")
+        defer { try? FileManager.default.removeItem(at: config) }
+        let tasks = config.appendingPathComponent("tasks/s1")
+        try FileManager.default.createDirectory(at: tasks, withIntermediateDirectories: true)
+        try #"{"id":"1","subject":"a","status":"completed"}"#.write(to: tasks.appendingPathComponent("1.json"), atomically: true, encoding: .utf8)
+        try "{\n  \"id\": \"2\",\n  \"status\": \"completed\"\n}".write(to: tasks.appendingPathComponent("2.json"),
+                                                                       atomically: true, encoding: .utf8)
+        try #"{"id":"3","subject":"not \"status\":\"completed\"","status":"pending"}"#
+            .write(to: tasks.appendingPathComponent("3.json"), atomically: true, encoding: .utf8)
+        let payload = #"{"session_id":"s1","hook_event_name":"PostToolUse","tool_name":"TaskUpdate","tool_input":{"taskId":"2"}}"#
+        #expect(try progress(payload, env: ["CLAUDE_CONFIG_DIR": config.path]) == ["progress 2/3"])
+    }
+
+    @Test func aTeamLeadCountsTheTeamTaskDirectory() throws {
+        let config = URL(fileURLWithPath: NSTemporaryDirectory()).appendingPathComponent("elis-tasks-\(UUID().uuidString)")
+        defer { try? FileManager.default.removeItem(at: config) }
+        let fm = FileManager.default
+        for dir in ["teams/other", "teams/my-team", "tasks/my-team", "tasks/s1"] {
+            try fm.createDirectory(at: config.appendingPathComponent(dir), withIntermediateDirectories: true)
+        }
+        try #"{"leadSessionId":"s9"}"#.write(to: config.appendingPathComponent("teams/other/config.json"), atomically: true, encoding: .utf8)
+        try "{\n  \"name\": \"my-team\",\n  \"leadSessionId\": \"s1\"\n}"
+            .write(to: config.appendingPathComponent("teams/my-team/config.json"), atomically: true, encoding: .utf8)
+        for (name, status) in [("1", "completed"), ("2", "pending"), ("3", "pending"), ("4", "pending")] {
+            try #"{"id":"\#(name)","status":"\#(status)"}"#
+                .write(to: config.appendingPathComponent("tasks/my-team/\(name).json"), atomically: true, encoding: .utf8)
+        }
+        try #"{"id":"1","status":"completed"}"#.write(to: config.appendingPathComponent("tasks/s1/1.json"), atomically: true, encoding: .utf8)
+        let payload = #"{"session_id":"s1","hook_event_name":"PostToolUse","tool_name":"TaskCreate","tool_input":{}}"#
+        #expect(try progress(payload, env: ["CLAUDE_CONFIG_DIR": config.path]) == ["progress 1/4"])
+    }
+
+    @Test func aTaskToolWithNoTaskFilesIsSilent() throws {
+        let config = URL(fileURLWithPath: NSTemporaryDirectory()).appendingPathComponent("elis-tasks-\(UUID().uuidString)")
+        let payload = #"{"session_id":"s1","hook_event_name":"PostToolUse","tool_name":"TaskCreate","tool_input":{}}"#
+        #expect(try progress(payload, env: ["CLAUDE_CONFIG_DIR": config.path]).isEmpty)
+    }
+
+    @Test(arguments: [["completed", "completed", "completed"], []])
+    func allDoneSendsClear(_ statuses: [String]) throws {
+        #expect(try progress(Self.todoPayload(statuses)) == ["progress clear"])
+    }
+
+    @Test func aSubagentsTodoIsSilent() throws {
+        #expect(try progress(Self.todoPayload(["completed", "pending"], agentID: "a1")).isEmpty)
+    }
+
+    @Test func anUnsafeSessionIDIsSilent() throws {
+        #expect(try progress(Self.todoPayload(["completed", "pending"], sessionID: "../x")).isEmpty)
+    }
+
+    @Test(arguments: ["", "not json"])
+    func progressWithoutAPayloadIsSilent(_ text: String) throws {
+        #expect(try progress(text).isEmpty)
     }
 
     @Test func outsideElisExitsSilently() throws {

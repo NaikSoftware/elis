@@ -458,6 +458,11 @@ extension elisApp {
                     // the predicate spares this one the dashboard's own term: its shortcut stays the open grid's
                     // close escape hatch, while zoom and a topmost native picker still block the toggle.
                     .disabled(!PaletteCommand.dashboard.isEnabled(in: context))
+                Button { if let store = actions.store { actions.showAssistant(in: store) } } label: {
+                    Label("Show Elis", systemImage: "bubble.left.and.text.bubble.right")
+                }
+                .keyboardShortcut(shortcut(for: .showAssistant))
+                .disabled(!PaletteCommand.showAssistant.isEnabled(in: context))
                 Divider()
                 // step between sessions in the sidebar's flattened order. prev/next ride ⌥⌘↑/↓, NOT bare
                 // ⌘+arrows (which shadow text-field caret nav in rename/palette/settings fields), and

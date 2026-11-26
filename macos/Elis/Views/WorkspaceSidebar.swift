@@ -102,7 +102,8 @@ struct WorkspaceSidebar: NSViewRepresentable {
         _ = store.workspaces.map {
             ($0.id, $0.name, $0.unseenCount, $0.tint, $0.sessions.map {
                 ($0.id, $0.displayName, $0.hasSplit, $0.splitAxis, $0.unseenCount, $0.agentIndicator, $0.flagged,
-                 $0.remoteConnection, $0.tint, $0.effectiveCI, $0.runningAgent, $0.ended)
+                 $0.remoteConnection, $0.tint, $0.effectiveCI, $0.runningAgent, $0.ended, $0.controlProgress,
+                 $0.terminalProgress)
             })
         }
         _ = store.selectedSessionID
@@ -114,6 +115,7 @@ struct WorkspaceSidebar: NSViewRepresentable {
         // a membership change or a filter flip takes the rebuild branch.
         _ = store.focusedWorkspaceIDs
         _ = store.focusEnabled
+        _ = (store.assistantShown, actions.assistant.unread)
         context.coordinator.applyAddButtonEnabled(!store.serverActionsBlocked)
         context.coordinator.reconcile()
         context.coordinator.syncSelection()
@@ -130,6 +132,8 @@ struct WorkspaceSidebar: NSViewRepresentable {
 
         /// Root workspace nodes in store order, rebuilt from the store on each reload from cached instances.
         private var roots: [SidebarNode] = []
+        /// The pinned Elis row, always `roots[0]`; outside `nodeCache`, which holds sessions and workspaces only.
+        let assistantNode = SidebarNode(kind: .assistant, id: UUID())
         private var deferredRebuild = false
         /// rebuilding skips the expansion callbacks' geometry refresh; the rebuild refreshes once when it ends.
         var rebuilding = false
@@ -472,6 +476,7 @@ struct WorkspaceSidebar: NSViewRepresentable {
                 rebuildAndReload()
                 return
             }
+            refreshAssistantRow()
             reloadChangedContentRows()
             applyRowDecorations()
         }
@@ -592,7 +597,7 @@ struct WorkspaceSidebar: NSViewRepresentable {
             // flat flagged list: non-expandable session rows; no workspace nodes, so they leave the cache.
             if !rendersWorkspaceRows {
                 var seen = Set<UUID>()
-                roots = store.orderedFlaggedSessions.map { session in
+                roots = [assistantNode] + store.orderedFlaggedSessions.map { session in
                     seen.insert(session.id)
                     let row = node(for: session.id, kind: .session)
                     row.children = []
@@ -605,7 +610,7 @@ struct WorkspaceSidebar: NSViewRepresentable {
             }
 
             var seen = Set<UUID>()
-            var newRoots: [SidebarNode] = []
+            var newRoots = [assistantNode]
             for (workspace, sessions) in workspaceProjection {
                 let wsNode = node(for: workspace.id, kind: .workspace)
                 seen.insert(workspace.id)
@@ -771,7 +776,7 @@ struct WorkspaceSidebar: NSViewRepresentable {
             applyingSelection = true
             defer { applyingSelection = false }
             guard let selectedID = store.selectedSessionID, let node = nodeCache[selectedID], node.kind == .session else {
-                outline.deselectAll(nil)
+                if !selectAssistantRow(in: outline) { outline.deselectAll(nil) }
                 lastRevealedSelection = nil
                 return
             }
@@ -825,7 +830,7 @@ struct WorkspaceSidebar: NSViewRepresentable {
         func outlineViewSelectionDidChange(_ notification: Notification) {
             // repaint the selection pill + row text — with the .none highlight style AppKit won't redraw.
             refreshSelectionAppearance()
-            guard !applyingSelection, let outline = outlineView else { return }
+            guard !applyingSelection, let outline = outlineView, !showsAssistantForSelection(in: outline) else { return }
             let selectedIDs = outline.selectedRowIndexes.compactMap { row -> UUID? in
                 guard let node = outline.item(atRow: row) as? SidebarNode, node.kind == .session else { return nil }
                 return node.id
@@ -865,6 +870,7 @@ struct WorkspaceSidebar: NSViewRepresentable {
         /// program of input and send keystrokes to a surface the user can't see.
         func focusActiveTerminal(attempt: Int = 0) {
             if renameController.isRenameInFlight { return }
+            if store.assistantShown { return NotificationCenter.default.post(name: .elisFocusAssistantComposer, object: store) }
             let window = outlineView?.window
             if let window, window.firstResponder is NSText { return }
             if let session = store.activeSession, HtmlOverlayRegistry.shared.focusCover(of: session) { return }
@@ -942,7 +948,8 @@ final class SidebarScrollView: NSScrollView {
         guard let emptyState, !emptyState.isHidden else { return }
         let size = emptyState.fittingSize
         let width = min(size.width, max(0, bounds.width - 32))
-        let top = safeAreaInsets.top + 40
+        // below the pinned Elis row
+        let top = safeAreaInsets.top + 40 + ((documentView as? NSTableView).map { $0.numberOfRows > 0 ? $0.rect(ofRow: 0).maxY : 0 } ?? 0)
         let y = isFlipped ? top : bounds.height - top - size.height
         emptyState.frame = NSRect(x: ((bounds.width - width) / 2).rounded(), y: y.rounded(), width: width, height: size.height)
     }

@@ -146,6 +146,8 @@ final class SidebarRenameController: NSObject, NSTextFieldDelegate {
         case .workspace:
             if remote(.renameWorkspace(node.id, name: newValue)) { return }
             store.renameWorkspace(node.id, to: newValue)
+        case .assistant:
+            return
         }
     }
 

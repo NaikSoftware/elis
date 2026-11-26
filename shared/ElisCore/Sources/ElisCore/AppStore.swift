@@ -75,9 +75,10 @@ public final class AppStore {
                 let now = Date()
                 for id in [oldValue, selectedSessionID].compactMap({ $0 }) { session(withID: id)?.lastSelectedAt = now }
             }
-            emitSessionSelected(previous: oldValue)
+            selectionDidChange(previous: oldValue)
         }
     }
+    public var assistantShown = false // the Elis chat shows in place of a session; transient, never in `Snapshot`
 
     /// restoringSelection is true while `restore(from:)` runs: a reload is not a selection.
     var restoringSelection = false
@@ -154,7 +155,7 @@ public final class AppStore {
     @ObservationIgnored var pendingCloseRecords: [UUID: PendingCloseRecord] = [:]
     @ObservationIgnored var pendingCloseOrder: [UUID] = []
     @ObservationIgnored var pendingCloseTasks: [UUID: Task<Void, Never>] = [:]
-
+    @ObservationIgnored var terminalProgressTimeout: Duration = .seconds(15)
     @ObservationIgnored let persistence: PersistenceStore
     /// catalogOperations is the operation table of the catalog this store serves, written in every save; nil before its first operation.
     @ObservationIgnored public var catalogOperations: CatalogOperationTable?
@@ -458,7 +459,7 @@ public final class AppStore {
                                           statusColor: idle ? nil : session.agentIndicator.color,
                                           statusShape: idle ? nil : session.agentIndicator.shape?.rawValue,
                                           statusChangedAt: session.statusChangedAt?.timeIntervalSince1970, activePanes: activePanes(of: session),
-                                          background: session.backgroundWatermark,
+                                          background: session.backgroundWatermark, progress: progressNode(of: session),
                                           paneBackgrounds: session.paneBackgrounds.isEmpty ? nil : session.paneBackgrounds,
                                           unseen: session.unseenCount > 0 ? session.unseenCount : nil,
                                           fontSize: fontSize(session),
@@ -509,7 +510,7 @@ public final class AppStore {
                            pickPending: pickPending(), askPending: askPending(), app: app, liveReset: liveReset,
                            indexUnsaved: indexUnsaved ? true : nil, snapshotUnsaved: snapshotUnsaved ? true : nil,
                            linkOpenMode: linkOpenMode?.rawValue,
-                           sidebarDensity: sidebarDensity?.rawValue, keepAwake: keepAwake)
+                           sidebarDensity: sidebarDensity?.rawValue, keepAwake: keepAwake, assistantShown: assistantShown ? true : nil)
     }
 
     /// The tree's `paneOverlays`: the panes covered by their own overlay, omitted when neither is.

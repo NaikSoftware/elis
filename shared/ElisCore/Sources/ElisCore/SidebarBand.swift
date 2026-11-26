@@ -25,11 +25,32 @@ public enum SidebarBand {
         }
     }
 
-    /// wave is nil unless active. A tinted base pairs with the active color, an untinted one with the accent.
-    public static func wave(status: AgentStatus, sessionTintHex: String?, workspaceTintHex: String?,
-                            activeHex: String, accentHex: String) -> SidebarWave? {
-        guard status == .active else { return nil }
+    /// wave shows for an active agent or an unblocked indeterminate progress.
+    /// A tinted base pairs with the active color, an untinted one with the accent.
+    public static func wave(status: AgentStatus, indeterminate: Bool = false, sessionTintHex: String?,
+                            workspaceTintHex: String?, activeHex: String, accentHex: String) -> SidebarWave? {
+        guard status == .active || (indeterminate && status != .blocked) else { return nil }
         guard let tint = sessionTintHex ?? workspaceTintHex else { return SidebarWave(base: activeHex, second: accentHex) }
         return SidebarWave(base: tint, second: activeHex)
+    }
+
+    /// progressFill is nil for no or indeterminate progress and for a blocked row; the fraction clamps to 0...1.
+    public static func progressFill(progress: SessionProgress?, status: AgentStatus, sessionTintHex: String?,
+                                    workspaceTintHex: String?, activeHex: String) -> SidebarProgressFill? {
+        guard status != .blocked, let fraction = progress?.fraction else { return nil }
+        return SidebarProgressFill(colorHex: sessionTintHex ?? workspaceTintHex ?? activeHex,
+                                   fraction: min(max(fraction, 0), 1))
+    }
+}
+
+/// The share of a row's width a determinate progress fills, and its color.
+public struct SidebarProgressFill: Sendable, Equatable {
+    public let colorHex: String
+    public let fraction: Double
+    public static let alpha = 0.16
+
+    public init(colorHex: String, fraction: Double) {
+        self.colorHex = colorHex
+        self.fraction = fraction
     }
 }

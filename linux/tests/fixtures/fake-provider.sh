@@ -32,12 +32,13 @@ if [[ $1 == exec ]]; then
     exit
 fi
 re='"text":"(([^"\\]|\\.)*)"'
-init= next=
+init= next= wait=0.3
+((BASH_VERSINFO[0] < 4)) && wait=1 # bash 3.2 (macOS) rejects a fractional read timeout
 while if [[ -n $next ]]; then line=$next next=; else IFS= read -r line; fi; do
     [[ -z $init ]] && init=1 && printf '{"type":"system","subtype":"init","session_id":"fake-%s"}\n' $$
     [[ $line =~ $re ]] && input=${BASH_REMATCH[1]} || input=
     early=
-    if IFS= read -r -t 0.3 next; then early=' early'; else next=; fi
+    if IFS= read -r -t "$wait" next; then early=' early'; else next=; fi
     answer "$input" "$early"
     if [[ -n $quiet ]]; then
         printf '{"type":"result","subtype":"success","is_error":false,"session_id":"fake-%s"}\n' $$

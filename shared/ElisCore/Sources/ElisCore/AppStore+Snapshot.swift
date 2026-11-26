@@ -35,11 +35,11 @@ extension AppStore {
     }
 
     /// The selection to write. A server window's row is not in the snapshot, so naming it would restore an empty
-    /// window while local rows sit there; fall back to the most recent surviving session, then the first,
-    /// matching the MRU repair `reselectIfSelectionHidden` already does for a narrowed tree.
+    /// window while local rows sit there, and a nil one (the Elis chat shown) is not restored either; fall back to
+    /// the most recent surviving session, then the first, matching the MRU repair `reselectIfSelectionHidden`
+    /// already does for a narrowed tree.
     private func persistedSelection(among persistable: Set<UUID>, recency: [UUID]) -> UUID? {
         if let selectedSessionID, persistable.contains(selectedSessionID) { return selectedSessionID }
-        guard selectedSessionID != nil else { return nil }
         return recency.first ?? workspaces.flatMap(\.sessions).first { persistable.contains($0.id) }?.id
     }
 

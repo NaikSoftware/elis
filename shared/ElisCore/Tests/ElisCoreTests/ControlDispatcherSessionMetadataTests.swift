@@ -186,6 +186,21 @@ struct ControlDispatcherSessionMetadataTests {
         ])
     }
 
+    @Test func sessionProgressRoutesParsedValueAndRejectsInvalid() async {
+        let actions = MockControlActions()
+        let dispatcher = ControlDispatcher(actions: actions)
+
+        func send(_ value: String?) async -> ControlResponse? {
+            await dispatcher.dispatch(ControlRequest(cmd: .sessionProgress, target: "s", args: ControlArgs(progress: value)))
+        }
+        #expect(await send("3/7") == ControlResponse(ok: true))
+        #expect(await send("8/7") == ControlResponse(ok: false, error: "invalid progress"))
+        #expect(await send(nil) == ControlResponse(ok: false, error: "invalid progress"))
+        #expect(await send("clear") == ControlResponse(ok: true))
+        #expect(actions.calls == [.sessionProgress(target: "s", .steps(done: 3, total: 7)),
+                                  .sessionProgress(target: "s", nil)])
+    }
+
     @Test func sessionStatusPassesIfIdleThrough() async {
         let actions = MockControlActions()
         let dispatcher = ControlDispatcher(actions: actions)
@@ -200,6 +215,22 @@ struct ControlDispatcherSessionMetadataTests {
                            ControlSessionStatusUpdate(status: .active, blink: nil, autoReset: nil, sound: nil, ifIdle: true)),
             .sessionStatus(target: "session", window: nil,
                            ControlSessionStatusUpdate(status: .active, blink: nil, autoReset: nil, sound: nil)),
+        ])
+    }
+
+    @Test func sessionStatusPassesAnAbsoluteCwdAndRejectsARelativeOne() async {
+        let actions = MockControlActions()
+        let dispatcher = ControlDispatcher(actions: actions)
+
+        _ = await dispatcher.dispatch(ControlRequest(cmd: .sessionStatus, target: "session",
+                                                     args: ControlArgs(cwd: "/repo/wt", status: "active")))
+        let relative = await dispatcher.dispatch(ControlRequest(cmd: .sessionStatus, target: "session",
+                                                                args: ControlArgs(cwd: "repo", status: "active")))
+
+        #expect(relative == ControlResponse(ok: false, error: "cwd must be an absolute path"))
+        #expect(actions.calls == [
+            .sessionStatus(target: "session", window: nil,
+                           ControlSessionStatusUpdate(status: .active, blink: nil, autoReset: nil, sound: nil, cwd: "/repo/wt"))
         ])
     }
 

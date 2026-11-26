@@ -126,11 +126,13 @@ class SidebarCellView: NSTableCellView {
         repeatButtonGapConstraint?.constant = visible ? 6 : 0
     }
 
-    /// Reveals or collapses the session row's close button. It shows only while the row has no badge, status
-    /// glyph or companion marker, so it never covers one; configure resets it hidden.
+    /// Reveals or collapses the session row's close button, which takes the badge and status glyph's slot while it
+    /// shows. An active row keeps its glyph and shows none; configure resets it hidden.
     func setCloseButtonVisible(_ visible: Bool) {
         guard let closeButton, let closeButtonWidthConstraint else { return }
-        let show = visible && badge.count == 0 && !statusIcon.showsGlyph && companionMarker?.isHidden != false
+        let show = visible && !statusIcon.isActive
+        badge.hoverHidden = show
+        statusIcon.hoverHidden = show
         closeButton.isHidden = !show
         closeButtonWidthConstraint.constant = show ? Self.addButtonWidth : 0
     }
@@ -228,7 +230,7 @@ final class BadgeView: NSView {
         }
     }
 
-    /// hoverHidden collapses a nonzero badge while the workspace row's hover buttons take its slot.
+    /// hoverHidden collapses a nonzero badge while a row's hover buttons take its slot.
     var hoverHidden = false {
         didSet {
             guard hoverHidden != oldValue else { return }
@@ -331,6 +333,7 @@ final class StatusIconView: NSImageView {
     }
 
     private var indicator = AgentIndicator()
+    var isActive: Bool { indicator.status == .active }
 
     // Core Animation can drop a layer's animations while the view is out of a window, so re-add on return.
     override func viewDidMoveToWindow() {
@@ -344,7 +347,7 @@ final class StatusIconView: NSImageView {
         pulse(Self.fadeKey, indicator.status == .active && !indicator.blink && motion, to: 0.25, duration: 1.4)
     }
 
-    /// hoverHidden collapses a shown glyph while the workspace row's hover buttons take its slot.
+    /// hoverHidden collapses a shown glyph while a row's hover buttons take its slot.
     var hoverHidden = false {
         didSet { applyVisibility() }
     }
@@ -400,12 +403,12 @@ class SidebarRowView: NSTableRowView {
         get { window?.isKeyWindow ?? false }
         // isEmphasized is derived from the window's key state; the setter only triggers a redraw.
         // swiftlint:disable:next unused_setter_value
-        set { needsDisplay = true }
+        set { needsDisplay = true; refreshInfoLine() }
     }
 
     override var isSelected: Bool {
         // AppKit won't redraw with selectionHighlightStyle == .none
-        didSet { if isSelected != oldValue { needsDisplay = true } }
+        didSet { if isSelected != oldValue { needsDisplay = true; refreshInfoLine() } }
     }
 
     // AppKit draws the triangle in the appearance's secondary label color; dimmed it reads near the spec's fg 36%
@@ -416,7 +419,7 @@ class SidebarRowView: NSTableRowView {
 
     /// selectionTint is the tint of the row's group (workspace, else its own session tint); nil uses the theme.
     var selectionTint: NSColor? {
-        didSet { if selectionTint != oldValue, isSelected { needsDisplay = true } }
+        didSet { if selectionTint != oldValue, isSelected { needsDisplay = true; refreshInfoLine() } }
     }
 
     var selectionColor: NSColor {
@@ -431,6 +434,7 @@ class SidebarRowView: NSTableRowView {
             guard band?.color != oldValue?.color || band?.edge != oldValue?.edge else { return }
             needsDisplay = true
             needsLayout = true
+            refreshInfoLine()
         }
     }
 
@@ -445,13 +449,13 @@ class SidebarRowView: NSTableRowView {
 
     /// rowWash is a tinted session's own wash, drawn over the band.
     var rowWash: NSColor? {
-        didSet { if rowWash != oldValue { needsDisplay = true } }
+        didSet { if rowWash != oldValue { needsDisplay = true; refreshInfoLine() } }
     }
 
     /// isHovered draws the pointer's faint fill. It is cleared on reuse and when the row leaves its window, so
     /// a row scrolled or reloaded away from under the pointer never keeps it.
     var isHovered = false {
-        didSet { if isHovered != oldValue { needsDisplay = true } }
+        didSet { if isHovered != oldValue { needsDisplay = true; refreshInfoLine() } }
     }
     private var hoverArea: NSTrackingArea?
 
@@ -477,6 +481,7 @@ class SidebarRowView: NSTableRowView {
     override func prepareForReuse() {
         super.prepareForReuse()
         isHovered = false
+        setProgressFill(nil)
     }
 
     /// waveLayer clips the drifting gradient to the row rect; nil while the row shows no wave.
@@ -494,6 +499,7 @@ class SidebarRowView: NSTableRowView {
         guard wave != self.wave || still != waveStill else { return }
         self.wave = wave
         waveStill = still
+        defer { refreshInfoLine() }
         guard let wave, let base = NSColor(elisHex: wave.base), let second = NSColor(elisHex: wave.second) else {
             waveLayer?.removeFromSuperlayer()
             waveLayer = nil
@@ -504,7 +510,7 @@ class SidebarRowView: NSTableRowView {
         if waveLayer == nil {
             clip.masksToBounds = true
             clip.addSublayer(CAGradientLayer())
-            layer?.insertSublayer(clip, at: 0)
+            if let progressLayer { layer?.insertSublayer(clip, above: progressLayer) } else { layer?.insertSublayer(clip, at: 0) }
             waveLayer = clip
         }
         let gradient = clip.sublayers?.first as? CAGradientLayer
@@ -518,9 +524,56 @@ class SidebarRowView: NSTableRowView {
         layoutWave()
     }
 
+    /// progressLayer clips the progress wash to the row rect, directly under the wave; nil while there is no fill.
+    private(set) var progressLayer: CALayer?
+    private(set) var progressFill: SidebarProgressFill?
+
+    /// setProgressFill shows a determinate progress as a flat wash across `fraction` of the row, or removes it for nil.
+    /// A fraction change on a shown fill slides over 0.2 s unless Reduce Motion is on.
+    func setProgressFill(_ fill: SidebarProgressFill?) {
+        guard fill != progressFill else { return }
+        let animate = progressFill != nil && fill?.colorHex == progressFill?.colorHex
+            && !NSWorkspace.shared.accessibilityDisplayShouldReduceMotion
+        progressFill = fill
+        defer { refreshInfoLine() }
+        guard let fill, let color = NSColor(elisHex: fill.colorHex) else {
+            progressLayer?.removeFromSuperlayer()
+            progressLayer = nil
+            return
+        }
+        wantsLayer = true
+        let clip = progressLayer ?? CALayer()
+        if progressLayer == nil {
+            clip.masksToBounds = true
+            let wash = CALayer()
+            wash.anchorPoint = .zero
+            clip.addSublayer(wash)
+            if let waveLayer { layer?.insertSublayer(clip, below: waveLayer) } else { layer?.insertSublayer(clip, at: 0) }
+            progressLayer = clip
+        }
+        clip.sublayers?.first?.backgroundColor = color.withAlphaComponent(SidebarProgressFill.alpha).cgColor
+        layoutProgress(animated: animate)
+    }
+
+    private func layoutProgress(animated: Bool = false) {
+        guard let clip = progressLayer, let wash = clip.sublayers?.first, let fill = progressFill else { return }
+        CATransaction.begin()
+        CATransaction.setDisableActions(true)
+        clipToRow(clip)
+        CATransaction.commit()
+        let width = clip.bounds.width * fill.fraction
+        CATransaction.begin()
+        CATransaction.setDisableActions(!animated)
+        CATransaction.setAnimationDuration(0.2)
+        wash.bounds = CGRect(x: 0, y: 0, width: width, height: clip.bounds.height)
+        wash.position = .zero
+        CATransaction.commit()
+    }
+
     override func layout() {
         super.layout()
         alignToContent()
+        layoutProgress()
         layoutWave()
     }
 
@@ -538,11 +591,13 @@ class SidebarRowView: NSTableRowView {
         }
     }
 
-    // re-adds the drift if Core Animation dropped it while the row was out of a window
+    // re-adds the drift if Core Animation dropped it while the row was out of a window; a window move also changes
+    // `isEmphasized` without its setter, so the info line re-renders for the new key state
     override func viewDidMoveToWindow() {
         super.viewDidMoveToWindow()
         if window == nil { isHovered = false }
         needsLayout = true
+        refreshInfoLine()
     }
 
     private func layoutWave() {
@@ -550,15 +605,7 @@ class SidebarRowView: NSTableRowView {
         let period = bounds.width * 2
         CATransaction.begin()
         CATransaction.setDisableActions(true)
-        // square where the group continues; at the group's outer ends it follows the band's inner radius
-        clip.frame = rowRect
-        let top: CACornerMask = isFlipped ? [.layerMinXMinYCorner, .layerMaxXMinYCorner] : [.layerMinXMaxYCorner, .layerMaxXMaxYCorner]
-        let bottom: CACornerMask = isFlipped ? [.layerMinXMaxYCorner, .layerMaxXMaxYCorner] : [.layerMinXMinYCorner, .layerMaxXMinYCorner]
-        var corners: CACornerMask = []
-        if groupEdge == .first || groupEdge == .single { corners.formUnion(top) }
-        if groupEdge == .last || groupEdge == .single { corners.formUnion(bottom) }
-        clip.maskedCorners = corners
-        clip.cornerRadius = corners.isEmpty ? 0 : Self.bandRadius - Self.groupPadding
+        clipToRow(clip)
         gradient.frame = CGRect(x: -clip.frame.minX, y: 0, width: period * 2, height: clip.bounds.height)
         CATransaction.commit()
         guard period != wavePeriod || (!waveStill && gradient.animation(forKey: Self.waveKey) == nil) else { return }
@@ -571,6 +618,19 @@ class SidebarRowView: NSTableRowView {
         drift.duration = 4.8
         drift.repeatCount = .greatestFiniteMagnitude
         gradient.add(drift, forKey: Self.waveKey)
+    }
+
+    /// clipToRow frames `clip` on the row rect: square where the group continues, and at the group's outer ends
+    /// following the band's inner radius.
+    private func clipToRow(_ clip: CALayer) {
+        clip.frame = rowRect
+        let top: CACornerMask = isFlipped ? [.layerMinXMinYCorner, .layerMaxXMinYCorner] : [.layerMinXMaxYCorner, .layerMaxXMaxYCorner]
+        let bottom: CACornerMask = isFlipped ? [.layerMinXMaxYCorner, .layerMaxXMaxYCorner] : [.layerMinXMinYCorner, .layerMaxXMinYCorner]
+        var corners: CACornerMask = []
+        if groupEdge == .first || groupEdge == .single { corners.formUnion(top) }
+        if groupEdge == .last || groupEdge == .single { corners.formUnion(bottom) }
+        clip.maskedCorners = corners
+        clip.cornerRadius = corners.isEmpty ? 0 : Self.bandRadius - Self.groupPadding
     }
 
     /// Half the gap between workspace groups, and the group's padding around its rows.
@@ -650,6 +710,39 @@ class SidebarRowView: NSTableRowView {
         }
     }
 
+    /// infoBackdrops are the opaque colors under the info line, stacked as `drawBackground` and the wave paint them:
+    /// one color, or the wave's two strongest stops over it.
+    var infoBackdrops: [RGBA] {
+        var backdrops: [RGBA] = []
+        effectiveAppearance.performAsCurrentDrawingAppearance {
+            let app = GhosttyApp.shared
+            // the outline is clear over the terminal background; translucency is ignored
+            var stack = (app.terminalBackgroundColor ?? .windowBackgroundColor).withAlphaComponent(1).rgba
+            func over(_ color: NSColor) { stack = RGBA.composite(color.rgba, over: stack) }
+            if let band { over(band.color.withAlphaComponent(0.10)) }
+            if let rowWash { over(rowWash) }
+            if isSelected {
+                over(selectionColor.withAlphaComponent(isEmphasized ? 0.20 : 0.12))
+            } else if isHovered {
+                over((app.terminalForegroundColor ?? .labelColor).withAlphaComponent(0.07))
+            }
+            backdrops = [stack]
+            // the line may sit on the fill or past its end
+            if let progressFill, let color = NSColor(elisHex: progressFill.colorHex) {
+                backdrops.append(RGBA.composite(color.withAlphaComponent(SidebarProgressFill.alpha).rgba, over: stack))
+            }
+            guard let wave, let base = NSColor(elisHex: wave.base), let second = NSColor(elisHex: wave.second) else { return }
+            backdrops = backdrops.flatMap {
+                [RGBA.composite(base.withAlphaComponent(0.20).rgba, over: $0), RGBA.composite(second.withAlphaComponent(0.16).rgba, over: $0)]
+            }
+        }
+        return backdrops
+    }
+
+    private func refreshInfoLine() {
+        for case let cell as SidebarInfoCellView in subviews { cell.refreshColors() }
+    }
+
     /// rowRadius rounds selection, hover and wash.
     class var rowRadius: CGFloat { 8 }
 
@@ -679,7 +772,7 @@ class SidebarRowView: NSTableRowView {
 /// caches one per workspace/session id and rebuilds only the child lists.
 final class SidebarNode {
     enum Kind {
-        case workspace, session
+        case workspace, session, assistant
 
         var iconElement: InterfaceElement { self == .workspace ? .workspaceIcons : .sessionIcons }
     }

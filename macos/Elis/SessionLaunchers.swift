@@ -16,7 +16,18 @@ enum SessionLaunchers {
         refresh()
         return detected
     }
+    /// cached is the last detected list without starting a detection, for paths a phone polls.
+    static var cached: [SessionLauncher] { detected }
+    /// path is the PATH the last detection searched; nil before the first one finishes.
+    private(set) static var path: String?
     private static var detectedAt: Date?
+    private static var detection: Task<Void, Never>?
+
+    /// settled awaits the in-flight detection, starting the first one if none ran yet.
+    static func settled() async {
+        if detectedAt == nil { refresh() }
+        await detection?.value
+    }
 
     /// Re-detects in the background when the cached list is older than `maxAge`; the next menu sees the result.
     /// A Finder-launched app gets launchd's minimal PATH, and agents install into directories only the user's
@@ -25,12 +36,15 @@ enum SessionLaunchers {
         if let detectedAt, Date().timeIntervalSince(detectedAt) < maxAge { return }
         detectedAt = Date()
         let environment = ProcessInfo.processInfo.environment
-        Task.detached {
+        detection = Task.detached {
             let shellPath = loginShellPath(environment: environment)
             let path = [shellPath, CommandPath.widened(environment["PATH"], bundledCLIDirectory: nil),
                         NSHomeDirectory() + "/.local/bin"].compactMap(\.self).joined(separator: ":")
             let found = SessionLauncher.available(path: path) { FileManager.default.isExecutableFile(atPath: $0) }
-            await MainActor.run { detected = found }
+            await MainActor.run {
+                detected = found
+                Self.path = path
+            }
         }
     }
 

@@ -42,6 +42,8 @@ public enum AttachedForward: Equatable, Sendable {
     case closeSplit(session: String)
     case scratch(session: String, mode: String, command: String?)
     case restore(session: String, paneID: String, pin: ControlRestoreOverride)
+    /// progress sets the origin's control progress, which the viewer's row then mirrors; `value` is `session progress`'s.
+    case progress(session: String, value: String)
 
     /// words carry each free value joined to its flag, so a value starting with `-` is never read as an option.
     public var words: [String] {
@@ -61,6 +63,7 @@ public enum AttachedForward: Equatable, Sendable {
         case .closeSplit(let session): ["session", "split", "close", "--target", session]
         case .scratch(let session, let mode, let command):
             ["session", "scratch", mode, "--target", session] + (command.map { ["--command=" + $0] } ?? [])
+        case .progress(let session, _): ["session", "progress", "--target", session]
         case .restore(let session, let paneID, let pin):
             ["session", "restore", "--target", session, "--pane-id", paneID] + {
                 switch pin {
@@ -72,9 +75,10 @@ public enum AttachedForward: Equatable, Sendable {
         }
     }
 
-    /// operands follow a `--`, so a restore line starting with `-` stays the line.
+    /// operands follow a `--`, so a restore line or progress value starting with `-` stays itself.
     public var operands: [String] {
         if case .restore(_, _, .pin(let command)) = self { return [command] }
+        if case .progress(_, let value) = self { return [value] }
         return []
     }
 
@@ -91,6 +95,7 @@ public enum AttachedForward: Equatable, Sendable {
         case .closeSplit: .sessionSplitClose
         case .scratch: .sessionScratch
         case .restore: .sessionRestore
+        case .progress: .sessionProgress
         }
     }
 
@@ -120,6 +125,7 @@ public enum AttachedForward: Equatable, Sendable {
         case .split, .closeSplit: "the split changed"
         case .scratch: "the scratch changed"
         case .restore: "the restore command was set"
+        case .progress: "the progress was set"
         }
     }
 }

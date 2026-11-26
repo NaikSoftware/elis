@@ -382,7 +382,11 @@
           <section id="install" class="doc-v2" style="scroll-margin-top: 88px; padding-top: 56px">
 <h2>Install</h2>
 <p>Builds for Apple Silicon (arm64) Macs running macOS 14 or later are published on the <a href="https://github.com/NaikSoftware/elis/releases">releases page</a>.</p>
-<p>Download the <code>.dmg</code> from the <a href="https://github.com/NaikSoftware/elis/releases/latest">latest release</a>, open it, and drag Elis.app into <code>/Applications</code>. The build is not notarized, so clear the download flag once before the first launch:</p>
+<p>With Homebrew, tap and trust the cask, then install it. The cask clears the quarantine flag, so the unnotarized app opens without a prompt:</p>
+<pre class="bash"><code>brew tap naiksoftware/tap
+brew trust --cask naiksoftware/tap/elis
+brew install --cask naiksoftware/tap/elis</code></pre>
+<p>Upgrade with <code>brew upgrade --cask elis</code>. To install by hand instead, download the <code>.dmg</code> from the <a href="https://github.com/NaikSoftware/elis/releases/latest">latest release</a>, open it, and drag Elis.app into <code>/Applications</code>. The build is not notarized, so clear the download flag once before the first launch:</p>
 <pre class="bash"><code>xattr -dr com.apple.quarantine /Applications/Elis.app</code></pre>
 <h3 id="install-help">Automatic installers</h3>
 <p>None is needed to use Elis as a terminal; each connects it to a wider workflow. A release build installs all three once per installed build: on the first launch after a fresh install and after each update. It runs silently and shows an alert only when you must act, for example after a failure or a skipped agent. An agent you install later gets its hooks and skill on the next Elis update.</p>
@@ -479,7 +483,7 @@ command &quot;Session here&quot; ctrl+a&gt;n elisctl session new --cwd &quot;$AG
 <li>A session is named after its working directory's last folder. Renaming pins a name of your own; clearing it restores automatic naming. Rename inline by double-clicking a row's name.</li>
 <li>The four icons at the bottom of the sidebar add a workspace, add a session, and toggle the workspace filter and the flagged view.</li>
 <li>A click on a workspace's icon folds it at once.</li>
-<li>Hovering a session row with no badge or status shows an × that closes it, as Close Session does.</li>
+<li>Hovering a session row shows an × in place of its badge and status that closes it, as Close Session does. A session with an active agent keeps its status instead.</li>
 <li><strong>Copy Name</strong> on a session or workspace row copies its name.</li>
 <li><strong>Duplicate Session</strong> in a session's context menu opens a fresh shell right after it, in the same workspace and its current directory. Only the directory carries over.</li>
 <li><strong>Reveal in Finder</strong> opens the focused pane's directory, and is greyed out when that directory no longer exists.</li>
@@ -579,8 +583,9 @@ elisctl session overlay open --html report.html --page</code></pre>
           <!-- ELIS ASSISTANT -->
           <section id="assistant" class="doc-v2" style="scroll-margin-top: 88px; padding-top: 56px">
 <h2>Elis assistant</h2>
-<p><strong>Elis</strong> is a system chat pinned above the workspaces in the sidebar, shown with the dog icon, the name <strong>Elis</strong> and an unread count of replies from other sessions. It lets you talk to your sessions from one thread and manages them through <code>elisctl</code>. Available in the Linux app now; the macOS app gets it later.</p>
+<p><strong>Elis</strong> is a system chat pinned above the workspaces in the sidebar, shown with the dog icon, the name <strong>Elis</strong> and an unread count of replies from other sessions. It lets you talk to your sessions from one thread and manages them through <code>elisctl</code>.</p>
 <p>Open the chat by clicking the row or with <strong>Navigate ▸ Show Elis</strong> (bindable as <code>show_assistant</code>). Opening it leaves the session you were in, so no session shortcut reaches a session hidden behind the chat; one tap of the session switcher (<kbd>Ctrl</kbd>+<kbd>Tab</kbd>) takes you back to it.</p>
+<p>On the Mac, <strong>Show Elis</strong> is also in the command palette, and <code>show_assistant</code> has no default shortcut. The <strong>Show notification badges</strong> setting also hides the unread count on the row. Elis works with local sessions only: a session on an attached Mac or an elis-server host has no handle and cannot be tagged. The Elis row also shows in a remote window and opens the local chat.</p>
 <h3 id="assistant-providers">Choosing an agent</h3>
 <p>Every message goes through the agent you pick by name in the composer's provider panel: Claude Code, Codex, Antigravity or OpenCode, whichever are installed. The choice applies from the next message.</p>
 <p>Elis keeps one conversation across your messages. Replies from other sessions reach it in the order they arrive, each after the turn it is busy with.</p>
@@ -717,7 +722,7 @@ elisctl reply &quot;all tests pass&quot;</code></pre>
 <li>It differs from macOS window zoom and full screen, which size the window itself.</li>
 </ul>
 <h3 id="terminals-file-panel">File panel</h3>
-<p>A column right of the sidebar shows the active session's current folder as a tree, in the app theme, and refreshes as files change.</p>
+<p>A column right of the sidebar shows the active session's current folder as a tree, in the app theme, and refreshes as files change. The folder is the one the focused pane's coding agent works in, else the pane's own: a Claude Code session that moves into a worktree shows that worktree.</p>
 <ul>
 <li>Toggle it with ⌃⌘E, the folder button left of the sidebar toggle, View ▸ Show/Hide File Panel, the palette, or the <code>toggle_file_panel</code> keymap action. A remote session shows "No local folder".</li>
 <li>Double-click or Return opens a file: Markdown, text and images in the built-in viewer, anything else in its default macOS app.</li>
@@ -901,6 +906,10 @@ s=$(elisctl zmx tree studio.local --json \
 <tr>
 <td>status</td>
 <td>clearing the row's status or badge here (typing, selecting, Clear Status) clears it there too, under that Mac's reset settings, when the status came from there; a status set on this Mac's row clears here only, and one pane here finishing leaves the other Mac's active shown</td>
+</tr>
+<tr>
+<td>progress</td>
+<td>a value set with <code>elisctl</code> on either Mac shows on both; terminal progress arrives in the pane's output</td>
 </tr>
 <tr>
 <td>session context</td>
@@ -1163,7 +1172,7 @@ s=$(elisctl zmx tree studio.local --json \
 </ul>
 <p>The <a href="commands.html#phone">phone</a> and <a href="commands.html#mobile">mobile</a> commands drive all of this from a script.</p>
 <h3 id="phone-assistant">Ask Elis on the phone</h3>
-<p>When the paired computer runs the <a href="#assistant">Elis assistant</a>, the Sessions screen has an <strong>Ask Elis…</strong> button with the Elis icon and the unread count of agent replies, beside New session. Without the assistant, New session fills the row; today only the Linux app runs it, so on a Mac or an elis-server host the button is absent.</p>
+<p>When the paired computer runs the <a href="#assistant">Elis assistant</a>, the Sessions screen has an <strong>Ask Elis…</strong> button with the Elis icon and the unread count of agent replies, beside New session. Without the assistant, New session fills the row; an elis-server host has no assistant, so the button is absent there.</p>
 <ul>
 <li><strong>Open and close.</strong> A tap expands the button into the Elis chat as a sheet over the list. Opening it marks the replies read and never switches the computer to its Elis chat. Close the sheet by dragging it down, tapping its handle or the dimmed list, or pressing Back.</li>
 <li><strong>The chat.</strong> It shows your messages, Elis's answers, errors, and a card for each message Elis sent to sessions (one row per session) and each reply from a session. A tap on a session opens it; a session the phone does not list shows the start of its id. <em>Elis is working…</em> shows while a turn runs.</li>
@@ -1310,7 +1319,7 @@ s=$(elisctl zmx tree studio.local --json \
 <li>Where a new session opens: by default the workspace's project folder, else the current session's directory; or your home directory, or a folder you pick; and whether New Session adds it at the end of the workspace or right after the current session.</li>
 <li><strong>Restore mode</strong>: fresh shells, re-run commands, or Live sessions (<a href="#restore">Restore &amp; persistence</a>).</li>
 <li>An optional confirmation before closing a session.</li>
-<li><strong>Keep the Mac awake while an agent is working</strong> (on by default; <em>Keep the computer awake</em> on Linux): while any session's agent status is active, the computer does not sleep on its own; on the Mac the display still sleeps and locks, while on Linux the screen also stays on and unlocked so an agent can see and drive the desktop. A blocked or finished agent lets it sleep again. Sessions attached from another computer or shown in a remote window do not count, since they run there. <code>elisctl settings keep-awake on|off|toggle</code> sets it.</li>
+<li><strong>Keep the Mac awake while an agent is working</strong> (on by default; <em>Keep the computer awake</em> on Linux): while any session's agent status is active, the computer does not sleep on its own; the display also stays on, and on Linux the screen also stays unlocked so an agent can see and drive the desktop. A blocked or finished agent lets it sleep again. Sessions attached from another computer or shown in a remote window do not count, since they run there. <code>elisctl settings keep-awake on|off|toggle</code> sets it.</li>
 <li>Whether to load your global Ghostty config (<a href="#ghostty">Ghostty config</a>).</li>
 </ul>
 <h3 id="settings-appearance">Appearance</h3>
@@ -1428,7 +1437,7 @@ previous_workspace   next_workspace
 previous_window   next_window
 previous_attention_session   next_attention_session
 quick_terminal   session_palette   command_palette
-custom_command_palette   show_attention
+custom_command_palette   show_attention   show_assistant
 select_theme   toggle_fullscreen   toggle_terminal_zoom
 dashboard   attach_remote
 open_remote_window   detached_sessions
@@ -1570,6 +1579,10 @@ elisctl notify &quot;needs input&quot; --target &quot;$AGT_SESSION_ID&quot; --so
 <tr>
 <td><code>notify</code></td>
 <td>a notification is raised</td>
+</tr>
+<tr>
+<td><code>progress</code></td>
+<td>the progress a session's row shows changes; carries <code>progress</code> and <code>source</code>, both absent once cleared</td>
 </tr>
 <tr>
 <td><code>session.created</code>, <code>session.closed</code></td>
@@ -2490,12 +2503,29 @@ elisctl session context --clear --target &quot;$ELIS_SESSION_ID&quot;</code></pr
 <ul>
 <li>The line counts the workflow runs of the branch's last pushed commit: <code>◷ build</code> for one run, <code>✓ 3 passed</code> when all agree, <code>✗ build  ◷ 1  ✓ 2</code> when they differ, a single failure by name.</li>
 <li>With an open pull request the line starts with its number and reviews: <code>#56 👍1 👎1 · ✓ build</code> counts approvals and change requests.</li>
-<li>Click the line for the details: the pull request with who approved and who asked for changes, then every run. Click the pull request or a run to open it on GitHub.</li>
+<li>Click the shown session's line for a menu of details; a click on another session's line selects it. The menu lists the pull request with who approved and who asked for changes, then every run. Click the pull request or a run to open it on GitHub. A Control-, Shift- or Command-click on the line acts on the row (menu, selection) and opens no details.</li>
+<li>The branch is the one the focused pane's coding agent works in, else the pane's own directory's. A Claude Code session that moves into a worktree shows that worktree's branch; its subagents' worktrees do not count.</li>
 <li>Elis checks every 30 seconds while a run is going and every 3 minutes once all are done, once for all sessions on the same branch.</li>
 <li><strong>Settings ▸ Interface ▸ CI status</strong> shows it Always (the default), only in the flagged view (Flagged), or never (Off). Off stops asking GitHub.</li>
 <li>A session attached from another Mac or an elis-server host shows the CI the host sees.</li>
 <li><code>tree</code> reports it as the session's <code>ci</code>: <code>branch</code>, <code>sha</code>, <code>pr</code> (<code>number</code>, <code>title</code>, <code>url</code>, <code>approved</code>, <code>changesRequested</code>) and <code>runs</code> (<code>workflow</code>, <code>state</code> <code>running</code>|<code>failed</code>|<code>passed</code>|<code>skipped</code>, <code>url</code>); omitted when there is none.</li>
 </ul>
+<h3 id="status-progress">Progress</h3>
+<p>A session row can fill from the left to show how far a job has come: an agent's plan, a build, a long copy.</p>
+<img src="assets/docs-status-progress.webp" alt="Sidebar rows partly filled with progress" width="218" height="333" loading="lazy">
+<pre class="bash"><code>elisctl session progress 3/7 --target &quot;$ELIS_SESSION_ID&quot;
+elisctl session progress 40%
+elisctl session progress indeterminate
+elisctl session progress clear</code></pre>
+<ul>
+<li>The fill takes the session's tint, else its workspace's, else the active status color. <code>indeterminate</code> shows the active wave instead of a fill, even with no agent status. A blocked row shows only its status.</li>
+<li>A program in any pane, the scratch terminal included, can report progress with OSC 9;4. It is not a notification. The row shows the <code>elisctl</code> value while one is set, else the terminal's.</li>
+<li>Each kind clears only itself. An <code>elisctl</code> value clears on <code>clear</code> or when the session's status changes to completed or idle. A terminal value clears when the pane sends OSC 9;4;0, when that pane closes, or 15 seconds after its last update, so a killed program leaves no fill behind.</li>
+<li>With the <a href="#status-hooks">agent hooks</a> installed, Claude Code's todo list and tasks fill the row: done tasks out of all of them, cleared when all are done. A subagent's list never fills the lead's row. An agent-team lead counts the team's task list. Hooks installed before this feature need the next hook update.</li>
+<li>It works the same on a session attached from another Mac and on an elis-server session, and on Linux.</li>
+<li><code>tree</code> reports it as the session's <code>progress</code>: <code>value</code>, <code>fraction</code> (absent for indeterminate) and <code>source</code> (<code>control</code> or <code>terminal</code>); omitted when the row shows none. <code>events</code> emits <code>progress</code>.</li>
+</ul>
+<p>The command reference lists every field: <a href="commands.html#session">session progress</a>.</p>
 <h3 id="status-transcript">Read Claude's conversation</h3>
 <p>A script can read the Claude Code conversation running in a session as a list of prompts, replies and tool calls, taken from Claude Code's own transcript rather than the screen, so a finished reply reads whole however far it scrolled away.</p>
 <pre class="bash"><code>elisctl session transcript --target &quot;$ID&quot;
@@ -2538,7 +2568,7 @@ elisctl session tint clear --target &quot;$ELIS_SESSION_ID&quot;</code></pre>
 </tr>
 <tr>
 <td>Claude Code</td>
-<td>seven hooks: prompt and tool run → active, Stop → completed, permission request and permission prompt → blocked, subagent start and stop → track working teammates</td>
+<td>eight hooks: prompt and tool run → active, Stop → completed, permission request and permission prompt → blocked, subagent start and stop → track working teammates, todo and task tools → <a href="#status-progress">progress</a></td>
 </tr>
 <tr>
 <td>Codex</td>

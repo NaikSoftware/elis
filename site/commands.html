@@ -549,6 +549,7 @@
                 <span style="font-family: &quot;JetBrains Mono&quot;, monospace">statusBlink</span>,
                 <span style="font-family: &quot;JetBrains Mono&quot;, monospace">statusColor</span>,
                 <span style="font-family: &quot;JetBrains Mono&quot;, monospace">statusShape</span>,
+                <span style="font-family: &quot;JetBrains Mono&quot;, monospace">progress</span> (the row's progress fill: <span style="font-family: &quot;JetBrains Mono&quot;, monospace">value</span>, <span style="font-family: &quot;JetBrains Mono&quot;, monospace">fraction</span> and <span style="font-family: &quot;JetBrains Mono&quot;, monospace">source</span>; omitted when none),
                 <span style="font-family: &quot;JetBrains Mono&quot;, monospace">statusChangedAt</span> (when the status was last set,
                 in epoch seconds on the same clock as an event's
                 <span style="font-family: &quot;JetBrains Mono&quot;, monospace">ts</span>; omitted before any set, refreshed by every set
@@ -609,7 +610,7 @@
                 <span style="font-family: &quot;JetBrains Mono&quot;, monospace">presenter</span>, true when one holds it; omitted when none does; an older Elis omits <span style="font-family: &quot;JetBrains Mono&quot;, monospace">viewers</span>),
                 <span style="font-family: &quot;JetBrains Mono&quot;, monospace">remoteOverlays</span> (on an origin session: the overlay slots a presenting Mac holds, each
                 <span style="font-family: &quot;JetBrains Mono&quot;, monospace">{pane?, sizePercent?, pageID?}</span>, <span style="font-family: &quot;JetBrains Mono&quot;, monospace">pageID</span> for a page, while the session stays uncovered here; omitted when none is held),
-                <span style="font-family: &quot;JetBrains Mono&quot;, monospace">handle</span> (the session's short Latin <span style="font-family: &quot;JetBrains Mono&quot;, monospace">@</span> tag for the Elis assistant),
+                <span style="font-family: &quot;JetBrains Mono&quot;, monospace">handle</span> (the session's short Latin <span style="font-family: &quot;JetBrains Mono&quot;, monospace">@</span> tag for the Elis assistant; a remote row has none),
                 <span style="font-family: &quot;JetBrains Mono&quot;, monospace">assistantMark</span> (<span style="font-family: &quot;JetBrains Mono&quot;, monospace">waiting</span>, <span style="font-family: &quot;JetBrains Mono&quot;, monospace">replied</span>, or <span style="font-family: &quot;JetBrains Mono&quot;, monospace">not-delivered</span> during an assistant exchange; omitted when none), and
                 <span style="font-family: &quot;JetBrains Mono&quot;, monospace">unseen</span>.
               </p>
@@ -738,6 +739,9 @@
               <p style="font-size: 15px; line-height: 1.65; color: #cbc6bc; margin: 10px 0 0">
                 <strong style="color: #e6e1d7">Kinds.</strong>
                 <span style="font-family: &quot;JetBrains Mono&quot;, monospace">status</span>,
+                <span style="font-family: &quot;JetBrains Mono&quot;, monospace">progress</span> (payload <span style="font-family: &quot;JetBrains Mono&quot;, monospace">progress</span>, the shown value, absent once cleared, and <span style="font-family: &quot;JetBrains Mono&quot;, monospace">source</span>; human line
+                <span style="font-family: &quot;JetBrains Mono&quot;, monospace; white-space: nowrap">HH:MM:SS progress NAME 3/7 source=control</span>,
+                or <span style="font-family: &quot;JetBrains Mono&quot;, monospace; white-space: nowrap">HH:MM:SS progress NAME cleared</span>),
                 <span style="font-family: &quot;JetBrains Mono&quot;, monospace">notify</span>,
                 <span style="font-family: &quot;JetBrains Mono&quot;, monospace">session.created</span> (a companion's also carries
                 <span style="font-family: &quot;JetBrains Mono&quot;, monospace">parent</span>, the parent's id, and its human line reads
@@ -1893,7 +1897,7 @@
             <div style="background: #22272b; border: 1px solid rgba(255, 255, 255, 0.08); border-radius: 11px; padding: 18px 20px; margin-bottom: 12px">
               <div style="font-family: &quot;JetBrains Mono&quot;, monospace; font-size: 13.5px; color: #e08a45; line-height: 1.6; word-break: break-word">
                 elisctl session status &lt;idle|active|completed|blocked&gt; [--blink] [--auto-reset] [--if-idle] [--sound NAME]
-                [--color #rrggbb] [--shape SHAPE] [--pane left|right|scratch] [--pane-id TOKEN] [--target T] [--window W]
+                [--color #rrggbb] [--shape SHAPE] [--pane left|right|scratch] [--pane-id TOKEN] [--cwd DIR] [--target T] [--window W]
               </div>
               <div style="font-family: &quot;JetBrains Mono&quot;, monospace; font-size: 11.5px; color: #6b727a; margin-top: 6px">session.status</div>
               <p style="font-size: 15px; line-height: 1.65; color: #cbc6bc; margin: 10px 0 0">
@@ -1969,6 +1973,30 @@
                 automatically by the agent-status hook; when it resolves it overrides
                 <span style="font-family: &quot;JetBrains Mono&quot;, monospace">--pane</span>, so a status from a promoted-then-re-split
                 pane lands on its current slot. Scripts leave it to the hook.
+                <span style="font-family: &quot;JetBrains Mono&quot;, monospace">--cwd</span> is the reporting agent's absolute working directory, which the session's CI line follows while that pane has focus,
+                until that pane's agent exits; a relative path errors. The Claude Code hook sends it. Read back as the CI line's
+                <span style="font-family: &quot;JetBrains Mono&quot;, monospace">ci.branch</span>.
+              </p>
+            </div>
+
+            <div style="background: #22272b; border: 1px solid rgba(255, 255, 255, 0.08); border-radius: 11px; padding: 18px 20px; margin-bottom: 12px">
+              <div style="font-family: &quot;JetBrains Mono&quot;, monospace; font-size: 13.5px; color: #e08a45; line-height: 1.6; word-break: break-word">
+                elisctl session progress &lt;N/M|P%|indeterminate|clear&gt; [--target T] [--window W]
+              </div>
+              <div style="font-family: &quot;JetBrains Mono&quot;, monospace; font-size: 11.5px; color: #6b727a; margin-top: 6px">session.progress</div>
+              <p style="font-size: 15px; line-height: 1.65; color: #cbc6bc; margin: 10px 0 0">
+                Fill the session's sidebar row with progress: <span style="font-family: &quot;JetBrains Mono&quot;, monospace">N/M</span> steps (1 ≤ M ≤ 10000, 0 ≤ N ≤ M),
+                <span style="font-family: &quot;JetBrains Mono&quot;, monospace">P%</span> (0–100), <span style="font-family: &quot;JetBrains Mono&quot;, monospace">indeterminate</span> (the active wave, no fill), or <span style="font-family: &quot;JetBrains Mono&quot;, monospace">clear</span>. Anything else errors with
+                <span style="font-family: &quot;JetBrains Mono&quot;, monospace">invalid progress</span>. The value clears on <span style="font-family: &quot;JetBrains Mono&quot;, monospace">clear</span> or when the session's status changes to
+                <span style="font-family: &quot;JetBrains Mono&quot;, monospace">completed</span> or <span style="font-family: &quot;JetBrains Mono&quot;, monospace">idle</span>. OSC 9;4 from any pane sets a separate terminal value; the row shows this one while
+                it is set, and neither clears the other.
+              </p>
+              <p style="font-size: 13.5px; line-height: 1.6; color: #949ba4; margin: 8px 0 0">
+                Read back as the session node's <span style="font-family: &quot;JetBrains Mono&quot;, monospace">progress</span>:
+                <span style="font-family: &quot;JetBrains Mono&quot;, monospace">{"value":"3/7","fraction":0.4286,"source":"control"}</span>, <span style="font-family: &quot;JetBrains Mono&quot;, monospace">fraction</span> absent for indeterminate,
+                <span style="font-family: &quot;JetBrains Mono&quot;, monospace">source</span> <span style="font-family: &quot;JetBrains Mono&quot;, monospace">control</span> or <span style="font-family: &quot;JetBrains Mono&quot;, monospace">terminal</span>; omitted when the row shows none. Emits a
+                <span style="font-family: &quot;JetBrains Mono&quot;, monospace">progress</span> event. On a row attached from another Mac it runs on that Mac; on an elis-server window's row,
+                on the server.
               </p>
             </div>
 
@@ -3877,7 +3905,7 @@
               <div style="font-family: &quot;JetBrains Mono&quot;, monospace; font-size: 11.5px; color: #6b727a; margin-top: 6px">settings.keep-awake</div>
               <p style="font-size: 15px; line-height: 1.65; color: #cbc6bc; margin: 10px 0 0">
                 Turn on or off keeping the computer awake while an agent is working: with it on, the default, the computer does not
-                sleep on its own while any session in this app has the status <span style="font-family: &quot;JetBrains Mono&quot;, monospace">active</span>; on the Mac the display still sleeps and locks, on Linux the screen stays on and unlocked too.
+                sleep on its own while any session in this app has the status <span style="font-family: &quot;JetBrains Mono&quot;, monospace">active</span>; the display stays on too, and on Linux the screen stays unlocked.
                 <span style="font-family: &quot;JetBrains Mono&quot;, monospace">toggle</span> is the default; an unknown mode errors. App-wide, the same setting as Settings ▸ General: no
                 <span style="font-family: &quot;JetBrains Mono&quot;, monospace">--window</span>. <strong style="color: #bfbab0">Returns</strong> <span style="font-family: &quot;JetBrains Mono&quot;, monospace">on</span> or
                 <span style="font-family: &quot;JetBrains Mono&quot;, monospace">off</span> in <span style="font-family: &quot;JetBrains Mono&quot;, monospace">result.text</span>. Read back via the tree's
@@ -4118,7 +4146,7 @@
               </div>
               <div style="font-family: &quot;JetBrains Mono&quot;, monospace; font-size: 11.5px; color: #6b727a; margin-top: 6px">assistant.ask · assistant.send · assistant.read · assistant.provider · assistant.show · assistant.seen · assistant.clear</div>
               <p style="font-size: 15px; line-height: 1.65; color: #cbc6bc; margin: 10px 0 0">
-                Drive the app-wide Elis assistant chat pinned above the workspaces in the sidebar (available in the Linux app now; the macOS app gets it later).
+                Drive the app-wide Elis assistant chat pinned above the workspaces in the sidebar, in the macOS and Linux apps.
                 <span style="font-family: &quot;JetBrains Mono&quot;, monospace">ask</span> posts a user message to the assistant;
                 <span style="font-family: &quot;JetBrains Mono&quot;, monospace">--wait</span> polls <span style="font-family: &quot;JetBrains Mono&quot;, monospace">tree</span> until
                 <span style="font-family: &quot;JetBrains Mono&quot;, monospace">assistant.running</span> clears and prints the new entries (or <span style="font-family: &quot;JetBrains Mono&quot;, monospace">ok</span>), and

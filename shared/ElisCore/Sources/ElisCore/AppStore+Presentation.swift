@@ -20,7 +20,7 @@ extension AppStore {
                                     hud: presentationHud(of: session, now: now), context: session.context,
                                     layout: presentationLayout(of: session), ci: session.ci,
                                     mail: presentationMail(forSession: id), agentSession: session.agentSessionID,
-                                    agent: presentationAgent(of: session))
+                                    agent: presentationAgent(of: session), progress: session.controlProgress)
     }
 
     func presentationLayout(of session: Session) -> PresentationLayout? {

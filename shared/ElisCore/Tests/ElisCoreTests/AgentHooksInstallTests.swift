@@ -29,7 +29,7 @@ struct AgentHooksInstallTests {
         let evts = events(result.json)
         #expect(evts.count == 7)
         #expect(evts["UserPromptSubmit"]?.count == 1)
-        #expect(evts["PostToolUse"]?.count == 1)
+        #expect(evts["PostToolUse"]?.count == 2)
         #expect(evts["Stop"]?.count == 1)
         #expect(evts["Notification"]?.count == 1)
         #expect(evts["PermissionRequest"]?.count == 1)
@@ -51,6 +51,17 @@ struct AgentHooksInstallTests {
         #expect(evts["PermissionRequest"]?.first?["matcher"] == nil)
         #expect(evts["UserPromptSubmit"]![0]["matcher"] == nil)
         #expect(evts["PostToolUse"]![0]["matcher"] == nil)
+    }
+
+    @Test func mergeAddsThePlanProgressHook() throws {
+        let adapter = AgentHooksInstall.claudeWrapperPath(scriptDir: scriptDir)
+        let fresh = try AgentHooksInstall.mergeClaudeSettings(existing: nil, scriptDir: scriptDir)
+        let progress = events(fresh.json)["PostToolUse"]?.first { $0["matcher"] as? String == "TodoWrite|TaskCreate|TaskUpdate" }
+        #expect(command(progress ?? [:]) == "'\(adapter)' progress")
+        let existing = #"{"hooks":{"PostToolUse":[{"hooks":[{"type":"command","command":"'\#(adapter)' active --blink"}]}]}}"#
+        let merged = try AgentHooksInstall.mergeClaudeSettings(existing: existing, scriptDir: scriptDir)
+        #expect(events(merged.json)["PostToolUse"]?.count == 2)
+        #expect(try !AgentHooksInstall.mergeClaudeSettings(existing: merged.json, scriptDir: scriptDir).changed)
     }
 
     @Test func mergeAddsClaudeModToPluginDirs() throws {
@@ -107,7 +118,7 @@ struct AgentHooksInstallTests {
         let commands = evts["UserPromptSubmit"]!.compactMap { command($0) }
         #expect(commands.contains("/usr/bin/other-hook.sh"))
         #expect(commands.contains { $0.hasSuffix("claude-status.sh' active --blink") })
-        #expect(evts["PostToolUse"]?.count == 1)
+        #expect(evts["PostToolUse"]?.count == 2)
         #expect(evts["Stop"]?.count == 1)
         #expect(evts["Notification"]?.count == 1)
         #expect(evts["PermissionRequest"]?.count == 1)
@@ -163,7 +174,7 @@ struct AgentHooksInstallTests {
         let evts = events(result.json)
         let adapter = AgentHooksInstall.claudeWrapperPath(scriptDir: scriptDir)
         #expect(evts["UserPromptSubmit"]?.count == 1)
-        #expect(evts["PostToolUse"]?.count == 1)
+        #expect(evts["PostToolUse"]?.count == 2)
         #expect(evts["Stop"]?.count == 1)
         #expect(evts["Notification"]?.count == 1)
         #expect(command(evts["UserPromptSubmit"]![0]) == "'\(adapter)' active --blink")
@@ -199,7 +210,7 @@ struct AgentHooksInstallTests {
         let evts = events(first.json)
         #expect(evts.count == 7)
         for event in ["UserPromptSubmit", "PostToolUse", "Stop", "Notification", "PermissionRequest", "SubagentStart", "SubagentStop"] {
-            #expect(evts[event]?.count == 1)
+            #expect(evts[event]?.count == (event == "PostToolUse" ? 2 : 1))
         }
         #expect(command(evts["PermissionRequest"]?.first ?? [:]) == "'\(adapter)' blocked")
         #expect(evts["Notification"]?.first?["matcher"] as? String == "permission_prompt")

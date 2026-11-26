@@ -26,6 +26,8 @@ extension WorkspaceSidebar.Coordinator {
             guard store.sidebarMode == .tree else { return nil }
             pbItem.setString(node.id.uuidString, forType: workspacePasteboardType)
             dropText = Session.dropText(store.workspaces.first { $0.id == node.id }?.sessions ?? [])
+        case .assistant:
+            return nil
         }
         // a terminal types the ids
         if let dropText { pbItem.setString(dropText, forType: .string) }
@@ -41,9 +43,12 @@ extension WorkspaceSidebar.Coordinator {
             guard let move = resolveWorkspaceMove(from: info, in: outlineView) else { return [] }
             if store.remoteActions != nil, remoteWorkspaceStep(move) == nil { return [] }
             // workspace reorder lives at the top level: highlight a between-rows slot under the root.
-            outlineView.setDropItem(nil, dropChildIndex: move.dropChildIndex)
+            // + 1: the pinned Elis row is root 0
+            outlineView.setDropItem(nil, dropChildIndex: move.dropChildIndex + 1)
             return .move
         }
+        // a workspace drag resolves from the cursor, highlighting at root 1 or later, so only it may hover the row
+        if refusesAssistantDrop(item: item, childIndex: index) { return [] }
         if !draggedSessionIDs(from: info).isEmpty, showsFlatFlaggedList {
             cancelSpringLoadedExpansion()
             return resolveFlaggedReorder(from: info, item: item, childIndex: index) == nil ? [] : .move
@@ -98,6 +103,7 @@ extension WorkspaceSidebar.Coordinator {
             dropSucceeded = true
             return true
         }
+        if refusesAssistantDrop(item: item, childIndex: index) { return false }
         if !draggedSessionIDs(from: info).isEmpty, showsFlatFlaggedList {
             guard let move = resolveFlaggedReorder(from: info, item: item, childIndex: index) else { return false }
             dropSucceeded = store.moveFlagged(move.ids, to: move.placement, of: move.anchor)
@@ -209,6 +215,8 @@ extension WorkspaceSidebar.Coordinator {
         case .session:
             guard let drop = store.sessionLocation(ofSession: node.id) else { return nil }
             target = .sessionRow(workspace: drop.workspace, sessionIndex: drop.index, sessionCount: drop.count)
+        case .assistant:
+            return nil
         }
 
         let sources = sessionIDs.compactMap { id -> SidebarDrop.SessionSource? in
@@ -283,7 +291,7 @@ extension WorkspaceSidebar.Coordinator {
         let sessionIDs = draggedSessionIDs(from: info)
         guard !sessionIDs.isEmpty else { return nil }
         return SidebarDrop.resolveFlaggedReorder(order: store.orderedFlaggedSessions.map(\.id), dragged: sessionIDs,
-                                                 onRow: (item as? SidebarNode)?.id, childIndex: index)
+                                                 onRow: (item as? SidebarNode)?.id, childIndex: item == nil && index > 0 ? index - 1 : index)
     }
 
     private var showsFlatFlaggedList: Bool {
@@ -323,6 +331,8 @@ extension WorkspaceSidebar.Coordinator {
             return node.id
         case .session:
             return store.workspace(forSession: node.id)?.id
+        case .assistant:
+            return nil
         }
     }
 

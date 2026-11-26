@@ -145,10 +145,12 @@ public enum AgentHooksInstall {
     /// keystroke, and stays for the sandboxed network prompt, which `PermissionRequest` does not cover.
     /// `Notification` alone carries a matcher, and only `Stop`→`completed` passes `--auto-reset` (it clears
     /// on visit); the rest stay keep-state. `SubagentStart`/`SubagentStop` feed the adapter's busy-teammate
-    /// marks; carrying `agent_id`, their `active` posts only onto an idle row.
+    /// marks; carrying `agent_id`, their `active` posts only onto an idle row. The todo tools' `PostToolUse` posts
+    /// the plan's progress; an event's entries are told apart by matcher.
     static let claudeHooks: [(event: String, matcher: String?, state: String)] = [
         ("UserPromptSubmit", nil, "active --blink"),
         ("PostToolUse", nil, "active --blink"),
+        ("PostToolUse", "TodoWrite|TaskCreate|TaskUpdate", "progress"),
         ("Stop", nil, "completed --auto-reset"),
         ("PermissionRequest", nil, "blocked"),
         ("Notification", "permission_prompt", "blocked"),
@@ -215,7 +217,7 @@ public enum AgentHooksInstall {
         didChange = try addClaudeModDir(&root, scriptDir: scriptDir) || didChange
         for hook in claudeHooks {
             var entries = hooks[hook.event] as? [[String: Any]] ?? [] // shape already checked above
-            if entries.contains(where: { entryUsesWrapper($0, scriptDir: scriptDir) }) {
+            if entries.contains(where: { $0["matcher"] as? String == hook.matcher && entryUsesWrapper($0, scriptDir: scriptDir) }) {
                 continue
             }
             entries.append(hookEntry(command: command, state: hook.state, matcher: hook.matcher))

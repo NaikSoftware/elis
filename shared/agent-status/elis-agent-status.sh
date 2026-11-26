@@ -5,6 +5,7 @@
 #   elis-agent-status.sh completed         # agent finished a turn
 #   elis-agent-status.sh blocked           # agent is waiting on you
 #   elis-agent-status.sh idle              # clear the indicator
+#   elis-agent-status.sh progress 3/7      # fill the row: N/M, N%, indeterminate or clear
 #
 # States: idle | active | completed | blocked. An optional --blink / --auto-reset
 # (and any further args) is forwarded verbatim to `elisctl session status`.
@@ -43,12 +44,26 @@ pane_args=()
 [ -n "${ELIS_PANE:-}" ] && pane_args+=(--pane "$ELIS_PANE")
 [ -n "${ELIS_PANE_ID:-}" ] && pane_args+=(--pane-id "$ELIS_PANE_ID")
 
-if [ -n "${ELIS_SOCKET:-}" ]; then
-  "${ELISCTL:-elisctl}" session status "$state" \
-    --target "$ELIS_SESSION_ID" --socket "$ELIS_SOCKET" \
-    "${pane_args[@]+"${pane_args[@]}"}" "$@" >/dev/null 2>&1 || true
-else
-  "${ELISCTL:-elisctl}" session status "$state" \
-    --target "$ELIS_SESSION_ID" "${pane_args[@]+"${pane_args[@]}"}" "$@" >/dev/null 2>&1 || true
+socket_args=()
+[ -n "${ELIS_SOCKET:-}" ] && socket_args=(--socket "$ELIS_SOCKET")
+
+# a row's progress belongs to the session, not a pane
+if [ "$state" = progress ]; then
+  "${ELISCTL:-elisctl}" session progress "${1:-}" --target "$ELIS_SESSION_ID" \
+    "${socket_args[@]+"${socket_args[@]}"}" >/dev/null 2>&1
+  exit 0
+fi
+
+send() {
+  "${ELISCTL:-elisctl}" session status "$state" --target "$ELIS_SESSION_ID" \
+    "${socket_args[@]+"${socket_args[@]}"}" "${pane_args[@]+"${pane_args[@]}"}" "$@" >/dev/null 2>&1
+}
+
+# an elisctl older than --cwd (a PATH fallback, an $ELISCTL override) rejects the whole call; the status
+# matters more than the directory, so a failed call ending in `--cwd <dir>` is resent without it
+if ! send "$@" && [ "$#" -ge 2 ]; then
+  args=("$@")
+  n=${#args[@]}
+  [ "${args[$((n - 2))]}" = --cwd ] && send "${args[@]:0:$((n - 2))}"
 fi
 exit 0

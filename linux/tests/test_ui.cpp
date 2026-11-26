@@ -2071,6 +2071,36 @@ private Q_SLOTS:
         QCOMPARE(tree->topLevelItem(1)->data(0, SidebarRole::TintColor).toString(), QStringLiteral("red"));
     }
 
+    void aProgressRowCarriesTheFillRoles()
+    {
+        Store store;
+        MainWindow w(store, dir.filePath("progressrow.json"));
+        w.restore({});
+        const QString a = store.addSession(store.addWorkspace("w"), {}, {});
+        store.select(a);
+        store.setTint(a, "#336699");
+        w.show();
+        auto *tree = w.findChild<Sidebar *>();
+        auto row = [&] { return tree->topLevelItem(1)->child(0); };
+        QVERIFY(!row()->data(0, SidebarRole::ProgressFill).isValid());
+        store.setControlProgress(a, QJsonObject{{"percent", 50}});
+        QCOMPARE(row()->data(0, SidebarRole::ProgressFill).toDouble(), 0.5);
+        const QColor color = row()->data(0, SidebarRole::ProgressColor).value<QColor>();
+        QCOMPARE(color.name(), QStringLiteral("#336699"));
+        QCOMPARE(color.alpha(), qRound(0.16 * 255));
+        QVERIFY(!row()->data(0, SidebarRole::Wave).toBool());
+        store.setStatus(a, "blocked");
+        QVERIFY(!row()->data(0, SidebarRole::ProgressFill).isValid());
+        QVERIFY(!row()->data(0, SidebarRole::Wave).toBool());
+        store.setStatus(a, "active");
+        store.setControlProgress(a, QJsonObject{{"indeterminate", true}});
+        QVERIFY(!row()->data(0, SidebarRole::ProgressFill).isValid());
+        QVERIFY(row()->data(0, SidebarRole::Wave).toBool());
+        store.setStatus(a, "completed");
+        store.setTerminalProgress(a, "p1", {{"update", "set"}, {"progress", QJsonObject{{"indeterminate", true}}}});
+        QVERIFY(row()->data(0, SidebarRole::Wave).toBool()); // indeterminate waves without an agent status
+    }
+
     void tintMenuListsTheMacPaletteAndAHexAsCustom()
     {
         Store store;
@@ -2229,6 +2259,15 @@ private Q_SLOTS:
             }
         }
         QCOMPARE(legibleOn(QColor(0x30D158), {QColor(0x202326)}, QColor(0xFCFCFC)).rgba(), QColor(0x30D158).rgba()); // already legible: untouched
+        // mid-gray text on a dark wave: red eases toward white and keeps its hue
+        const QColor dark(0x282C34), wave = over(dark, QColor(0xDBD9E6), 0.20);
+        const QColor red = legibleOn(QColor(0xFF0000), {dark, wave}, QColor(0xABB2BF));
+        QVERIFY(red != QColor(0xABB2BF));
+        QVERIFY(red.redF() > red.greenF() && red.redF() > red.blueF());
+        for (const QColor &bg : {dark, wave}) {
+            const qreal a = luminance(over(bg, red, red.alphaF())), b = luminance(bg);
+            QVERIFY((std::max(a, b) + 0.05) / (std::min(a, b) + 0.05) >= 4.5);
+        }
     }
 
     void aClickOnTheShownSessionsCiLineOpensItsPanel()

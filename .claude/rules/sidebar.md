@@ -66,8 +66,8 @@ paths:
 - The footer provides workspace creation and New Session/Open Directory. Workspace row menus repeat the
   session actions. Hover shows `workspace-add-session` only when `InterfaceElement.workspaceAddSession`
   is enabled.
-- Hover shows `session-close` on a session row only while it has no badge, status glyph or companion marker,
-  so it never covers one; it runs the menu's Close. No Interface toggle, by the owner's call.
+- Hover shows `session-close` on a session row in place of its badge and status glyph, except on an `.active`
+  row, which keeps its glyph; it runs the menu's Close. No Interface toggle, by the owner's call.
 - A workspace-row click toggles expansion through the outline action, excluding the disclosure frame.
   Defer by `NSEvent.doubleClickInterval` and cancel on double-click so rename does not flicker through a
   toggle. This click routing is keep-in-sync exempt. `GhosttyApp.workspaceRowClickExpands` (default on)
@@ -176,16 +176,18 @@ paths:
   minimum, lifted 6 points into the plain row's bottom padding. The title row centers in a band of plain
   row height, so the name sits where a plain row puts it. `heightOfRowByItem` and the cell read the same `sessionInfo(forSession:)` gate.
   `RowContent.info` reloads the row and calls `noteHeightOfRows`, which a reload alone does not do.
-- `SidebarInfoCellView` rebuilds its colors on every `setColors`. A colored fragment keeps its `TintColor`
-  whatever `selected` says, as a row tint does, and uncolored text follows the theme color for it. Color emoji
+- `SidebarInfoCellView` rebuilds its colors on every `setColors` and whenever a row fill changes. A colored fragment
+  is eased by `legibleOn` to 4.5:1 on every backdrop `SidebarRowView.infoBackdrops` lists; uncolored text follows
+  the theme color for `selected`. Color emoji
   are drawn at 0.7 of the line's size, centered on cap height, because a full-size glyph reads oversized
   and low. A text-default symbol counts as emoji only with VS16, and VS15 always keeps text form.
 - `AppSettings.sessionInfoDisplay` (`always`|`flagged`|`off`, nil = always) decides where the line shows,
   mirrored to `GhosttyApp.sessionInfoDisplay`, labelled "CI status". `flagged` shows it in the flagged view only
   and polls only flagged sessions; `off` polls none. The picker shares the Settings ▸ Interface Sidebar section's last row.
-- A click on the line opens `CIStatusPanel` in an `NSPopover` and does nothing else: its
-  `NSClickGestureRecognizer` delays the mouse-down, so the row neither selects nor drags, while a moved press
-  fails the recognizer and drags as before. The panel reads the session live and closes when the line goes.
+- A plain click on the shown session's line, which hugs its text, pops up `CIStatusLine.showMenu`'s `NSMenu`; its delaying
+  `NSClickGestureRecognizer` claims only that click, decided at mouse-down. Any other click on the line, or one
+  with Control, Shift or Command, reaches the row whole: it selects, drags, extends the selection or opens the
+  row menu. The menu is a snapshot and closes when the line goes.
 
 ## Workspace focus
 
@@ -247,6 +249,12 @@ paths:
   4.8 s per period, the period two row widths.
   The active status glyph fades under key `agent-status-fade` (1.4 s), distinct from blink.
   Reduce Motion leaves both static.
+- A row's progress fill is a flat `0.16` alpha rect, hard edged, its width the progress fraction, clipped like the wave.
+  Its color is the session tint, else the workspace tint, else the `active` status color.
+  Layers, bottom to top: band, row wash, progress fill, wave, hover/selection, cell.
+  The Mac draws selection and hover under the row's sublayers, so there the fill and wave sit above the selection pill.
+  A blocked row shows neither fill nor wave; indeterminate shows the wave alone, with or without a status.
+  [[control-api]] owns its sources and clearing.
 - `focus-filter-toggle` replaces the deleted single-workspace pill. It uses a filled grid when active,
   manual 0.35 opacity and disabled state when the set is empty, and accessibility value `on`/`off`.
   It remains usable while filtering is off and is gated by `InterfaceElement.focusFilter`.

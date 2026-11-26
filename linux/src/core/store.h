@@ -11,6 +11,8 @@
 
 #include <optional>
 
+class QTimer;
+
 // A sidebar row colour, a Store::tintPalette name or a lowercase #rrggbb: its icon, its name, and a workspace's band or a
 // session's wash; empty = none.
 struct Tint {
@@ -69,6 +71,9 @@ struct Session {
     // each pane's identity (a UUID): its ELIS_PANE_ID and the name of its live zmx daemon; persisted, and a pane that
     // starts over (a split opened again, a parent's respawn) gets a new one
     QString paneId, splitPaneId;
+    // the row's progress fill, runtime only: session.progress's, else OSC 9;4's with the elisPaneId of the pane that sent it
+    QJsonObject controlProgress, terminalProgress;
+    QString terminalProgressPane;
 
     QString displayName() const;
 };
@@ -138,6 +143,7 @@ public:
     // normalized colour ("" = none) and returns "", or returns the refusal.
     static QString parseTint(const QString &cmd, const QJsonObject &args, QString *tint);
     static QJsonObject bridge(char *(*call)(const char *), const QJsonObject &request); // an ElisBridge JSON call
+    static QJsonObject bridgeText(char *(*call)(const char *), const QString &text); // one taking raw text; empty for a null reply
 
     QList<Workspace> workspaces;
     QString selected;
@@ -167,6 +173,7 @@ public:
     };
     QList<PendingClose> pending; // newest last
     int graceMs = 3000;
+    int progressExpiryMs = 15000; // a terminal progress with no update since; a killed program never sends its clear
     Settings settings;
     QString restoreModeAtLaunch = QStringLiteral("none"); // frozen by the first fromJson
     // the line to type into a pane's new shell: the pin, else the capture if restorable; consumed once
@@ -236,6 +243,12 @@ public:
     void setAgentSessionId(const QString &id, const QString &claudeId);
     void setBusy(const QString &id, bool busy);
     void setCi(const QString &id, const QJsonObject &ci, const QList<InfoSpan> &spans);
+    void setControlProgress(const QString &id, const std::optional<QJsonObject> &progress); // nullopt clears
+    // update is elis_progress_terminal's {"update":"set","progress"} or {"update":"clear"}; a clear from another pane is ignored
+    void setTerminalProgress(const QString &id, const QString &pane, const QJsonObject &update);
+    void clearTerminalProgress(const QString &id, const QString &pane) { setTerminalProgress(id, pane, {{"update", "clear"}}); }
+    // what the row fills, control before terminal: {"value","fraction"?,"source"}, empty for none
+    static QJsonObject progressNode(const Session &s);
     void setSettings(const Settings &s);
     void keyPressed(const QString &id, Key key);
     // ⌘D / ⌘⇧D: create, transpose (other axis), or hide (same axis)
@@ -257,6 +270,7 @@ Q_SIGNALS:
     void sessionRemoved(const QString &id);
     void selectionChanged(const QString &id);
     void statusChanged(const QString &id, const QString &status);
+    void progressChanged(const QString &id); // what the row shows changed
     void titleChanged(const QString &id);
     void paneLayoutChanged(const QString &id);
     void swapRequested(const QString &id);
@@ -274,6 +288,8 @@ private:
     void commitFocus(QStringList ids, bool enabled);
     void reselect(const Workspace *w, int i); // after the selected session left w at row i; w null when w went too
     bool park(const PendingClose &close);
+    template<typename F> void changeProgress(Session *s, F change);
+    QHash<QString, QTimer *> m_progressExpiry;
     int m_pendingSerial = 0;
     bool m_loaded = false;
 };

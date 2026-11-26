@@ -234,6 +234,22 @@ final class ControlServerRemoteActionsTests: XCTestCase {
         XCTAssertNil(row.tint)
     }
 
+    func testAProgressOfACatalogRowGoesToTheServerAndAnInvalidOneIsRefusedHere() async throws {
+        let entry = catalogSession()
+        try open([entry])
+        let id = entry.id.uuidString
+
+        let refused = try await send(.sessionProgress, target: id, args: ControlArgs(progress: "8/7"))
+        let set = try await send(.sessionProgress, target: id, args: ControlArgs(progress: "3/7"))
+
+        XCTAssertEqual(refused.error, "invalid progress")
+        XCTAssertTrue(set.ok, set.error ?? "")
+        XCTAssertEqual(runner.operations.count, 1)
+        XCTAssertTrue(runner.operations[0].contains("session progress --target \(id)"))
+        XCTAssertTrue(runner.operations[0].hasSuffix("-- 3/7"))
+        XCTAssertNil(try XCTUnwrap(remoteStore.session(withID: entry.id)).controlProgress, "the row shows the server's frame")
+    }
+
     func testFlagAndTintOfACatalogRowStayHereWithAServerThatDoesNotKeepThem() async throws {
         let entry = catalogSession()
         try open([entry])

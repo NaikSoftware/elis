@@ -53,12 +53,14 @@ Parts in this order, each only when it has something to show, truncated at the t
    - all in one group: `✓ 3 passed`, `◷ 3 running`, `✗ 2 failed`;
    - mixed: `✗ 2  ◷ 1  ✓ 5`, and a single failure names itself: `✗ build  ◷ 1  ✓ 2`.
 
+Colored spans ease toward white on a dark row, black on a light one, just far enough to keep 4.5:1 against the fills under them.
+
 Examples: `#56 👍1 · ✗ build  ◷ 1  ✓ 2`, `◷ build`, `#61 👎1 · ✓ build`, `#62 👍2` (no runs).
 
 ## The panel
 
-A click on the line opens a popover anchored to it (NSPopover on the Mac, a `Qt::Popup` widget on Linux).
-The click does only that; selecting the session stays the click on the name band.
+A click on the shown session's line opens a popover anchored to it (NSPopover on the Mac, a `Qt::Popup` widget
+on Linux); a click on any other session's line selects it like a row click.
 Cost on the Mac: the line becomes its own hit target inside an `NSOutlineView` row, so the cell must pass drags,
 the context menu and rename through untouched. The owner asked for the click, so this cost is accepted.
 

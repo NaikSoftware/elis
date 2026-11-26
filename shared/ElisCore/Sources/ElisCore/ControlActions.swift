@@ -78,6 +78,8 @@ public protocol ControlActions {
     /// Sets or clears a workspace row's own tint.
     func setWorkspaceTint(_ target: String?, window: String?, update: ControlTintUpdate) -> ControlResponse
     func markSessionSeen(_ target: String?, window: String?) -> ControlResponse
+    /// Sets a session's control progress; nil clears it. The dispatcher has parsed the value.
+    func setSessionProgress(_ target: String?, window: String?, progress: SessionProgress?) async -> ControlResponse
     func setSessionStatus(_ target: String?, window: String?, update: ControlSessionStatusUpdate) async -> ControlResponse
     /// Write a pane's PERSISTED restore-command override (consumed on the NEXT launch, never this run).
     /// The host resolves the target session and the live pane slot, then stores the tri-state value; it

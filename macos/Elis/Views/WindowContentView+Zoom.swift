@@ -94,6 +94,7 @@ extension WindowContentView {
             // FRONTMOST window, so a background window's zoom exit must not grab first responder there
             // — e.g. out of an open ⌘F search field the user is typing into.
             if library.activeWindowID == windowID { actions.focusActiveSession() }
+            if store.assistantShown { actions.assistant.refresh() } // a reply that arrived under the zoom is seen now
         }
     }
 

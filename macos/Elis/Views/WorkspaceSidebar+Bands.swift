@@ -39,6 +39,7 @@ extension WorkspaceSidebar.Coordinator {
     /// groupEdge is a row's place in its workspace group, tinted or not: nil where no workspace rows render. One
     /// rule feeds the row height, the cell frame and the drawing, so they cannot disagree.
     func groupEdge(for node: SidebarNode) -> SidebarBandEdge? {
+        if node.kind == .assistant { return .single }
         guard rendersWorkspaceRows, let outline = outlineView else { return nil }
         // from the model, not `parent(forItem:)`: the outline asks heights while its own row map is being built
         let workspaceID = node.kind == .workspace ? node.id : store.workspace(forSession: node.id)?.id
@@ -76,6 +77,7 @@ extension WorkspaceSidebar.Coordinator {
             rowView.groupEdge = nil
             rowView.rowWash = nil
             rowView.selectionTint = nil
+            rowView.setProgressFill(nil)
             return rowView.setWave(nil)
         }
         let head = outline.item(atRow: group.lowerBound) as? SidebarNode
@@ -92,20 +94,28 @@ extension WorkspaceSidebar.Coordinator {
         rowView.rowWash = session?.tint.map { NSColor.tint($0.color).withAlphaComponent(0.09) }
         rowView.selectionTint = (workspaceTint ?? session?.tint).map { NSColor.tint($0.color) }
         let indicator = effectiveIndicator(forSession: node.id)
-        guard let session, indicator.status == .active else { return rowView.setWave(nil) }
+        let progress = session?.shownProgress?.progress
+        guard let session, indicator.status == .active || progress != nil else {
+            rowView.setProgressFill(nil)
+            return rowView.setWave(nil)
+        }
         // dynamic system colors resolve for the sidebar's theme-pinned appearance, not the app's
         var wave: SidebarWave?
+        var fill: SidebarProgressFill?
         outline.effectiveAppearance.performAsCurrentDrawingAppearance {
             let app = GhosttyApp.shared
             let accent = app.terminalSelectionBackgroundColor ?? app.terminalForegroundColor ?? .white
             guard let activeHex = app.statusColor(for: .active, override: indicator.color).elisHexString,
                   let accentHex = accent.elisHexString else { return }
-            wave = SidebarBand.wave(
-                status: indicator.status,
-                sessionTintHex: session.tint.flatMap { NSColor.tint($0.color).elisHexString },
-                workspaceTintHex: workspaceTint.flatMap { NSColor.tint($0.color).elisHexString },
-                activeHex: activeHex, accentHex: accentHex)
+            let sessionTintHex = session.tint.flatMap { NSColor.tint($0.color).elisHexString }
+            let workspaceTintHex = workspaceTint.flatMap { NSColor.tint($0.color).elisHexString }
+            wave = SidebarBand.wave(status: indicator.status, indeterminate: progress == .indeterminate,
+                                    sessionTintHex: sessionTintHex, workspaceTintHex: workspaceTintHex,
+                                    activeHex: activeHex, accentHex: accentHex)
+            fill = SidebarBand.progressFill(progress: progress, status: indicator.status, sessionTintHex: sessionTintHex,
+                                            workspaceTintHex: workspaceTintHex, activeHex: activeHex)
         }
+        rowView.setProgressFill(fill)
         rowView.setWave(wave)
     }
 }

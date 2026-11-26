@@ -41,6 +41,8 @@ The event kinds and payloads are:
   overrides). An event fires whenever the whole indicator changes, not just the state name — so a
   change to `blink`, `pane`, `color` or `shape` alone is a real event you can watch, while re-asserting
   an identical indicator emits nothing. Clearing emits `idle`.
+- `progress`: `name`, `progress` (the value the row shows: `3/7`, `40%` or `indeterminate`; absent once
+  cleared) and `source` (`control` or `terminal`; absent once cleared).
 - `notify`: `name`, effective `title`, and `body`. It is emitted after target and foreground-focus
   suppression checks, including when desktop banners are disabled.
 - `session.created` / `session.closed`: session `name`, emitted when the session enters or leaves a
@@ -264,7 +266,9 @@ change of state, so a hook re-pushing `active` refreshes it and
 `now - statusChangedAt` reads as how long ago the status was last WRITTEN, including idle.
 Automatic and manual clears and pane promotion also count.
 Ephemeral like `unseen`: never persisted, so it is absent after a restart even for a restored session),
-`lastSelectedAt` (when the session last became or stopped being its window's selected session, in epoch
+`progress` (the row's progress fill: `value` — `3/7`, `40%` or `indeterminate` —, `fraction` 0..1, absent
+for indeterminate, and `source` — `control` from `session progress`, else `terminal` from a pane's OSC 9;4;
+omitted when the row shows none), `lastSelectedAt` (when the session last became or stopped being its window's selected session, in epoch
 seconds on the same clock; persisted, omitted when no selection has been recorded, which includes a
 session restored from a build that did not record it, so absence is not proof of never being used.
 Read it with `active`: an active session is selected right now),
@@ -901,7 +905,7 @@ error keeps those names for compatibility.
   `0.05..0.95` and persisted, and the applied (clamped) fraction is printed (and returned as `result.ratio`
   under `--json`). Errors when the session has no split. Resizing a hidden split updates the stored
   fraction; it takes effect when the split is next shown.
-- `session status <idle|active|completed|blocked> [--blink] [--auto-reset] [--if-idle] [--sound NAME] [--color #rrggbb] [--shape circle|square|triangle|triangle-down|play|diamond|capsule|seal|star|bolt|bell|checkmark] [--pane left|right|scratch] [--pane-id TOKEN] [--target] [--window W]` —
+- `session status <idle|active|completed|blocked> [--blink] [--auto-reset] [--if-idle] [--sound NAME] [--color #rrggbb] [--shape circle|square|triangle|triangle-down|play|diamond|capsule|seal|star|bolt|bell|checkmark] [--pane left|right|scratch] [--pane-id TOKEN] [--cwd DIR] [--target] [--window W]` —
   set the sidebar agent-status glyph. Every APPLIED write stamps the session node's
   `statusChangedAt`, including idle and one that re-pushes the same status, so a poller can read the last
   set time without keeping state of its own; a call another pane's status keeps off the row
@@ -960,6 +964,9 @@ error keeps those names for compatibility.
   a status from a pane whose baked role went stale (a split survivor promoted into the main pane, then a
   re-split) lands on the pane's CURRENT slot instead of the stale role; an absent/unknown token falls back
   to `--pane`. Scripts normally set `--pane` directly and leave `--pane-id` to the hook.
+  `--cwd` is the reporting agent's absolute working directory: the session's CI line follows it, not the shell's, while that pane has focus,
+  until the pane's agent exits (a relative path errors). The bundled Claude Code hook sends it, so a session
+  that moved into a worktree shows the worktree's branch; read it back as the node's `ci.branch`.
   An unknown state errors. Agents/hooks set non-idle states; `idle` clears it (also available in the GUI).
   The GUI's Mark for Attention sets `completed` on an idle session; a script's equivalent reads `tree` and
   sends `completed` only where the session is idle.
@@ -998,7 +1005,7 @@ error keeps those names for compatibility.
   bar it takes line two in normal mode (replacing the cwd/terminal-title detail) and follows the session and
   window names on line one in compact mode, where a long value tail-truncates before the names do. Settings
   ▸ Interface ▸ Title Bar ▸ "Session context" hides it without clearing it.
-- CI status is not a command: a session whose focused cwd is a GitHub checkout gets a second sidebar line with
+- CI status is not a command: a session whose focused cwd (its agent's `session status --cwd` first) is a GitHub checkout gets a second sidebar line with
   its branch's CI, refreshed every 30 s while a run is going and every 3 min after, read back as the node's `ci`.
   No `gh`, no login, no GitHub remote, a detached HEAD or a network error means no line and no `ci`.
   Settings ▸ Interface ▸ CI status shows it Always, in the flagged view only, or Off, which stops asking GitHub.
@@ -2020,7 +2027,7 @@ needed, and every window's sidebar follows at once. Returns the resulting densit
 as the tree's top-level `sidebarDensity`.
 
 `elisctl settings keep-awake [on|off|toggle]` — keep the computer from sleeping on its own while any local session's
-status is `active` (on by default; the display still sleeps). `toggle` is the default; an unknown mode is an error.
+status is `active` (on by default; the display stays on too). `toggle` is the default; an unknown mode is an error.
 APP-WIDE, the Settings ▸ General toggle: no `--window`. Returns `on` or `off` in `result.text`; read back as the
 tree's top-level `keepAwake`. Not on elis-server.
 
@@ -2147,8 +2154,8 @@ a server pane cannot message each other yet: a Mac send to a server row is rejec
 
 ## assistant
 
-App-wide system chat pinned above the workspaces in the sidebar (dog icon, row named **Elis**, unread count of replies).
-Available in the Linux app now; the macOS app gets it later. Everything in the chat runs through the chosen provider
+App-wide system chat pinned above the workspaces in the sidebar (dog icon, row named **Elis**, unread count of replies),
+in the macOS and Linux apps. Everything in the chat runs through the chosen provider
 (`claude`, `codex`, `antigravity`, `opencode`, whichever are installed) and keeps one conversation across messages; other sessions'
 replies reach Elis in order, each after its current turn. **Note:** providers run in their full-auto permission mode so no confirmation
 prompt stalls the stream.

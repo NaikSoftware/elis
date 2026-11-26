@@ -28,6 +28,7 @@ public enum Command: String, Codable, Sendable, CaseIterable {
     case workspaceFolder = "workspace.folder"
     case sessionType = "session.type"
     case sessionStatus = "session.status"
+    case sessionProgress = "session.progress"
     case sessionFlag = "session.flag"
     case sessionContext = "session.context"
     case sessionTint = "session.tint"
@@ -479,6 +480,8 @@ public struct ControlArgs: Codable, Sendable, Equatable {
     /// `ifIdle` applies the `session.status` write only while the session's status is idle; otherwise it is an
     /// ok no-op.
     public var ifIdle: Bool?
+    /// Raw `session.progress` value (`3/7`, `40%`, `indeterminate`, `clear`); the dispatcher parses it.
+    public var progress: String?
     /// One-shot sound for `session.status` (caller-driven, not stored on the indicator): `default`/`beep`
     /// = the system alert, anything else a named `NSSound(named:)` sound (e.g. `Glass`, also resolving
     /// custom `~/Library/Sounds`). nil/empty = none; the Settings "Blocked sound" may still play on `blocked`.
@@ -585,7 +588,7 @@ public struct ControlArgs: Codable, Sendable, Equatable {
                 title: String? = nil, body: String? = nil,
                 width: Int? = nil, height: Int? = nil, sidebarWidth: Double? = nil,
                 filePanelWidth: Double? = nil, x: Int? = nil, y: Int? = nil, display: Int? = nil,
-                status: String? = nil, blink: Bool? = nil, autoReset: Bool? = nil, ifIdle: Bool? = nil, sound: String? = nil,
+                status: String? = nil, blink: Bool? = nil, autoReset: Bool? = nil, ifIdle: Bool? = nil, progress: String? = nil, sound: String? = nil,
                 ratio: Double? = nil, ratioDelta: Double? = nil,
                 path: String? = nil, color: String? = nil, textColor: String? = nil, shape: String? = nil,
                 opacity: Double? = nil, fit: String? = nil,
@@ -665,6 +668,7 @@ public struct ControlArgs: Codable, Sendable, Equatable {
         self.blink = blink
         self.autoReset = autoReset
         self.ifIdle = ifIdle
+        self.progress = progress
         self.sound = sound
         self.ratio = ratio
         self.ratioDelta = ratioDelta

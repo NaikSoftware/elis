@@ -27,7 +27,7 @@ QColor tintColor(const QString &name);
 QColor legibleOn(const QColor &color, const QList<QColor> &under, const QColor &text);
 
 namespace SidebarRole {
-enum { Id = Qt::UserRole, Kind, Status, Blink, Agent, Flagged, Expanded, Unseen, Busy, Companion, HasCompanions, FoldedAttention, TintColor, Focused, WorkspaceLabel, Split, Info };
+enum { Id = Qt::UserRole, Kind, Status, Blink, Agent, Flagged, Expanded, Unseen, Busy, Companion, HasCompanions, FoldedAttention, TintColor, Focused, WorkspaceLabel, Split, Info, Wave, ProgressFill, ProgressColor };
 enum { WorkspaceRow = 1, SessionRow, AssistantRow }; // AssistantRow: the Elis row, pinned first
 }
 

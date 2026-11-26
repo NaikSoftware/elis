@@ -22,12 +22,29 @@ struct ServerActionsEffectsTests {
             ifIdle: ifIdle))
     }
 
+    @Test func aStatusCwdLeadsTheCILine() async throws {
+        let session = try newSession()
+
+        #expect(await harness.actions.setSessionStatus(session.id.uuidString, window: nil, update: ControlSessionStatusUpdate(
+            status: .active, blink: nil, autoReset: nil, sound: nil, cwd: "/repo/.claude/worktrees/a")).ok)
+
+        #expect(session.workingCwd == "/repo/.claude/worktrees/a")
+    }
+
     @Test func aStatusIsSetOnTheSession() async throws {
         let session = try newSession()
 
         #expect(await status(session, .blocked, sound: "Glass").ok)
 
         #expect(session.agentIndicator.status == .blocked)
+    }
+
+    @Test func aProgressIsSetOnTheSession() async throws {
+        let session = try newSession()
+
+        #expect(await harness.actions.setSessionProgress(session.id.uuidString, window: nil, progress: .percent(40)).ok)
+
+        #expect(session.controlProgress == .percent(40))
     }
 
     @Test func anotherPanesWriteUnderABlockIsAcceptedAndKeepsTheBlockShown() async throws {

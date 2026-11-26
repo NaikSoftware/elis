@@ -52,11 +52,20 @@ paths:
   an event carrying `agent_id` adds `--if-idle` to `active`, and a Stop whose `background_tasks` lists a
   running subagent, workflow or shell, or whose `session_crons` is non-empty, posts `active --blink` in place of `completed`, dropping the caller's flags
   so `--auto-reset` cannot idle the row. Anything else, an unreadable payload included, posts argv.
+  An event without `agent_id` whose `cwd` is absolute appends `--cwd`, which follows `EnterWorktree`.
+  The wrapper resends a failed call ending in `--cwd <dir>` without it: a PATH or `$ELISCTL` elisctl older
+  than the option rejects the whole call, and the status outranks the directory.
   A `teammate` task stays `running` while idle, so it counts only while busy: `SubagentStart` touches
   `$TMPDIR/elis-claude-busy/<session_id>/<agent_id>` and `SubagentStop`, which fires each time a teammate goes
-  idle, removes it; a Stop listing no teammate drops the session's directory. Teammate task ids are not agent ids,
+  idle, removes it; a Stop listing no teammate drops the session's directory.
+  A `SubagentStop` with no mark posts no `active`: Claude Code's forks (the away recap) send it without
+  `SubagentStart` after the lead's Stop, and on a row already reset to idle it would stay active. Teammate task ids are not agent ids,
   so a mark is not matched to its task: one any agent leaves without `SubagentStop` (killed, interrupted)
   holds the row while any teammate is alive.
+- Claude's `PostToolUse` matcher `TodoWrite|TaskCreate|TaskUpdate` posts `progress`. `TodoWrite` carries the
+  whole list; the task tools carry one task, so the script counts `${CLAUDE_CONFIG_DIR:-~/.claude}/tasks/<session>/`,
+  or for an agent-team lead (`leadSessionId` in `teams/*/config.json`) `tasks/<team>/`.
+  All done or none sends `clear`; an event carrying `agent_id` posts nothing, so a subagent never writes the lead's row.
 - Codex maps SessionStart idle; prompt/pre/post tool active; Stop ending `?` blocked, otherwise completed.
   Those first four report nothing for a null `transcript_path`: Codex's ephemeral memory consolidation
   thread fires them but never a user Stop, so they would leave the pane active.
@@ -1804,6 +1813,16 @@ the spec `docs/superpowers/specs/2026-11-20-phone-chat-mode-design.md` owns the 
   emits `tree.changed` when the shown value changed; re-setting the same value does neither. The tree's
   `context` is the shown value: an attached row also shows its origin's context, and the Remote sessions
   section owns that rule.
+- `session.progress` takes `N/M`, `P%`, `indeterminate` or `clear`; `SessionProgress.parse` refuses the rest
+  as `invalid progress`. Read `progress` on the session node, emit `progress`.
+  A session holds two values: `control` from this command and `terminal` from OSC 9;4 (ConEmu states, any pane).
+  The row shows `control` when set, else `terminal`, and each source clears only itself.
+  `control` clears on a status change into `completed` or `idle`, so it never outlives the agent turn.
+  `terminal` clears on state 0 from the pane that set it, on that pane's close, and 15 s after its last update,
+  since a killed program sends no state 0. An undone close drops it.
+  `Command.sessionProgress`, `ControlEventKind.progress`, `PresentationFrame.Body.progress`,
+  `AttachedForward.progress` and `RemoteOperation.setProgress` are new public cases the agterm-linux fork's
+  exhaustive switches must add.
 - The sidebar's second line is the session's GitHub CI (`CIStatus`), internal with no setter: the owner removed
   `session.info` on 2026-11-21. `CITracker` (ElisCore) owns the schedule: one fetch per repository and branch read
   from `.git` (no git process), `gh run list` and `gh pr view` through `CIProbe.gh`, blocking up to its 15 s timeout.
@@ -1811,6 +1830,12 @@ the spec `docs/superpowers/specs/2026-11-20-phone-chat-mode-design.md` owns the 
   Qt app through `elis_ci_statuses` on its thread pool. Any failure applies nil,
   so a stale line never outlives the fact. Remote rows are skipped; their origin polls. Read back `ci` from
   `effectiveCI`, omitted when nil; it is runtime-only and a change emits `tree.changed`.
+- `CIPoller` reads `Session.ciCwd`: the focused pane's `paneAgentCwd`, else `focusedCwd` on the same pane.
+  `session.status --cwd` writes it in `applyControlStatus` ahead of the block early return, so the Mac and
+  elis-server adapters both record it; an `ifIdle` skip and `.scratch` drop it. It lives while that pane's
+  agent sample shows an agent (`applyAgentSamples` clears it), never cleared by a status change, and follows
+  pane swap, promotion and close. Deliberate read-back exemption: no `agentCwd` field, since a remote
+  presentation frame would not carry it; `ci.branch` is the read-back.
 
 ## Message bus
 
@@ -1851,6 +1876,10 @@ the spec `docs/superpowers/specs/2026-11-20-phone-chat-mode-design.md` owns the 
   A catalog-owned row keeps the catalog as its only source, so the two streams' orderings never meet in one cache.
   The origin publishes from `PresentationMailRelay`, one main-queue turn after any count-changing bus mutation,
   so no disposal site needs its own hook; the hub sends each viewer only a map that differs from its last.
+- The Mac host's assistant members live in `ControlServer+Assistant`, the `AssistantModel` on `AppActions.assistant`,
+  and `assistant.*` events go out through `WindowLibrary.emitAppEvent`.
+- The assistant is local only (owner, 2026-11-25): elis-server refuses every `assistant.*`, a remote row gets no `handle`
+  and is no target, and there is no remote reply route.
 
 ## Keymap, config, theme, and sidebar
 
@@ -2501,6 +2530,9 @@ the spec `docs/superpowers/specs/2026-11-20-phone-chat-mode-design.md` owns the 
   effective value: setting the text the mirror already shows emits nothing. Attach does not seed the
   context from `zmx.tree`, which would make the origin's label a local override that wins forever, so an
   origin predating the `context` frame mirrors none.
+- `control` progress travels origin to viewer as the `progress` presentation kind and snapshot field.
+  `session.progress` on an attached row runs on the origin, and on a server window's row on its server.
+  `terminal` progress needs no transport: the OSC bytes reach the viewer's own surface, and elis-server parses none.
 - The CI line follows the local, mirrored and effective split (`Session.ci`, `mirroredCI`, `effectiveCI`): the
   origin sends its local status in the `ci` frame and the snapshot, and the viewer never polls a remote row.
   Stream end clears only the mirror.

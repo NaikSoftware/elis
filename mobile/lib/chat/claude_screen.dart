@@ -143,10 +143,22 @@ class ClaudeScreen {
 
     if (s.busy) {
       // `⏺ server - tool (MCP)(` may wrap; a running call blinks its ⏺ off, leaving the indent after a blank row
+      // a collapsed call group's header is free text; its `⎿` row is what tells it from reply text
+      bool result(int r) {
+        var e = r + 1;
+        while (e < above && g.text(e).startsWith('  ') && !norm(g.text(e)).startsWith('⎿')) {
+          e++;
+        }
+        return e < above && norm(g.text(e)).startsWith('⎿');
+      }
+
       bool call(int r) {
         final t = g.text(r);
-        if (t.startsWith('⏺ ')) return _toolCall.hasMatch(_block(g, r, above).substring(2));
-        return t.startsWith('  ') && r > 0 && g.text(r - 1).trim().isEmpty && _blinkedCall.hasMatch(_block(g, r, above));
+        if (t.startsWith('⏺ ')) return _toolCall.hasMatch(_block(g, r, above).substring(2)) || result(r);
+        return t.startsWith('  ') &&
+            r > 0 &&
+            g.text(r - 1).trim().isEmpty &&
+            (_blinkedCall.hasMatch(_block(g, r, above)) || result(r));
       }
 
       final start = [for (var r = prompt + 1; r < above; r++) r].where((r) => g.text(r).startsWith('⏺ ') && !call(r)).lastOrNull;

@@ -26,6 +26,7 @@ public struct ControlDispatcher {
             return dispatchEventsRead(request)
         case .sessionNew, .sessionDuplicate, .sessionSelect, .sessionGo, .sessionClose, .sessionTerminate, .sessionRename,
                 .sessionReveal, .sessionMove, .sessionFlag, .sessionContext, .sessionSeen, .sessionStatus,
+                .sessionProgress,
                 .sessionRestore:
             return await dispatchSessionCommand(request)
         case .sessionTint, .workspaceTint:
@@ -238,6 +239,13 @@ public struct ControlDispatcher {
             return dispatchSessionContext(request)
         case .sessionSeen:
             return actions.markSessionSeen(request.target, window: request.args?.window)
+        case .sessionProgress:
+            do {
+                let progress = try SessionProgress.parse(request.args?.progress ?? "")
+                return await actions.setSessionProgress(request.target, window: request.args?.window, progress: progress)
+            } catch {
+                return ControlResponse(ok: false, error: error.description)
+            }
         case .sessionStatus:
             guard let status = AgentStatus(rawValue: request.args?.status ?? "") else {
                 return ControlResponse(ok: false, error: "invalid status")
@@ -257,12 +265,16 @@ public struct ControlDispatcher {
             case .pane(let parsed): pane = parsed
             case .rejected(let rejection): return rejection
             }
+            if let cwd = request.args?.cwd, !cwd.hasPrefix("/") {
+                return ControlResponse(ok: false, error: "cwd must be an absolute path")
+            }
             let update = ControlSessionStatusUpdate(status: status, blink: request.args?.blink,
                                                     autoReset: request.args?.autoReset,
                                                     sound: request.args?.sound, color: request.args?.color,
                                                     shape: shape,
                                                     pane: pane, paneID: request.args?.paneID,
-                                                    ifIdle: request.args?.ifIdle ?? false)
+                                                    ifIdle: request.args?.ifIdle ?? false,
+                                                    cwd: request.args?.cwd)
             return await actions.setSessionStatus(request.target, window: request.args?.window, update: update)
         case .sessionRestore:
             return dispatchSessionRestore(request)

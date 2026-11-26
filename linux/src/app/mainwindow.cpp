@@ -1215,6 +1215,8 @@ void MainWindow::paneExited(const QString &id, KParts::ReadOnlyPart *part)
         return;
     }
     Zmx::forget(part->property("elisZmx").toString());
+    // cleared after the pointers drop the part: the store's synchronous changed() rebuilds from them
+    const QString paneId = part->property("elisPaneId").toString();
     if (part == p.right) {
         p.right = nullptr;
         m_store.session(id)->splitPaneId.clear();
@@ -1243,6 +1245,7 @@ void MainWindow::paneExited(const QString &id, KParts::ReadOnlyPart *part)
             m_store.removeSession(id);
         }
     }
+    m_store.clearTerminalProgress(id, paneId);
     dashboardForget(id);
 }
 

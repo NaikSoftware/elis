@@ -7,7 +7,12 @@ paths:
 
 - **Releases are local; there is no `release.yml`.** Run `scripts/release.sh <version> --publish` on the
   owner's Mac. The script builds Release, creates the tag and GitHub release, and uploads the DMG.
-  There is no Homebrew cask; the DMG on the release is the only macOS install path.
+  It creates the release as a draft and publishes it after the upload, because publishing runs
+  `homebrew-tap.yml`, which writes the DMG's `version` and `sha256` into `NaikSoftware/homebrew-tap`'s
+  `Casks/elis.rb` through the `HOMEBREW_TAP_DEPLOY_KEY` secret, a write deploy key on the tap only.
+  Prereleases skip it; `gh workflow run homebrew-tap.yml -f tag=vX.Y.Z` retries one.
+  The cask strips quarantine in `preflight_steps` on the staged copy, as the upstream agterm cask does.
+  Homebrew 7 refuses an untrusted tap, so the install docs include `brew trust`.
 - With a `Developer ID Application` identity in the keychain and an `elis-notary` notary profile, the
   script signs, notarizes and staples the app and DMG. The DMG container must be codesigned before
   notarization or `spctl` rejects `hdiutil`'s unsigned image.

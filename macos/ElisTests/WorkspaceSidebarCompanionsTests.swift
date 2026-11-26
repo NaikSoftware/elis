@@ -187,7 +187,7 @@ final class WorkspaceSidebarCompanionsTests: XCTestCase {
 
             XCTAssertTrue(try node(group.parent.id).children.isEmpty, "\(layout)")
             XCTAssertFalse(outline.isExpandable(try node(group.parent.id)), "\(layout)")
-            XCTAssertEqual(outline.numberOfRows, 1, "\(layout)")
+            XCTAssertEqual(outline.numberOfRows, 2, "\(layout): the Elis row and the parent")
             group.store.setSidebarMode(.tree)
             coordinator.reconcile()
         }
@@ -362,7 +362,7 @@ final class WorkspaceSidebarCompanionsTests: XCTestCase {
         defer { pasteboard.releaseGlobally() }
         pasteboard.clearContents()
         pasteboard.setString(ids.map(\.uuidString).joined(separator: "\n"), forType: sessionPasteboardType)
-        let info = FakeDrag(pasteboard, over: outline)
+        let info = SidebarFakeDrag(pasteboard, over: outline)
         let operation = coordinator.outlineView(outline, validateDrop: info, proposedItem: try node(target),
                                                 proposedChildIndex: childIndex)
         guard operation == .move else { return false }
@@ -489,7 +489,7 @@ private struct CompanionRows {
     let after: Session
 }
 
-private final class RecordingOutlineView: NSOutlineView {
+final class RecordingOutlineView: NSOutlineView {
     private(set) var dropItem: Any?
     private(set) var dropChildIndex = SidebarDrop.onItemIndex
 
@@ -501,15 +501,15 @@ private final class RecordingOutlineView: NSOutlineView {
 }
 
 @MainActor
-private final class FakeDrag: NSObject, @preconcurrency NSDraggingInfo {
+final class SidebarFakeDrag: NSObject, @preconcurrency NSDraggingInfo {
     let draggingPasteboard: NSPasteboard
     let draggingDestinationWindow: NSWindow?
     let draggingLocation: NSPoint
 
-    init(_ pasteboard: NSPasteboard, over view: NSView) {
+    init(_ pasteboard: NSPasteboard, over view: NSView, at location: NSPoint = .zero) {
         draggingPasteboard = pasteboard
         draggingDestinationWindow = view.window
-        draggingLocation = .zero
+        draggingLocation = location
     }
 
     var draggingSourceOperationMask: NSDragOperation { .every }

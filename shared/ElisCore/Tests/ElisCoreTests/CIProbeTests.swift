@@ -37,6 +37,81 @@ struct CIProbeTests {
         }
         #expect(seen.starts(with: ["run", "list", "--branch", "feature/x"]))
         #expect(seen.last == "/r")
+        #expect(!seen.contains("--repo"))
+
+        _ = CIProbe.runs(CIRepo(root: "/r", branch: "feature/x", pushRepo: "github.com/o/r")) { arguments, _ in
+            seen = arguments
+            return Data("[]".utf8)
+        }
+        #expect(seen.suffix(2) == ["--repo", "github.com/o/r"])
+    }
+
+    @Test(arguments: [
+        ("https://github.com/NaikSoftware/elis.git", "github.com/NaikSoftware/elis"),
+        ("https://user@GitHub.com/o/r", "github.com/o/r"),
+        ("git@github.com:o/r.git", "github.com/o/r"),
+        ("ssh://git@github.com/o/r.git", "github.com/o/r"),
+        ("ssh://git@github.com:22/o/r", "github.com/o/r"),
+    ])
+    func githubRepoReadsEveryURLForm(url: String, expected: String) {
+        #expect(CIRepo.githubRepo(url) == expected)
+    }
+
+    @Test func githubRepoIsNilForAnUnparseableURL() {
+        #expect(CIRepo.githubRepo("/srv/git/r.git") == nil)
+        #expect(CIRepo.githubRepo("file:///srv/git/o/r") == nil)
+        #expect(CIRepo.githubRepo("https://github.com/o") == nil)
+        #expect(CIRepo.githubRepo("https://evil.example/o/r") == nil)
+        #expect(CIRepo.githubRepo("git@github.com.evil.example:o/r.git") == nil)
+    }
+
+    private func checkout(config: String) throws -> URL {
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent("ci-remote-\(UUID().uuidString)")
+        let gitDir = root.appendingPathComponent(".git")
+        try FileManager.default.createDirectory(at: gitDir, withIntermediateDirectories: true)
+        try "ref: refs/heads/main\n".write(to: gitDir.appendingPathComponent("HEAD"), atomically: true, encoding: .utf8)
+        try config.write(to: gitDir.appendingPathComponent("config"), atomically: true, encoding: .utf8)
+        return root
+    }
+
+    @Test func locateFollowsGitsPushRemoteOrder() throws {
+        let remotes = """
+        [remote "origin"]
+        \turl = https://github.com/me/fork.git
+        [remote "upstream"]
+        \turl = https://github.com/them/base.git
+        \tgh-resolved = base
+        [Remote "push"]
+        \turl = git@github.com:me/push.git
+        [remote "track"]
+        \turl = git@github.com:me/track.git
+
+        """
+        let cases: [(String, String?)] = [
+            ("", "github.com/me/fork"),
+            ("[branch \"main\"]\n\tremote = track\n", "github.com/me/track"),
+            ("[branch \"main\"]\n\tremote = track\n[remote]\n\tpushDefault = push\n", "github.com/me/push"),
+            ("[remote]\n\tpushDefault = push\n[branch \"main\"]\n\tremote = track\n\tpushRemote = upstream\n", "github.com/them/base"),
+            ("[branch \"main\"]\n\tremote = missing\n", nil),
+        ]
+        for (extra, expected) in cases {
+            let root = try checkout(config: remotes + extra)
+            defer { try? FileManager.default.removeItem(at: root) }
+            #expect(CIRepo.locate(cwd: root.path)?.pushRepo == expected, "\(extra)")
+        }
+    }
+
+    @Test func aWorktreeReadsTheCommonDirsConfig() throws {
+        let main = try checkout(config: "[remote \"origin\"]\n\turl = git@github.com:me/fork.git\n")
+        defer { try? FileManager.default.removeItem(at: main) }
+        let gitDir = main.appendingPathComponent(".git/worktrees/wt")
+        try FileManager.default.createDirectory(at: gitDir, withIntermediateDirectories: true)
+        try "ref: refs/heads/feature\n".write(to: gitDir.appendingPathComponent("HEAD"), atomically: true, encoding: .utf8)
+        try "../..\n".write(to: gitDir.appendingPathComponent("commondir"), atomically: true, encoding: .utf8)
+        let worktree = main.appendingPathComponent("wt")
+        try FileManager.default.createDirectory(at: worktree, withIntermediateDirectories: true)
+        try "gitdir: \(gitDir.path)\n".write(to: worktree.appendingPathComponent(".git"), atomically: true, encoding: .utf8)
+        #expect(CIRepo.locate(cwd: worktree.path) == CIRepo(root: worktree.path, branch: "feature", pushRepo: "github.com/me/fork"))
     }
 
     @Test func noRunsIsEmptyAndAFailureIsNil() {
