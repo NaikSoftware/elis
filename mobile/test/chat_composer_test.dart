@@ -21,10 +21,14 @@ Grid _g(String name) => gridFromAnsi(File('test/fixtures/grid/$name.ansi').readA
 VtRow _row(String text) => VtRow([for (final r in text.runes) VtCell(String.fromCharCode(r))]);
 
 /// [g] with Claude's input showing [text] on its first row and no further input rows.
-Grid _withInput(Grid g, String text, {String prompt = '❯'}) {
+Grid _withInput(Grid g, String text, {String prompt = '❯'}) => _withInputRows(g, ['$prompt $text']);
+
+/// [g] with Claude's input drawn as [lines], the grid's height kept.
+Grid _withInputRows(Grid g, List<String> lines) {
   final (a, b) = ClaudeScreen.read(g).inputRows!;
-  final rows = [...g.rows]..replaceRange(a, b, [_row('$prompt $text')]);
-  return Grid([for (var n = 0; n < b - a - 1; n++) VtRow(const []), ...rows]);
+  final rows = [...g.rows]..replaceRange(a, b, [for (final l in lines) _row(l)]);
+  final pad = b - a - lines.length;
+  return Grid([for (var n = 0; n < pad; n++) VtRow(const []), ...rows.skip(pad < 0 ? -pad : 0)]);
 }
 
 /// One Ctrl+U as check 5 saw it: the last input row loses its text, then the row itself.
@@ -872,6 +876,38 @@ void main() {
       expect(c.chip('a.png'), findsNothing);
     });
 
+    testWidgets('anImageTokenWrappedAcrossRowsCounts', (t) async {
+      final idle = _g('idle-placeholder-45');
+      final c = _C(t, idle)..picks = const [_a];
+      int? total;
+      c.script((w) {
+        total ??= c.gate.total;
+        return switch (w) {
+          PasteWrite(text: 'fix this') || TextWrite(text: ' ') => _withInput(idle, 'fix this'),
+          PasteWrite() => _withInputRows(idle, ['❯ fix this [Image', '  #1]']),
+          _ => idle,
+        };
+      });
+      await c.pump();
+      await c.attach();
+      await c.type('fix this');
+      await c.send();
+      expect((c.writer.writes.length, _enter(c.writer.writes.last)), (4, true));
+      expect(total, 4);
+    });
+
+    testWidgets('anImagePathLeftAsTextStopsBeforeEnter', (t) async {
+      final idle = _g('idle-placeholder-45');
+      final c = _C(t, idle)..picks = const [_a];
+      c.script((w) => _withInput(idle, w is PasteWrite && w.text.startsWith("'") ? "fix this '/h/u/S/a.png'" : 'fix this'));
+      await c.pump();
+      await c.attach();
+      await c.type('fix this');
+      await c.send();
+      expect(c.writer.writes.where(_enter), isEmpty);
+      expect(find.text('Claude did not attach the image'), findsOneWidget);
+    });
+
     testWidgets('imagesOnlyPasteOnceThenEnter', (t) async {
       final idle = _g('idle-placeholder-45');
       final c = _C(t, idle)..picks = const [_a];
@@ -903,8 +939,11 @@ void main() {
       final colour = _g('idle-placeholder-45');
       final screen = [for (var r = 0; r < colour.rows.length; r++) colour.text(r)].join('\n');
       final c = _C(t, Grid.text(screen))..picks = const [_a];
-      var n = 0;
-      c.script((w) => Grid.text(_enter(w) ? screen : screen.replaceFirst(RegExp(r'Try ".*"'), 'x${n++}')));
+      c.script((w) => Grid.text(switch (w) {
+            PasteWrite() => screen.replaceFirst(RegExp(r'Try ".*"'), 'hello'),
+            TextWrite() => screen.replaceFirst(RegExp(r'Try ".*"'), 'hello [Image #1]'),
+            _ => screen,
+          }));
       await c.pump();
       await c.attach();
       await c.type('hello');
@@ -913,6 +952,19 @@ void main() {
       expect((c.writer.writes[0] as PasteWrite).text, 'hello');
       expect((c.writer.writes[1] as TextWrite).text, " \x1b[200~'/h/u/S/a.png'\x1b[201~");
       expect(_enter(c.writer.writes.last), isTrue);
+    });
+
+    testWidgets('typedEnterWaitsForTheImage', (t) async {
+      final colour = _g('idle-placeholder-45');
+      final screen = [for (var r = 0; r < colour.rows.length; r++) colour.text(r)].join('\n');
+      final c = _C(t, Grid.text(screen))..picks = const [_a];
+      c.script((w) => Grid.text(screen.replaceFirst(RegExp(r'Try ".*"'), w is TextWrite ? "hello '/h/u/S/a.png'" : 'hello')));
+      await c.pump();
+      await c.attach();
+      await c.type('hello');
+      await c.send();
+      expect(c.writer.writes.where(_enter), isEmpty);
+      expect(find.text('Claude did not attach the image'), findsOneWidget);
     });
 
     for (final runs in [true, false]) {

@@ -185,7 +185,8 @@ class ChatComposerState extends State<ChatComposer> {
       _sending = true;
       _offer = null;
     });
-    final steps = (line.isEmpty ? 1 : 2) + (images.isEmpty ? 0 : 1);
+    // the live path types a space between the text and the images as a step of its own
+    final steps = (line.isEmpty ? 1 : 2) + (images.isEmpty ? 0 : 1) + (widget.colours && line.isNotEmpty && images.isNotEmpty ? 1 : 0);
     final r = await widget.gate.run(steps, (q) => widget.colours ? _live(q, line, replace, images) : _typed(q, line, images));
     if (!mounted) return;
     final draft = norm(widget.screen()?.draft ?? '');
@@ -379,17 +380,11 @@ class ChatComposerState extends State<ChatComposer> {
     if (images.isNotEmpty) {
       // its own key, not in the paste: a paste holding more than quoted paths stays text
       if (text.isNotEmpty) {
-        q.addSteps(1);
         // the draft reads trimmed, so the space shows no change: any repaint after it will do
         await q.send(GateStep(TextWrite(' '), ready: (g) => ClaudeScreen.read(g).bottomStack, done: (_) => true));
       }
-      // the typed text can hold `[Image #` itself
-      int imageCount(Grid g) => '[Image #'.allMatches(ClaudeScreen.read(g).draft).length;
-      var imagesBefore = 0;
-      await q.send(GateStep(PasteWrite(imagePaste(images)), ready: (g) {
-        imagesBefore = imageCount(g);
-        return ClaudeScreen.read(g).bottomStack;
-      }, done: (g) => imageCount(g) - imagesBefore >= images.length));
+      await _imageStep(q, PasteWrite(imagePaste(images)), images.length, (g) => ClaudeScreen.read(g).draft,
+          (g) => ClaudeScreen.read(g).bottomStack);
     }
     bool human(ChatItem i) => i.kind == 'user' && i.isHumanPrompt;
     final humans = widget.feed.items.where(human).length;
@@ -402,6 +397,21 @@ class ChatComposerState extends State<ChatComposer> {
       return s.dialog || s.busy || (s.bottomStack && s.draft.isEmpty && !s.pastePlaceholder) || widget.feed.items.where(human).length > humans;
     }));
     _adopted = null;
+  }
+
+  /// Writes [w] and waits until [read] shows [n] more `[Image #`: the text can hold some itself, and a wrap can split one.
+  Future<void> _imageStep(GateSequence q, GateWrite w, int n, String Function(Grid g) read, bool Function(Grid g) ready) async {
+    int count(Grid g) => '[Image#'.allMatches(norm(read(g))).length;
+    var before = 0;
+    try {
+      await q.send(GateStep(w, ready: (g) {
+        before = count(g);
+        return ready(g);
+      }, done: (g) => count(g) - before >= n));
+    } on GateStop catch (e) {
+      if (e.outcome != GateOutcome.timeout) rethrow;
+      throw GateStop(e.outcome, '${widget.agent} did not attach the image');
+    }
   }
 
   static bool _empty(ClaudeScreen s) => s.bottomStack && s.draft.isEmpty && !s.pastePlaceholder;
@@ -440,7 +450,7 @@ class ChatComposerState extends State<ChatComposer> {
     // key outside the paste, in this write because a polled grid shows no change for it
     if (images.isNotEmpty) {
       final space = text.isEmpty ? '' : ' ';
-      await q.send(GateStep(TextWrite('$space\x1b[200~${imagePaste(images)}\x1b[201~'), ready: ready, done: (g) => all(g) != before));
+      await _imageStep(q, TextWrite('$space\x1b[200~${imagePaste(images)}\x1b[201~'), images.length, all, ready);
     }
     await q.send(GateStep(KeyWrite(VtKey.enter), ready: ready, done: (g) => all(g) != before));
   }
