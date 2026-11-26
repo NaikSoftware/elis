@@ -471,6 +471,9 @@ omitted when expanded).
 - `session transcript [--after N | --before N] [--json]`: read a session's Claude or agy conversation as items (prompts,
   replies, tool calls with results), from Claude Code's transcript rather than the screen, so completed replies
   survive scrolling and redraws; page with the printed `next`. reference.md has the fields and the cursor rules.
+- `session upload --name NAME --size BYTES [--target]`: write exactly BYTES from stdin into a file the session's host
+  reserves under its state directory's `uploads/<session id>/` and print `upload.path` (what the phone's Chat attach
+  uses; a remote row answers `host` and `session`). reference.md has the errors.
 - `session search [needle] [--next|--prev|--close]` — search the terminal scrollback; prints the "N of M" counter.
 - `session split [on|off|toggle] [--axis vertical|horizontal]` · `session split close` - second shell, left/right by
   default or top/bottom with `--axis horizontal`. Omitting `--axis` preserves the current axis and the

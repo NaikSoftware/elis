@@ -6,7 +6,7 @@ import Testing
     /// Union of every payload field; a vector's `object` decodes into it, then into the struct its kind names.
     struct Object: Decodable {
         var type: String?, target: String?, pane: String?, claim: Bool?, cols: UInt16?, rows: UInt16?
-        var error: String?, role: String?, reason: String?, page: String?
+        var error: String?, role: String?, reason: String?, page: String?, name: String?, size: Int?, path: String?
     }
 
     struct Vectors: Decodable {
@@ -25,17 +25,17 @@ import Testing
         switch kind {
         case .open:
             return .json(kind, channel: vector.channel, PhoneLinkOpen(type: try #require(o.type), target: try #require(o.target), pane: o.pane, claim: o.claim, cols: o.cols, rows: o.rows,
-                                                    page: o.page))
+                                                    page: o.page, name: o.name, size: o.size))
         case .opened: return .json(kind, channel: vector.channel, PhoneLinkOpened(cols: o.cols, rows: o.rows, error: o.error))
         case .lead: return .json(kind, channel: vector.channel, PhoneLinkLead(role: try #require(o.role)))
-        case .close: return .json(kind, channel: vector.channel, PhoneLinkClose(reason: try #require(o.reason)))
+        case .close: return .json(kind, channel: vector.channel, PhoneLinkClose(reason: try #require(o.reason), path: o.path))
         default: throw DecodingError.dataCorrupted(.init(codingPath: [], debugDescription: vector.kind))
         }
     }
 
     @Test func encodesJsonVectors() throws {
         let vectors = try Self.vectors()
-        #expect(vectors.count == 8)
+        #expect(vectors.count == 10)
         for vector in vectors {
             #expect(try Self.frame(vector).encoded() == PhoneLinkFrameTests.hex(vector.hex), "\(vector.name)")
         }
@@ -53,9 +53,9 @@ import Testing
             default: #expect(try PhoneLinkFrame.json(.close, channel: vector.channel, frame.decodeJSON(PhoneLinkClose.self)) == expected, "\(vector.name)")
             }
         }
-        let page = try Self.vectors().first { $0.name == "open page" }
+        let page = try Self.vectors().first { $0.name == "open present" }
         let decoded = try Self.frame(#require(page)).decodeJSON(PhoneLinkOpen.self)
-        #expect(decoded == PhoneLinkOpen(type: "page", target: "s1"))
+        #expect(decoded == PhoneLinkOpen(type: "present", target: "s1"))
     }
 
     @Test func aForwardOpenCarriesItsPage() throws {

@@ -173,7 +173,7 @@ paths:
   the decoded struct drops every field the CLI build does not model (#625), so no CLI path prints JSON from
   the model; the pick/ask `--no-block` id object, their result payloads, `events`' per-event lines and
   `session wait`'s `{id, status}` object are the deliberate exceptions, each printing its own nested object
-  rather than the response.
+  rather than the response, and `session upload` always prints one `ControlResponse` JSON line.
 - Human output shows IDs only for created session/workspace/window, retains them in JSON, uses
   `result.affected` for session counts and for `zmx.prune`'s killed-daemon count, and reserves
   `result.count` for diagnostics/search.
@@ -204,7 +204,7 @@ renumbering. Do not reintroduce a count anywhere.
   `.expand`, `.tint`, `.folder`
 - `session.new`, `.duplicate`, `.companion.new`, `.companion.page`, `.companion.duplicate`, `.companion.convert`, `.companion.move`, `.companion.page.attach`, `.page`, `.collapse`, `.expand`, `.close`, `.terminate`, `.select`, `.rename`, `.reveal`, `.move`, `.type`, `.split`,
   `.split.close`, `.swap`, `.lead`,
-  `.scratch`, `.focus`, `.resize`, `.go`, `.copy`, `.paste`, `.selectall`, `.text`, `.transcript`, `.search`, `.status`,
+  `.scratch`, `.focus`, `.resize`, `.go`, `.copy`, `.paste`, `.selectall`, `.text`, `.transcript`, `.upload`, `.search`, `.status`,
   `.grid`, `.scroll`, `.flag`, `.tint`, `.seen`, `.restore`, `.restart`, `.background`, `.overlay.open`, `.overlay.close`, `.overlay.resize`,
   `.overlay.reload`, `.overlay.navigate`,
   `.overlay.result`, `.overlay.submit`, `.overlay.copy`, `.overlay.text`, `.overlay.job.run`, `.overlay.page.serve`, `.overlay.hide`,
@@ -291,7 +291,7 @@ Wire contract for the phone (M4b):
 - OPENED `{"error":"revoked"}` is followed by the link closing.
 - The phone sends CREDIT at least once per window consumed, and a zero-byte CREDIT clears the stall clock.
   A CREDIT in flight across RESYNC can let the relay send up to one extra window.
-- Relay-to-phone CREDIT goes only on a claim or `forward` channel, LEAD only on a claim (Direct input, Pages below).
+- Relay-to-phone CREDIT goes only on a claim, `forward` or `upload` channel, LEAD only on a claim (Direct input, Pages below, Phone uploads).
   Channel ids are used once per link.
 - Priority is strict 0 > 1 > vt: a large `tree` answer on Bluetooth holds every vt channel until it is out.
   `present` and `forward` channels are the low class below vt: they send when no vt channel can,
@@ -426,7 +426,7 @@ and its `nonce`, the `ZMX_MANAGED` value the role reports echo; the same panes q
 The relay (`mobile serve`) prints `phone attached from <ip> pane <paneID>` and `phone detached ...` lines;
 the app turns them into `phone.attached` / `phone.detached` and `surfaces[].phoneViewers`.
 When the relay stops or restarts, every remaining viewer detaches with `ip=-`.
-elis-server's own tree omits `phoneViewers`, an approved exception (2026-11-18): the relay runs only on a Mac.
+elis-server's own tree omits `phoneViewers`, an approved exception (2026-11-18): the relay runs on a Mac or a Linux desktop, never on elis-server.
 Debug builds are ad-hoc signed with a bare `cdhash` requirement,
 so each rebuild asks for Bluetooth again at the relay's first start.
 
@@ -1680,6 +1680,39 @@ the spec `docs/superpowers/specs/2026-11-20-phone-chat-mode-design.md` owns the 
   A teammate stopped mid-tool reads running until that bound: `TaskStop`'s task id is not the agent id.
 - `PageSessionRefusal` refuses it on a page row. It is a read: no event, no `EventFormatter` entry, and the
   tree's `agent`, `agentPane` and `agentSessionId` name what it reads.
+
+## Phone uploads
+
+`site/commands.html#session` owns the user contract of `session.upload`; the spec
+`docs/superpowers/specs/2026-11-24-phone-chat-attachments-design.md` owns the limits and refusal copy.
+
+- `session.upload {target, name, size}` reserves a destination and writes nothing.
+  A local row answers `result.upload.path`, `<stateDir>/uploads/<sessionID>/<yyyyMMdd-HHmmss>-<safe name>`,
+  claimed as an empty placeholder (`UploadStorage.reserve`).
+  A remote row answers `{host, session}`: its origin host and the origin's session id.
+  A page row gets `PageSessionRefusal`; a host without it refuses `the Elis on this host is too old for session.upload`.
+- It sets no model state, so it has no tree read-back and no event: the written file is the result.
+  This is a deliberate exemption from the state-setting read-back rule.
+- `elisctl session upload --target T --name N --size BYTES` reads exactly `size` bytes of stdin into the reserved path
+  (`Session+Upload.swift`) and prints one `ControlResponse` line.
+  Its errors: `upload ended after <k> of <n> bytes`, `file changed while sending` (both remove the file),
+  `cannot upload to a remote row from here` (the `{host, session}` answer).
+  The relay reaches a remote host as `ssh -T <host> elisctl session upload …`.
+- Retention: `UploadStorage.sweep` runs once at each host's launch, after sessions and Recent Closed load.
+  It removes folders of sessions not open, not in a saved window and not in Recent Closed, and files older than 7 days;
+  when the saved windows cannot all be listed it only prunes by age.
+  A Recent Closed reopen keeps the session id on every host.
+- Relay mux `upload` channel (`PhoneLinkUpload`): OPEN `{type:"upload", target, name, size}`;
+  the relay answers OPENED or OPENED `{error}`, in the order malformed open, `file too large (max 20 MiB)`,
+  `an upload is already running` (one upload per link), then the app's answer.
+  The phone sends DATA under a 16 KiB window and the relay returns CREDIT per window written;
+  past the window or past `size` the channel closes `input overflow`.
+  The relay writes `<path>.part` and renames it after the last byte; a cancel, a lost link or a short stream removes it
+  and the placeholder.
+  CLOSE `{reason:"uploaded", path}` ends a good upload, any other reason is the error.
+  The mux has no half-close, so the byte count decides completion; an empty file completes right after OPENED.
+- "Too old" (`Update Elis on the computer to attach files`, `Update Elis on <host> to attach files`) is only an unknown
+  command or a refused argument; an unreachable host is `<host> gave no answer (<ssh error>)`.
 
 ## Status, notifications, and flags
 

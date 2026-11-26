@@ -57,6 +57,8 @@ const _duplicateOpen = 'channel already open';
 const _claimWindow = 16 * 1024; // the relay's receive window: more unacknowledged closes the channel `input overflow`
 const _forwardWindow = 65536; // PhoneLinkForward.window
 const _queueCap = 1 << 20;
+const _uploadWindow = 16384; // PhoneLinkUpload.window
+const _tooOldRelay = 'Update Elis on the computer to attach files';
 
 class Mux {
   Mux._(this._c);
@@ -129,6 +131,15 @@ class Mux {
     if (_done.isCompleted) return ch.._end('Disconnected');
     _channels[ch.id] = ch;
     _add(LinkFrame.json(LinkKind.open, ch.id, {'type': 'forward', 'target': target, 'page': page}));
+    return ch;
+  }
+
+  /// One file to the session's host; the caller streams it with [UploadChannel.send]. A link carries one upload at a time.
+  UploadChannel upload(String target, {required String name, required int size}) {
+    final ch = UploadChannel._(this, _nextChannel++, size, name);
+    if (_done.isCompleted) return ch.._end('Disconnected');
+    _channels[ch.id] = ch;
+    _add(LinkFrame.json(LinkKind.open, ch.id, {'type': 'upload', 'target': target, 'name': name, 'size': size}));
     return ch;
   }
 
@@ -567,5 +578,132 @@ class ForwardChannel implements _Channel {
       unawaited(_opened.future.catchError((Object _) {})); // a caller that only reads [bytes] still sees the end
     }
     unawaited(_in.close());
+  }
+}
+
+class UploadFailed implements Exception {
+  UploadFailed(this.reason);
+  final String reason;
+
+  bool get tooOld => reason.startsWith('Update Elis on');
+
+  @override
+  String toString() => reason;
+}
+
+/// An `upload` channel: one file to the session's host, under the relay's credit window.
+class UploadChannel implements _Channel {
+  UploadChannel._(this._mux, this.id, this.size, this.name);
+
+  final Mux _mux;
+  @override
+  final int id;
+  final int size;
+  final String name;
+  final _progress = StreamController<int>();
+  final _opened = Completer<void>();
+  final _done = Completer<String>();
+  late final _out = _Outbox(_mux, id, _uploadWindow);
+  Completer<void>? _wake;
+
+  /// The credited bytes.
+  Stream<int> get progress => _progress.stream;
+
+  /// The host path; throws [UploadFailed].
+  Future<String> get done => _done.future;
+
+  @override
+  bool get _isOpened => _opened.isCompleted;
+
+  bool get _ended => _mux._channels[id] != this;
+
+  /// Streams [bytes] once OPENED; a count other than [size] or an error from [bytes] cancels and throws. Returns
+  /// quietly when the channel ended meanwhile: [done] has the reason.
+  Future<void> send(Stream<List<int>> bytes) async {
+    try {
+      await _opened.future;
+    } on UploadFailed {
+      return;
+    }
+    var count = 0;
+    try {
+      await for (final chunk in bytes) {
+        count += chunk.length;
+        if (count > size) break;
+        for (var at = 0; at < chunk.length; at += linkMaxPayload) {
+          final piece = Uint8List.fromList(chunk.sublist(at, min(at + linkMaxPayload, chunk.length)));
+          while (!_ended && !_out.send(piece)) {
+            await (_wake ??= Completer<void>()).future;
+          }
+        }
+        if (_ended) return;
+      }
+    } on Object {
+      if (_ended) return;
+      _fail('cannot read $name');
+    }
+    if (_ended || count == size) return;
+    _fail('file changed while sending');
+  }
+
+  Never _fail(String reason) {
+    cancel(reason: reason);
+    throw UploadFailed(reason);
+  }
+
+  /// Sends CLOSE and fails [done] with [reason].
+  void cancel({String reason = 'cancelled'}) {
+    if (_ended) return;
+    _mux._add(LinkFrame.json(LinkKind.close, id, {'reason': 'closed'}));
+    _end(reason);
+  }
+
+  @override
+  void _onFrame(LinkFrame f) {
+    switch (f.kind) {
+      case LinkKind.opened:
+        if (!_refused(_mux, this, _json(f.payload) ?? const {}) && !_isOpened) _opened.complete();
+      case LinkKind.credit:
+        final n = f.creditBytes ?? 0;
+        _out.credit(n);
+        if (!_progress.isClosed) _progress.add(n);
+        _release();
+      case LinkKind.close:
+        final o = _json(f.payload) ?? const {};
+        if (o['reason'] == 'uploaded' && o['path'] is String) {
+          _teardown();
+          if (!_done.isCompleted) _done.complete(o['path'] as String);
+        } else {
+          _end('${o['reason'] ?? 'closed'}');
+        }
+      case LinkKind.open || LinkKind.data || LinkKind.resize || LinkKind.grid || LinkKind.resync || LinkKind.lead:
+        break; // not sent on an upload channel
+    }
+  }
+
+  @override
+  void _end(String? reason, {bool revoked = false}) {
+    _teardown();
+    final e = UploadFailed(reason == 'unsupported channel type' ? _tooOldRelay : reason ?? 'closed');
+    if (!_opened.isCompleted) {
+      _opened.completeError(e);
+      unawaited(_opened.future.catchError((Object _) {}));
+    }
+    if (!_done.isCompleted) {
+      _done.completeError(e);
+      unawaited(_done.future.catchError((Object _) => ''));
+    }
+  }
+
+  void _teardown() {
+    _mux._channels.remove(id);
+    _out.clear();
+    _release();
+    unawaited(_progress.close());
+  }
+
+  void _release() {
+    _wake?.complete();
+    _wake = null;
   }
 }

@@ -114,6 +114,18 @@ public enum RemoteSession {
         return sshArguments(host: host, connectTimeout: connectTimeout, interactive: false, controlPath: controlPath) + [remote]
     }
 
+    /// One ssh invocation running the far side's `elisctl session upload`, which reads exactly `size` bytes from
+    /// stdin and answers one JSON line. `exec` so ssh's stdin reaches elisctl directly.
+    public static func uploadCommand(host: String, session: String, name: String, size: Int, connectTimeout: Int = 5,
+                                     controlPath: String? = nil) throws -> [String] {
+        try validate(host: host)
+        guard isPlain(session) else { throw InvocationError.invalidSession }
+        let words = ["session", "upload", "--target=" + session, "--name=" + name, "--size=\(size)"]
+        let chain = cliPathPrefix + " && exec elisctl " + CommandRestore.shellQuotedLine(words)
+        let remote = ["/bin/sh", "-c", chain].map(CommandRestore.accountShellQuoted).joined(separator: " ")
+        return sshArguments(host: host, connectTimeout: connectTimeout, interactive: false, controlPath: controlPath) + [remote]
+    }
+
     /// sshd's PATH and a profile-less shell miss an installed CLI (exit 127), so `CommandPath`'s Mac directories and
     /// elis-server's `$HOME/.local/bin` are APPENDED: a user's own `elisctl` earlier on PATH still wins.
     static var cliPathPrefix: String {

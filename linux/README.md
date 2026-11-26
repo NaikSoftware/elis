@@ -221,6 +221,8 @@ It prints the QR code and the link; Ctrl+C stops it. Nothing listens unless one 
   encrypted with a key from the pairing token. Its stderr reports `bluetooth: advertising` or `bluetooth: off (<reason>)`;
   `--no-bluetooth` turns it off. One relay per state directory advertises.
 - A pane running Claude Code or agy opens in Chat, read from its transcript (`session transcript`).
+  Files attached in Chat (up to 10, 20 MiB each) land in `<state dir>/uploads/<session id>/` (`session upload`);
+  old uploads are swept at launch (retention: `site/docs.html`).
   Pages on the phone are Mac-only for now (page overlays are not ported to Linux).
 
 ## Credits and license

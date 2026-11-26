@@ -40,6 +40,8 @@ final class PhoneLinkSession {
     private var presenters: [UInt32: PhoneLinkPresenter] = [:]
     /// `forward` channels from their OPEN on, with the present channel and page they reach.
     private var forwards: [UInt32: (presenter: UInt32, page: String, forward: PhoneLinkForward)] = [:]
+    /// The `upload` channel, at most one, from its OPEN on.
+    private var uploads: [UInt32: PhoneLinkUpload] = [:]
     /// Closed channels whose attach request still runs, as their `asking`: each keeps its slot until the answer, so
     /// OPEN and CLOSE in a loop cannot pile up app requests.
     private var leaving: [(present: Bool, asking: () -> Bool)] = []
@@ -94,6 +96,8 @@ final class PhoneLinkSession {
                     presenter.stop()
                 } else if let forward = forwards[frame.channel]?.forward {
                     forward.stop()
+                } else if let upload = uploads[frame.channel] {
+                    upload.stop()
                 } else {
                     break
                 }
@@ -102,6 +106,7 @@ final class PhoneLinkSession {
                 claims[frame.channel]?.input(frame.payload)
                 presenters[frame.channel]?.receive(frame.payload)
                 forwards[frame.channel]?.forward.input(frame.payload)
+                uploads[frame.channel]?.input(frame.payload)
             case (.resize, _):
                 guard let size = frame.size else { break }
                 claims[frame.channel]?.resize(cols: size.cols, rows: size.rows)
@@ -119,10 +124,13 @@ final class PhoneLinkSession {
         let claimed = claims.values
         let presenting = presenters.values
         let forwarding = forwards.values.map(\.forward)
+        let uploading = uploads.values
         terminals = [:]
         claims = [:]
         presenters = [:]
         forwards = [:]
+        uploads = [:]
+        uploading.forEach { $0.stop() }
         forwarding.forEach { $0.stop() }
         presenting.forEach { $0.stop() }
         claimed.forEach { $0.stop() }
@@ -136,12 +144,15 @@ final class PhoneLinkSession {
         let request = try? frame.decodeJSON(PhoneLinkOpen.self)
         if channel < 2 {
             refusal = "channels 0 and 1 are not vt channels"
-        } else if terminals[channel] != nil || claims[channel] != nil || presenters[channel] != nil || forwards[channel] != nil {
+        } else if terminals[channel] != nil || claims[channel] != nil || presenters[channel] != nil || forwards[channel] != nil
+                    || uploads[channel] != nil {
             refusal = "channel already open"
         } else if let request, request.type == "present" {
             return openPresenter(channel, request)
         } else if let request, request.type == "forward" {
             return openForward(channel, request)
+        } else if let request, request.type == "upload" {
+            return openUpload(channel, request)
         } else if request == nil {
             refusal = "malformed open"
         } else if request?.type != "vt" {
@@ -243,6 +254,20 @@ final class PhoneLinkSession {
         forward.start()
     }
 
+    /// Kept before the app is asked, so a second OPEN meanwhile is refused.
+    private func openUpload(_ channel: UInt32, _ request: PhoneLinkOpen) {
+        if let refusal = PhoneLinkUpload.refusal(request, running: !uploads.isEmpty) {
+            return sendDirect(.json(.opened, channel: channel, PhoneLinkOpened(error: refusal)))
+        }
+        let link = PhoneLinkUpload.Link(
+            frame: { [weak self] frame in self?.sendDirect(frame) },
+            credit: { [weak self] bytes, sent in self?.sendDirect(.credit(channel: channel, bytes: bytes), sent: sent) },
+            ended: { [weak self] in self?.closeChannel(channel) })
+        let upload = PhoneLinkUpload(channel: channel, request: request, socketPath: socketPath, queue: queue, link: link)
+        uploads[channel] = upload
+        upload.start()
+    }
+
     /// A page left its presenter: its forwards close, each telling the phone.
     private func pageEnded(presenter: UInt32, _ page: String) {
         for (channel, entry) in forwards where entry.presenter == presenter && entry.page == page {
@@ -276,6 +301,7 @@ final class PhoneLinkSession {
         }
         if let presenter = presenters.removeValue(forKey: channel), presenter.asking { leaving.append((true, { presenter.asking })) }
         forwards[channel] = nil
+        uploads[channel] = nil
         scheduler.close(channel: channel)
     }
 

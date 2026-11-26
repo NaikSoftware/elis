@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
+import 'package:elis_mobile/chat/attachments.dart';
 import 'package:elis_mobile/chat/chat_view.dart';
 import 'package:elis_mobile/chat/grid.dart';
 import 'package:elis_mobile/chat/mode.dart';
@@ -18,7 +19,7 @@ import 'package:flutter/rendering.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import 'mux_test.dart' show frame, json;
-import 'session_term_test.dart' show FakeVt, Harness, loadFonts, phone, treeOf;
+import 'session_term_test.dart' show FakeVt, Harness, Relay, loadFonts, pauseResume, phone, treeOf;
 import 'support/ansi.dart';
 
 const _claude = {'agent': 'claude', 'agentSessionId': 'c1'};
@@ -312,6 +313,78 @@ void main() {
       await h.stop();
     });
   }
+
+  testWidgets('chipsPickedWhileTheLinkIsDownUploadAfterTheReconnect', (t) async {
+    final dir = Directory.systemTemp.createTempSync('attach');
+    addTearDown(() => dir.deleteSync(recursive: true));
+    File('${dir.path}/a.txt').writeAsBytesSync([1, 2, 3]);
+    final picked = Completer<List<PickedFile>>();
+    final h = Harness(t, treeOf(session: _claude))..pick = () => picked.future;
+    await h.start();
+    await h.opened();
+    await _show(h, 'idle-placeholder-45');
+    Future<void> settle() async {
+      await t.pump();
+      await t.pump(const Duration(milliseconds: 500));
+    }
+
+    // the Attach row's state and reason, read from the composer's menu
+    Future<(bool, String?)> attach() async {
+      await t.tap(find.byKey(const Key('composerMenu')));
+      await settle();
+      final row = t.widget<ListTile>(find.byKey(const Key('attach')));
+      Navigator.pop(t.element(find.byKey(const Key('attach'))));
+      await settle();
+      return (row.enabled, (row.subtitle as Text?)?.data);
+    }
+
+    await t.tap(find.byKey(const Key('composerMenu')));
+    await settle();
+    await t.tap(find.byKey(const Key('attach')));
+    AttachBlocks.tooOld['s1'] = 'Update Elis on the computer to attach files';
+    addTearDown(AttachBlocks.tooOld.clear);
+    await settle();
+    expect(await attach(), (false, 'Update Elis on the computer to attach files'));
+    final first = h.r;
+    await pauseResume(h, watch: false, paused: () async {
+      expect(h.m.mux, isNull);
+      picked.complete([PickedFile(name: 'a.txt', path: '${dir.path}/a.txt', size: 3)]);
+      await t.pump();
+    });
+    await t.pump(const Duration(milliseconds: 10));
+    final Relay r = h.r;
+    expect(r, isNot(same(first)));
+    await h.opened();
+    await _show(h, 'idle-placeholder-45');
+    expect(find.byKey(const Key('tile-a.txt')), findsOneWidget);
+    expect(await attach(), (true, null));
+    await t.enterText(find.byKey(const Key('composer')), 'fix this');
+    await t.pump();
+    await t.tap(find.byKey(const Key('send')));
+    await t.pump();
+    final open = r.of(LinkKind.open).last;
+    expect(jsonDecode(utf8.decode(open.payload)), {'type': 'upload', 'target': 's1', 'name': 'a.txt', 'size': 3});
+    final up = open.channel;
+    r.send([
+      ...json(LinkKind.opened, up, {}),
+      ...frame(LinkKind.credit, up, LinkFrame.credit(up, 3).payload),
+      ...json(LinkKind.close, up, {'reason': 'uploaded', 'path': '/h/uploads/s1/a.txt'}),
+    ]);
+    await t.pump();
+    await t.pump();
+    final claim = r.of(LinkKind.open).last;
+    expect(jsonDecode(utf8.decode(claim.payload))['claim'], isTrue);
+    r.send([
+      ...json(LinkKind.opened, claim.channel, {'cols': 80, 'rows': 24}),
+      ...json(LinkKind.lead, claim.channel, {'role': 'leader'}),
+    ]);
+    await t.pump();
+    await t.pump();
+    final pasted = utf8.decode([for (final f in r.of(LinkKind.data)) if (f.channel == claim.channel) ...f.payload]);
+    expect(pasted, contains("fix this Attached: '/h/uploads/s1/a.txt'"));
+    await t.pump(const Duration(seconds: 3));
+    await h.stop();
+  });
 
   testWidgets('statusEventPollsAtOnce', (t) async {
     final h = Harness(t, treeOf(session: _claude));

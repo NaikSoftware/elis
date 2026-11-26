@@ -63,6 +63,7 @@ public enum Command: String, Codable, Sendable, CaseIterable {
     case sessionSelectAll = "session.selectall"
     case sessionText = "session.text"
     case sessionTranscript = "session.transcript"
+    case sessionUpload = "session.upload"
     case sessionGrid = "session.grid"
     case sessionScroll = "session.scroll"
     case sessionAttach = "session.attach"
@@ -561,6 +562,8 @@ public struct ControlArgs: Codable, Sendable, Equatable {
     public var transcript: String?
     /// maxBytes is `session.transcript`'s page budget, clamped to `ClaudeTranscript.pageBudget`.
     public var maxBytes: Int?
+    /// size is the byte count `session.upload` will write.
+    public var size: Int?
     /// last is how many of the newest entries `assistant.read` returns; nil returns all.
     public var last: Int?
     /// provider is the assistant CLI `assistant.provider` selects, a `SessionLauncher` raw value.
@@ -872,6 +875,7 @@ public struct ControlResult: Codable, Sendable, Equatable {
     public var commands: [ControlTranscriptCommand]?
     public var skipped: Int?
     public var assistant: ControlAssistantResult?
+    public var upload: ControlUpload?
 
     public init(id: String? = nil, tree: ControlTree? = nil, text: String? = nil,
                 windows: [ControlWindowNode]? = nil, exitCode: Int? = nil, count: Int? = nil,

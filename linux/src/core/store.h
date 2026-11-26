@@ -204,7 +204,7 @@ public:
     QString addWorkspace(const QString &name, bool collapsed = false, const QString &projectFolder = {}, bool reveal = false);
     // index -1 follows settings.newSessionPlacement
     QString addSession(const QString &workspaceId, const QString &name, const QString &cwd, const QString &command = {}, int index = -1,
-                       const QString &resume = {});
+                       const QString &resume = {}, const QString &id = {}); // id: a reopened session keeps its own
     QString duplicateSession(const QString &id, const QString &cwd);
     // a companion of `parentId` (a companion target means its parent), after the parent's last companion
     QString addCompanion(const QString &parentId, const QString &name, const QString &cwd, const QString &command = {});

@@ -1,5 +1,7 @@
+import 'dart:async';
 import 'dart:io';
 
+import 'package:elis_mobile/chat/attachments.dart';
 import 'package:elis_mobile/chat/chat_composer.dart';
 import 'package:elis_mobile/chat/checks.dart';
 import 'package:elis_mobile/chat/claude_screen.dart';
@@ -7,6 +9,7 @@ import 'package:elis_mobile/chat/feed.dart';
 import 'package:elis_mobile/chat/grid.dart';
 import 'package:elis_mobile/chat/transcript.dart';
 import 'package:elis_mobile/chat/write_gate.dart';
+import 'package:elis_mobile/link/mux.dart' show UploadChannel, UploadFailed;
 import 'package:elis_mobile/terminal/vt.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -18,10 +21,14 @@ Grid _g(String name) => gridFromAnsi(File('test/fixtures/grid/$name.ansi').readA
 VtRow _row(String text) => VtRow([for (final r in text.runes) VtCell(String.fromCharCode(r))]);
 
 /// [g] with Claude's input showing [text] on its first row and no further input rows.
-Grid _withInput(Grid g, String text) {
+Grid _withInput(Grid g, String text, {String prompt = '❯'}) => _withInputRows(g, ['$prompt $text']);
+
+/// [g] with Claude's input drawn as [lines], the grid's height kept.
+Grid _withInputRows(Grid g, List<String> lines) {
   final (a, b) = ClaudeScreen.read(g).inputRows!;
-  final rows = [...g.rows]..replaceRange(a, b, [_row('❯ $text')]);
-  return Grid([for (var n = 0; n < b - a - 1; n++) VtRow(const []), ...rows]);
+  final rows = [...g.rows]..replaceRange(a, b, [for (final l in lines) _row(l)]);
+  final pad = b - a - lines.length;
+  return Grid([for (var n = 0; n < pad; n++) VtRow(const []), ...rows.skip(pad < 0 ? -pad : 0)]);
 }
 
 /// One Ctrl+U as check 5 saw it: the last input row loses its text, then the row itself.
@@ -69,6 +76,36 @@ class _Writer implements GateWriter {
   bool pasteSafe(String text) => true;
 }
 
+const _a = PickedFile(name: 'a.png', path: '/p/a.png', size: 1258291);
+const _b = PickedFile(name: 'b.txt', path: '/p/b.txt', size: 4096);
+
+/// An upload the test finishes or fails; [cancel] fails it as the mux does.
+class _Up implements UploadChannel {
+  _Up(this.file);
+  final PickedFile file;
+  final _done = Completer<String>();
+  final credits = StreamController<int>();
+  String? cancelled;
+
+  @override
+  Stream<int> get progress => credits.stream;
+  @override
+  Future<String> get done => _done.future;
+  @override
+  Future<void> send(Stream<List<int>> bytes) async {}
+  @override
+  void cancel({String reason = 'cancelled'}) {
+    cancelled = reason;
+    fail(reason);
+  }
+
+  void finish() => _done.complete('/h/u/S/${file.name}');
+  void fail(String reason) => _done.isCompleted ? null : _done.completeError(UploadFailed(reason));
+
+  @override
+  dynamic noSuchMethod(Invocation i) => super.noSuchMethod(i);
+}
+
 class _C {
   _C(this.t, Grid g) : grids = _Grids(g);
 
@@ -83,6 +120,12 @@ class _C {
   bool remote = false, server = false;
   Checks checks = _proven;
   String? disabledBy;
+  List<PickedFile> picks = const [_a, _b];
+  PickFiles? pickWith;
+  final ups = <_Up>[];
+  void Function(_Up u) onUpload = (u) => scheduleMicrotask(u.finish);
+  bool uploads = true;
+  String? attachBlocked;
 
   /// Scripts the grid's answer to each write, a microtask after it.
   void script(Grid? Function(GateWrite w) next) =>
@@ -102,7 +145,11 @@ class _C {
                   server: server,
                   gate: gate,
                   disabledBy: disabledBy,
-                  checks: checks),
+                  checks: checks,
+                  session: 'S',
+                  pick: pickWith ?? () async => picks,
+                  upload: uploads ? _upload : null,
+                  attachBlocked: attachBlocked),
             ]),
           ),
         ),
@@ -125,6 +172,62 @@ class _C {
   }
 
   Iterable<KeyWrite> get keys => writer.writes.whereType<KeyWrite>();
+
+  UploadChannel _upload(PickedFile f) {
+    final u = _Up(f);
+    ups.add(u);
+    onUpload(u);
+    return u;
+  }
+
+  IconButton get menu => t.widget<IconButton>(find.byKey(const Key('composerMenu')));
+  Finder chip(String name) => find.byKey(Key('tile-$name'));
+  ChatComposerState get state => t.state<ChatComposerState>(find.byType(ChatComposer));
+
+  Future<void> openMenu() async {
+    await t.tap(find.byKey(const Key('composerMenu')));
+    await t.pumpAndSettle();
+  }
+
+  Future<void> closeMenu() async {
+    Navigator.pop(t.element(find.byKey(const Key('attach'))));
+    await t.pumpAndSettle();
+  }
+
+  /// The Attach row's state and its reason; a disabled menu gives its tooltip.
+  Future<(bool, String?)> attachRow() async {
+    if (menu.onPressed == null) return (false, menu.tooltip);
+    await openMenu();
+    final row = t.widget<ListTile>(find.byKey(const Key('attach')));
+    await closeMenu();
+    return (row.enabled, (row.subtitle as Text?)?.data);
+  }
+
+  /// Whether the mode rows take a tap; a disabled menu has none open.
+  Future<bool> modesEnabled() async {
+    if (menu.onPressed == null) return false;
+    await openMenu();
+    final on = t.widget<ListTile>(find.byKey(const Key('mode-manual'))).enabled;
+    await closeMenu();
+    return on;
+  }
+
+  Future<void> attach() async {
+    await openMenu();
+    await t.tap(find.byKey(const Key('attach')));
+    await t.pumpAndSettle();
+  }
+
+  Future<void> unchip(String name) async {
+    await t.tap(find.descendant(of: chip(name), matching: find.byIcon(Icons.close)));
+    await t.pump();
+  }
+
+  /// Taps Send and stops while the first upload runs.
+  Future<void> startSend() async {
+    await t.tap(find.byKey(const Key('send')));
+    await t.pump();
+  }
 }
 
 const _proven =
@@ -475,8 +578,7 @@ void main() {
     expect(find.text('Sending from the phone is not verified yet'), findsOneWidget);
   });
 
-  group('mode chip', () {
-    bool chipEnabled(WidgetTester t) => t.widget<ActionChip>(find.byKey(const Key('mode-chip'))).onPressed != null;
+  group('composer menu', () {
     bool shiftTab(GateWrite w) => w is KeyWrite && w.key == VtKey.tab && w.mods == vtShift;
 
     testWidgets('chipCyclesToTarget', (t) async {
@@ -484,9 +586,8 @@ void main() {
       final next = [_g('mode-accept-45'), _g('mode-plan-45'), _g('mode-auto-45')];
       c.script((w) => shiftTab(w) ? next.removeAt(0) : null);
       await c.pump();
-      expect(chipEnabled(t), isTrue);
-      await t.tap(find.byKey(const Key('mode-chip')));
-      await t.pumpAndSettle();
+      expect(await c.modesEnabled(), isTrue);
+      await c.openMenu();
       await t.tap(find.text('auto mode on'));
       await t.pumpAndSettle();
       expect(c.writer.writes, isEmpty);
@@ -502,8 +603,7 @@ void main() {
       final c = _C(t, _g('idle-placeholder-45'));
       c.script((_) => null);
       await c.pump();
-      await t.tap(find.byKey(const Key('mode-chip')));
-      await t.pumpAndSettle();
+      await c.openMenu();
       await t.tap(find.text('plan mode on'));
       await t.pump();
       await t.pump(const Duration(seconds: 3));
@@ -515,8 +615,7 @@ void main() {
     testWidgets('pickerNamesTheModesPassed', (t) async {
       final c = _C(t, _g('idle-placeholder-45'));
       await c.pump();
-      await t.tap(find.byKey(const Key('mode-chip')));
-      await t.pumpAndSettle();
+      await c.openMenu();
       expect(find.text('Passes accept edits'), findsOneWidget);
       expect(find.text('Passes accept edits, plan'), findsOneWidget);
     });
@@ -526,8 +625,7 @@ void main() {
       final next = [_g('mode-accept-45')];
       c.script((w) => next.isEmpty ? null : next.removeAt(0));
       await c.pump();
-      await t.tap(find.byKey(const Key('mode-chip')));
-      await t.pumpAndSettle();
+      await c.openMenu();
       await t.tap(find.text('plan mode on'));
       await t.pump();
       await t.pump(const Duration(seconds: 3));
@@ -540,8 +638,7 @@ void main() {
       final next = [_g('mode-accept-45'), _g('idle-placeholder-45')];
       c.script((w) => next.isEmpty ? null : next.removeAt(0));
       await c.pump();
-      await t.tap(find.byKey(const Key('mode-chip')));
-      await t.pumpAndSettle();
+      await c.openMenu();
       await t.tap(find.text('plan mode on'));
       await t.pumpAndSettle();
       expect(c.writer.writes.length, 2);
@@ -551,7 +648,7 @@ void main() {
     testWidgets('chipDisabledWhileWorking', (t) async {
       final c = _C(t, _g('working-45'));
       await c.pump();
-      expect(chipEnabled(t), isFalse);
+      expect(await c.modesEnabled(), isFalse);
     });
 
     testWidgets('chipDisabledWithoutAKnownMode', (t) async {
@@ -560,16 +657,16 @@ void main() {
       g.rows[r] = _row('  ⏸ ручний режим');
       final c = _C(t, g);
       await c.pump();
-      expect(chipEnabled(t), isFalse);
+      expect(await c.modesEnabled(), isFalse);
     });
 
     testWidgets('chipDisabledOnAnUnprovenRemoteRow', (t) async {
       final c = _C(t, _g('idle-placeholder-45'))..remote = true;
       await c.pump();
-      expect(chipEnabled(t), isFalse);
+      expect(await c.modesEnabled(), isFalse);
       c.checks = const Checks(keys: true, paste: true, attached: true);
       await c.pump();
-      expect(chipEnabled(t), isTrue);
+      expect(await c.modesEnabled(), isTrue);
     });
 
     testWidgets('chipEnabledOnAServerRowOnly', (t) async {
@@ -578,27 +675,437 @@ void main() {
         ..server = true
         ..checks = const Checks(keys: true, paste: true, server: true);
       await c.pump();
-      expect(chipEnabled(t), isTrue);
+      expect(await c.modesEnabled(), isTrue);
       c.server = false;
       await c.pump();
-      expect(chipEnabled(t), isFalse);
+      expect(await c.modesEnabled(), isFalse);
     });
 
-    testWidgets('chipShowsTheTranscriptModeWhileHidden', (t) async {
-      final c = _C(t, _g('dialog-bash-45'));
-      c.feed.meta = TranscriptMeta.fromJson(const {'permissionMode': 'plan'});
+    testWidgets('oneMenuButtonOpensAttachAndModes', (t) async {
+      final c = _C(t, _g('idle-placeholder-45'));
       await c.pump();
-      expect(find.text('plan'), findsOneWidget);
-      expect(chipEnabled(t), isFalse);
+      expect(find.byType(ActionChip), findsNothing);
+      expect(find.byIcon(Icons.attach_file), findsNothing);
+      await c.openMenu();
+      expect(find.text('Attach files'), findsOneWidget);
+      expect(find.text('PERMISSION MODE'), findsOneWidget);
+      expect(find.text('manual mode on'), findsOneWidget);
+      expect(find.text('auto mode on'), findsOneWidget);
     });
 
-    testWidgets('shellBadge', (t) async {
+    testWidgets('modeRowsKeepTheirGates', (t) async {
+      final c = _C(t, _g('working-45'));
+      await c.pump();
+      expect(await c.attachRow(), (true, null));
+      expect(await c.modesEnabled(), isFalse);
+      c.uploads = false;
+      await c.pump();
+      expect(c.menu.onPressed, isNull);
+    });
+
+    testWidgets('menuShowsShellsWhenAny', (t) async {
       final c = _C(t, _g('shell-45'));
       await c.pump();
+      expect(find.text('1 shell'), findsNothing);
+      await c.openMenu();
       expect(find.text('1 shell'), findsOneWidget);
+      await c.closeMenu();
       c.grids.set(_g('idle-placeholder-45'));
       await t.pump();
+      await c.openMenu();
       expect(find.text('1 shell'), findsNothing);
+    });
+
+    testWidgets('agyMenuHoldsAttachOnly', (t) async {
+      final c = _C(t, _g('agy-idle-70'));
+      await c.pump();
+      await c.openMenu();
+      expect(find.text('Attach files'), findsOneWidget);
+      expect(find.text('PERMISSION MODE'), findsNothing);
+      expect(find.byKey(const Key('mode-manual')), findsNothing);
+    });
+  });
+
+  group('attachments', () {
+    tearDown(AttachBlocks.tooOld.clear);
+
+    testWidgets('attachRowPicksFiles', (t) async {
+      final c = _C(t, _g('idle-placeholder-45'));
+      await c.pump();
+      expect(await c.attachRow(), (true, null));
+      await c.attach();
+      expect(find.text('Attach files'), findsNothing);
+      expect(c.chip('a.png'), findsOneWidget);
+      expect(c.chip('b.txt'), findsOneWidget);
+      await c.unchip('a.png');
+      expect(c.chip('a.png'), findsNothing);
+      expect(c.chip('b.txt'), findsOneWidget);
+    });
+
+    testWidgets('theBadgeTakesATapPastTheTileCorner', (t) async {
+      final c = _C(t, _g('idle-placeholder-45'));
+      await c.pump();
+      await c.attach();
+      await t.tapAt(t.getCenter(find.descendant(of: c.chip('a.png'), matching: find.byIcon(Icons.close))) + const Offset(8, -8));
+      await t.pump();
+      expect(c.chip('a.png'), findsNothing);
+    });
+
+    testWidgets('modesStayReachableWhileUploading', (t) async {
+      final c = _C(t, _g('idle-placeholder-45'))..onUpload = (_) {};
+      await c.pump();
+      await c.attach();
+      await c.startSend();
+      expect(await c.attachRow(), (false, null));
+      expect(await c.modesEnabled(), isTrue);
+      await t.tap(find.byKey(const Key('composer')));
+      await t.pump();
+      expect(t.testTextInput.hasAnyClients, isFalse);
+    });
+
+    testWidgets('tilesShowThumbnailForImagesAndNameForFiles', (t) async {
+      final c = _C(t, _g('idle-placeholder-45'));
+      await c.pump();
+      await c.attach();
+      expect(t.widget<Image>(find.descendant(of: c.chip('a.png'), matching: find.byType(Image))).semanticLabel, 'a.png');
+      expect(find.descendant(of: c.chip('b.txt'), matching: find.byType(Image)), findsNothing);
+      expect(find.descendant(of: c.chip('b.txt'), matching: find.text('b.txt')), findsOneWidget);
+      expect(find.descendant(of: c.chip('b.txt'), matching: find.text('4 KB')), findsOneWidget);
+    });
+
+    testWidgets('twoPicksWithOneNameAreTwoChips', (t) async {
+      final c = _C(t, _g('idle-placeholder-45'))..picks = const [_a, PickedFile(name: 'a.png', path: '/q/a.png', size: 3)];
+      await c.pump();
+      await c.attach();
+      expect(c.chip('a.png'), findsNWidgets(2));
+      await t.tap(find.descendant(of: c.chip('a.png').first, matching: find.byIcon(Icons.close)));
+      await t.pump();
+      expect(c.chip('a.png'), findsOneWidget);
+      final shown = (t.widget<Image>(find.descendant(of: c.chip('a.png'), matching: find.byType(Image))).image as ResizeImage).imageProvider;
+      expect((shown as FileImage).file.path, '/q/a.png');
+    });
+
+    testWidgets('aFileOverTheCapIsNotAdded', (t) async {
+      final c = _C(t, _g('idle-placeholder-45'))..picks = const [_a, PickedFile(name: 'big.bin', path: '/p/big.bin', size: 20971521)];
+      await c.pump();
+      await c.attach();
+      expect(c.chip('a.png'), findsOneWidget);
+      expect(c.chip('big.bin'), findsNothing);
+      expect(find.text('file too large (max 20 MiB)'), findsOneWidget);
+    });
+
+    testWidgets('removingAChipDeletesOnlyItsCachedFile', (t) async {
+      final dir = Directory.systemTemp.createTempSync('elis_pick');
+      addTearDown(() => dir.deleteSync(recursive: true));
+      final files = [for (final n in ['a.png', 'b.txt']) File('${dir.path}/$n')..writeAsStringSync('x')];
+      final c = _C(t, _g('idle-placeholder-45'))
+        ..picks = [for (final f in files) PickedFile(name: f.uri.pathSegments.last, path: f.path, size: 1)];
+      await c.pump();
+      await c.attach();
+      await c.unchip('a.png');
+      await t.runAsync(() => Future<void>.delayed(const Duration(milliseconds: 50)));
+      expect([for (final f in files) f.existsSync()], [false, true]);
+    });
+
+    testWidgets('picksPastTheTenthAreDropped', (t) async {
+      final c = _C(t, _g('idle-placeholder-45'))
+        ..picks = [for (var i = 0; i < 11; i++) PickedFile(name: 'f$i.txt', path: '/p/f$i.txt', size: 1)];
+      await c.pump();
+      await c.attach();
+      expect(c.chip('f9.txt'), findsOneWidget);
+      expect(c.chip('f10.txt'), findsNothing);
+      expect(find.text('at most 10 files per message'), findsOneWidget);
+    });
+
+    testWidgets('attachIsOffWithoutUploadOrWhenBlocked', (t) async {
+      final c = _C(t, _g('idle-placeholder-45'))..uploads = false;
+      await c.pump();
+      expect((await c.attachRow()).$1, isFalse);
+      c
+        ..uploads = true
+        ..attachBlocked = 'Sending from the phone is not verified on remote sessions yet';
+      await c.pump();
+      expect(await c.attachRow(), (false, 'Sending from the phone is not verified on remote sessions yet'));
+    });
+
+    testWidgets('attachIsOffWhileSendingIsBlocked', (t) async {
+      final c = _C(t, _g('dialog-bash-45'))..disabledBy = 'Agent exited';
+      await c.pump();
+      expect(await c.attachRow(), (false, 'Agent exited'));
+      c.disabledBy = null;
+      await c.pump();
+      expect(await c.attachRow(), (false, 'Claude shows a dialog'));
+    });
+
+    testWidgets('sendPastesTextThenTheImagesAlone', (t) async {
+      final idle = _g('idle-placeholder-45');
+      final c = _C(t, idle);
+      const line = "fix this Attached: '/h/u/S/b.txt'";
+      c.script((w) => switch (w) {
+            PasteWrite(text: line) || TextWrite(text: ' ') => _withInput(idle, line),
+            PasteWrite() => _withInput(idle, '$line [Image #1]'),
+            _ => idle,
+          });
+      await c.pump();
+      await c.attach();
+      await c.type('fix this ');
+      await c.send();
+      expect([for (final w in c.writer.writes.take(3)) switch (w) { PasteWrite(:final text) || TextWrite(:final text) => text, _ => null }],
+          [line, ' ', "'/h/u/S/a.png'"]);
+      expect(c.writer.writes[1], isA<TextWrite>());
+      expect((c.writer.writes.length, _enter(c.writer.writes.last)), (4, true));
+      expect(c.field, '');
+      expect(c.chip('a.png'), findsNothing);
+      expect(c.chip('b.txt'), findsNothing);
+    });
+
+    testWidgets('theImageStepCountsOnlyNewImages', (t) async {
+      final idle = _g('idle-placeholder-45');
+      final c = _C(t, idle)..picks = const [_a];
+      const line = 'see [Image #1] again';
+      c.script((w) => switch (w) {
+            PasteWrite(text: line) || TextWrite(text: ' ') => _withInput(idle, line),
+            PasteWrite() => _withInput(idle, '$line [Image #2]'),
+            _ => idle,
+          });
+      await c.pump();
+      await c.attach();
+      await c.type(line);
+      await c.send();
+      expect((c.writer.writes.length, _enter(c.writer.writes.last)), (4, true));
+      expect(c.chip('a.png'), findsNothing);
+    });
+
+    testWidgets('anImageTokenWrappedAcrossRowsCounts', (t) async {
+      final idle = _g('idle-placeholder-45');
+      final c = _C(t, idle)..picks = const [_a];
+      int? total;
+      c.script((w) {
+        total ??= c.gate.total;
+        return switch (w) {
+          PasteWrite(text: 'fix this') || TextWrite(text: ' ') => _withInput(idle, 'fix this'),
+          PasteWrite() => _withInputRows(idle, ['❯ fix this [Image', '  #1]']),
+          _ => idle,
+        };
+      });
+      await c.pump();
+      await c.attach();
+      await c.type('fix this');
+      await c.send();
+      expect((c.writer.writes.length, _enter(c.writer.writes.last)), (4, true));
+      expect(total, 4);
+    });
+
+    testWidgets('anImagePathLeftAsTextStopsBeforeEnter', (t) async {
+      final idle = _g('idle-placeholder-45');
+      final c = _C(t, idle)..picks = const [_a];
+      c.script((w) => _withInput(idle, w is PasteWrite && w.text.startsWith("'") ? "fix this '/h/u/S/a.png'" : 'fix this'));
+      await c.pump();
+      await c.attach();
+      await c.type('fix this');
+      await c.send();
+      expect(c.writer.writes.where(_enter), isEmpty);
+      expect(find.text('Claude did not attach the image'), findsOneWidget);
+    });
+
+    testWidgets('imagesOnlyPasteOnceThenEnter', (t) async {
+      final idle = _g('idle-placeholder-45');
+      final c = _C(t, idle)..picks = const [_a];
+      c.script((w) => _enter(w) ? idle : _withInput(idle, '[Image #1]'));
+      await c.pump();
+      expect(c.sendEnabled, isFalse);
+      await c.attach();
+      expect(c.sendEnabled, isTrue);
+      await c.send();
+      expect((c.writer.writes.first as PasteWrite).text, "'/h/u/S/a.png'");
+      expect((c.writer.writes.length, _enter(c.writer.writes.last)), (2, true));
+      expect(c.chip('a.png'), findsNothing);
+    });
+
+    testWidgets('antigravityKeepsTheSingleLine', (t) async {
+      final idle = _g('agy-idle-70');
+      final c = _C(t, idle);
+      const line = "fix this Attached: '/h/u/S/a.png' '/h/u/S/b.txt'";
+      c.script((w) => _enter(w) ? idle : _withInput(idle, line, prompt: '>'));
+      await c.pump();
+      await c.attach();
+      await c.type('fix this');
+      await c.send();
+      expect((c.writer.writes.first as PasteWrite).text, line);
+      expect((c.writer.writes.length, _enter(c.writer.writes.last)), (2, true));
+    });
+
+    testWidgets('typedImagePasteIsBracketed', (t) async {
+      final colour = _g('idle-placeholder-45');
+      final screen = [for (var r = 0; r < colour.rows.length; r++) colour.text(r)].join('\n');
+      final c = _C(t, Grid.text(screen))..picks = const [_a];
+      c.script((w) => Grid.text(switch (w) {
+            PasteWrite() => screen.replaceFirst(RegExp(r'Try ".*"'), 'hello'),
+            TextWrite() => screen.replaceFirst(RegExp(r'Try ".*"'), 'hello [Image #1]'),
+            _ => screen,
+          }));
+      await c.pump();
+      await c.attach();
+      await c.type('hello');
+      await c.send();
+      expect(c.writer.writes.length, 3);
+      expect((c.writer.writes[0] as PasteWrite).text, 'hello');
+      expect((c.writer.writes[1] as TextWrite).text, " \x1b[200~'/h/u/S/a.png'\x1b[201~");
+      expect(_enter(c.writer.writes.last), isTrue);
+    });
+
+    testWidgets('typedEnterWaitsForTheImage', (t) async {
+      final colour = _g('idle-placeholder-45');
+      final screen = [for (var r = 0; r < colour.rows.length; r++) colour.text(r)].join('\n');
+      final c = _C(t, Grid.text(screen))..picks = const [_a];
+      c.script((w) => Grid.text(screen.replaceFirst(RegExp(r'Try ".*"'), w is TextWrite ? "hello '/h/u/S/a.png'" : 'hello')));
+      await c.pump();
+      await c.attach();
+      await c.type('hello');
+      await c.send();
+      expect(c.writer.writes.where(_enter), isEmpty);
+      expect(find.text('Claude did not attach the image'), findsOneWidget);
+    });
+
+    for (final runs in [true, false]) {
+      testWidgets('aCommandWithAChipIsOneWrite $runs', (t) async {
+        final idle = _g('idle-placeholder-45');
+        final c = _C(t, idle)..picks = const [_a];
+        if (!runs) c.checks = const Checks(keys: true, paste: true);
+        const line = "/review Attached: '/h/u/S/a.png'";
+        c.script((w) => _enter(w) ? idle : _withInput(idle, line));
+        await c.pump();
+        await c.attach();
+        await c.type('/review');
+        await c.send();
+        expect(c.writer.writes.where((w) => w is! KeyWrite).single, runs ? isA<PasteWrite>() : isA<TextWrite>());
+        expect(switch (c.writer.writes.first) { PasteWrite(:final text) || TextWrite(:final text) => text, _ => null }, line);
+        expect(_enter(c.writer.writes.last), isTrue);
+      });
+    }
+
+    testWidgets('aFailedUploadKeepsTextAndChipsAndTheResendUploadsOnlyTheRest', (t) async {
+      final idle = _g('idle-placeholder-45');
+      final c = _C(t, idle);
+      c.onUpload = (u) => scheduleMicrotask(() => u.file == _b ? u.fail('cannot read b.txt') : u.finish());
+      await c.pump();
+      await c.attach();
+      await c.type('fix this');
+      await c.send();
+      expect(c.writer.writes, isEmpty);
+      expect(c.field, 'fix this');
+      expect(c.chip('a.png'), findsOneWidget);
+      expect(c.chip('b.txt'), findsOneWidget);
+      expect(find.text('cannot read b.txt'), findsOneWidget);
+      c.onUpload = (u) => scheduleMicrotask(u.finish);
+      const line = "fix this Attached: '/h/u/S/b.txt'";
+      c.script((w) => switch (w) {
+            PasteWrite(text: line) || TextWrite(text: ' ') => _withInput(idle, line),
+            PasteWrite() => _withInput(idle, '$line [Image #1]'),
+            _ => idle,
+          });
+      await c.send();
+      expect([for (final u in c.ups) u.file.name], ['a.png', 'b.txt', 'b.txt']);
+      expect([for (final w in c.writer.writes.whereType<PasteWrite>()) w.text], [line, "'/h/u/S/a.png'"]);
+    });
+
+    testWidgets('removingAnUploadingChipStopsTheSendSilently', (t) async {
+      final c = _C(t, _g('idle-placeholder-45'))..onUpload = (_) {};
+      await c.pump();
+      await c.attach();
+      await c.type('hi');
+      await c.startSend();
+      expect(find.text('Uploading 1/2'), findsOneWidget);
+      await c.unchip('a.png');
+      await t.pump(const Duration(seconds: 1));
+      expect(c.ups.single.cancelled, 'cancelled');
+      expect(c.writer.writes, isEmpty);
+      expect(c.field, 'hi');
+      expect(c.chip('b.txt'), findsOneWidget);
+      expect(find.byType(SnackBar), findsNothing);
+      expect(c.sendEnabled, isTrue);
+    });
+
+    testWidgets('aSecondSendDuringAnUploadDoesNothing', (t) async {
+      final c = _C(t, _g('idle-placeholder-45'))..onUpload = (_) {};
+      await c.pump();
+      await c.attach();
+      await c.type('hi');
+      await c.startSend();
+      expect((c.sendEnabled, (await c.attachRow()).$1), (false, false));
+      unawaited(c.state.sendField('hi'));
+      await t.pump();
+      expect(c.ups.length, 1);
+    });
+
+    testWidgets('uploadingTileShowsProgress', (t) async {
+      final c = _C(t, _g('idle-placeholder-45'))..onUpload = (_) {};
+      await c.pump();
+      await c.attach();
+      await c.startSend();
+      c.ups.single.credits
+        ..add(251658)
+        ..add(251658);
+      await t.pump();
+      expect(t.widget<CircularProgressIndicator>(find.descendant(of: c.chip('a.png'), matching: find.byType(CircularProgressIndicator))).value,
+          closeTo(.4, .001));
+      expect(find.descendant(of: c.chip('b.txt'), matching: find.byType(CircularProgressIndicator)), findsNothing);
+    });
+
+    testWidgets('sendWaitsForAPickInProgress', (t) async {
+      final picked = Completer<List<PickedFile>>();
+      final c = _C(t, _g('idle-placeholder-45'));
+      await c.pump();
+      await c.attach();
+      c.pickWith = () => picked.future;
+      await c.pump();
+      await c.attach();
+      await c.type('hi');
+      expect(c.sendEnabled, isFalse);
+      unawaited(c.state.sendField('hi'));
+      await t.pump();
+      expect(c.ups, isEmpty);
+      picked.complete(const []);
+      await t.pump();
+      expect(c.sendEnabled, isTrue);
+    });
+
+    testWidgets('anotherSendLeavesTheChipsAlone', (t) async {
+      final idle = _g('idle-placeholder-45');
+      final c = _C(t, idle);
+      c.script((w) => _enter(w) ? idle : _withInput(idle, '/model'));
+      await c.pump();
+      await c.attach();
+      unawaited(c.state.send('/model'));
+      await t.pump(const Duration(seconds: 3));
+      await t.pump();
+      expect((c.writer.writes.first as PasteWrite).text, '/model');
+      expect(c.ups, isEmpty);
+      expect(c.chip('a.png'), findsOneWidget);
+      expect(c.chip('b.txt'), findsOneWidget);
+    });
+
+    testWidgets('unmountingDuringAnUploadCancelsItAndWritesNothing', (t) async {
+      final c = _C(t, _g('idle-placeholder-45'))..onUpload = (_) {};
+      await c.pump();
+      await c.attach();
+      await c.type('hi');
+      await c.startSend();
+      await t.pumpWidget(const SizedBox());
+      await t.pump(const Duration(seconds: 1));
+      expect(c.ups.single.cancelled, 'cancelled');
+      expect(c.writer.writes, isEmpty);
+    });
+
+    testWidgets('aTooOldFailureTurnsAttachOffWithTheReason', (t) async {
+      const why = 'Update Elis on mac2 to attach files';
+      final c = _C(t, _g('idle-placeholder-45'))..onUpload = (u) => scheduleMicrotask(() => u.fail(why));
+      await c.pump();
+      await c.attach();
+      await c.send();
+      expect(find.text(why), findsOneWidget);
+      expect(await c.attachRow(), (false, why));
+      expect(AttachBlocks.tooOld['S'], why);
     });
   });
 }

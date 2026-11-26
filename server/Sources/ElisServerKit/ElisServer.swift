@@ -93,6 +93,8 @@ public final class ElisServer {
         server.actions.recentClosed = recentClosed
         historyChanged = { [weak server] in MainActor.assumeIsolated { server?.actions.recentItems = nil } }
         server.actions.pendingCloses = pendingCloses
+        server.actions.uploadDirectory = directory
+        server.actions.sweepUploads()
         // an operation that committed in an earlier run is answered at a revision this run's viewers can reach
         store.catalogOperations?.adopt(epoch: server.actions.streams.catalogHub.epoch, rev: server.actions.streams.catalogHub.rev)
         let socket = ServerControlSocket(path: configuration.socketPath, handler: { [weak server] request in

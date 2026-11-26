@@ -1668,6 +1668,25 @@
 
             <div style="background: #22272b; border: 1px solid rgba(255, 255, 255, 0.08); border-radius: 11px; padding: 18px 20px; margin-bottom: 12px">
               <div style="font-family: &quot;JetBrains Mono&quot;, monospace; font-size: 13.5px; color: #e08a45; line-height: 1.6; word-break: break-word">
+                elisctl session upload --name NAME --size BYTES [--target T] [--window W]
+              </div>
+              <div style="font-family: &quot;JetBrains Mono&quot;, monospace; font-size: 11.5px; color: #6b727a; margin-top: 6px">session.upload</div>
+              <p style="font-size: 15px; line-height: 1.65; color: #cbc6bc; margin: 10px 0 0">
+                Write a file into the session's host: it reads exactly <span style="font-family: &quot;JetBrains Mono&quot;, monospace">--size</span> bytes from stdin into a new file under the Elis state directory's <span style="font-family: &quot;JetBrains Mono&quot;, monospace">uploads/&lt;session id&gt;/</span>,
+                named with a timestamp and <span style="font-family: &quot;JetBrains Mono&quot;, monospace">--name</span> reduced to letters, digits, dot, dash and underscore. The phone's Chat attachments use it.
+                It always prints one JSON line. <strong style="color: #bfbab0">Returns</strong> <span style="font-family: &quot;JetBrains Mono&quot;, monospace">upload.path</span>, the file's path on the host.
+                On a row attached from another Mac or served by elis-server the command answers the origin's <span style="font-family: &quot;JetBrains Mono&quot;, monospace">host</span> and <span style="font-family: &quot;JetBrains Mono&quot;, monospace">session</span> instead, and the file goes there through ssh.
+              </p>
+              <p style="font-size: 13.5px; line-height: 1.6; color: #949ba4; margin: 8px 0 0">
+                Files stay while the session is open, saved or in Recent Closed; at the next launch Elis removes the rest, and any file older than 7 days.
+                Errors: <span style="font-family: &quot;JetBrains Mono&quot;, monospace">file too large (max 20 MiB)</span>, <span style="font-family: &quot;JetBrains Mono&quot;, monospace">upload ended after K of N bytes</span>, <span style="font-family: &quot;JetBrains Mono&quot;, monospace">file changed while sending</span> (each leaves no file),
+                <span style="font-family: &quot;JetBrains Mono&quot;, monospace">cannot upload to a remote row from here</span>, and a host predating the command answers <span style="font-family: &quot;JetBrains Mono&quot;, monospace">the Elis on this host is too old for session.upload</span>. A page session refuses it.
+                It changes no state, so the tree has nothing to read back.
+              </p>
+            </div>
+
+            <div style="background: #22272b; border: 1px solid rgba(255, 255, 255, 0.08); border-radius: 11px; padding: 18px 20px; margin-bottom: 12px">
+              <div style="font-family: &quot;JetBrains Mono&quot;, monospace; font-size: 13.5px; color: #e08a45; line-height: 1.6; word-break: break-word">
                 elisctl session search [needle] [--next | --prev | --close] [--target T] [--window W]
               </div>
               <div style="font-family: &quot;JetBrains Mono&quot;, monospace; font-size: 11.5px; color: #6b727a; margin-top: 6px">session.search</div>

@@ -44,6 +44,8 @@ public struct ControlDispatcher {
             return await dispatchSessionSurfaceCommand(request)
         case .sessionTranscript:
             return await dispatchSessionTranscript(request)
+        case .sessionUpload:
+            return dispatchSessionUpload(request)
         case .sessionOverlayJobRun, .sessionOverlayPageServe:
             return dispatchSessionOverlayCommand(request)
         case .sessionCompanionNew, .sessionCompanionPage, .sessionPage, .sessionCompanionDuplicate, .sessionCompanionConvert,

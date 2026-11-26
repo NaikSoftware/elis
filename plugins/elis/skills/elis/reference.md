@@ -797,6 +797,13 @@ error keeps those names for compatibility.
   NOT an error (returns `ok` with an empty string, unlike `session copy`'s `no selection`), but a failed
   read IS an error (`failed to read surface buffer`). Pipe the text into `grep`/`fzf` to extract URLs,
   paths, etc.
+- `session upload --name NAME --size BYTES [--target] [--window W]`: reads exactly BYTES from stdin into a new file
+  `<state dir>/uploads/<session id>/<yyyyMMdd-HHmmss>-<NAME reduced to [A-Za-z0-9._-]>` and prints one JSON line,
+  `result.upload.path`. A row attached from another Mac or served by elis-server answers `upload.host` and
+  `upload.session` instead, and the file goes there over ssh. Errors: `file too large (max 20 MiB)`,
+  `upload ended after K of N bytes`, `file changed while sending` (each leaves no file), `cannot upload to a remote row
+  from here`, `the Elis on this host is too old for session.upload`; a page session refuses it. No tree read-back.
+  Old uploads are swept at launch (retention: `site/commands.html`).
 - `session transcript [--pane left|right] [--pane-id TOKEN] [--after N | --before N] [--transcript ID] [--max-bytes N] [--target] [--window W]`:
   a page of the Claude Code or agy (Antigravity CLI) conversation running in the session, read from its transcript file. `--pane` defaults to the
   node's `agentPane`; `scratch` is refused. Human output prints the title, model and permission mode, one

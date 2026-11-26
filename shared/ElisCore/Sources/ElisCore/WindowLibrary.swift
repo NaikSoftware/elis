@@ -71,7 +71,7 @@ public final class WindowLibrary {
     var openSetVersion = 0
 
     /// The state directory (ELIS_STATE_DIR-aware): the index here, per-window files in `windows/`.
-    @ObservationIgnored let directory: URL
+    @ObservationIgnored public let directory: URL
     @ObservationIgnored let recentClosedStore: RecentClosedStore
     /// One bounded run-identified ring shared by every window store for this library/app lifetime.
     @ObservationIgnored let controlEventRing: ControlEventRing

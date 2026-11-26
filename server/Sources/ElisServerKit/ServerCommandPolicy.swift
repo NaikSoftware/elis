@@ -20,7 +20,7 @@ public enum ServerCommandPolicy {
         .msgSend, .msgRead, .msgAck, .surfaceCursor, .zmxList, .zmxScreen, .sessionSeen,
         .sessionFlag, .sessionTint, .workspaceFlag, .workspaceTint, .sessionDuplicate,
         .sessionRestart, .sessionCompanionDuplicate, .sessionCompanionConvert, .sessionCompanionMove, .zmxKill, .zmxKillPane, .zmxPrune,
-        .recentList, .recentOpen, .recentClear, .sessionAttach, .sessionTranscript,
+        .recentList, .recentOpen, .recentClear, .sessionAttach, .sessionTranscript, .sessionUpload,
     ]
 
     /// refusal is the error for a command the server does not serve, nil for one it does.

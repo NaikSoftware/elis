@@ -293,13 +293,13 @@ QString Store::addWorkspace(const QString &name, bool isCollapsed, const QString
 }
 
 QString Store::addSession(const QString &workspaceId, const QString &name, const QString &cwd, const QString &command, int index,
-                          const QString &resume)
+                          const QString &resume, const QString &id)
 {
     auto *w = workspace(workspaceId);
     if (!w)
         return {};
     Session s;
-    s.id = newId();
+    s.id = id.isEmpty() || session(id) ? newId() : id;
     s.cwd = cwd.isEmpty() ? QDir::homePath() : cwd;
     s.name = name;
     s.command = command;
@@ -530,7 +530,7 @@ QString Store::reopenClosed(const QString &closedId)
     QString ws = c.workspaceId;
     if (!workspace(ws))
         ws = workspaces.isEmpty() ? addWorkspace(QStringLiteral("main")) : workspaces.first().id;
-    const QString id = addSession(ws, c.name, c.cwd, {}, c.index, c.resume);
+    const QString id = addSession(ws, c.name, c.cwd, {}, c.index, c.resume, c.id);
     select(id);
     return id;
 }

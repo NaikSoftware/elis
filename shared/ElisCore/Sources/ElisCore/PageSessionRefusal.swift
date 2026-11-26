@@ -5,7 +5,7 @@ public enum PageSessionRefusal {
     private static let refused: Set<Command> = [
         .sessionType, .sessionText, .sessionTranscript, .sessionGrid, .sessionScroll, .sessionAttach, .sessionCopy, .sessionPaste, .sessionSelectAll, .sessionSearch, .sessionBackground,
         .sessionLead, .sessionSwap, .sessionFocus, .sessionResize, .sessionSplit, .sessionSplitClose, .sessionScratch,
-        .sessionRestart, .sessionRestore, .sessionOverlayOpen, .sessionHudOpen,
+        .sessionRestart, .sessionRestore, .sessionOverlayOpen, .sessionHudOpen, .sessionUpload,
     ]
 
     /// refusal answers `request` when it addresses a page session, nil otherwise. `isPageSession` resolves a session
@@ -19,7 +19,11 @@ public enum PageSessionRefusal {
             && request.target.map { $0 != "active" } == true
         guard refused.contains(request.cmd) || floats || terminalAsk || namedSurface,
               isPageSession(request.target.map(sessionPart(ofSurface:)), request.args?.window) else { return nil }
-        return ControlResponse(ok: false, error: "\(request.cmd.rawValue): not available on a page session")
+        return response(request.cmd)
+    }
+
+    public static func response(_ cmd: Command) -> ControlResponse {
+        ControlResponse(ok: false, error: "\(cmd.rawValue): not available on a page session")
     }
 
     // a `surface:<session>:<slot>` address names its session in the middle
