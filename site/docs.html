@@ -722,7 +722,7 @@ elisctl reply &quot;all tests pass&quot;</code></pre>
 <li>It differs from macOS window zoom and full screen, which size the window itself.</li>
 </ul>
 <h3 id="terminals-file-panel">File panel</h3>
-<p>A column right of the sidebar shows the active session's current folder as a tree, in the app theme, and refreshes as files change.</p>
+<p>A column right of the sidebar shows the active session's current folder as a tree, in the app theme, and refreshes as files change. The folder is the one the focused pane's coding agent works in, else the pane's own: a Claude Code session that moves into a worktree shows that worktree.</p>
 <ul>
 <li>Toggle it with ⌃⌘E, the folder button left of the sidebar toggle, View ▸ Show/Hide File Panel, the palette, or the <code>toggle_file_panel</code> keymap action. A remote session shows "No local folder".</li>
 <li>Double-click or Return opens a file: Markdown, text and images in the built-in viewer, anything else in its default macOS app.</li>

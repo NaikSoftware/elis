@@ -125,7 +125,7 @@ public final class CIPoller {
             if include(session) { candidates.append(session) } else { apply(session, nil) }
         }
         let tracker = tracker
-        let cwds = candidates.map(\.ciCwd)
+        let cwds = candidates.map(\.workingCwd)
         // the tracker blocks for up to gh's timeout, so it runs on a dispatch thread, never on the cooperative pool
         let statuses = await withCheckedContinuation { continuation in
             DispatchQueue.global(qos: .utility).async { continuation.resume(returning: tracker.statuses(cwds: cwds)) }

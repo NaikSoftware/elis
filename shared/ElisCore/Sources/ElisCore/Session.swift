@@ -44,7 +44,8 @@ public final class Session: Identifiable {
     @ObservationIgnored var paneActivity: [StatusPane: AgentIndicator] = [:]
     /// Each pane's agent's own directory from `session.status --cwd`, which a worktree moves while the shell's stays.
     /// Kept while the pane's agent sample shows an agent, so status changes never clear it.
-    @ObservationIgnored var paneAgentCwd: [StatusPane: String] = [:]
+    /// Observed, so the file panel follows it; writers skip equal values.
+    var paneAgentCwd: [StatusPane: String] = [:]
 
     /// The coding agent either pane runs in the foreground, the focused pane's first, sampled by the app; the sidebar
     /// row shows its logo. Ephemeral, and nil again once the agent exits.
@@ -652,8 +653,8 @@ public final class Session: Identifiable {
         return currentCwd ?? initialCwd
     }
 
-    /// The directory the CI line reads: the focused pane's agent's, else `focusedCwd`, on the same pane.
-    public var ciCwd: String {
+    /// The directory the focused pane works in, which the CI line and the file panel read: its agent's, else `focusedCwd`.
+    public var workingCwd: String {
         paneAgentCwd[splitFocused && splitSurface != nil ? .right : .left] ?? focusedCwd
     }
 

@@ -214,7 +214,7 @@ public struct ControlSessionStatusUpdate: Equatable, Sendable {
     public let paneID: String?
     /// `ifIdle` applies the write only while the session's status is idle; otherwise it is an ok no-op.
     public let ifIdle: Bool
-    /// `cwd` is the reporting agent's absolute directory, which the CI line follows (`Session.ciCwd`).
+    /// `cwd` is the reporting agent's absolute directory, which the CI line and the file panel follow (`Session.workingCwd`).
     public let cwd: String?
 
     public init(status: AgentStatus, blink: Bool?, autoReset: Bool?, sound: String?,

@@ -29,7 +29,7 @@ extension AppStore {
         guard let session = session(withID: id) else { return .applied }
         if ifIdle, session.agentIndicator.status != .idle { return .skipped }
         let writer = indicator.normalizedPane(hasSplit: session.hasSplit) ?? .left
-        if let cwd, !cwd.isEmpty, writer != .scratch { session.paneAgentCwd[writer] = cwd }
+        if let cwd, !cwd.isEmpty, writer != .scratch, session.paneAgentCwd[writer] != cwd { session.paneAgentCwd[writer] = cwd }
         let before = session.paneActivity[writer] != nil
         session.paneActivity[writer] = indicator.status == .active ? indicator : nil
         let shown = session.agentIndicator
