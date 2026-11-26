@@ -4,10 +4,13 @@ import Foundation
 public struct CIRepo: Hashable, Sendable {
     public let root: String
     public let branch: String
+    /// pushRepo is `host/owner/repo` of the remote the branch pushes to, nil when unknown.
+    public let pushRepo: String?
 
-    public init(root: String, branch: String) {
+    public init(root: String, branch: String, pushRepo: String? = nil) {
         self.root = root
         self.branch = branch
+        self.pushRepo = pushRepo
     }
 
     /// locate walks up from `cwd` to the first `.git`, a directory or a worktree's `gitdir:` file. Nil outside
@@ -39,7 +42,53 @@ public struct CIRepo: Hashable, Sendable {
         let prefix = "ref: refs/heads/"
         guard let head = try? String(contentsOf: gitDir.appendingPathComponent("HEAD"), encoding: .utf8)
             .trimmingCharacters(in: .whitespacesAndNewlines), head.hasPrefix(prefix) else { return nil }
-        return CIRepo(root: root.path, branch: String(head.dropFirst(prefix.count)))
+        let branch = String(head.dropFirst(prefix.count))
+        let common = (try? String(contentsOf: gitDir.appendingPathComponent("commondir"), encoding: .utf8))
+            .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+            .map { $0.hasPrefix("/") ? URL(fileURLWithPath: $0) : gitDir.appendingPathComponent($0) } ?? gitDir
+        let config = (try? String(contentsOf: common.appendingPathComponent("config"), encoding: .utf8)).map(gitConfig) ?? [:]
+        // git's push remote order
+        let remote = config["branch.\(branch).pushremote"] ?? config["remote.pushdefault"]
+            ?? config["branch.\(branch).remote"] ?? "origin"
+        return CIRepo(root: root.path, branch: branch, pushRepo: config["remote.\(remote).url"].flatMap(githubRepo))
+    }
+
+    /// gitConfig flattens a git config to `section.subsection.key`, section and key lowercased as git compares
+    /// them, the last value winning. shortcut: no includes, continuations or inline comments; add them if a
+    /// real config needs one.
+    static func gitConfig(_ text: String) -> [String: String] {
+        var section = "", values: [String: String] = [:]
+        for raw in text.split(whereSeparator: \.isNewline) {
+            let line = raw.trimmingCharacters(in: .whitespaces)
+            if line.hasPrefix("["), let close = line.firstIndex(of: "]") {
+                let header = line[line.index(after: line.startIndex)..<close]
+                if let quote = header.firstIndex(of: "\"") {
+                    let name = header[..<quote].trimmingCharacters(in: .whitespaces).lowercased()
+                    section = name + "." + header[quote...].trimmingCharacters(in: CharacterSet(charactersIn: "\""))
+                } else {
+                    section = header.trimmingCharacters(in: .whitespaces).lowercased()
+                }
+            } else if !line.hasPrefix("#"), !line.hasPrefix(";"), let equals = line.firstIndex(of: "=") {
+                let key = line[..<equals].trimmingCharacters(in: .whitespaces).lowercased()
+                values[section + "." + key] = line[line.index(after: equals)...]
+                    .trimmingCharacters(in: .whitespaces).trimmingCharacters(in: CharacterSet(charactersIn: "\""))
+            }
+        }
+        return values
+    }
+
+    /// githubRepo reads `host/owner/repo` from an https, `ssh://` or scp-style `git@host:owner/repo` URL.
+    static func githubRepo(_ url: String) -> String? {
+        var url = url
+        if !url.contains("://"), let colon = url.firstIndex(of: ":"), !url[..<colon].contains("/") {
+            url = "ssh://" + url[..<colon] + "/" + url[url.index(after: colon)...]
+        }
+        guard let components = URLComponents(string: url), let host = components.host, !host.isEmpty else { return nil }
+        var path = components.path.trimmingCharacters(in: CharacterSet(charactersIn: "/"))
+        if path.hasSuffix(".git") { path.removeLast(4) }
+        let parts = path.split(separator: "/")
+        guard parts.count == 2 else { return nil }
+        return "\(host)/\(parts[0])/\(parts[1])"
     }
 }
 
@@ -49,10 +98,12 @@ public enum CIProbe {
     public typealias Runner = @Sendable (_ arguments: [String], _ directory: String) -> Data?
 
     /// runs is the latest run of each workflow on the newest commit the branch has runs for, which is its last
-    /// push, so local unpushed commits keep the previous push's line. Nil when `gh` fails.
+    /// push, so local unpushed commits keep the previous push's line. Nil when `gh` fails. It names the push
+    /// remote's repository, since gh's default can be the upstream of a fork.
     public static func runs(_ repo: CIRepo, run: Runner) -> (sha: String, runs: [CIRun])? {
         let arguments = ["run", "list", "--branch", repo.branch, "--limit", "30",
                          "--json", "workflowName,status,conclusion,headSha,url"]
+            + (repo.pushRepo.map { ["--repo", $0] } ?? [])
         guard let data = run(arguments, repo.root), let list = try? JSONDecoder().decode([RunJSON].self, from: data) else {
             return nil
         }
