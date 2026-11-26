@@ -345,6 +345,20 @@ struct ClaudeStatusHookTests {
         }
     }
 
+    // Claude Code's forks (the away recap, the session title) end with SubagentStop and never send SubagentStart.
+    @Test func subagentStopWithoutStartStaysSilent() throws {
+        try withBusyDir { env in
+            try #expect(post("SubagentStop", agentID: "a-fork", env: env).isEmpty)
+        }
+    }
+
+    @Test func subagentStopAfterStartPostsActive() throws {
+        try withBusyDir { env in
+            _ = try post("SubagentStart", agentID: "a1", env: env)
+            try #expect(post("SubagentStop", agentID: "a1", env: env) == ["active --blink --if-idle"])
+        }
+    }
+
     @Test func stopWithNoTeammateDropsBusyMarks() throws {
         try withBusyDir { env in
             _ = try post("SubagentStart", agentID: "at1-0b61", env: env)
