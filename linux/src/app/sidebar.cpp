@@ -394,26 +394,7 @@ void SidebarDelegate::paint(QPainter *p, const QStyleOptionViewItem &opt, const 
             p->restore();
         }
     }
-    // Elis stands alone at a group card's size, so its edges and the gap under it match the cards below
-    const qreal pad = assistant ? Sidebar::groupPadding : 0;
-    const QRectF fill = r.adjusted(-pad, -pad, pad, pad);
-    if (selected) {
-        // the group's tint, else the row's own, else the accent; dimmer while the window is in the background
-        const QColor c = band.isValid() ? band : tint.isValid() ? tint : pal.color(QPalette::Highlight);
-        const bool key = m_sidebar->isActiveWindow();
-        p->setPen(QPen(faded(c, key ? 0.55 : 0.35), 1));
-        p->setBrush(faded(c, key ? 0.20 : 0.12));
-        under = over(under, faded(c, key ? 0.20 : 0.12));
-        p->drawPath(shape(fill.adjusted(0.5, 0.5, -0.5, -0.5), assistant ? 10.5 : 7.5));
-    } else if (opt.state & QStyle::State_MouseOver) {
-        p->setBrush(faded(text, 0.07));
-        under = over(under, faded(text, 0.07));
-        p->drawPath(shape(fill, assistant ? 10.5 : 8));
-    }
-
-    QList<QColor> unders{under};
-    if (filled.isValid())
-        unders << over(under, filled);
+    QColor waveBase, waveSecond; // the wave's strongest stops, for the info line's contrast
     if (session && index.data(Wave).toBool()) {
         // in progress: the row's tint (else the active colour) drifts across it with a second hue, one period every two row widths
         const QColor active = statusColor(m_sidebar->settings(), QStringLiteral("active"));
@@ -429,9 +410,33 @@ void SidebarDelegate::paint(QPainter *p, const QStyleOptionViewItem &opt, const 
         p->setPen(Qt::NoPen);
         p->setBrush(g);
         p->drawPath(shape(r, 8));
-        QList<QColor> waved; // its strongest stops: the line holds still as it drifts
+        waveBase = alpha(base, 51), waveSecond = alpha(second, 41);
+    }
+    // Elis stands alone at a group card's size, so its edges and the gap under it match the cards below
+    const qreal pad = assistant ? Sidebar::groupPadding : 0;
+    const QRectF fill = r.adjusted(-pad, -pad, pad, pad);
+    if (selected) {
+        // the group's tint, else the row's own, else the accent; dimmer while the window is in the background
+        const QColor c = band.isValid() ? band : tint.isValid() ? tint : pal.color(QPalette::Highlight);
+        const bool key = m_sidebar->isActiveWindow();
+        p->setPen(QPen(faded(c, key ? 0.55 : 0.35), 1));
+        p->setBrush(faded(c, key ? 0.20 : 0.12));
+        under = over(under, faded(c, key ? 0.20 : 0.12));
+        p->drawPath(shape(fill.adjusted(0.5, 0.5, -0.5, -0.5), assistant ? 10.5 : 7.5));
+    } else if (opt.state & QStyle::State_MouseOver) {
+        p->setPen(Qt::NoPen);
+        p->setBrush(faded(text, 0.07));
+        under = over(under, faded(text, 0.07));
+        p->drawPath(shape(fill, assistant ? 10.5 : 8));
+    }
+
+    QList<QColor> unders{under};
+    if (filled.isValid())
+        unders << over(under, filled);
+    if (waveBase.isValid()) {
+        QList<QColor> waved; // the line holds still as the wave drifts
         for (const QColor &u : std::as_const(unders))
-            waved << over(u, alpha(base, 51)) << over(u, alpha(second, 41));
+            waved << over(u, waveBase) << over(u, waveSecond);
         unders = waved;
     }
 

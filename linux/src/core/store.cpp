@@ -368,6 +368,7 @@ void Store::removeSession(const QString &id)
         closed.removeLast();
     w->sessions.removeAt(i);
     recent.removeAll(id);
+    delete m_progressExpiry.take(id);
     if (selected == id)
         reselect(w, i);
     Q_EMIT sessionRemoved(id);
@@ -464,6 +465,12 @@ bool Store::softRemoveWorkspace(const QString &id)
 bool Store::park(const PendingClose &close)
 {
     pending << close;
+    // a parked pane's progress expiry finds no session, so an undo would bring back a stale fill
+    auto stale = [](Session &s) { s.terminalProgress = QJsonObject(), s.terminalProgressPane.clear(); };
+    for (Parked &p : pending.last().sessions)
+        stale(p.session);
+    for (Session &s : pending.last().workspace.sessions)
+        stale(s);
     QTimer::singleShot(graceMs, this, [this, serial = close.serial] { finalizePending(serial); });
     Q_EMIT changed();
     return true;
@@ -481,6 +488,7 @@ void Store::finalizePending(int serial)
         for (const Parked &p : std::as_const(gone)) {
             closed.prepend({p.workspaceId, p.session.name, p.session.cwd, p.index, p.session.id, QDateTime::currentMSecsSinceEpoch(),
                             p.session.displayName(), p.session.resume});
+            delete m_progressExpiry.take(p.session.id);
             Q_EMIT sessionRemoved(p.session.id);
         }
         while (closed.size() > 20)

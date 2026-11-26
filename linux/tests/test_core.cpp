@@ -521,6 +521,20 @@ private Q_SLOTS:
         QCOMPARE(Store::progressNode(*s.session(a))["value"].toString(), QStringLiteral("1/2"));
     }
 
+    void anUndoneCloseDropsTheTerminalProgress()
+    {
+        Store s;
+        const QString ws = s.addWorkspace("w");
+        const QString a = s.addSession(ws, "a", {}), b = s.addSession(ws, "b", {});
+        s.select(a);
+        s.setControlProgress(b, QJsonObject{{"percent", 10}});
+        s.setTerminalProgress(b, "p1", {{"update", "set"}, {"progress", QJsonObject{{"percent", 40}}}});
+        QVERIFY(s.softClose({b}));
+        QVERIFY(s.undoClose());
+        QVERIFY(s.session(b)->terminalProgress.isEmpty());
+        QCOMPARE(Store::progressNode(*s.session(b))["source"].toString(), QStringLiteral("control"));
+    }
+
     void sessionProgressCommandReadsBack()
     {
         Store s;
