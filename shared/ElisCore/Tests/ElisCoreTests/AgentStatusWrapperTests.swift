@@ -19,8 +19,10 @@ struct AgentStatusWrapperTests {
 
     // run the wrapper with a stub elisctl. the stub records each received arg on its own line, prints
     // `stubStdout`, and exits `stubExit`. returns the recorded argv, the wrapper's own stdout, and its exit.
+    // `rejectsCwd` records one line per call instead and fails a call carrying `--cwd`, as an older elisctl does.
     private func runWrapper(_ args: [String], env: [String: String],
-                            stubStdout: String = "ok", stubExit: Int = 0) throws -> (argv: [String], stdout: String, exit: Int32) {
+                            stubStdout: String = "ok", stubExit: Int = 0,
+                            rejectsCwd: Bool = false) throws -> (argv: [String], stdout: String, exit: Int32) {
         let fm = FileManager.default
         let dir = URL(fileURLWithPath: NSTemporaryDirectory()).appendingPathComponent("elis-wrapper-\(UUID().uuidString)")
         try fm.createDirectory(at: dir, withIntermediateDirectories: true)
@@ -30,8 +32,9 @@ struct AgentStatusWrapperTests {
         let stub = dir.appendingPathComponent("elisctl")
         let stubScript = """
         #!/bin/bash
-        printf '%s\\n' "$@" > '\(record.path)'
+        \(rejectsCwd ? "printf '%s\\n' \"$*\" >> '\(record.path)'" : "printf '%s\\n' \"$@\" > '\(record.path)'")
         printf '%s' '\(stubStdout)'
+        \(rejectsCwd ? #"case " $* " in *" --cwd "*) exit 64 ;; esac"# : "")
         exit \(stubExit)
         """
         try stubScript.writeExecutable(to: stub)
@@ -89,6 +92,23 @@ struct AgentStatusWrapperTests {
     @Test func alwaysExitsZeroEvenWhenElisctlFails() throws {
         let r = try runWrapper(["active"], env: ["ELIS_SESSION_ID": "sid", "ELIS_SOCKET": "/tmp/s.sock"], stubExit: 64)
         #expect(r.exit == 0)
+    }
+
+    @Test func anElisctlRejectingCwdStillGetsTheStatus() throws {
+        let r = try runWrapper(["active", "--blink", "--cwd", "/wt"], env: ["ELIS_SESSION_ID": "sid"], rejectsCwd: true)
+        #expect(r.argv == ["session status active --target sid --blink --cwd /wt",
+                            "session status active --target sid --blink"])
+    }
+
+    @Test func aBareStateKeepsItsStatusWhenCwdIsRejected() throws {
+        let r = try runWrapper(["blocked", "--cwd", "/wt"], env: ["ELIS_SESSION_ID": "sid"], rejectsCwd: true)
+        #expect(r.argv == ["session status blocked --target sid --cwd /wt", "session status blocked --target sid"])
+        #expect(r.exit == 0)
+    }
+
+    @Test func aFailureWithoutCwdIsNotRetried() throws {
+        let r = try runWrapper(["active", "--blink"], env: ["ELIS_SESSION_ID": "sid"], stubExit: 1, rejectsCwd: true)
+        #expect(r.argv == ["session status active --target sid --blink"])
     }
 
     @Test func paneForwardedWhenElisPaneSet() throws {

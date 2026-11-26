@@ -653,6 +653,12 @@ struct CommandsTests {
                                       args: ControlArgs(status: "active", blink: true, ifIdle: true)))
     }
 
+    @Test func sessionStatusWithCwd() throws {
+        let req = try request(["session", "status", "active", "--cwd", "/repo/wt"])
+        #expect(req == ControlRequest(cmd: .sessionStatus, target: "active",
+                                      args: ControlArgs(cwd: "/repo/wt", status: "active")))
+    }
+
     @Test func sessionStatusWithSound() throws {
         let req = try request(["session", "status", "blocked", "--sound", "Glass"])
         #expect(req.cmd == .sessionStatus)

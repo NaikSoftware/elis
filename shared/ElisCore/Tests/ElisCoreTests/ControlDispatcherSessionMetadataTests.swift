@@ -203,6 +203,22 @@ struct ControlDispatcherSessionMetadataTests {
         ])
     }
 
+    @Test func sessionStatusPassesAnAbsoluteCwdAndRejectsARelativeOne() async {
+        let actions = MockControlActions()
+        let dispatcher = ControlDispatcher(actions: actions)
+
+        _ = await dispatcher.dispatch(ControlRequest(cmd: .sessionStatus, target: "session",
+                                                     args: ControlArgs(cwd: "/repo/wt", status: "active")))
+        let relative = await dispatcher.dispatch(ControlRequest(cmd: .sessionStatus, target: "session",
+                                                                args: ControlArgs(cwd: "repo", status: "active")))
+
+        #expect(relative == ControlResponse(ok: false, error: "cwd must be an absolute path"))
+        #expect(actions.calls == [
+            .sessionStatus(target: "session", window: nil,
+                           ControlSessionStatusUpdate(status: .active, blink: nil, autoReset: nil, sound: nil, cwd: "/repo/wt"))
+        ])
+    }
+
     @Test func sessionStatusRevertsColorWhenOmitted() async {
         let actions = MockControlActions()
         let dispatcher = ControlDispatcher(actions: actions)

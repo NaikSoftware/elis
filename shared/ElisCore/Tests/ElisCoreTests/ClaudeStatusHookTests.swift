@@ -232,8 +232,10 @@ struct ClaudeStatusHookTests {
         }
     }
 
-    private static func payload(_ event: String, agentID: String? = nil, tasks: String? = nil, crons: String? = nil) -> String {
+    private static func payload(_ event: String, agentID: String? = nil, tasks: String? = nil, crons: String? = nil,
+                                cwd: String? = nil) -> String {
         var fields = [#""session_id":"s1""#, #""hook_event_name":"\#(event)""#]
+        if let cwd { fields.append(#""cwd":"\#(cwd)""#) }
         if let agentID { fields.append(#""agent_id":"\#(agentID)""#) }
         if let tasks { fields.append(#""background_tasks":\#(tasks)"#) }
         if let crons { fields.append(#""session_crons":\#(crons)"#) }
@@ -266,6 +268,25 @@ struct ClaudeStatusHookTests {
     @Test func mainActivePostsArgv() throws {
         let result = try run(chain: ["login", "claude"], args: ["active", "--blink"], input: .pipe(Self.payload("PostToolUse")))
         #expect(result.calls == ["active --blink"])
+    }
+
+    @Test func theLeadsCwdIsForwarded() throws {
+        let result = try run(chain: ["login", "claude"], args: ["active", "--blink"],
+                             input: .pipe(Self.payload("PostToolUse", cwd: "/repo/.claude/worktrees/a")))
+        #expect(result.calls == ["active --blink --cwd /repo/.claude/worktrees/a"])
+    }
+
+    @Test func theCwdFollowsTheStopRewrite() throws {
+        let result = try run(chain: ["login", "claude"], args: ["completed", "--auto-reset"],
+                             input: .pipe(Self.payload("Stop", tasks: Self.runningSubagent, cwd: "/wt")))
+        #expect(result.calls == ["active --blink --cwd /wt"])
+    }
+
+    @Test(arguments: [("a1", "/wt"), (nil, "relative")])
+    func aSubagentOrRelativeCwdIsNotForwarded(_ agentID: String?, _ cwd: String) throws {
+        let result = try run(chain: ["login", "claude"], args: ["blocked"],
+                             input: .pipe(Self.payload("PermissionRequest", agentID: agentID, cwd: cwd)))
+        #expect(result.calls == ["blocked"])
     }
 
     @Test func subagentActiveKeepsItsFlags() throws {

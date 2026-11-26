@@ -12,7 +12,7 @@ extension ServerActions {
             let pane = update.paneID.flatMap { session.paneRole(forToken: $0) } ?? update.pane
             let indicator = AgentIndicator(status: update.status, blink: update.blink ?? false, autoReset: update.autoReset ?? false,
                                            color: update.color, shape: update.shape, statusPane: pane)
-            if store.applyControlStatus(indicator, forSession: session.id, ifIdle: update.ifIdle) == .skipped {
+            if store.applyControlStatus(indicator, forSession: session.id, ifIdle: update.ifIdle, cwd: update.cwd) == .skipped {
                 return ControlResponse(ok: true, result: ControlResult(id: session.id.uuidString))
             }
             let explicit = update.sound.flatMap { $0.isEmpty ? nil : $0 }
