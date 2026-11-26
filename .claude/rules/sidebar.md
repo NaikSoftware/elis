@@ -184,10 +184,10 @@ paths:
 - `AppSettings.sessionInfoDisplay` (`always`|`flagged`|`off`, nil = always) decides where the line shows,
   mirrored to `GhosttyApp.sessionInfoDisplay`, labelled "CI status". `flagged` shows it in the flagged view only
   and polls only flagged sessions; `off` polls none. The picker shares the Settings ▸ Interface Sidebar section's last row.
-- A plain click on the shown session's line opens `CIStatusPanel` in an `NSPopover`; its delaying
+- A plain click on the shown session's line pops up `CIStatusLine.showMenu`'s `NSMenu`; its delaying
   `NSClickGestureRecognizer` claims only that click, decided at mouse-down. Any other click on the line, or one
   with Control, Shift or Command, reaches the row whole: it selects, drags, extends the selection or opens the
-  row menu. The panel reads the session live and closes when the line goes.
+  row menu. The menu is a snapshot and closes when the line goes.
 
 ## Workspace focus
 
