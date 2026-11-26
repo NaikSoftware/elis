@@ -141,6 +141,33 @@ running_teammate() {
 # Each agent's SubagentStart marks it busy and its SubagentStop (fired whenever a teammate goes idle) clears it.
 safe_id() { case "$1" in '' | . | .. | */*) return 1 ;; esac; }
 
+# the plan's done/total from a todo tool's PostToolUse: TodoWrite carries the whole list, TaskCreate/TaskUpdate one task,
+# their list living on disk. A subagent's plan is not the row's, and a payload the hook cannot read sends nothing.
+if [ "${1:-}" = progress ]; then
+  sid=$(field session_id)
+  safe_id "$sid" && [ -z "$(field agent_id)" ] || exit 0
+  finished=0
+  if [ "$(field tool_name)" = TodoWrite ]; then
+    total=$(field tool_input.todos)
+    case "$total" in '' | *[!0-9]*) exit 0 ;; esac
+    i=0
+    while [ "$i" -lt "$total" ]; do
+      [ "$(field "tool_input.todos.$i.status")" = completed ] && finished=$((finished + 1))
+      i=$((i + 1))
+    done
+  else
+    total=0
+    for f in "${CLAUDE_CONFIG_DIR:-${HOME:-}/.claude}/tasks/$sid"/*.json; do
+      [ -f "$f" ] || continue
+      total=$((total + 1))
+      grep -q '"status"[[:space:]]*:[[:space:]]*"completed"' "$f" 2>/dev/null && finished=$((finished + 1))
+    done
+  fi
+  value=clear
+  [ "$finished" -lt "$total" ] && value=$finished/$total
+  exec "$status_wrapper" progress "$value"
+fi
+
 if [ -n "$payload" ]; then
   event=$(field hook_event_name)
   sid=$(field session_id)
