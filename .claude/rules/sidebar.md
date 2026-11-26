@@ -66,8 +66,8 @@ paths:
 - The footer provides workspace creation and New Session/Open Directory. Workspace row menus repeat the
   session actions. Hover shows `workspace-add-session` only when `InterfaceElement.workspaceAddSession`
   is enabled.
-- Hover shows `session-close` on a session row only while it has no badge, status glyph or companion marker,
-  so it never covers one; it runs the menu's Close. No Interface toggle, by the owner's call.
+- Hover shows `session-close` on a session row in place of its badge and status glyph, except on an `.active`
+  row, which keeps its glyph; it runs the menu's Close. No Interface toggle, by the owner's call.
 - A workspace-row click toggles expansion through the outline action, excluding the disclosure frame.
   Defer by `NSEvent.doubleClickInterval` and cancel on double-click so rename does not flicker through a
   toggle. This click routing is keep-in-sync exempt. `GhosttyApp.workspaceRowClickExpands` (default on)
@@ -184,7 +184,7 @@ paths:
 - `AppSettings.sessionInfoDisplay` (`always`|`flagged`|`off`, nil = always) decides where the line shows,
   mirrored to `GhosttyApp.sessionInfoDisplay`, labelled "CI status". `flagged` shows it in the flagged view only
   and polls only flagged sessions; `off` polls none. The picker shares the Settings ▸ Interface Sidebar section's last row.
-- A plain click on the shown session's line pops up `CIStatusLine.showMenu`'s `NSMenu`; its delaying
+- A plain click on the shown session's line, which hugs its text, pops up `CIStatusLine.showMenu`'s `NSMenu`; its delaying
   `NSClickGestureRecognizer` claims only that click, decided at mouse-down. Any other click on the line, or one
   with Control, Shift or Command, reaches the row whole: it selects, drags, extends the selection or opens the
   row menu. The menu is a snapshot and closes when the line goes.

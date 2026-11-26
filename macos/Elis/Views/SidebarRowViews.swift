@@ -126,11 +126,13 @@ class SidebarCellView: NSTableCellView {
         repeatButtonGapConstraint?.constant = visible ? 6 : 0
     }
 
-    /// Reveals or collapses the session row's close button. It shows only while the row has no badge, status
-    /// glyph or companion marker, so it never covers one; configure resets it hidden.
+    /// Reveals or collapses the session row's close button, which takes the badge and status glyph's slot while it
+    /// shows. An active row keeps its glyph and shows none; configure resets it hidden.
     func setCloseButtonVisible(_ visible: Bool) {
         guard let closeButton, let closeButtonWidthConstraint else { return }
-        let show = visible && badge.count == 0 && !statusIcon.showsGlyph && companionMarker?.isHidden != false
+        let show = visible && !statusIcon.isActive
+        badge.hoverHidden = show
+        statusIcon.hoverHidden = show
         closeButton.isHidden = !show
         closeButtonWidthConstraint.constant = show ? Self.addButtonWidth : 0
     }
@@ -228,7 +230,7 @@ final class BadgeView: NSView {
         }
     }
 
-    /// hoverHidden collapses a nonzero badge while the workspace row's hover buttons take its slot.
+    /// hoverHidden collapses a nonzero badge while a row's hover buttons take its slot.
     var hoverHidden = false {
         didSet {
             guard hoverHidden != oldValue else { return }
@@ -331,6 +333,7 @@ final class StatusIconView: NSImageView {
     }
 
     private var indicator = AgentIndicator()
+    var isActive: Bool { indicator.status == .active }
 
     // Core Animation can drop a layer's animations while the view is out of a window, so re-add on return.
     override func viewDidMoveToWindow() {
@@ -344,7 +347,7 @@ final class StatusIconView: NSImageView {
         pulse(Self.fadeKey, indicator.status == .active && !indicator.blink && motion, to: 0.25, duration: 1.4)
     }
 
-    /// hoverHidden collapses a shown glyph while the workspace row's hover buttons take its slot.
+    /// hoverHidden collapses a shown glyph while a row's hover buttons take its slot.
     var hoverHidden = false {
         didSet { applyVisibility() }
     }

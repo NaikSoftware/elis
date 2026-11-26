@@ -270,6 +270,9 @@ final class SidebarInfoRowTests: XCTestCase {
         let field = try infoCell(forSession: session.id).infoField
         XCTAssertEqual(field.stringValue, "✓ build")
         XCTAssertTrue(field.gestureRecognizers.contains { $0 is NSClickGestureRecognizer && $0.delaysPrimaryMouseButtonEvents })
+        let cell = try infoCell(forSession: session.id)
+        cell.layoutSubtreeIfNeeded()
+        XCTAssertLessThan(field.frame.maxX, cell.bounds.midX, "the line takes clicks on its text only")
 
         store.setCI(nil, forSession: session.id)
         try await waitUntil { (try? self.height(of: session.id)) == self.plainHeight }
