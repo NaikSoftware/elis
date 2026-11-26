@@ -2071,6 +2071,34 @@ private Q_SLOTS:
         QCOMPARE(tree->topLevelItem(1)->data(0, SidebarRole::TintColor).toString(), QStringLiteral("red"));
     }
 
+    void aProgressRowCarriesTheFillRoles()
+    {
+        Store store;
+        MainWindow w(store, dir.filePath("progressrow.json"));
+        w.restore({});
+        const QString a = store.addSession(store.addWorkspace("w"), {}, {});
+        store.select(a);
+        store.setTint(a, "#336699");
+        w.show();
+        auto *tree = w.findChild<Sidebar *>();
+        auto row = [&] { return tree->topLevelItem(1)->child(0); };
+        QVERIFY(!row()->data(0, SidebarRole::ProgressFill).isValid());
+        store.setControlProgress(a, QJsonObject{{"percent", 50}});
+        QCOMPARE(row()->data(0, SidebarRole::ProgressFill).toDouble(), 0.5);
+        QCOMPARE(row()->data(0, SidebarRole::ProgressColor).toString(), QStringLiteral("#336699"));
+        QVERIFY(!row()->data(0, SidebarRole::Wave).toBool());
+        store.setStatus(a, "blocked");
+        QVERIFY(!row()->data(0, SidebarRole::ProgressFill).isValid());
+        QVERIFY(!row()->data(0, SidebarRole::Wave).toBool());
+        store.setStatus(a, "active");
+        store.setControlProgress(a, QJsonObject{{"indeterminate", true}});
+        QVERIFY(!row()->data(0, SidebarRole::ProgressFill).isValid());
+        QVERIFY(row()->data(0, SidebarRole::Wave).toBool());
+        store.setStatus(a, "completed");
+        store.setTerminalProgress(a, "p1", {{"update", "set"}, {"progress", QJsonObject{{"indeterminate", true}}}});
+        QVERIFY(row()->data(0, SidebarRole::Wave).toBool()); // indeterminate waves without an agent status
+    }
+
     void tintMenuListsTheMacPaletteAndAHexAsCustom()
     {
         Store store;

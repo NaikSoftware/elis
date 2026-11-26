@@ -50,6 +50,8 @@ static QJsonObject withContext(QJsonObject node, const Session &s, const Store &
         node.insert("context", s.context);
     if (!s.ci.isEmpty())
         node.insert("ci", s.ci);
+    if (const QJsonObject progress = Store::progressNode(s); !progress.isEmpty())
+        node.insert("progress", progress);
     if (store.collapsed.contains(s.id) && !const_cast<Store &>(store).companionsOf(s.id).isEmpty())
         node.insert("collapsed", true); // a parent with its companions folded
     return node;
@@ -669,6 +671,12 @@ QJsonObject dispatch(Store &store, Terminals &terminals, const QJsonObject &requ
             const QString status = args.value("status").toString();
             if (!store.setStatus(id, status, args.value("autoReset").toBool(), args.value("blink").toBool(), args.value("ifIdle").toBool()))
                 return fail(QStringLiteral("status must be one of %1").arg(Store::statuses.join(QLatin1String(", "))));
+        } else if (cmd == QLatin1String("session.progress")) {
+            const QJsonObject parsed = Store::bridgeText(elis_progress_parse, args.value("progress").toString());
+            if (!parsed.value("ok").toBool())
+                return fail(parsed.value("error").toString(QStringLiteral("invalid progress")));
+            const QJsonValue progress = parsed.value("progress");
+            store.setControlProgress(id, progress.isObject() ? std::optional(progress.toObject()) : std::nullopt);
         } else if (cmd == QLatin1String("session.flag")) {
             const QString mode = args.value("mode").toString(QStringLiteral("toggle"));
             if (mode != QLatin1String("on") && mode != QLatin1String("off") && mode != QLatin1String("toggle"))

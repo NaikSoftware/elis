@@ -604,7 +604,12 @@ bool Store::moveSession(const QString &id, const QString &workspaceId, int index
 
 QJsonObject Store::bridge(char *(*call)(const char *), const QJsonObject &request)
 {
-    char *raw = call(QJsonDocument(request).toJson(QJsonDocument::Compact).constData());
+    return bridgeText(call, QString::fromUtf8(QJsonDocument(request).toJson(QJsonDocument::Compact)));
+}
+
+QJsonObject Store::bridgeText(char *(*call)(const char *), const QString &text)
+{
+    char *raw = call(text.toUtf8().constData());
     const QJsonObject reply = QJsonDocument::fromJson(raw ? QByteArray(raw) : QByteArray()).object();
     elis_free(raw);
     return reply;
@@ -850,8 +855,11 @@ bool Store::setStatus(const QString &id, const QString &status, bool autoReset, 
     s->blink = blink && status != QLatin1String("idle");
     if (same)
         return true;
+    const bool ended = s->status != status && (status == QLatin1String("completed") || status == QLatin1String("idle"));
     s->status = status;
     Q_EMIT statusChanged(id, status);
+    if (ended)
+        changeProgress(s, [](Session *x) { x->controlProgress = {}; });
     Q_EMIT changed();
     return true;
 }
@@ -989,6 +997,64 @@ void Store::setCi(const QString &id, const QJsonObject &ci, const QList<InfoSpan
         s->infoSpans = spans;
         Q_EMIT changed(); // tree.changed too: `ci` is read back there
     }
+}
+
+QJsonObject Store::progressNode(const Session &s)
+{
+    const bool control = !s.controlProgress.isEmpty();
+    const QJsonObject p = control ? s.controlProgress : s.terminalProgress;
+    if (p.isEmpty())
+        return {};
+    QJsonObject node{{"source", control ? "control" : "terminal"}};
+    if (p.contains("percent")) {
+        node.insert("value", QString::number(p.value("percent").toInt()) + QLatin1Char('%'));
+        node.insert("fraction", p.value("percent").toInt() / 100.0);
+    } else if (p.contains("total")) {
+        node.insert("value", QStringLiteral("%1/%2").arg(p.value("done").toInt()).arg(p.value("total").toInt()));
+        node.insert("fraction", p.value("done").toInt() / double(p.value("total").toInt()));
+    } else {
+        node.insert("value", QStringLiteral("indeterminate"));
+    }
+    return node;
+}
+
+template<typename F> void Store::changeProgress(Session *s, F change)
+{
+    const QJsonObject before = progressNode(*s);
+    change(s);
+    if (progressNode(*s) == before)
+        return;
+    Q_EMIT progressChanged(s->id);
+    Q_EMIT changed(); // tree.changed too: `progress` is read back there
+}
+
+void Store::setControlProgress(const QString &id, const std::optional<QJsonObject> &progress)
+{
+    if (Session *s = session(id))
+        changeProgress(s, [&](Session *x) { x->controlProgress = progress.value_or(QJsonObject()); });
+}
+
+void Store::setTerminalProgress(const QString &id, const QString &pane, const QJsonObject &update)
+{
+    Session *s = session(id);
+    if (!s)
+        return;
+    if (update.value("update").toString() != QLatin1String("set")) {
+        if (s->terminalProgressPane == pane)
+            changeProgress(s, [](Session *x) { x->terminalProgress = QJsonObject(), x->terminalProgressPane.clear(); });
+        return;
+    }
+    changeProgress(s, [&](Session *x) { x->terminalProgress = update.value("progress").toObject(), x->terminalProgressPane = pane; });
+    QTimer *&expiry = m_progressExpiry[id];
+    if (!expiry) {
+        expiry = new QTimer(this);
+        expiry->setSingleShot(true);
+        connect(expiry, &QTimer::timeout, this, [this, id] {
+            if (Session *s = session(id))
+                changeProgress(s, [](Session *x) { x->terminalProgress = QJsonObject(), x->terminalProgressPane.clear(); });
+        });
+    }
+    expiry->start(progressExpiryMs);
 }
 
 void Store::setBusy(const QString &id, bool busy)

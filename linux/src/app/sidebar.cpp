@@ -1,6 +1,7 @@
 #include "sidebar.h"
 
 #include "assistant.h"
+#include "elis_bridge.h"
 #include "store.h"
 
 #include <QApplication>
@@ -374,6 +375,23 @@ void SidebarDelegate::paint(QPainter *p, const QStyleOptionViewItem &opt, const 
         p->drawPath(shape(r, 8));
         under = over(under, faded(tint, 0.09));
     }
+    if (const QVariant fraction = index.data(ProgressFill); session && fraction.isValid()) {
+        // the done share of the row, its last 26 px feathered out, inside the row's own outline
+        const qreal w = r.width() * fraction.toDouble();
+        if (w > 0) {
+            QColor c(index.data(ProgressColor).toString());
+            QLinearGradient g(r.left(), 0, r.left() + w, 0);
+            c.setAlphaF(0.22);
+            g.setColorAt(0, c);
+            g.setColorAt(qMax(0.0, (w - 26) / w), c);
+            c.setAlphaF(0);
+            g.setColorAt(1, c);
+            p->save();
+            p->setClipPath(shape(r, 8));
+            p->fillRect(QRectF(r.left(), r.top(), w, r.height()), g);
+            p->restore();
+        }
+    }
     // Elis stands alone at a group card's size, so its edges and the gap under it match the cards below
     const qreal pad = assistant ? Sidebar::groupPadding : 0;
     const QRectF fill = r.adjusted(-pad, -pad, pad, pad);
@@ -392,7 +410,7 @@ void SidebarDelegate::paint(QPainter *p, const QStyleOptionViewItem &opt, const 
     }
 
     QList<QColor> unders{under};
-    if (session && index.data(Status).toString() == QLatin1String("active")) {
+    if (session && index.data(Wave).toBool()) {
         // in progress: the row's tint (else the active colour) drifts across it with a second hue, one period every two row widths
         const QColor active = statusColor(m_sidebar->settings(), QStringLiteral("active"));
         const QColor base = tint.isValid() ? tint : active, second = tint.isValid() ? active : pal.color(QPalette::Highlight);
@@ -795,9 +813,26 @@ void Sidebar::rebuild()
             info += span.text + QChar(span.bold | span.italic << 1 | span.code << 2 | span.dim << 3) + span.color + QChar(0);
         item->setData(0, Info, showsInfo ? info : QString());
         item->setData(0, Split, !s.hasSplit ? QString() : s.splitAxis == QLatin1String("horizontal") ? QStringLiteral("splitH") : QStringLiteral("split"));
+        // ElisCore decides the fill and the wave once a progress shows; without one the wave is the active status's
+        bool wave = s.status == QLatin1String("active");
+        QVariant fill, fillColor;
+        if (const QJsonObject shown = s.controlProgress.isEmpty() ? s.terminalProgress : s.controlProgress; !shown.isEmpty()) {
+            QJsonObject request{{"progress", shown}, {"status", s.status}, {"active", statusColor(m_store.settings, QStringLiteral("active")).name()}};
+            if (const QColor c = tintColor(s.tint.color); c.isValid())
+                request.insert("sessionTint", c.name());
+            if (const QColor c = tintColor(m_store.workspaceOf(s.id)->tint.color); c.isValid())
+                request.insert("workspaceTint", c.name());
+            const QJsonObject row = Store::bridge(elis_progress_row, request);
+            wave = row.value("wave").toBool(wave);
+            if (const QJsonObject f = row.value("fill").toObject(); !f.isEmpty())
+                fill = f.value("fraction").toDouble(), fillColor = f.value("color").toString();
+        }
+        item->setData(0, Wave, wave);
+        item->setData(0, ProgressFill, fill);
+        item->setData(0, ProgressColor, fillColor);
         item->setToolTip(0, s.title.isEmpty() ? s.cwd : s.title + QLatin1Char('\n') + s.cwd);
         item->setFlags(Qt::ItemIsEnabled | Qt::ItemIsSelectable | Qt::ItemIsEditable | Qt::ItemIsDragEnabled);
-        animating |= s.blink || s.status == QLatin1String("active");
+        animating |= s.blink || wave;
         if (s.id == m_store.selected)
             setCurrentItem(item, 0, QItemSelectionModel::NoUpdate);
         item->setSelected(s.id == m_store.selected || keepSelected.contains(s.id));

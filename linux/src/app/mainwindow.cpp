@@ -1215,6 +1215,7 @@ void MainWindow::paneExited(const QString &id, KParts::ReadOnlyPart *part)
         return;
     }
     Zmx::forget(part->property("elisZmx").toString());
+    m_store.clearTerminalProgress(id, part->property("elisPaneId").toString());
     if (part == p.right) {
         p.right = nullptr;
         m_store.session(id)->splitPaneId.clear();
