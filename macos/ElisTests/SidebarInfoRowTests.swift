@@ -281,13 +281,14 @@ final class SidebarInfoRowTests: XCTestCase {
         let runs = [run("lint", .passed), run("docs", .skipped), run("build", .failed), run("test", .running)]
         let items = CIStatusLine.menuItems(for: CIStatus(branch: "main", sha: "abc", pr: pr, runs: runs))
 
-        XCTAssertEqual(items.map(\.title), ["#5 Fix", "Approved: a, b", "Changes requested: c", "", "✗ build", "◷ test", "✓ lint", "– docs"])
+        XCTAssertEqual(items.map(\.title), ["#5 Fix", "Approved: a, b", "Changes requested: c", "", "build", "test", "lint", "docs"])
         XCTAssertEqual(items.map(\.isEnabled), [true, false, false, false, true, true, true, true])
         XCTAssertEqual(items.filter(\.isSeparatorItem).count, 1)
         XCTAssertEqual(items[0].representedObject as? String, pr.url)
-        XCTAssertEqual(items[4].attributedTitle?.string, "✗ build")
+        XCTAssertEqual(items[4...].map { $0.image?.accessibilityDescription }, ["Failed", "Running", "Passed", "Skipped"])
+        XCTAssertEqual(items[..<4].compactMap(\.image).count, 0)
         XCTAssertEqual(items[4].representedObject as? String, "https://github.com/o/r/actions/runs/build")
-        XCTAssertEqual(items[7].attributedTitle?.attribute(.foregroundColor, at: 2, effectiveRange: nil) as? NSColor, .secondaryLabelColor)
+        XCTAssertEqual(items[7].attributedTitle?.attribute(.foregroundColor, at: 0, effectiveRange: nil) as? NSColor, .secondaryLabelColor)
 
         let quiet = CIStatusLine.menuItems(for: CIStatus(branch: "main", sha: "abc", pr: CIPullRequest(number: 5, title: "Fix", url: pr.url), runs: []))
         XCTAssertEqual(quiet.map(\.title), ["#5 Fix", "No reviews yet"])
@@ -295,7 +296,7 @@ final class SidebarInfoRowTests: XCTestCase {
 
     func testTheCIMenuWithoutAPRStartsWithRuns() {
         let items = CIStatusLine.menuItems(for: CIStatus(branch: "main", sha: "abc", runs: [run("build", .passed), run("lint", .failed)]))
-        XCTAssertEqual(items.map(\.title), ["✗ lint", "✓ build"])
+        XCTAssertEqual(items.map(\.title), ["lint", "build"])
         XCTAssertFalse(items.contains(where: \.isSeparatorItem))
     }
 

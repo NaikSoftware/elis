@@ -55,11 +55,14 @@ enum CIStatusLine {
         for state in [CIRunState.failed, .running, .passed, .skipped] {
             for run in ci.runs where run.state == state {
                 let item = link(title: run.workflow, url: run.url)
-                let font = NSFont.menuFont(ofSize: 0)
-                let title = NSMutableAttributedString(string: "\(glyph(state)) ", attributes: [.font: font, .foregroundColor: color(state)])
-                title.append(NSAttributedString(string: run.workflow,
-                                                attributes: state == .skipped ? [.font: font, .foregroundColor: NSColor.secondaryLabelColor] : [.font: font]))
-                item.attributedTitle = title
+                item.image = NSImage(systemSymbolName: symbol(state), accessibilityDescription: description(state))?
+                    .withSymbolConfiguration(.init(hierarchicalColor: color(state)))
+                // the image is the run's state, so it shows even where macOS 27 hides menu images by default
+                if #available(macOS 27, *) { item.preferredImageVisibility = .visible }
+                if state == .skipped {
+                    item.attributedTitle = NSAttributedString(string: run.workflow, attributes: [.font: NSFont.menuFont(ofSize: 0),
+                                                                                              .foregroundColor: NSColor.secondaryLabelColor])
+                }
                 items.append(item)
             }
         }
@@ -83,12 +86,21 @@ enum CIStatusLine {
         }
     }
 
-    private static func glyph(_ state: CIRunState) -> String {
+    private static func symbol(_ state: CIRunState) -> String {
         switch state {
-        case .failed: "✗"
-        case .running: "◷"
-        case .passed: "✓"
-        case .skipped: "–"
+        case .failed: "xmark.circle.fill"
+        case .running: "clock.fill"
+        case .passed: "checkmark.circle.fill"
+        case .skipped: "minus.circle.fill"
+        }
+    }
+
+    private static func description(_ state: CIRunState) -> String {
+        switch state {
+        case .failed: "Failed"
+        case .running: "Running"
+        case .passed: "Passed"
+        case .skipped: "Skipped"
         }
     }
 
