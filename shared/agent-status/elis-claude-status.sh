@@ -171,6 +171,8 @@ if [ "${1:-}" = progress ]; then
       total=$((total + 1))
       grep -q '"status"[[:space:]]*:[[:space:]]*"completed"' "$f" 2>/dev/null && finished=$((finished + 1))
     done
+    # a task tool always leaves a file, so none means the wrong directory (a teammate under the lead's id)
+    [ "$total" -gt 0 ] || exit 0
   fi
   value=clear
   [ "$finished" -lt "$total" ] && value=$finished/$total

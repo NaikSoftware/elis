@@ -490,6 +490,12 @@ struct ClaudeStatusHookTests {
         #expect(try progress(payload, env: ["CLAUDE_CONFIG_DIR": config.path]) == ["progress 1/4"])
     }
 
+    @Test func aTaskToolWithNoTaskFilesIsSilent() throws {
+        let config = URL(fileURLWithPath: NSTemporaryDirectory()).appendingPathComponent("elis-tasks-\(UUID().uuidString)")
+        let payload = #"{"session_id":"s1","hook_event_name":"PostToolUse","tool_name":"TaskCreate","tool_input":{}}"#
+        #expect(try progress(payload, env: ["CLAUDE_CONFIG_DIR": config.path]).isEmpty)
+    }
+
     @Test(arguments: [["completed", "completed", "completed"], []])
     func allDoneSendsClear(_ statuses: [String]) throws {
         #expect(try progress(Self.todoPayload(statuses)) == ["progress clear"])
