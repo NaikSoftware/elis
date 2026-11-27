@@ -13,6 +13,9 @@
 #include "zmx.h"
 #include "palette.h"
 #include "paneleadcover.h"
+#ifdef ELIS_HAS_WEBENGINE
+#include "pageoverlay.h"
+#endif
 #include "restore.h"
 #include "paths.h"
 #include "phone.h"
@@ -668,7 +671,15 @@ void MainWindow::createMenus()
     }));
     file->addSeparator();
     file->addAction(action(QStringLiteral("close_session"), tr("Close Session"), QStringLiteral("tab-close"), QKeySequence(QStringLiteral("Ctrl+Shift+W")),
-                           [this] { m_zoomed ? toggleZoom() : closeSessions({m_store.selected}); })); // ⌘W leaves zoom first
+                           [this] {
+                               // the ⌘W ladder, topmost first: the dashboard, the session's HUD or shown cover, the
+                               // focused pane's, then zoom, which here only hides the chrome around them, then the session
+                               if (m_dashboard)
+                                   return closeDashboard();
+                               if (closeFrontCover(m_store.selected))
+                                   return;
+                               m_zoomed ? toggleZoom() : closeSessions({m_store.selected});
+                           }));
     // ⌘Z: the newest close inside its grace comes back with its shells; enabled only then, so Redo keeps the chord otherwise
     QAction *undo = action(QStringLiteral("undo_close"), tr("Reopen Closed Item"), QStringLiteral("edit-undo"),
                            QKeySequence(QStringLiteral("Ctrl+Shift+Z")), [this] { m_store.undoClose(); });
@@ -777,6 +788,13 @@ void MainWindow::createMenus()
     auto fontAction = [this, view](const QString &name, const QString &text, const QString &op, QList<QKeySequence> keys) {
         QAction *a = action(name, text, {}, keys.first(), [this, op] {
             QString e;
+#ifdef ELIS_HAS_WEBENGINE
+            for (QWidget *w = QApplication::focusWidget(); w; w = w->parentWidget())
+                if (qobject_cast<PageOverlay *>(w)) // the page the keys are in, whichever pane holds it
+                    return void(PageOverlay::stepZoom(op == QLatin1String("inc") ? QStringLiteral("increase_font_size:1")
+                                                      : op == QLatin1String("dec") ? QStringLiteral("decrease_font_size:1")
+                                                                                   : QStringLiteral("reset_font_size")));
+#endif
             if (m_store.session(m_store.selected))
                 font(m_store.selected, QStringLiteral("main"), op, &e);
         });
@@ -1199,8 +1217,8 @@ void MainWindow::applyLayout(const QString &id)
         p.split->setSizes({int(total * s->splitRatio), total - int(total * s->splitRatio)});
     }
     p.layers->setCurrentWidget(p.split);
-    if (KParts::ReadOnlyPart *target = coverPart(id); target && id == m_store.selected && isActiveWindow())
-        target->widget()->setFocus();
+    if (QWidget *target = coverWidget(id); target && id == m_store.selected && isActiveWindow())
+        target->setFocus();
     layoutOverlays(id);
 }
 
@@ -1324,6 +1342,14 @@ void MainWindow::newCompanion(const QString &parentId)
 
 bool MainWindow::font(const QString &sessionId, const QString &pane, const QString &op, QString *error)
 {
+#ifdef ELIS_HAS_WEBENGINE
+    if (pageCovers(sessionId, pane)) { // the one app-wide page zoom, never the terminal the page hides
+        PageOverlay::stepZoom(op == QLatin1String("inc") ? QStringLiteral("increase_font_size:1")
+                              : op == QLatin1String("dec") ? QStringLiteral("decrease_font_size:1")
+                                                           : QStringLiteral("reset_font_size"));
+        return true;
+    }
+#endif
     const Panes p = m_panes.value(sessionId);
     QWidget *display = terminalDisplay(pane == QLatin1String("right") ? p.right : p.main);
     Session *s = m_store.session(sessionId);
@@ -1697,9 +1723,8 @@ void MainWindow::showSelected()
     }
     // focus moves only with the selection, so a status repaint never pulls it out of the split pane
     if (p.view && m_shownId != m_store.selected && isActiveWindow() && !m_tree->editing()) {
-        KParts::ReadOnlyPart *front = coverPart(m_store.selected);
-        if (front)
-            front->widget()->setFocus();
+        if (QWidget *front = coverWidget(m_store.selected))
+            front->setFocus();
     }
     m_shownId = m_store.selected;
     if (!m_filePanel->isHidden())

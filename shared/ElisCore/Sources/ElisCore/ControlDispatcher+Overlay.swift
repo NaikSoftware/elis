@@ -168,14 +168,24 @@ extension ControlDispatcher {
     }
 
     // the options only a text page takes, refused ahead of any source so a request with no text file is answered
-    private static func textOnlyRefusal(_ args: ControlArgs?) -> String? {
+    nonisolated private static func textOnlyRefusal(_ args: ControlArgs?) -> String? {
         guard args?.textFile == nil else { return nil }
         if args?.line != nil { return OverlayHtmlError.lineWithoutText }
         if args?.tail != nil || args?.followFile == true { return OverlayHtmlError.tailWithoutText }
         return nil
     }
 
-    static func overlayContent(command: String, args: ControlArgs?) -> OverlayContent {
+    /// overlayPage is `overlayContent` for a host without this dispatcher (the Linux bridge): the page source, nil
+    /// for a program, or the refusal text.
+    nonisolated public static func overlayPage(command: String, args: ControlArgs?) -> (page: HtmlSource?, error: String?) {
+        switch overlayContent(command: command, args: args) {
+        case .rejected(let response): return (nil, response.error ?? "invalid arguments")
+        case .program: return (nil, nil)
+        case .page(let source): return (source, nil)
+        }
+    }
+
+    nonisolated static func overlayContent(command: String, args: ControlArgs?) -> OverlayContent {
         let reject = { (error: String) in OverlayContent.rejected(ControlResponse(ok: false, error: error)) }
         if let error = textOnlyRefusal(args) { return reject(error) }
         if let image = args?.image {
@@ -226,7 +236,7 @@ extension ControlDispatcher {
         }
     }
 
-    private static func imageContent(_ path: String, args: ControlArgs?) -> OverlayContent {
+    nonisolated private static func imageContent(_ path: String, args: ControlArgs?) -> OverlayContent {
         let reject = { (error: String) in OverlayContent.rejected(ControlResponse(ok: false, error: error)) }
         let flags = [args?.wait, args?.navigation, args?.javascript, args?.chromeless, args?.persistent, args?.browse]
         if args?.cwd != nil || flags.contains(true) { return reject(OverlayHtmlError.imageOptions) }
@@ -238,7 +248,7 @@ extension ControlDispatcher {
         return .page(.image(path: url.path))
     }
 
-    private static func markdownContent(_ path: String, args: ControlArgs?) -> OverlayContent {
+    nonisolated private static func markdownContent(_ path: String, args: ControlArgs?) -> OverlayContent {
         let reject = { (error: String) in OverlayContent.rejected(ControlResponse(ok: false, error: error)) }
         let flags = [args?.wait, args?.javascript, args?.chromeless, args?.persistent, args?.browse]
         if args?.cwd != nil || flags.contains(true) { return reject(OverlayHtmlError.markdownOptions) }
@@ -250,7 +260,7 @@ extension ControlDispatcher {
         return .page(.markdown(path: url.path))
     }
 
-    private static func textContent(_ path: String, args: ControlArgs?) -> OverlayContent {
+    nonisolated private static func textContent(_ path: String, args: ControlArgs?) -> OverlayContent {
         let reject = { (error: String) in OverlayContent.rejected(ControlResponse(ok: false, error: error)) }
         let flags = [args?.wait, args?.navigation, args?.javascript, args?.chromeless, args?.persistent, args?.browse]
         if args?.cwd != nil || flags.contains(true) { return reject(OverlayHtmlError.textOptions) }

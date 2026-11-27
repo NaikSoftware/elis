@@ -8,8 +8,8 @@ Elis is a Qt6/KDE Frameworks 6 port of [agterm](https://github.com/umputun/agter
 [NaikSoftware/elis](https://github.com/NaikSoftware/elis), which adds the file panel, agent logos and launchers,
 remembered workspace folders and more on top of upstream. It follows Elis's model, keys (translated to Linux
 conventions), config files, agent-status hooks and `elisctl` wire protocol, so agents and scripts written for Elis
-work here. It is an independent project: report bugs here, not upstream. Not ported yet: web-page overlays, HTML companions,
-`browser.*` and remote sessions.
+work here. It is an independent project: report bugs here, not upstream. Not ported yet: markdown, image and text pages,
+the page bridge, `--browse` and `--persistent` pages, page sessions and companions, `browser.*` and remote sessions.
 
 Each terminal is a Konsole KPart, so Konsole's profiles, colour schemes, scrollback, search and copy/paste work as
 in Konsole.
@@ -27,6 +27,8 @@ The first build of it takes a few minutes; it installs to `lib/elis` beside the 
 The Swift `elisctl` helper's phone relay links the system OpenSSL, libsystemd and zlib: building needs `libssl-dev`,
 `libsystemd-dev` and `zlib1g-dev`, running it `libssl3` and the `openssl` command, which makes the relay's certificate.
 Its Bluetooth link needs BlueZ (`bluetoothd`) and an adapter that can advertise.
+Page overlays (`session overlay open --html|--url`) need Qt WebEngine (`qt6-webengine-dev`); a build without it refuses
+them, and `-DELIS_WEBENGINE=OFF` leaves it out even when it is installed.
 Live sessions run under the Mac's patched zmx, which the build makes from source with zig 0.16, git and `shasum`
 (`macos/scripts/setup.sh --zmx-only`, network on the first build) and installs it to `libexec/elis`, off PATH. Unpack
 [zig 0.16.0](https://ziglang.org/download/) into `~/.local/opt`, where configure finds it, or pass `-DZIG=/path/to/zig`;
@@ -117,7 +119,7 @@ ctrl+alt+shift), next to plain `ctrl`, `shift`, `alt` and `super`.
 | Ctrl+Shift+N / Ctrl+Alt+Shift+N | New session / new workspace |
 | Ctrl+Alt+N | New window (Elis's ⌥⌘N; its literal mapping is taken by New Workspace) |
 | Ctrl+Shift+O | Open directory as a session |
-| Ctrl+Shift+W | Close session (leaves terminal zoom first) |
+| Ctrl+Shift+W | Close the HUD or the overlay in front, then leave terminal zoom, then close the session |
 | Ctrl+Shift+Z | Undo a close within its 3 s grace (Settings can turn the grace off) |
 | Ctrl+Alt+Shift+T | Reopen last closed item |
 | Ctrl+Shift+= / - / 0 | Terminal font size larger / smaller / reset |
@@ -223,7 +225,7 @@ It prints the QR code and the link; Ctrl+C stops it. Nothing listens unless one 
 - A pane running Claude Code or agy opens in Chat, read from its transcript (`session transcript`).
   Files attached in Chat (up to 10, 20 MiB each) land in `<state dir>/uploads/<session id>/` (`session upload`);
   old uploads are swept at launch (retention: `site/docs.html`).
-  Pages on the phone are Mac-only for now (page overlays are not ported to Linux).
+  A page a Linux session opens shows in the app only, never on the phone.
 
 ## Credits and license
 

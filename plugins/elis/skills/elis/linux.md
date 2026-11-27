@@ -53,11 +53,13 @@ These answer `<cmd> is not supported on this platform (<reason>)`:
 - every `zmx …` command, remote sessions, `session lead` (a covered pane takes the lead with a key), `session restart`;
 - `session background`, `surface cursor`, `config reload`;
 - `browser …`: there is no built-in browser, and links open in the system browser;
-- page sessions (`session page`, `session overlay open --page`), page overlays (`session overlay open --html|--url`,
-  `overlay reload|navigate|submit|follow|search|changes|files|wrap`) and page companions: they need Qt WebEngine.
+- page sessions (`session page`, `session overlay open --page`), page companions, the text-page commands
+  (`overlay follow|search|changes|files|wrap`), `--browse`, `--persistent` and the page bridge (`data-elis`,
+  `elis.request`). `--html` and `--url` pages work in a build with Qt WebEngine, which refuses them without it;
+  `--browse` and `--persistent` answer `--<flag> pages are not ported to Elis yet`, and a large `--html` file
+  (percent-encoded text over 2 MB) needs `--cwd`.
   There is no inline image, rendered markdown or file-at-line view either: never pass `--image`, `--markdown` or
-  `--text` to `overlay open` (`--markdown FILE` would run FILE as the command).
-  Show a file by running a viewer as the overlay program (`less +N file`, `glow file`).
+  `--text` to `overlay open`. Show a file by running a viewer as the overlay program (`less +N file`, `glow file`).
 
 Also absent from the CLI: `session wait` (use `events`), `clipboard set` (use `wl-copy`/`xclip`), `terminfo`,
 per-call status colour, shape, sound and pane, and

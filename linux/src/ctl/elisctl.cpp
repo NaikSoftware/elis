@@ -120,6 +120,10 @@ static const char *usage = R"(usage: elisctl <command> [args] [--target T] [--so
   session overlay open <command> [--cwd DIR] [--wait | --block] [--size-percent N [--width PT] [--height PT]]
                        [--background-color #rrggbb] [--follow] [--pane left|right]
                                         a program over the session (full, floating, or one pane); closes when it exits
+  session overlay open --html FILE [--cwd DIR] | --url URL [--navigation] [--js] [--chromeless] [--block] ...
+                                        a page over the session (needs Qt WebEngine); --block exits 0 answered, 2 closed
+  session overlay reload [--current] | navigate back|forward|browser|finder | submit <value> [--pane left|right]
+  session overlay result --page ID      a page's outcome, after the page or its session is gone
   session overlay close | result | copy | text [--lines N] [--pane left|right]
   session overlay hide | show | toggle [--pane left|right]
   session overlay resize (--size-percent N [--width PT] [--height PT] | --width PT | --height PT | --full)
@@ -152,7 +156,7 @@ static const char *usage = R"(usage: elisctl <command> [args] [--target T] [--so
   session restore <command> | --none | --clear [--pane left|right]   pin what this pane re-runs (rerun mode)
 
 Not in elis (the app answers "<cmd> is not supported on this platform"): zmx, session restart/lead/background/page,
-surface cursor, config reload, browser, page overlays and companions, quick terminal, scratch terminal.
+surface cursor, config reload, browser, page companions, text-page commands, quick terminal, scratch terminal.
 )";
 
 static QByteArray roundTrip(const QString &path, const QJsonObject &request, QString *error)
@@ -597,7 +601,8 @@ int main(int argc, char **argv)
     }
     const QStringList flags{"json", "stdin", "all", "no-select", "create-workspace", "auto-reset", "blink", "if-idle", "undoable", "companion",
                             "wait", "block", "follow", "full", "markdown", "sticky", "no-frame", "spinner", "none", "clear", "mru", "auto-size", "close", "minimized",
-                            "next", "prev", "allow-custom", "no-block", "multiple", "ack", "reset", "collapsed", "page"};
+                            "next", "prev", "allow-custom", "no-block", "multiple", "ack", "reset", "collapsed", "page",
+                            "browse", "navigation", "js", "chromeless", "persistent", "current"};
     QStringList pos;
     QHash<QString, QString> opt;
     QHash<QString, QStringList> multi; // every value of a repeatable option, in order
@@ -610,7 +615,9 @@ int main(int argc, char **argv)
         const QString name = in[i].mid(2);
         if (name == QLatin1String("help"))
             return fputs(usage, stdout), 0;
-        if (flags.contains(name))
+        // overlay result --page takes the page's id; overlay open --page is the page-session flag
+        const bool valued = name == QLatin1String("page") && pos.contains(QStringLiteral("result"));
+        if (flags.contains(name) && !valued)
             opt.insert(name, QStringLiteral("1"));
         else if (i + 1 < in.size())
             opt.insert(name, in[++i]), multi[name] << in[i];
@@ -748,11 +755,27 @@ int main(int argc, char **argv)
         copy("detail", "detail");
         copy("position", "position");
         copy("spinner-style", "spinner");
-        copy("html", "html");
+        if (opt.contains(QStringLiteral("html"))) { // the page and its grant as the caller's shell sees them, as the Mac CLI sends
+            args.insert("html", callerPath(opt.value(QStringLiteral("html"))));
+            if (opt.contains(QStringLiteral("cwd")))
+                args.insert("cwd", callerPath(opt.value(QStringLiteral("cwd"))));
+        }
         copy("url", "url");
         flag("wait", "wait");
         flag("follow", "follow");
         flag("full", "full");
+        flag("navigation", "navigation");
+        flag("js", "javascript");
+        flag("chromeless", "chromeless");
+        flag("persistent", "persistent");
+        flag("browse", "browse");
+        flag("current", "current");
+        if (cmd == QLatin1String("session.overlay.navigate") && !arg.isEmpty())
+            args.insert("to", arg);
+        if (cmd == QLatin1String("session.overlay.submit") && !pos.isEmpty())
+            args.insert("value", arg);
+        if (cmd == QLatin1String("session.overlay.result"))
+            copy("page", "page");
         flag("markdown", "markdown");
         flag("sticky", "sticky");
         if (opt.contains(QStringLiteral("spinner")) && !args.contains("spinner"))
@@ -1069,9 +1092,32 @@ int main(int argc, char **argv)
             QThread::msleep(250);
         }
     }
+    // a page's outcome as JSON: exit 0 submitted, 2 dismissed, 1 still pending; --block polls until it is not pending
+    auto pageOutcome = [&](const QString &pageID, bool wait) -> int {
+        const QJsonObject poll{{"cmd", "session.overlay.result"}, {"args", QJsonObject{{"page", pageID}}}};
+        for (int polls = 0;; ++polls) {
+            const QByteArray raw = roundTrip(path, poll, &error);
+            const QJsonObject r = QJsonDocument::fromJson(raw).object();
+            if (!r.value("ok").toBool())
+                return die(r.value("error").toString(error));
+            const QJsonObject outcome = r["result"]["pageOutcome"].toObject();
+            const QString state = outcome.value("outcome").toString();
+            if (state == QLatin1String("pending") && wait) {
+                QThread::msleep(polls < 10 ? 100 : 500); // fast for the first second, as the Mac's pick polling
+                continue;
+            }
+            printf("%s\n", opt.contains(QStringLiteral("json")) ? raw.trimmed().constData() : QJsonDocument(outcome).toJson(QJsonDocument::Compact).constData());
+            return state == QLatin1String("submitted") ? 0 : state == QLatin1String("dismissed") ? 2 : 1;
+        }
+    };
+    if (cmd == QLatin1String("session.overlay.result") && args.contains("page"))
+        return pageOutcome(args.value("page").toString(), false);
     const QByteArray line = roundTrip(path, request, &error);
     if (line.isEmpty())
         return die(error);
+    if (cmd == QLatin1String("session.overlay.open") && opt.contains(QStringLiteral("block")))
+        if (const QJsonObject r = QJsonDocument::fromJson(line).object(); r.value("ok").toBool() && r["result"].toObject().contains("pageID"))
+            return pageOutcome(r["result"]["pageID"].toString(), true);
     if ((cmd == QLatin1String("pick.result") || cmd == QLatin1String("ask.result")) && !opt.contains(QStringLiteral("json"))) {
         const QJsonObject r = QJsonDocument::fromJson(line).object();
         if (!r.value("ok").toBool())

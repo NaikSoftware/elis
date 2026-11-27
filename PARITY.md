@@ -27,9 +27,9 @@ Commands for these answer `<cmd> is not supported on this platform (<reason>)` o
 
 - Quick terminal and scratch terminal.
 - Remote sessions: attaching another Mac's session, remote windows, elis-server hosts, remote overlay jobs.
-- Web content, which needs Qt WebEngine: page sessions, page companions, HTML/URL/markdown/image/text page overlays
-  and everything that acts on them (reload, navigate, submit, follow, search, changes, files, wrap),
-  the built-in browser and links opened in a session overlay. Links open in the system browser.
+- Web content beyond `--html` and `--url` page overlays: page sessions, page companions, markdown/image/text page
+  overlays and their commands (follow, search, changes, files, wrap), `--browse` and `--persistent` pages, the page
+  bridge, the built-in browser and links opened in a session overlay. Links open in the system browser.
   Pages never show on the phone.
 - The `zmx …` commands, Reset Live Sessions, `session restart` and `session lead`
   (a covered Live pane takes the lead back with a key).
@@ -52,6 +52,11 @@ Commands for these answer `<cmd> is not supported on this platform (<reason>)` o
 - A terminal-style `ask` is a dialog over the window, not drawn in the pane; `pick` rows show no status glyph.
 - `session overlay open` runs the program in a temporary Konsole terminal; `--background-color` tints only the
   floating frame.
+- `--html` and `--url` pages need a build with Qt WebEngine and open local pages only (no remote overlay jobs).
+  A file page without `--cwd` whose percent-encoded text passes 2 MB (as little as 700 KB of non-ASCII text) fails
+  instead of showing.
+- Ctrl+Shift+W closes the HUD or the overlay in front before it leaves terminal zoom, which hides only the chrome
+  around them; ⌘W leaves zoom first.
 - `session search` drives Konsole's search bar.
 - `tree` surfaces carry no per-pane status or `pendingMessages`.
 - `msg send --all` reaches the addressed window only.

@@ -1,17 +1,24 @@
 // Overlays (a program in a temporary terminal over a session or one pane) and the passive HUD.
 #include "mainwindow.h"
+#include "hooks.h"
 #include "konsoleprivate.h"
+#ifdef ELIS_HAS_WEBENGINE
+#include "elis_bridge.h"
+#include "pageoverlay.h"
+#endif
 #include "store.h"
 #include "zmx.h"
 
 #include <KParts/ReadOnlyPart>
 #include <kde_terminal_interface.h>
 
+#include <QApplication>
 #include <QDir>
 #include <QFile>
 #include <QFrame>
 #include <QHBoxLayout>
 #include <QJsonArray>
+#include <QJsonDocument>
 #include <QLabel>
 #include <QStackedWidget>
 #include <QStatusBar>
@@ -159,7 +166,9 @@ void MainWindow::layoutOverlays(const QString &id)
         } else {
             // a point axis overrides the percent and is capped at 80% of the session
             const int w = ov.width > 0 ? qMin(int(ov.width), int(t.width() * 0.8)) : t.width() * ov.sizePercent / 100;
-            const int h = ov.height > 0 ? qMin(int(ov.height), int(t.height() * 0.8)) : t.height() * ov.sizePercent / 100;
+            // a page's point height is its content's, under the strip and its rule
+            const int chrome = ov.page && !ov.chromeless ? 29 : 0;
+            const int h = ov.height > 0 ? qMin(int(ov.height) + chrome, int(t.height() * 0.8)) : t.height() * ov.sizePercent / 100;
             ov.frame->setGeometry(QRect(0, 0, w, h).translated(t.center() - QPoint(w / 2, h / 2)));
         }
         ov.frame->raise();
@@ -168,15 +177,53 @@ void MainWindow::layoutOverlays(const QString &id)
         hud->place(overlayTarget(id, hud->spec.value("pane").toString()));
 }
 
-KParts::ReadOnlyPart *MainWindow::coverPart(const QString &id) const
+QWidget *MainWindow::coverWidget(const QString &id) const
 {
-    // what owns the keyboard: a shown session-wide program, else the main pane's own overlay
+    // what owns the keyboard: a shown session-wide cover, else the main pane's own, else the main pane
     for (const QString &pane : {QString(), QStringLiteral("left")}) {
         const Overlay ov = m_overlays.value(slotKey(id, pane));
-        if (ov.part && !ov.hidden)
-            return ov.part;
+        if (ov.hidden)
+            continue;
+        if (ov.page)
+            return ov.page;
+        if (ov.part)
+            return ov.part->widget();
     }
-    return m_panes.value(id).main;
+    KParts::ReadOnlyPart *main = m_panes.value(id).main;
+    return main ? main->widget() : nullptr;
+}
+
+bool MainWindow::closeFrontCover(const QString &id)
+{
+    if (closeHud(id))
+        return true;
+    // the key that asked is still being delivered to the cover's widget, so the cover goes on the next pass
+    const auto close = [this](const QString &key) {
+        QTimer::singleShot(0, this, [this, key, frame = m_overlays.value(key).frame] {
+            if (frame && m_overlays.value(key).frame == frame)
+                closeOverlay(key);
+        });
+        return true;
+    };
+    if (const Overlay full = m_overlays.value(slotKey(id, {})); full.frame && !full.hidden)
+        return close(slotKey(id, {}));
+    // a pane's overlay only while the keys are in that pane: the other pane's is not in front of the user
+    const QWidget *focus = QApplication::focusWidget();
+    for (const QString &pane : {QStringLiteral("left"), QStringLiteral("right")}) {
+        const Overlay ov = m_overlays.value(slotKey(id, pane));
+        const QWidget *under = paneWidget(id, pane);
+        if (ov.frame && !ov.hidden && focus && (ov.frame->isAncestorOf(focus) || (under && (under == focus || under->isAncestorOf(focus)))))
+            return close(slotKey(id, pane));
+    }
+    return false;
+}
+
+bool MainWindow::pageCovers(const QString &id, const QString &pane) const
+{
+    for (const QString &slot : {QString(), pane == QLatin1String("right") ? QStringLiteral("right") : QStringLiteral("left")})
+        if (const Overlay ov = m_overlays.value(slotKey(id, slot)); ov.page && !ov.hidden)
+            return true;
+    return false;
 }
 
 bool MainWindow::openOverlay(const QString &id, const QString &pane, const QString &command, const QString &cwd, int sizePercent, double width,
@@ -248,6 +295,83 @@ bool MainWindow::openOverlay(const QString &id, const QString &pane, const QStri
     return true;
 }
 
+#ifdef ELIS_HAS_WEBENGINE
+bool MainWindow::openPage(const QString &id, const QString &pane, const QJsonObject &args, QJsonObject *result, QString *error)
+{
+    const Panes p = m_panes.value(id);
+    const Session *s = m_store.session(id);
+    const QString key = slotKey(id, pane);
+    if (!p.view || !s)
+        return *error = QStringLiteral("session has no terminal"), false;
+    if (m_overlays.contains(key))
+        return *error = m_overlays.value(key).hidden ? QStringLiteral("overlay hidden") : pane.isEmpty() ? QStringLiteral("overlay already open") : QStringLiteral("pane overlay already open"), false;
+    QWidget *under = pane.isEmpty() ? p.view : paneWidget(id, pane);
+    if (!under || (pane == QLatin1String("right") && !s->splitVisible))
+        return *error = QStringLiteral("pane not visible"), false;
+    if (pane.isEmpty())
+        closeHud(id); // a page replaces the HUD in the session-wide slot, as a program does
+
+    char *raw = elis_page_outcome_register();
+    const QString pageID = QJsonDocument::fromJson(raw ? QByteArray(raw) : QByteArray()).object().value("pageID").toString();
+    elis_free(raw);
+    Overlay ov;
+    ov.sizePercent = args.value("sizePercent").toInt();
+    ov.width = args.value("width").toDouble();
+    ov.height = args.value("height").toDouble();
+    ov.pageID = pageID;
+    ov.chromeless = args.value("chromeless").toBool();
+    auto *frame = new QFrame(p.view);
+    frame->setObjectName(QStringLiteral("elisOverlay"));
+    frame->setAutoFillBackground(true); // a page has no terminal to paint the whole cover, as a program's does
+    auto *box = new QVBoxLayout(frame);
+    box->setContentsMargins(ov.sizePercent > 0 ? QMargins(1, 1, 1, 1) : QMargins());
+    if (ov.sizePercent > 0)
+        frame->setFrameShape(QFrame::StyledPanel);
+    // a file page draws no canvas: the frame paints --background-color or the terminal's behind it, as the Mac's panel
+    const QJsonObject theme = terminalTheme();
+    QString paint = ov.sizePercent > 0 ? args.value("color").toString() : QString();
+    if (paint.isEmpty() && args.value("page").toObject().value("kind").toString() == QLatin1String("file"))
+        paint = theme.value("background").toString();
+    if (!paint.isEmpty()) {
+        QPalette pal = frame->palette();
+        pal.setColor(QPalette::Window, QColor(paint));
+        frame->setPalette(pal);
+    }
+    PageOverlay::setZoom(m_store.settings.htmlOverlayZoom);
+    const QJsonObject flags{{"navigation", args.value("navigation").toBool()},
+                            {"javascript", args.value("javascript").toBool()},
+                            {"chromeless", ov.chromeless}};
+    auto *page = new PageOverlay(args.value("page").toObject(), flags, pageID, theme, frame);
+    box->addWidget(page);
+    ov.page = page;
+    ov.frame = frame;
+    connect(page, &PageOverlay::closeRequested, this, [this, key, page] {
+        if (m_overlays.value(key).page == page)
+            closeOverlay(key);
+    });
+    connect(page, &PageOverlay::changed, this, [this] { m_events->scheduleTreeChanged(); });
+    connect(page, &PageOverlay::zoomChanged, this, [this](double factor) {
+        if (m_store.settings.htmlOverlayZoom == (factor == 1 ? 0 : factor))
+            return;
+        m_store.settings.htmlOverlayZoom = factor == 1 ? 0 : factor; // 0: actual size stays out of the file
+        m_saveTimer.start();
+        m_events->scheduleTreeChanged();
+    });
+    under->installEventFilter(this);
+    under->setProperty("elisOverlayHost", id);
+    p.view->installEventFilter(this);
+    p.view->setProperty("elisOverlayHost", id);
+    m_overlays.insert(key, ov);
+    frame->show();
+    layoutOverlays(id);
+    if (id == m_store.selected && isActiveWindow())
+        page->setFocus();
+    result->insert("pageID", pageID);
+    syncChrome();
+    return true;
+}
+#endif
+
 void MainWindow::overlayExited(const QString &key, KParts::ReadOnlyPart *part)
 {
     if (m_quitting || m_overlays.value(key).part != part)
@@ -264,8 +388,8 @@ void MainWindow::overlayExited(const QString &key, KParts::ReadOnlyPart *part)
         ov.frame->deleteLater();
     const QString id = key.section(QLatin1Char('|'), 0, 0);
     if (id == m_store.selected && isActiveWindow())
-        if (KParts::ReadOnlyPart *front = coverPart(id); front && front != part)
-            front->widget()->setFocus();
+        if (QWidget *front = coverWidget(id))
+            front->setFocus();
     syncChrome();
     if (ov.onClose)
         ov.onClose();
@@ -274,13 +398,17 @@ void MainWindow::overlayExited(const QString &key, KParts::ReadOnlyPart *part)
 void MainWindow::closeOverlay(const QString &key)
 {
     Overlay ov = m_overlays.take(key);
+#ifdef ELIS_HAS_WEBENGINE
+    if (!ov.pageID.isEmpty())
+        elis_page_outcome_dismiss(ov.pageID.toUtf8().constData()); // a submitted page keeps its answer
+#endif
     QFile::remove(ov.codeFile);
     delete ov.part; // hangs up the program
     delete ov.frame;
     const QString id = key.section(QLatin1Char('|'), 0, 0);
     if (id == m_store.selected && isActiveWindow())
-        if (KParts::ReadOnlyPart *front = coverPart(id))
-            front->widget()->setFocus();
+        if (QWidget *front = coverWidget(id))
+            front->setFocus();
     syncChrome();
     if (ov.onClose)
         ov.onClose();
@@ -301,8 +429,8 @@ bool MainWindow::openHud(const QString &id, const QJsonObject &spec, QString *er
     if (!p.view || !s)
         return *error = QStringLiteral("session has no terminal"), false;
     const Overlay ov = m_overlays.value(slotKey(id, {}));
-    if (ov.part)
-        return *error = QStringLiteral("overlay already open"), false;
+    if (ov.part || ov.page)
+        return *error = ov.hidden ? QStringLiteral("overlay hidden") : QStringLiteral("overlay already open"), false;
     if (spec.value("pane").toString() == QLatin1String("right") && !s->splitVisible)
         return *error = QStringLiteral("pane not visible"), false;
     closeHud(id); // a second open replaces the first
@@ -323,6 +451,10 @@ bool MainWindow::overlayCommand(const QString &cmd, const QString &id, const QJs
     const QString key = slotKey(id, pane);
     auto *hud = static_cast<Hud *>(m_huds.value(id).data());
     if (cmd == QLatin1String("session.overlay.open")) {
+#ifdef ELIS_HAS_WEBENGINE
+        if (args.contains("page"))
+            return openPage(id, pane, args, result, error);
+#endif
         QString cwd = args.value("cwd").toString();
         if (cwd.startsWith(QLatin1Char('~')))
             cwd = QDir::homePath() + cwd.mid(1);
@@ -338,6 +470,33 @@ bool MainWindow::overlayCommand(const QString &cmd, const QString &id, const QJs
             return *error = QStringLiteral("no overlay"), false;
         return true;
     }
+#ifdef ELIS_HAS_WEBENGINE
+    if (cmd == QLatin1String("session.overlay.reload") || cmd == QLatin1String("session.overlay.navigate") || cmd == QLatin1String("session.overlay.submit")) {
+        const Overlay ov = m_overlays.value(key);
+        if (!ov.frame)
+            return *error = QStringLiteral("no overlay"), false;
+        auto *page = static_cast<PageOverlay *>(ov.page.data());
+        if (!page)
+            return *error = QStringLiteral("the overlay is not an html page"), false;
+        if (cmd == QLatin1String("session.overlay.reload")) {
+            page->reload(args.value("current").toBool());
+            return true;
+        }
+        if (cmd == QLatin1String("session.overlay.navigate"))
+            return page->navigate(args.value("to").toString(), error);
+        // the answer is recorded before the page closes, so the close's dismissal finds it settled
+        char *raw = elis_page_outcome_submit(ov.pageID.toUtf8().constData(), args.value("value").toString().toUtf8().constData());
+        elis_free(raw);
+        closeOverlay(key);
+        return true;
+    }
+    if (const Overlay ov = m_overlays.value(key); ov.page) {
+        if (cmd == QLatin1String("session.overlay.result"))
+            return *error = QStringLiteral("no overlay result: the slot holds an html page"), false;
+        if (cmd == QLatin1String("session.overlay.text") || cmd == QLatin1String("session.overlay.copy"))
+            return *error = QStringLiteral("no overlay to read: the slot holds an html page"), false;
+    }
+#endif
     if (cmd == QLatin1String("session.overlay.result")) {
         if (m_overlays.contains(key))
             return *error = QStringLiteral("overlay still running"), false;
@@ -393,8 +552,8 @@ bool MainWindow::overlayCommand(const QString &cmd, const QString &id, const QJs
             ov.frame->setVisible(!hide); // the program keeps running underneath
         }
         if (id == m_store.selected)
-            if (KParts::ReadOnlyPart *front = coverPart(id))
-                front->widget()->setFocus();
+            if (QWidget *front = coverWidget(id))
+                front->setFocus();
         result->insert("text", hide ? QStringLiteral("hidden") : QStringLiteral("shown"));
         syncChrome();
         return true;
@@ -449,8 +608,8 @@ QJsonObject MainWindow::sessionExtras(const QString &id) const
 {
     QJsonObject out = controlExtras(id);
     const Overlay full = m_overlays.value(slotKey(id, {}));
-    out.insert("overlay", bool(full.part));
-    if (full.part && full.sizePercent > 0) {
+    out.insert("overlay", bool(full.part || full.page));
+    if ((full.part || full.page) && full.sizePercent > 0) {
         out.insert("overlaySizePercent", full.sizePercent);
         if (full.frame) {
             out.insert("overlayWidth", full.frame->width());
@@ -461,7 +620,7 @@ QJsonObject MainWindow::sessionExtras(const QString &id) const
     if (full.hidden)
         hidden << QStringLiteral("session");
     for (const QString &pane : {QStringLiteral("left"), QStringLiteral("right")})
-        if (const Overlay ov = m_overlays.value(slotKey(id, pane)); ov.part) {
+        if (const Overlay ov = m_overlays.value(slotKey(id, pane)); ov.part || ov.page) {
             panes << pane;
             if (ov.hidden)
                 hidden << pane;
@@ -473,7 +632,7 @@ QJsonObject MainWindow::sessionExtras(const QString &id) const
     // the Mac's surfaces[]: an overlay over the session or the pane leaves it neither active nor visible
     const Session *s = const_cast<Store &>(m_store).session(id);
     const Panes p = m_panes.value(id);
-    const bool covered = full.part && !full.hidden;
+    const bool covered = (full.part || full.page) && !full.hidden;
     QJsonArray surfaces;
     bool zmx = true;
     for (const QString &kind : {QStringLiteral("left"), QStringLiteral("right")}) {
@@ -482,7 +641,7 @@ QJsonObject MainWindow::sessionExtras(const QString &id) const
             continue;
         KParts::ReadOnlyPart *part = right ? p.right : p.main;
         const Overlay ov = m_overlays.value(slotKey(id, kind));
-        const bool shown = !covered && !(ov.part && !ov.hidden) && (!right || s->splitVisible);
+        const bool shown = !covered && !((ov.part || ov.page) && !ov.hidden) && (!right || s->splitVisible);
         const bool backed = part && !part->property("elisZmx").toString().isEmpty();
         zmx = zmx && backed;
         surfaces << Zmx::surface({{"id", QStringLiteral("surface:%1:%2").arg(id, kind)},
@@ -493,6 +652,20 @@ QJsonObject MainWindow::sessionExtras(const QString &id) const
                                   {"paneID", part ? part->property("elisPaneId").toString() : QString()}});
     }
     out.insert("surfaces", surfaces);
+#ifdef ELIS_HAS_WEBENGINE
+    QJsonArray pages; // the Mac's htmlOverlays[]: the session-wide slot, then each pane's
+    for (const QString &pane : {QString(), QStringLiteral("left"), QStringLiteral("right")})
+        if (const Overlay ov = m_overlays.value(slotKey(id, pane)); ov.page) {
+            QJsonObject node = static_cast<PageOverlay *>(ov.page.data())->readBack();
+            if (!pane.isEmpty())
+                node.insert("pane", pane);
+            if (ov.hidden)
+                node.insert("hidden", true);
+            pages << node;
+        }
+    if (!pages.isEmpty())
+        out.insert("htmlOverlays", pages);
+#endif
     out.insert("backedByZmx", zmx && !surfaces.isEmpty());
     if (auto *hud = static_cast<Hud *>(m_huds.value(id).data())) {
         QJsonObject h = hud->spec;
@@ -522,7 +695,7 @@ bool MainWindow::hasHideableOverlay(const QString &id, bool *anyShown) const
     bool any = false;
     *anyShown = false;
     for (const QString &pane : {QString(), QStringLiteral("left"), QStringLiteral("right")})
-        if (const Overlay ov = m_overlays.value(slotKey(id, pane)); ov.part) {
+        if (const Overlay ov = m_overlays.value(slotKey(id, pane)); ov.part || ov.page) {
             any = true;
             *anyShown |= !ov.hidden;
         }
@@ -535,6 +708,10 @@ void MainWindow::forgetOverlays(const QString &id)
         const Overlay ov = m_overlays.take(slotKey(id, pane));
         if (!ov.codeFile.isEmpty())
             QFile::remove(ov.codeFile);
+#ifdef ELIS_HAS_WEBENGINE
+        if (!ov.pageID.isEmpty())
+            elis_page_outcome_dismiss(ov.pageID.toUtf8().constData());
+#endif
         m_overlayResults.remove(slotKey(id, pane));
     }
     m_huds.remove(id);
