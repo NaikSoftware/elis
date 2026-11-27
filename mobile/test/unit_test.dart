@@ -173,6 +173,18 @@ void main() {
     });
   });
 
+  test('a session row fills with its progress and waves while indeterminate, never while blocked', () {
+    Session s(String status, Object? progress) => Session({'status': status, 'progress': progress}, 'w', 'W');
+    expect(s('idle', {'value': '3/7', 'fraction': 3 / 7, 'source': 'control'}).fill, closeTo(3 / 7, 1e-9));
+    expect(s('idle', {'value': '3/7', 'fraction': 3 / 7, 'source': 'control'}).waves, isFalse);
+    expect(s('idle', {'value': 'indeterminate', 'source': 'terminal'}).fill, isNull);
+    expect(s('idle', {'value': 'indeterminate', 'source': 'terminal'}).waves, isTrue);
+    expect(s('blocked', {'value': '40%', 'fraction': 0.4, 'source': 'control'}).fill, isNull);
+    expect(s('blocked', {'value': 'indeterminate', 'source': 'terminal'}).waves, isFalse);
+    expect(s('active', null).waves, isTrue);
+    expect(s('idle', null).fill, isNull);
+  });
+
   test('promptTail drops frames and blank rows', () {
     expect(promptTail('╭────╮\n│ a  │\n\n│ b  │\n╰────╯', rows: 6), 'a\nb');
     expect(promptTail('1\n2\n3\n4', rows: 2), '3\n4');
