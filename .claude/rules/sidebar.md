@@ -76,6 +76,8 @@ paths:
   window cancels the pending toggle.
   The row icon acts like the triangle: a click toggles at once whatever the setting, and the second click of
   a double-click arrives only as `doubleAction`, which toggles back instead of renaming.
+  A click anywhere on a workspace row with no children, icon included and whatever the setting, opens the "+"
+  launcher menu at the click through the same deferred, double-click-cancelled item; the Linux sidebar matches.
   Route the row-click toggle through `outline.animator()` so it animates
   like the triangle; a bare `expandItem`/`collapseItem` silently drops the animation. Do not gate that on
   Reduce Motion — both hit targets reach the same AppKit animation, so a gate would re-split them. Every
