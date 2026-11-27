@@ -36,7 +36,9 @@ QString unsupportedReason(const QString &cmd)
         {"zmx", "the zmx commands are not ported to Elis yet"},
         {"session.restart", "it is not ported to Elis's live sessions"},
         {"session.lead", "it is not ported; a covered pane takes the lead with a key in it"},
+#ifndef ELIS_HAS_WEBENGINE
         {"browser", "Elis has no built-in browser: links open in the system browser"},
+#endif
         {"session.page", "page sessions need Qt WebEngine, which Elis does not have"},
         {"session.companion.page", "page companions need Qt WebEngine, which Elis does not have"},
 #ifndef ELIS_HAS_WEBENGINE
@@ -739,6 +741,30 @@ QJsonObject moreCommands(Store &store, Terminals &terminals, const QString &cmd,
         store.setSettings(s);
         return ok({{"text", s.preventSleepWhileActive ? "on" : "off"}});
     }
+#ifdef ELIS_HAS_WEBENGINE
+    if (cmd == QLatin1String("browser.links")) {
+        QJsonObject request{{"current", store.settings.linkOpenMode}, {"target", target}};
+        for (const char *k : {"mode", "window"})
+            if (args.contains(QLatin1String(k)))
+                request.insert(QLatin1String(k), args.value(QLatin1String(k)).toString());
+        char *raw = elis_browser_links(QJsonDocument(request).toJson(QJsonDocument::Compact).constData());
+        const QJsonObject reply = QJsonDocument::fromJson(raw ? QByteArray(raw) : QByteArray()).object();
+        elis_free(raw);
+        if (!reply.value("ok").toBool())
+            return fail(reply.value("error").toString(QStringLiteral("the link mode check gave no answer")));
+        const QString mode = reply.value("mode").toString();
+        if (args.contains("mode")) {
+            Settings s = store.settings;
+            s.linkOpenMode = mode == QLatin1String("browser") ? QString() : mode; // the Settings picker's spelling
+            store.setSettings(s);
+        }
+        return ok({{"text", mode}});
+    }
+    if (cmd == QLatin1String("browser.clear")) {
+        QJsonObject result;
+        return terminals.appCommand(cmd, target, args, &result, &error) ? ok(result) : fail(error);
+    }
+#endif
     if (cmd.startsWith(QLatin1String("recent.")))
         return recentCommand(store, cmd, target);
     if (cmd.startsWith(QLatin1String("msg.")))

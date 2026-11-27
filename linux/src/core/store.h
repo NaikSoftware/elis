@@ -129,6 +129,7 @@ struct Settings {
     // Key Mapping: the directory holding keymap.conf and hooks.conf; "" = the default
     QString configDirectory;
     QString restoreMode = QStringLiteral("none"); // none | rerun | live; takes effect at the next launch
+    QString linkOpenMode; // where a clicked web link opens: "" (browser) | overlay | overlay95 | overlay75 | overlay50
 
     QJsonObject toJson() const;
     static Settings fromJson(const QJsonObject &o);

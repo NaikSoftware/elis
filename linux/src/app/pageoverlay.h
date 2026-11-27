@@ -23,7 +23,7 @@ class PageOverlay : public QWidget
 public:
     // source {"kind":"file","path","cwd"?} | {"kind":"url","url"} | {"kind":"image|markdown|text|document","path"}, a built
     // page, with what the open check found: a markdown page's link grant "links", a text page's "line", "log",
-    // "language" and "diff"; flags {navigation,javascript,chromeless};
+    // "language" and "diff"; flags {navigation,javascript,chromeless,persistent,browse};
     // theme: the terminal's {background, foreground, dark, palette}, which every page reads and a file page wears
     PageOverlay(const QJsonObject &source, const QJsonObject &flags, const QString &pageID, const QJsonObject &theme, QWidget *parent = nullptr);
     ~PageOverlay() override;
@@ -45,6 +45,10 @@ public:
     static double zoom(); // the one app-wide factor every page shows at
     static void setZoom(double factor);
     static bool stepZoom(const QString &fontAction); // increase_font_size:1 | decrease_font_size:1 | reset_font_size
+    // the saved store every --persistent page shares, built on first use: why it cannot be used, empty when it can
+    static QString persistentStoreFailure();
+    static bool clearPersistentStore(const QString &target, const QJsonObject &args, QString *error); // browser.clear
+    static void releasePersistentStore(); // at quit, after every page and before WebEngine shuts down
     // where Open in Browser and Show in Folder go; tests replace it
     static inline std::function<void(const QUrl &)> openExternally;
 
@@ -72,6 +76,7 @@ private:
     void fail(const QString &error);
     void loadOriginal();
     void syncStrip();
+    bool syncShown();
     QUrl pageUrl() const;
     QUrl browserUrl() const;
     QString identity() const;
@@ -89,9 +94,11 @@ private:
     QLabel *m_identity = nullptr, *m_title = nullptr, *m_error = nullptr, *m_promptText = nullptr;
     QToolButton *m_back = nullptr, *m_forward = nullptr;
     QString m_state = QStringLiteral("loading"), m_errorText;
+    QString m_storeFailure; // a persistent page without its saved store loads nothing
     QUrl m_shown;              // the committed document's address, never a pending one
     QUrl m_promptUrl;          // the hand-off waiting on the prompt
     bool m_textLoaded = false; // a file page without a grant shows its text, not its URL
     bool m_loadPending = false, m_clickedLoad = false, m_silenced = false, m_failed = false;
     bool m_contentShown = false; // a load finished once: later loads keep that document on screen while they run
+    bool m_originalPending = false; // loadOriginal's load has neither committed nor failed
 };

@@ -950,6 +950,30 @@ private Q_SLOTS:
         QVERIFY(s.settings.preventSleepWhileActive);
     }
 
+    void browserLinksSetReadAndRefuse()
+    {
+        Store s;
+        FakeTerminals t;
+#ifdef ELIS_HAS_WEBENGINE
+        QCOMPARE(call(s, t, "tree")["result"]["tree"]["linkOpenMode"].toString(), QStringLiteral("browser"));
+        QCOMPARE(call(s, t, "browser.links")["result"]["text"].toString(), QStringLiteral("browser"));
+        QCOMPARE(call(s, t, "browser.links", {}, {{"mode", "overlay75"}})["result"]["text"].toString(), QStringLiteral("overlay75"));
+        QCOMPARE(s.settings.linkOpenMode, QStringLiteral("overlay75"));
+        QCOMPARE(call(s, t, "tree")["result"]["tree"]["linkOpenMode"].toString(), QStringLiteral("overlay75"));
+        QCOMPARE(call(s, t, "browser.links", {}, {{"mode", "tab"}})["error"].toString(), QStringLiteral("invalid link mode: tab"));
+        QCOMPARE(call(s, t, "browser.links", "active", {{"mode", "overlay"}})["error"].toString(), QStringLiteral("browser.links takes no target or --window"));
+        QCOMPARE(s.settings.linkOpenMode, QStringLiteral("overlay75"));
+        QCOMPARE(call(s, t, "browser.links", {}, {{"mode", "browser"}})["result"]["text"].toString(), QStringLiteral("browser"));
+        QVERIFY(s.settings.linkOpenMode.isEmpty()); // as the Settings picker stores it
+        QVERIFY(call(s, t, "browser.clear")["ok"].toBool());
+        QCOMPARE(t.appCmd, QStringLiteral("browser.clear"));
+#else
+        QVERIFY(!call(s, t, "tree")["result"]["tree"].toObject().contains("linkOpenMode"));
+        for (const char *cmd : {"browser.links", "browser.clear"})
+            QVERIFY2(call(s, t, cmd)["error"].toString().startsWith(QLatin1String(cmd) + QStringLiteral(" is not supported on this platform (")), cmd);
+#endif
+    }
+
     void workspaceFocusFilterAndSuspend()
     {
         Store s;
@@ -1089,10 +1113,11 @@ private Q_SLOTS:
         QCOMPARE(error("session.overlay.changes", {}), QStringLiteral("session.overlay.changes requires to next or prev"));
         QVERIFY(call(s, t, "session.overlay.search", id, {{"text", "needle"}})["ok"].toBool());
         QCOMPARE(t.appArgs["action"].toObject(), (QJsonObject{{"kind", "search"}, {"search", "query"}, {"query", "needle"}}));
-        QCOMPARE(error("session.overlay.open", {{"url", "https://example.org"}, {"browse", true}}),
-                 QStringLiteral("session.overlay.open: --browse pages are not ported to Elis yet"));
-        QCOMPARE(error("session.overlay.open", {{"url", "https://example.org"}, {"persistent", true}}),
-                 QStringLiteral("session.overlay.open: --persistent pages are not ported to Elis yet"));
+        QCOMPARE(error("session.overlay.open", {{"url", "https://example.org"}, {"browse", true}, {"chromeless", true}}),
+                 QStringLiteral("session.overlay.open: --chromeless cannot be combined with --browse"));
+        QCOMPARE(error("session.overlay.open", {{"html", "/a.html"}, {"persistent", true}}), QStringLiteral("session.overlay.open: --persistent requires --url"));
+        QVERIFY(call(s, t, "session.overlay.open", id, {{"url", "https://example.org"}, {"browse", true}, {"persistent", true}})["ok"].toBool());
+        QVERIFY(t.appArgs["browse"].toBool() && t.appArgs["persistent"].toBool());
         QVERIFY(call(s, t, "session.overlay.open", id, {{"command", "top"}, {"sizePercent", 50}, {"width", 400.5}})["ok"].toBool());
         QCOMPARE(error("session.overlay.navigate", {{"to", "up"}}), QStringLiteral("session.overlay.navigate requires back, forward, browser or finder"));
         QCOMPARE(error("session.overlay.submit", {}), QStringLiteral("session.overlay.submit requires a value"));
@@ -2211,7 +2236,7 @@ private Q_SLOTS:
         Store s;
         FakeTerminals t;
         const QString id = call(s, t, "session.new")["result"]["id"].toString();
-        QStringList absent{"zmx.list", "browser.links", "quick.type", "session.scratch", "session.background", "surface.cursor", "config.reload",
+        QStringList absent{"zmx.list", "quick.type", "session.scratch", "session.background", "surface.cursor", "config.reload",
                            "session.restart", "session.page"};
 #ifndef ELIS_HAS_WEBENGINE
         absent << "session.overlay.follow" << "session.overlay.search" << "session.overlay.changes" << "session.overlay.files" << "session.overlay.wrap";

@@ -111,6 +111,10 @@ char *elis_page_outcome_register(void); // {"pageID"}
 char *elis_page_outcome_submit(const char *pageID, const char *value); // {"ok"}: false when it was not pending
 void elis_page_outcome_dismiss(const char *pageID);
 char *elis_page_outcome_result(const char *pageID);
+// The saved browser store and browser.* (Sources/ElisBridge/Browser.swift)
+char *elis_browser_profile(const char *json); // {directory} -> {"ok":true,"id"}, created when missing, or {"ok":false,"error"}
+char *elis_browser_clear(const char *json);   // {target?,window?,directory,openPages} -> {"ok":true,"id"|null} or the Mac's refusal
+char *elis_browser_links(const char *json);   // {target?,window?,mode?,current} -> {"ok":true,"mode"} or the Mac's refusal
 // Markdown, image, text and document pages (Sources/ElisBridge/PageContent.swift); any thread
 char *elis_page_open_check(const char *json);          // {source,navigation?,log?} -> {ok,navigation,links?,pixels?,language?,diff} or refusal
 char *elis_markdown_assets(const char *directory);     // {script,style,textScript,textStyle}
