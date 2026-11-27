@@ -111,6 +111,10 @@ char *elis_page_outcome_register(void); // {"pageID"}
 char *elis_page_outcome_submit(const char *pageID, const char *value); // {"ok"}: false when it was not pending
 void elis_page_outcome_dismiss(const char *pageID);
 char *elis_page_outcome_result(const char *pageID);
+// The saved browser store and browser.* (Sources/ElisBridge/Browser.swift)
+char *elis_browser_profile(const char *json); // {directory} -> {"ok":true,"id"}, created when missing, or {"ok":false,"error"}
+char *elis_browser_clear(const char *json);   // {target?,window?,directory,openPages} -> {"ok":true,"id"|null} or the Mac's refusal
+char *elis_browser_links(const char *json);   // {target?,window?,mode?,current} -> {"ok":true,"mode"} or the Mac's refusal
 // session progress (Sources/ElisBridge/Progress.swift); every result is JSON freed with elis_free
 char *elis_progress_parse(const char *text);    // 3/7, 40%, indeterminate, clear: {"ok":true,"progress":{…}|null} or {"ok":false,"error"}
 char *elis_progress_terminal(const char *body); // OSC 9 body "4;1;40": {"update":"clear"|"set","progress"?} or null

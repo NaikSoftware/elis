@@ -19,6 +19,8 @@ flags, output fields and error texts live there.
 | Phone pairing | Elis ▸ Connect a Phone… | Settings ▸ Connect a Phone…; Bluetooth through BlueZ |
 | Attention | Dock badge, bounce and Dock menu | taskbar entry highlight, no Dock menu |
 | Keep awake | the display still sleeps and locks | the screen also stays on and unlocked |
+| Saved browser store (`--persistent`) | under `~/Library/WebKit`, by the profile id | `<state dir>/QtWebEngine/<id>`; for 2 s after `browser clear`, persistent opens and clears are refused `browser storage is being cleared` |
+| Open links in | Settings ▸ General ▸ Mouse | Settings ▸ General ▸ Sessions |
 
 ## Mac only
 
@@ -28,8 +30,9 @@ Commands for these answer `<cmd> is not supported on this platform (<reason>)` o
 - Quick terminal and scratch terminal.
 - Remote sessions: attaching another Mac's session, remote windows, elis-server hosts, remote overlay jobs.
 - Web content beyond `--html` and `--url` page overlays: page sessions, page companions, markdown/image/text page
-  overlays and their commands (follow, search, changes, files, wrap), `--browse` and `--persistent` pages, the page
-  bridge, the built-in browser and links opened in a session overlay. Links open in the system browser.
+  overlays and their commands (follow, search, changes, files, wrap), the page bridge, and terminal links opened in
+  a session overlay: Linux keeps the Open links in setting and `browser links`, and links open in the system browser.
+  Without Qt WebEngine, `browser …` is not supported either.
   Pages never show on the phone.
 - The `zmx …` commands, Reset Live Sessions, `session restart` and `session lead`
   (a covered Live pane takes the lead back with a key).

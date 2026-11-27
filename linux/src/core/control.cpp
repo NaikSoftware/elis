@@ -263,9 +263,6 @@ static QString overlayPageError(QJsonObject *args)
         return {};
     if (const QString kind = page.value("kind").toString(); kind != QLatin1String("file") && kind != QLatin1String("url"))
         return QStringLiteral("session.overlay.open: --%1 pages are not ported to Elis yet").arg(kind);
-    for (const char *flag : {"browse", "persistent"})
-        if (args->value(QLatin1String(flag)).toBool())
-            return QStringLiteral("session.overlay.open: --%1 pages are not ported to Elis yet").arg(QLatin1String(flag));
     args->insert("page", page);
     return {};
 }
@@ -414,12 +411,18 @@ static QJsonObject tree(Store &store, const Terminals &terminals)
             node.insert("collapsed", true);
         ws << node;
     }
-    return {{"workspaces", ws},
-            {"workspaceFilter", store.focusEnabled},
-            {"sidebarMode", store.flaggedView ? "flagged" : "tree"},
-            {"sidebarFlaggedLayout", store.settings.flaggedViewLayout},
-            {"sidebarDensity", store.settings.sidebarDensity},
-            {"keepAwake", store.settings.preventSleepWhileActive}};
+    QJsonObject top{{"workspaces", ws},
+                    {"workspaceFilter", store.focusEnabled},
+                    {"sidebarMode", store.flaggedView ? "flagged" : "tree"},
+                    {"sidebarFlaggedLayout", store.settings.flaggedViewLayout},
+                    {"sidebarDensity", store.settings.sidebarDensity},
+                    {"keepAwake", store.settings.preventSleepWhileActive}};
+#ifdef ELIS_HAS_WEBENGINE
+    char *raw = elis_browser_links(QJsonDocument(QJsonObject{{"current", store.settings.linkOpenMode}}).toJson(QJsonDocument::Compact).constData());
+    top.insert("linkOpenMode", QJsonDocument::fromJson(raw ? QByteArray(raw) : QByteArray()).object().value("mode")); // the effective mode
+    elis_free(raw);
+#endif
+    return top;
 }
 
 // on | off | toggle against the current state; "" means toggle

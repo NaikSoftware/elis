@@ -308,6 +308,9 @@ bool MainWindow::openPage(const QString &id, const QString &pane, const QJsonObj
     QWidget *under = pane.isEmpty() ? p.view : paneWidget(id, pane);
     if (!under || (pane == QLatin1String("right") && !s->splitVisible))
         return *error = QStringLiteral("pane not visible"), false;
+    if (args.value("persistent").toBool())
+        if (const QString failure = PageOverlay::persistentStoreFailure(); !failure.isEmpty())
+            return *error = QStringLiteral("session.overlay.open: %1").arg(failure), false;
     if (pane.isEmpty())
         closeHud(id); // a page replaces the HUD in the session-wide slot, as a program does
 
@@ -340,7 +343,9 @@ bool MainWindow::openPage(const QString &id, const QString &pane, const QJsonObj
     PageOverlay::setZoom(m_store.settings.htmlOverlayZoom);
     const QJsonObject flags{{"navigation", args.value("navigation").toBool()},
                             {"javascript", args.value("javascript").toBool()},
-                            {"chromeless", ov.chromeless}};
+                            {"chromeless", ov.chromeless},
+                            {"persistent", args.value("persistent").toBool()},
+                            {"browse", args.value("browse").toBool()}};
     auto *page = new PageOverlay(args.value("page").toObject(), flags, pageID, theme, frame);
     box->addWidget(page);
     ov.page = page;

@@ -54,6 +54,8 @@
 #include <QWheelEvent>
 #include "smoothwheel.h"
 #include "phone.h"
+#include <QClipboard>
+#include <QComboBox>
 #include <QTcpServer>
 #include "paneleadcover.h"
 #include "elis_bridge.h"
@@ -165,6 +167,15 @@ struct AssistantHost {
 // one canned response per path on 127.0.0.1, so a test has two origins and no network
 struct WebServer : QTcpServer {
     QHash<QString, QByteArray> routes;
+    QSet<QString> held; // answered only by answer(), so a test can hold a load before its commit
+    QHash<QString, QPointer<QTcpSocket>> waiting;
+    void answer(const QString &path, const QByteArray &bytes, bool end = true)
+    {
+        QTcpSocket *c = waiting.value(path);
+        c->write(bytes);
+        if (end)
+            c->disconnectFromHost(), waiting.remove(path);
+    }
     WebServer()
     {
         listen(QHostAddress::LocalHost);
@@ -172,6 +183,8 @@ struct WebServer : QTcpServer {
             while (QTcpSocket *c = nextPendingConnection())
                 connect(c, &QTcpSocket::readyRead, c, [this, c] {
                     const QString path = QString::fromLatin1(c->readAll().split(' ').value(1));
+                    if (held.contains(path))
+                        return waiting.insert(path, c), void();
                     c->write(routes.value(path, "HTTP/1.1 404 Not Found\r\nContent-Length: 0\r\nConnection: close\r\n\r\n"));
                     c->disconnectFromHost();
                 });
@@ -182,6 +195,11 @@ struct WebServer : QTcpServer {
     {
         return "HTTP/1.1 200 OK\r\nContent-Type: text/html; charset=utf-8\r\nConnection: close\r\nContent-Length: " + QByteArray::number(body.size()) +
                "\r\n\r\n" + body;
+    }
+    // no length, so a held answer can stop mid-body; no-store keeps history loads off the caches
+    static QByteArray streamed(const QByteArray &body)
+    {
+        return "HTTP/1.1 200 OK\r\nContent-Type: text/html; charset=utf-8\r\nCache-Control: no-store\r\nConnection: close\r\n\r\n" + body;
     }
     static QByteArray redirect(const QString &to)
     {
@@ -803,6 +821,17 @@ private Q_SLOTS:
         QString error;
         QVERIFY(w.font(store.selected, "main", "reset", &error)); // reset returns to the Settings size, not the profile's
         QCOMPARE(term->font().pointSizeF(), size + 4);
+#ifdef ELIS_HAS_WEBENGINE
+        QComboBox *links = nullptr;
+        for (QWidget *x : QApplication::allWidgets())
+            if (x->objectName() == QLatin1String("settingsLinkOpenMode"))
+                links = qobject_cast<QComboBox *>(x);
+        QVERIFY(links);
+        QCOMPARE(links->currentText(), QStringLiteral("Browser"));
+        links->setCurrentIndex(links->findData(QStringLiteral("overlay75")));
+        QCOMPARE(store.settings.linkOpenMode, QStringLiteral("overlay75"));
+        QCOMPARE(dispatch(store, w, QJsonObject{{"cmd", "tree"}}).value("result")["tree"]["linkOpenMode"].toString(), QStringLiteral("overlay75"));
+#endif
         dlg->close();
     }
     void shortcutsReachTheAppFromTheTerminalAndTypingClearsAttention()
@@ -1095,6 +1124,160 @@ private Q_SLOTS:
         QVERIFY(w.findChild<QWidget *>(QStringLiteral("elisPageError"))->isVisible());
         QTest::mouseClick(w.findChild<QToolButton *>(QStringLiteral("elisPageClose")), Qt::LeftButton);
         QTRY_VERIFY(!w.sessionExtras(id).contains("htmlOverlays"));
+    }
+
+    void browseIdentityFollowsTheCommittedDocument()
+    {
+        WebServer a, b;
+        a.routes["/"] = WebServer::streamed("<title>A</title><a id=away href='" + b.url("/slow").toUtf8() + "'>b</a>");
+        b.held << QStringLiteral("/slow");
+        Store store;
+        MainWindow w(store, dir.filePath("browse.json"));
+        w.restore({});
+        const QString id = store.addSession(store.addWorkspace("w"), {}, {});
+        store.select(id);
+        w.show();
+        auto run = [&](const QString &cmd, const QJsonObject &args = {}) {
+            QJsonObject result;
+            QString error;
+            return w.appCommand(cmd, id, args, &result, &error) ? result : QJsonObject{{"error", error}};
+        };
+        auto page = [&] { return w.sessionExtras(id)["htmlOverlays"].toArray().first().toObject(); };
+        QList<QUrl> external;
+        PageOverlay::openExternally = [&](const QUrl &u) { external << u; };
+        auto cleanup = qScopeGuard([] { PageOverlay::openExternally = nullptr; });
+        // every statement of whose page it is: identity, page, Open in Browser and Copy Link
+        auto names = [&](const QString &url) {
+            QCOMPARE(page()["page"].toString(), url);
+            QCOMPARE(w.findChild<QLabel *>(QStringLiteral("elisPageIdentity"))->text(), QUrl(url).adjusted(QUrl::RemovePath).toString());
+            QVERIFY(!run("session.overlay.navigate", {{"to", "browser"}}).contains("error"));
+            QCOMPARE(external.last(), QUrl(url));
+            QTest::mouseClick(w.findChild<QToolButton *>(QStringLiteral("elisPageCopy")), Qt::LeftButton);
+            QCOMPARE(QApplication::clipboard()->text(), url);
+        };
+
+        QVERIFY(!run("session.overlay.open", {{"page", QJsonObject{{"kind", "url"}, {"url", a.url()}}}, {"browse", true}, {"navigation", true}}).contains("error"));
+        QTRY_COMPARE_WITH_TIMEOUT(page()["state"].toString(), QStringLiteral("loaded"), 30000);
+        QCOMPARE(page()["browse"].toBool(), true);
+        names(a.url());
+        auto *overlay = w.findChild<PageOverlay *>();
+        overlay->view()->page()->runJavaScript(QStringLiteral("document.getElementById('away').click()"), QWebEngineScript::ApplicationWorld);
+        QTRY_VERIFY(b.waiting.contains(QStringLiteral("/slow")));
+        QTest::qWait(300);
+        names(a.url()); // a pending load on another origin names nothing yet
+        b.answer(QStringLiteral("/slow"), WebServer::streamed("<title>Slow</title><p>half"), false);
+        QTRY_COMPARE_WITH_TIMEOUT(page()["page"].toString(), b.url("/slow"), 10000);
+        QCOMPARE(page()["state"].toString(), QStringLiteral("loading")); // committed, not finished
+        names(b.url("/slow"));
+        b.answer(QStringLiteral("/slow"), "</p>");
+        QTRY_COMPARE(page()["state"].toString(), QStringLiteral("loaded"));
+
+        // a load the app starts itself, the original source again
+        a.held << QStringLiteral("/");
+        QVERIFY(!run("session.overlay.reload").contains("error"));
+        QTRY_VERIFY(a.waiting.contains(QStringLiteral("/")));
+        QTest::qWait(300);
+        names(b.url("/slow"));
+        a.answer(QStringLiteral("/"), WebServer::streamed("<title>A</title><p>half"), false);
+        QTRY_COMPARE_WITH_TIMEOUT(page()["page"].toString(), a.url(), 10000);
+        names(a.url());
+        a.answer(QStringLiteral("/"), "</p>");
+        QTRY_COMPARE(page()["state"].toString(), QStringLiteral("loaded"));
+
+        // a history load
+        QTRY_VERIFY(page()["canGoBack"].toBool());
+        QVERIFY(!run("session.overlay.navigate", {{"to", "back"}}).contains("error"));
+        QTRY_VERIFY(b.waiting.contains(QStringLiteral("/slow")));
+        QTest::qWait(300);
+        names(a.url());
+        b.answer(QStringLiteral("/slow"), WebServer::streamed("<title>Slow</title>"));
+        QTRY_COMPARE_WITH_TIMEOUT(page()["page"].toString(), b.url("/slow"), 10000);
+        names(b.url("/slow"));
+        QVERIFY(!run("session.overlay.close").contains("error"));
+    }
+
+    void persistentPagesShareOneSavedStoreUntilCleared()
+    {
+        WebServer a;
+        a.routes["/"] = "HTTP/1.1 200 OK\r\nContent-Type: text/html\r\nSet-Cookie: k=v; Max-Age=3600; Path=/\r\nConnection: close\r\n\r\n<title>A</title>";
+        a.routes["/plain"] = WebServer::html("<title>P</title>");
+        Store store;
+        MainWindow w(store, dir.filePath("persistent.json"));
+        w.restore({});
+        const QString id = store.addSession(store.addWorkspace("w"), {}, {});
+        store.select(id);
+        w.show();
+        auto run = [&](const QString &cmd, const QJsonObject &args = {}) {
+            QJsonObject result;
+            QString error;
+            return w.appCommand(cmd, id, args, &result, &error) ? result : QJsonObject{{"error", error}};
+        };
+        auto clear = [&] {
+            QJsonObject result;
+            QString error;
+            return w.appCommand(QStringLiteral("browser.clear"), {}, {}, &result, &error) ? QString() : error;
+        };
+        auto page = [&] { return w.sessionExtras(id)["htmlOverlays"].toArray().first().toObject(); };
+        auto open = [&](bool persistent, const QString &path) {
+            return run("session.overlay.open", {{"page", QJsonObject{{"kind", "url"}, {"url", a.url(path)}}}, {"persistent", persistent}})["error"].toString();
+        };
+        // what the page's origin holds: its cookie and its local storage
+        auto held = [&] {
+            const auto out = std::make_shared<QString>();
+            w.findChild<PageOverlay *>()->view()->page()->runJavaScript(QStringLiteral("document.cookie + '|' + localStorage.getItem('k')"),
+                                                                        QWebEngineScript::ApplicationWorld, [out](const QVariant &v) { *out = v.toString(); });
+            QTest::qWaitFor([out] { return !out->isEmpty(); }, 10000);
+            return *out;
+        };
+        const QString profile = stateDir() + QStringLiteral("/browser-profile");
+        QFile::remove(profile); // ctest's state dir outlives a run
+        QDir(stateDir() + QStringLiteral("/QtWebEngine")).removeRecursively();
+        QVERIFY(clear().isEmpty());
+        QVERIFY(!QFile::exists(profile)); // nothing to clear creates nothing
+
+        QFile bad(profile);
+        QVERIFY(bad.open(QIODevice::WriteOnly));
+        bad.write("not a uuid\n");
+        bad.close();
+        QCOMPARE(open(true, "/"), QStringLiteral("session.overlay.open: browser profile is not a UUID: %1").arg(profile));
+        QVERIFY(!w.sessionExtras(id).contains("htmlOverlays")); // never an in-memory store instead
+        QCOMPARE(clear(), QStringLiteral("browser.clear: browser profile is not a UUID: %1").arg(profile));
+        QVERIFY(QFile::remove(profile));
+
+        QVERIFY(open(true, "/").isEmpty());
+        QTRY_COMPARE_WITH_TIMEOUT(page()["state"].toString(), QStringLiteral("loaded"), 30000);
+        QCOMPARE(page()["persistent"].toBool(), true);
+        QFile idFile(profile);
+        QVERIFY(idFile.open(QIODevice::ReadOnly));
+        const QString uuid = QString::fromUtf8(idFile.readAll()).trimmed();
+        idFile.close();
+        QVERIFY(!QUuid::fromString(uuid).isNull());
+        const QString storage = stateDir() + QStringLiteral("/QtWebEngine/") + uuid;
+        QVERIFY(QDir(storage).exists());
+        w.findChild<PageOverlay *>()->view()->page()->runJavaScript(QStringLiteral("localStorage.setItem('k', 'v')"), QWebEngineScript::ApplicationWorld);
+        QTRY_COMPARE(held(), QStringLiteral("k=v|v"));
+        QCOMPARE(clear(), QStringLiteral("browser.clear: 1 persistent page still open"));
+        QVERIFY(!run("session.overlay.close").contains("error"));
+
+        QVERIFY(open(false, "/plain").isEmpty());
+        QTRY_COMPARE_WITH_TIMEOUT(page()["state"].toString(), QStringLiteral("loaded"), 30000);
+        QCOMPARE(held(), QStringLiteral("|null")); // a page of its own store
+        QVERIFY(!run("session.overlay.close").contains("error"));
+        QVERIFY(open(true, "/plain").isEmpty());
+        QTRY_COMPARE_WITH_TIMEOUT(page()["state"].toString(), QStringLiteral("loaded"), 30000);
+        QCOMPARE(held(), QStringLiteral("k=v|v")); // the saved store, shared
+        QVERIFY(!run("session.overlay.close").contains("error"));
+
+        QVERIFY(clear().isEmpty());
+        QVERIFY(idFile.open(QIODevice::ReadOnly));
+        QCOMPARE(QString::fromUtf8(idFile.readAll()).trimmed(), uuid); // the store keeps its id
+        idFile.close();
+        QCOMPARE(open(true, "/plain"), QStringLiteral("session.overlay.open: browser storage is being cleared"));
+        QCOMPARE(clear(), QStringLiteral("browser.clear: browser storage is being cleared"));
+        QVERIFY(QTest::qWaitFor([&] { return open(true, "/plain").isEmpty(); }, 5000));
+        QTRY_COMPARE_WITH_TIMEOUT(page()["state"].toString(), QStringLiteral("loaded"), 30000);
+        QCOMPARE(held(), QStringLiteral("|null"));
+        QVERIFY(!run("session.overlay.close").contains("error"));
     }
 
     void aGrantedFilePageReadsOnlyInsideItsFolder()

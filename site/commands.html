@@ -4427,6 +4427,8 @@
                 after the removal finished, and with nothing ever saved it answers ok. Refused while a persistent page is open, one in a
                 just-closed session that can still be restored included, since an open page writes its login back. Clearing local data does not sign
                 you out on the server. App-global; a target or <span style="font-family: &quot;JetBrains Mono&quot;, monospace">--window</span> is refused.
+                On Linux, for two seconds after a clear, a persistent page or another clear is refused
+                <span style="font-family: &quot;JetBrains Mono&quot;, monospace">browser storage is being cleared</span>.
               </p>
             </div>
 
@@ -4455,6 +4457,7 @@
                 pane overlay, or one the presenting Mac shows, is not replaced. A plain http link
                 uses the overlay only for an unqualified host name such as localhost, a .local name or a private or link-local IP address;
                 http to any other host opens in the browser. mailto, ftp and file links are unaffected. Same setting as Settings ▸ General ▸ Open links in.
+                On Linux the setting is Settings ▸ General ▸ Sessions ▸ Open links in, and a clicked link opens in the browser in every mode for now.
               </p>
             </div>
           </section>

@@ -1,5 +1,6 @@
 #include "pageoverlay.h"
 #include "elis_bridge.h"
+#include "paths.h"
 
 #include <algorithm>
 
@@ -48,6 +49,13 @@ static QByteArray compact(const QJsonObject &o)
 
 static double s_zoom = 1;
 static QList<QPointer<PageOverlay>> s_pages;
+static QPointer<QWebEngineProfile> s_persistent;
+static bool s_clearing = false; // the dropped store is still shutting down
+
+static QString persistentStoragePath(const QString &id)
+{
+    return stateDir() + QStringLiteral("/QtWebEngine/") + id; // Qt's own default for the live state dir, isolated with it
+}
 
 // Every navigation the page or the user starts goes to ElisCore's policy; dialogs, file pickers and popups never open.
 class PolicyPage : public QWebEnginePage
@@ -116,9 +124,15 @@ PageOverlay::PageOverlay(const QJsonObject &source, const QJsonObject &flags, co
 {
     setObjectName(QStringLiteral("elisPage"));
     s_pages << this;
-    m_profile = new QWebEngineProfile(this); // off the record: storage lives exactly as long as the page
-    m_profile->setUrlRequestInterceptor(new GrantInterceptor(source, m_profile));
+    if (flags.value("persistent").toBool())
+        m_storeFailure = persistentStoreFailure();
+    const bool saved = flags.value("persistent").toBool() && m_storeFailure.isEmpty();
+    m_profile = saved ? s_persistent.data() : new QWebEngineProfile(this); // off the record: storage lives as long as the page
     m_page = new PolicyPage(m_profile, this);
+    if (saved) // the shared store holds no one page's grant
+        m_page->setUrlRequestInterceptor(new GrantInterceptor(source, m_page));
+    else
+        m_profile->setUrlRequestInterceptor(new GrantInterceptor(source, m_profile));
     QWebEngineSettings *settings = m_page->settings();
     settings->setAttribute(QWebEngineSettings::JavascriptEnabled, flags.value("javascript").toBool());
     settings->setAttribute(QWebEngineSettings::JavascriptCanOpenWindows, false);
@@ -270,7 +284,7 @@ PageOverlay::PageOverlay(const QJsonObject &source, const QJsonObject &flags, co
             m_loadPending = false;
             if (!m_failed) {
                 m_state = QStringLiteral("loaded");
-                m_shown = m_page->url();
+                syncShown();
                 m_contentShown = true;
             }
             break;
@@ -289,12 +303,20 @@ PageOverlay::PageOverlay(const QJsonObject &source, const QJsonObject &flags, co
         Q_EMIT changed();
     });
     connect(m_page, &QWebEnginePage::urlChanged, this, [this] {
+        syncShown();
         syncStrip();
         Q_EMIT changed();
     });
     connect(m_page, &QWebEnginePage::titleChanged, this, [this] {
+        syncShown();
         syncStrip();
         Q_EMIT changed();
+    });
+    connect(m_page, &QWebEnginePage::loadProgress, this, [this] { // a load of our own commits with no address change
+        if (syncShown()) {
+            syncStrip();
+            Q_EMIT changed();
+        }
     });
     m_view->installEventFilter(this);
     if (m_view->focusProxy())
@@ -317,9 +339,10 @@ PageOverlay::~PageOverlay()
 
 void PageOverlay::loadOriginal()
 {
+    if (!m_storeFailure.isEmpty())
+        return fail(QStringLiteral("session.overlay.open: %1").arg(m_storeFailure));
     m_loadPending = true;
     m_failed = false;
-    m_shown.clear();
     const QString path = m_source.value("path").toString();
     if (m_source.value("kind").toString() == QLatin1String("url")) {
         m_page->load(QUrl(m_source.value("url").toString()));
@@ -447,8 +470,21 @@ bool PageOverlay::eventFilter(QObject *watched, QEvent *event)
     return QWidget::eventFilter(watched, event);
 }
 
+// url() can name a pending load Chromium started itself (Qt 6.11 was measured naming only commits), the history's
+// current item a pending history load: never one in both, so the two agree only on the committed document
+bool PageOverlay::syncShown()
+{
+    const QUrl now = m_page->url();
+    if (m_failed || now.isEmpty() || now == m_shown || now != m_page->history()->currentItem().url())
+        return false;
+    m_shown = now;
+    return true;
+}
+
 QUrl PageOverlay::pageUrl() const
 {
+    if (m_flags.value("browse").toBool()) // the committed document, never a pending one: the page may leave its origin
+        return m_shown.isEmpty() ? QUrl(m_source.value("url").toString()) : m_shown;
     if (m_textLoaded || m_page->url().scheme() == QLatin1String("data") || m_page->url().isEmpty())
         return m_source.value("kind").toString() == QLatin1String("url") ? QUrl(m_source.value("url").toString())
                                                                          : QUrl::fromLocalFile(m_source.value("path").toString());
@@ -518,8 +554,8 @@ QJsonObject PageOverlay::readBack() const
         node.insert("navigation", true);
     node.insert("javascript", m_flags.value("javascript").toBool());
     node.insert("chromeless", m_flags.value("chromeless").toBool());
-    node.insert("persistent", false);
-    node.insert("browse", false);
+    node.insert("persistent", m_flags.value("persistent").toBool());
+    node.insert("browse", m_flags.value("browse").toBool());
     node.insert("zoom", s_zoom);
     node.insert("id", m_pageID);
     return node;
@@ -583,5 +619,51 @@ bool PageOverlay::stepZoom(const QString &fontAction)
     if (!reply.value("zoom").isDouble())
         return false;
     setZoom(reply.value("zoom").toDouble());
+    return true;
+}
+
+QString PageOverlay::persistentStoreFailure()
+{
+    if (s_persistent)
+        return {};
+    const QJsonObject reply = bridge(elis_browser_profile(compact({{"directory", stateDir()}, {"clearing", s_clearing}}).constData()));
+    const QString id = reply.value("id").toString();
+    if (id.isEmpty())
+        return reply.value("error").toString(QStringLiteral("the browser profile gave no answer"));
+    s_persistent = new QWebEngineProfile(id, qApp);
+    s_persistent->setPersistentStoragePath(persistentStoragePath(id));
+    s_persistent->setCachePath(persistentStoragePath(id) + QStringLiteral("/cache"));
+    return {};
+}
+
+bool PageOverlay::clearPersistentStore(const QString &target, const QJsonObject &args, QString *error)
+{
+    // an open page holds its login in memory and would write it back
+    const auto open = std::ranges::count_if(s_pages, [](const QPointer<PageOverlay> &p) { return p && s_persistent && p->m_profile == s_persistent; });
+    QJsonObject request{{"directory", stateDir()}, {"openPages", qint64(open)}, {"clearing", s_clearing}};
+    if (!target.isEmpty())
+        request.insert("target", target);
+    if (args.contains("window"))
+        request.insert("window", args.value("window").toString());
+    const QJsonObject reply = bridge(elis_browser_clear(compact(request).constData()));
+    if (!reply.value("ok").toBool())
+        return *error = reply.value("error").toString(QStringLiteral("the browser store gave no answer")), false;
+    const QString id = reply.value("id").toString();
+    if (id.isEmpty())
+        return true; // no profile: nothing to remove, and none is created
+    // no page uses the store: drop it whole and let the next persistent page build an empty one under the same id
+    const bool live = s_persistent;
+    delete s_persistent.data();
+    const QString path = persistentStoragePath(id);
+    QDir(path).removeRecursively();
+    if (!live)
+        return true;
+    // shortcut: Qt reports no end to a dropped store's shutdown, whose last writes (its prefs) land after the delete;
+    // a fixed settle keeps a new store off the old one's files, and goes if Qt ever signals the release
+    s_clearing = true;
+    QTimer::singleShot(2000, qApp, [path] {
+        QDir(path).removeRecursively();
+        s_clearing = false;
+    });
     return true;
 }

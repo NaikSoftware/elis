@@ -52,12 +52,12 @@ These answer `<cmd> is not supported on this platform (<reason>)`:
 - quick terminal (`quick …`) and scratch terminal (`session scratch`);
 - every `zmx …` command, remote sessions, `session lead` (a covered pane takes the lead with a key), `session restart`;
 - `session background`, `surface cursor`, `config reload`;
-- `browser …`: there is no built-in browser, and links open in the system browser;
 - page sessions (`session page`, `session overlay open --page`), page companions, the text-page commands
-  (`overlay follow|search|changes|files|wrap`), `--browse`, `--persistent` and the page bridge (`data-elis`,
-  `elis.request`). `--html` and `--url` pages work in a build with Qt WebEngine, which refuses them without it;
-  `--browse` and `--persistent` answer `--<flag> pages are not ported to Elis yet`, and a large `--html` file
-  (percent-encoded text over 2 MB) needs `--cwd`.
+  (`overlay follow|search|changes|files|wrap`) and the page bridge (`data-elis`, `elis.request`).
+  `--html` and `--url` pages, `--browse`, `--persistent` and `browser clear|links` work in a build with Qt
+  WebEngine, which refuses them without it; a large `--html` file (percent-encoded text over 2 MB) needs `--cwd`.
+  `browser links` sets and reads the mode, but a clicked terminal link still opens in the system browser. For 2 s
+  after `browser clear`, a `--persistent` open or another clear answers `browser storage is being cleared`.
   There is no inline image, rendered markdown or file-at-line view either: never pass `--image`, `--markdown` or
   `--text` to `overlay open`. Show a file by running a viewer as the overlay program (`less +N file`, `glow file`).
 

@@ -151,6 +151,14 @@ void MainWindow::showSettings()
     sessions->addRow(check(tr("Allow undo after closing sessions and workspaces"), cur.closeUndo, [](Settings &s, bool v) { s.closeUndo = v; }));
     sessions->addRow(check(tr("Keep the computer awake while an agent is working"), cur.preventSleepWhileActive,
                            [](Settings &s, bool v) { s.preventSleepWhileActive = v; }));
+#ifdef ELIS_HAS_WEBENGINE
+    QComboBox *linkBox = picker({{tr("Browser"), QString()}, {tr("Session overlay"), QStringLiteral("overlay")},
+                                 {tr("Session overlay at 95%"), QStringLiteral("overlay95")}, {tr("Session overlay at 75%"), QStringLiteral("overlay75")},
+                                 {tr("Session overlay at 50%"), QStringLiteral("overlay50")}},
+                                cur.linkOpenMode, [](Settings &s, const QString &v) { s.linkOpenMode = v; });
+    linkBox->setObjectName(QStringLiteral("settingsLinkOpenMode"));
+    sessions->addRow(tr("Open links in"), linkBox);
+#endif
     QComboBox *restoreBox = picker({{tr("Fresh shells"), QStringLiteral("none")}, {tr("Re-run commands"), QStringLiteral("rerun")}, {tr("Live sessions"), QStringLiteral("live")}},
                                    cur.restoreMode, [](Settings &s, const QString &v) { s.restoreMode = v; });
     sessions->addRow(tr("Restore sessions"), restoreBox);
