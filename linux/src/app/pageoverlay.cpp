@@ -25,6 +25,9 @@
 #include <QWebEngineNewWindowRequest>
 #include <QWebEnginePage>
 #include <QWebEngineProfile>
+#if QT_VERSION >= QT_VERSION_CHECK(6, 9, 0)
+#include <QWebEngineProfileBuilder>
+#endif
 #include <QWebEngineScript>
 #include <QWebEngineScriptCollection>
 #include <QWebEngineSettings>
@@ -550,7 +553,7 @@ QJsonObject PageOverlay::readBack() const
     node.insert("state", m_state);
     if (!m_errorText.isEmpty())
         node.insert("error", m_errorText);
-    if (!m_page->url().isEmpty()) {
+    if (!m_page->url().isEmpty() || m_flags.value("browse").toBool()) { // a browse page names its source until a commit
         const QUrl page = pageUrl();
         node.insert("page", page.isLocalFile() ? page.toLocalFile() : page.toString());
         const QString title = m_page->title();
@@ -639,11 +642,16 @@ QString PageOverlay::persistentStoreFailure()
     const QString id = reply.value("id").toString();
     if (id.isEmpty())
         return reply.value("error").toString(QStringLiteral("the browser profile gave no answer"));
+    const QString path = persistentStoragePath(id);
+#if QT_VERSION >= QT_VERSION_CHECK(6, 9, 0) // the named constructor makes Qt's default folders, outside the state dir
+    s_persistent = QWebEngineProfileBuilder().setPersistentStoragePath(path).setCachePath(path + QStringLiteral("/cache")).createProfile(id, qApp);
+#else
     s_persistent = new QWebEngineProfile(id, qApp);
+    s_persistent->setPersistentStoragePath(path);
+    s_persistent->setCachePath(path + QStringLiteral("/cache"));
+#endif
     static const bool released = (qAddPostRoutine(releaseStore), true); // after the profile started WebEngine
     Q_UNUSED(released);
-    s_persistent->setPersistentStoragePath(persistentStoragePath(id));
-    s_persistent->setCachePath(persistentStoragePath(id) + QStringLiteral("/cache"));
     return {};
 }
 

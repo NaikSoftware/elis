@@ -168,13 +168,17 @@ struct AssistantHost {
 struct WebServer : QTcpServer {
     QHash<QString, QByteArray> routes;
     QSet<QString> held; // answered only by answer(), so a test can hold a load before its commit
-    QHash<QString, QPointer<QTcpSocket>> waiting;
+    QHash<QString, QList<QPointer<QTcpSocket>>> waiting;
     void answer(const QString &path, const QByteArray &bytes, bool end = true)
     {
-        QTcpSocket *c = waiting.value(path);
-        c->write(bytes);
+        for (QTcpSocket *c : std::as_const(waiting[path]))
+            if (c) {
+                c->write(bytes);
+                if (end)
+                    c->disconnectFromHost();
+            }
         if (end)
-            c->disconnectFromHost(), waiting.remove(path);
+            waiting.remove(path);
     }
     WebServer()
     {
@@ -184,7 +188,7 @@ struct WebServer : QTcpServer {
                 connect(c, &QTcpSocket::readyRead, c, [this, c] {
                     const QString path = QString::fromLatin1(c->readAll().split(' ').value(1));
                     if (held.contains(path))
-                        return waiting.insert(path, c), void();
+                        return waiting[path].append(c), void();
                     c->write(routes.value(path, "HTTP/1.1 404 Not Found\r\nContent-Length: 0\r\nConnection: close\r\n\r\n"));
                     c->disconnectFromHost();
                 });
@@ -827,8 +831,7 @@ private Q_SLOTS:
             if (x->objectName() == QLatin1String("settingsLinkOpenMode"))
                 links = qobject_cast<QComboBox *>(x);
         QVERIFY(links);
-        QCOMPARE(links->currentText(), QStringLiteral("Browser"));
-        links->setCurrentIndex(links->findData(QStringLiteral("overlay75")));
+        QCOMPARE(links->currentText(), QStringLiteral("Browser"));        links->setCurrentIndex(links->findData(QStringLiteral("overlay75")));
         QCOMPARE(store.settings.linkOpenMode, QStringLiteral("overlay75"));
         QCOMPARE(dispatch(store, w, QJsonObject{{"cmd", "tree"}}).value("result")["tree"]["linkOpenMode"].toString(), QStringLiteral("overlay75"));
 #endif
@@ -1129,7 +1132,7 @@ private Q_SLOTS:
     void browseIdentityFollowsTheCommittedDocument()
     {
         WebServer a, b;
-        a.routes["/"] = WebServer::streamed("<title>A</title><a id=away href='" + b.url("/slow").toUtf8() + "'>b</a>");
+        a.routes["/"] = WebServer::streamed("<title>A</title><a id=frag href='#x'>x</a><a id=away href='" + b.url("/slow").toUtf8() + "'>b</a>");
         b.held << QStringLiteral("/slow");
         Store store;
         MainWindow w(store, dir.filePath("browse.json"));
@@ -1149,22 +1152,31 @@ private Q_SLOTS:
         // every statement of whose page it is: identity, page, Open in Browser and Copy Link
         auto names = [&](const QString &url) {
             QCOMPARE(page()["page"].toString(), url);
-            QCOMPARE(w.findChild<QLabel *>(QStringLiteral("elisPageIdentity"))->text(), QUrl(url).adjusted(QUrl::RemovePath).toString());
+            QCOMPARE(w.findChild<QLabel *>(QStringLiteral("elisPageIdentity"))->text(), QUrl(url).adjusted(QUrl::RemovePath | QUrl::RemoveFragment).toString());
             QVERIFY(!run("session.overlay.navigate", {{"to", "browser"}}).contains("error"));
             QCOMPARE(external.last(), QUrl(url));
             QTest::mouseClick(w.findChild<QToolButton *>(QStringLiteral("elisPageCopy")), Qt::LeftButton);
             QCOMPARE(QApplication::clipboard()->text(), url);
         };
 
+        a.held << QStringLiteral("/");
         QVERIFY(!run("session.overlay.open", {{"page", QJsonObject{{"kind", "url"}, {"url", a.url()}}}, {"browse", true}, {"navigation", true}}).contains("error"));
+        QTRY_VERIFY_WITH_TIMEOUT(a.waiting.contains(QStringLiteral("/")), 30000);
+        QTest::qWait(300);
+        names(a.url()); // the source until the first commit
+        a.held.clear();
+        a.answer(QStringLiteral("/"), a.routes["/"]);
         QTRY_COMPARE_WITH_TIMEOUT(page()["state"].toString(), QStringLiteral("loaded"), 30000);
         QCOMPARE(page()["browse"].toBool(), true);
         names(a.url());
         auto *overlay = w.findChild<PageOverlay *>();
+        overlay->view()->page()->runJavaScript(QStringLiteral("document.getElementById('frag').click()"), QWebEngineScript::ApplicationWorld);
+        QTRY_COMPARE(page()["page"].toString(), a.url("/#x")); // a change on the shown origin is taken at once
+        names(a.url("/#x"));
         overlay->view()->page()->runJavaScript(QStringLiteral("document.getElementById('away').click()"), QWebEngineScript::ApplicationWorld);
         QTRY_VERIFY(b.waiting.contains(QStringLiteral("/slow")));
         QTest::qWait(300);
-        names(a.url()); // a pending load on another origin names nothing yet
+        names(a.url("/#x")); // a pending load on another origin names nothing yet
         b.answer(QStringLiteral("/slow"), WebServer::streamed("<title>Slow</title><p>half"), false);
         QTRY_COMPARE_WITH_TIMEOUT(page()["page"].toString(), b.url("/slow"), 10000);
         QCOMPARE(page()["state"].toString(), QStringLiteral("loading")); // committed, not finished
@@ -1254,6 +1266,9 @@ private Q_SLOTS:
         QVERIFY(!QUuid::fromString(uuid).isNull());
         const QString storage = stateDir() + QStringLiteral("/QtWebEngine/") + uuid;
         QVERIFY(QDir(storage).exists());
+#if QT_VERSION >= QT_VERSION_CHECK(6, 9, 0)
+        QVERIFY(!QDir(QStandardPaths::writableLocation(QStandardPaths::AppDataLocation) + QStringLiteral("/QtWebEngine/") + uuid).exists());
+#endif
         w.findChild<PageOverlay *>()->view()->page()->runJavaScript(QStringLiteral("localStorage.setItem('k', 'v')"), QWebEngineScript::ApplicationWorld);
         QTRY_COMPARE(held(), QStringLiteral("k=v|v"));
         QCOMPARE(clear(), QStringLiteral("browser.clear: 1 persistent page still open"));
