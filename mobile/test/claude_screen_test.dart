@@ -193,5 +193,42 @@ void main() {
   test('antigravityPermissionDialogIsADialog', () {
     final s = _s('agy-dialog-70');
     expect((s.dialog, s.bottomStack, s.idle), (true, false, false));
+    // colourless (session.text) and narrow (<=60 cols, where both rules share a width) still read as a dialog
+    final plain = [for (final r in _g('agy-dialog-70').rows) r.text].join('\n');
+    expect(ClaudeScreen.read(Grid.text(plain)).dialog, isTrue);
+    final narrow = plain.split('\n').map((l) => l.length > 45 ? l.substring(0, 45) : l).join('\n');
+    expect(ClaudeScreen.read(Grid.text(narrow)).dialog, isTrue);
+  });
+
+  test('antigravityBackgroundTasksAndQueuedFooterKeepTheStack', () {
+    final bar = '─' * 80;
+    final g = Grid.text([
+      '⣽ Target module requires a swipe-to-dismiss implementation... 10s',
+      '└ Tip: Press ctrl+b to send a long task to the background.',
+      '- Open PR (alt+m to send immediately)',
+      bar,
+      '> ',
+      bar,
+      '• [19:09:01] flutter run -d web-server --web-port=8088 running',
+      'Press up to edit queued messages      accept-edits · Gemini 4 Neon · high · 1 task(s) · /tasks',
+    ].join('\n'));
+    final s = ClaudeScreen.read(g);
+    expect((s.agy, s.bottomStack, s.dialog, s.busy, s.idle), (true, true, false, true, false));
+    expect(s.working, startsWith('Target module requires'));
+
+    // narrow screen: multiple wrapped task rows and a wrapped footer stay on the bottom stack
+    final narrowBar = '─' * 45;
+    final narrow = Grid.text([
+      narrowBar,
+      '> ',
+      narrowBar,
+      '• [19:09:01] flutter run -d web-server',
+      '  --web-port=8088 running',
+      '• [19:10:00] pytest -q running',
+      'esc to cancel     accept-edits · Gemini',
+      '4 Neon · high · 2 task(s) · /tasks',
+    ].join('\n'));
+    final ns = ClaudeScreen.read(narrow);
+    expect((ns.agy, ns.bottomStack, ns.dialog, ns.busy), (true, true, false, true));
   });
 }

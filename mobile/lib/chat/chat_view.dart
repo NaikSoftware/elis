@@ -550,13 +550,13 @@ class _ChatViewState extends State<ChatView> {
                       onOpen: panel && _panelHidden ? () => setState(() => _panelHidden = false) : null)),
             ),
           ]),
-          if (panel && !_panelHidden)
+          if (panel)
             Positioned(
               left: 0,
               right: 0,
               bottom: 0,
               top: box.maxHeight * 0.1,
-              child: PanelSheet(grid: g, stopped: _stopped, onKey: widget.onKey, onAnswer: widget.onAnswer, onHide: _hidePanel),
+              child: PanelSheet(grid: g, stopped: _stopped, hidden: _panelHidden, onKey: widget.onKey, onAnswer: widget.onAnswer, onHide: _hidePanel),
             ),
         ]),
       ),
