@@ -81,3 +81,50 @@ public enum LogTail {
         return present
     }
 }
+
+extension LogTail {
+    /// Shift is how the text a log page's push carries relates to what the page shows: `dropped` lines left its front,
+    /// `cut` when the new start falls inside a line, `replaced` when the file is not the one the page's text came from.
+    public struct Shift: Equatable, Sendable {
+        public var dropped: Int
+        public var cut: Bool
+        public var replaced: Bool
+
+        public init(dropped: Int = 0, cut: Bool = false, replaced: Bool = false) {
+            self.dropped = dropped
+            self.cut = cut
+            self.replaced = replaced
+        }
+    }
+
+    /// shift compares two snapshots of one file by their start offsets, counting the line feeds in the bytes the
+    /// newer one no longer shows; another file, a shrunk one or a start that moved back is a replacement.
+    public static func shift(from old: Snapshot?, stamp oldStamp: BoundedFile.FileStamp?, to new: Snapshot?,
+                             stamp newStamp: BoundedFile.FileStamp?) -> Shift {
+        guard let old, let new, old != new || oldStamp != newStamp else { return Shift() }
+        guard let oldStamp, let newStamp, oldStamp.device == newStamp.device, oldStamp.inode == newStamp.inode,
+              newStamp.size >= oldStamp.size, new.startOffset >= old.startOffset else { return Shift(replaced: true) }
+        let bytes = Array(old.text.utf8)
+        let gone = min(new.startOffset - old.startOffset, bytes.count)
+        guard gone < bytes.count else {
+            let unterminated = bytes.last.map { $0 != lineFeed && $0 != carriageReturn } ?? false
+            return Shift(dropped: lineBreaks(bytes, before: bytes.count) + (unterminated ? 1 : 0))
+        }
+        return Shift(dropped: lineBreaks(bytes, before: gone), cut: gone > 0 && !breakEnds(bytes, at: gone))
+    }
+
+    private static let carriageReturn: UInt8 = 0x0D
+
+    // LF, CRLF and a lone CR are each one break, as the page counts lines once it normalizes them
+    private static func lineBreaks(_ bytes: [UInt8], before end: Int) -> Int {
+        (0..<end).reduce(0) { $0 + (bytes[$1] == lineFeed || isLoneCR(bytes, $1) ? 1 : 0) }
+    }
+
+    private static func breakEnds(_ bytes: [UInt8], at index: Int) -> Bool {
+        bytes[index - 1] == lineFeed || isLoneCR(bytes, index - 1)
+    }
+
+    private static func isLoneCR(_ bytes: [UInt8], _ index: Int) -> Bool {
+        bytes[index] == carriageReturn && (index + 1 == bytes.count || bytes[index + 1] != lineFeed)
+    }
+}

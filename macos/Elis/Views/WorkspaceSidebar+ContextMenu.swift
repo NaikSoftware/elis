@@ -15,6 +15,19 @@ extension WorkspaceSidebar.Coordinator {
         // a click on the already-active row changes no selection, so it clears Done the way selecting would.
         if node.kind == .session, node.id == store.selectedSessionID { store.markVisited(node.id) }
         guard node.kind == .workspace else { return }
+        // an empty workspace has nothing to fold, so a click anywhere on it opens the "+" launcher menu instead
+        if node.children.isEmpty, let event = NSApp.currentEvent {
+            let point = sender.convert(event.locationInWindow, from: nil)
+            pendingRowToggle?.cancel()
+            let open = DispatchWorkItem { [weak self, weak node] in
+                guard let self, let node, let outline = self.outlineView else { return }
+                self.pendingRowToggle = nil
+                self.showLauncherMenu(for: node.id, at: point, in: outline)
+            }
+            pendingRowToggle = open
+            DispatchQueue.main.asyncAfter(deadline: .now() + NSEvent.doubleClickInterval, execute: open)
+            return
+        }
         if clickHitsWorkspaceIcon(sender, row: row) {
             pendingRowToggle?.cancel()
             pendingRowToggle = nil

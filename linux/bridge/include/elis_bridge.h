@@ -115,6 +115,21 @@ char *elis_page_outcome_result(const char *pageID);
 char *elis_browser_profile(const char *json); // {directory} -> {"ok":true,"id"}, created when missing, or {"ok":false,"error"}
 char *elis_browser_clear(const char *json);   // {target?,window?,directory,openPages} -> {"ok":true,"id"|null} or the Mac's refusal
 char *elis_browser_links(const char *json);   // {target?,window?,mode?,current} -> {"ok":true,"mode"} or the Mac's refusal
+// Markdown, image, text and document pages (Sources/ElisBridge/PageContent.swift); any thread
+char *elis_page_open_check(const char *json);          // {source,navigation?,log?} -> {ok,navigation,links?,pixels?,language?,diff} or refusal
+char *elis_markdown_assets(const char *directory);     // {script,style,textScript,textStyle}
+char *elis_markdown_page(const char *json);            // {path,links?,style} -> {"html"} | {"error"}
+char *elis_markdown_linked_document(const char *json); // {path,links:{path,root}} -> {"path"?}
+char *elis_image_page(const char *json);               // {path} -> {"html"} | {"error"}
+char *elis_image_points(const char *json);             // {width,height,scale,zoom,bounds?} -> {width,height,percent}
+char *elis_document_page(const char *json);            // {path} -> {"html"} | {"error"}
+char *elis_text_load(const char *json);                // {path} -> {"text"} | {"error"}
+char *elis_text_page(const char *json);                // {text,path,line?,style,log?,anchor?,search?,change?,entered?,file?,wrap?} -> {"html"}
+char *elis_text_log_read(const char *json);            // {path,tail,stamp?} -> {unchanged} | {stamp,snapshot?} | {error}
+char *elis_text_log_shift(const char *json);           // {old?,oldStamp?,new?,newStamp?} -> {dropped,cut,replaced}
+char *elis_overlay_text_action(const char *json);      // {cmd,args} -> {"ok":true,"action"} or the Mac's refusal
+char *elis_text_page_constants(void);                  // {maxQuery, the text-page refusal texts}
+char *elis_page_navigate_refusal(const char *json);    // {kind,to} -> {"error"?}
 // session progress (Sources/ElisBridge/Progress.swift); every result is JSON freed with elis_free
 char *elis_progress_parse(const char *text);    // 3/7, 40%, indeterminate, clear: {"ok":true,"progress":{…}|null} or {"ok":false,"error"}
 char *elis_progress_terminal(const char *body); // OSC 9 body "4;1;40": {"update":"clear"|"set","progress"?} or null

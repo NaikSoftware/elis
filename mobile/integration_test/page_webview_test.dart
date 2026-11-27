@@ -1,6 +1,6 @@
 // On an agent-owned emulator only: flutter test uninstalls the app from the device when it ends.
 // The renderer comes from the Mac app's folder, served from the host:
-//   (cd ../macos/Elis/Resources/markdown && python3 -m http.server 8791 --bind 127.0.0.1) &
+//   (cd ../shared/page-assets/markdown && python3 -m http.server 8791 --bind 127.0.0.1) &
 //   adb -s <device> reverse tcp:8791 tcp:8791
 //   flutter test integration_test/page_webview_test.dart -d <device> --no-pub --dart-define=ELIS_MARKDOWN=http://127.0.0.1:8791
 import 'dart:async';
@@ -111,7 +111,7 @@ Future<PageServer> _serve(String html, {required bool javascript}) => PageServer
 );
 
 Future<String> _renderer(String name) async {
-  if (_markdownHost.isEmpty) fail('pass --dart-define=ELIS_MARKDOWN=<url of macos/Elis/Resources/markdown>');
+  if (_markdownHost.isEmpty) fail('pass --dart-define=ELIS_MARKDOWN=<url of shared/page-assets/markdown>');
   final client = HttpClient();
   try {
     final response = await (await client.getUrl(Uri.parse('$_markdownHost/$name'))).close();

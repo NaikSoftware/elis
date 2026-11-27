@@ -153,3 +153,6 @@ QJsonObject dispatch(Store &store, Terminals &terminals, const QJsonObject &requ
 // A command whose reply blocks on files (session.transcript) answers {"deferred": true} and leaves its work here: the
 // caller runs it on a worker thread and sends what it returns. Empty after any other command.
 std::function<QJsonObject()> takeDeferred();
+// A reply the GUI gives later (a text page's step answering from the page): leaves that deferred job, which waits for
+// the returned callback's whole response, or answers timeoutError after 5 s. The first call stands.
+std::function<void(const QJsonObject &)> deferReply(const QString &timeoutError);

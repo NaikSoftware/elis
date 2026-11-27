@@ -98,4 +98,44 @@ struct LogTailTests {
 
         #expect(snapshot.startOffset == testCase.start)
     }
+
+    private func stamp(inode: UInt64 = 7, size: Int) -> BoundedFile.FileStamp {
+        BoundedFile.FileStamp(device: 1, inode: inode, size: size, modifiedSeconds: size, modifiedNanoseconds: 0)
+    }
+
+    @Test func aShiftCountsTheLinesThatLeftTheFrontOfOneFile() {
+        let old = LogTail.Snapshot(text: "a\nb\nc\n", lines: 3, clipped: false, startOffset: 10)
+        let appended = LogTail.Snapshot(text: "a\nb\nc\nd\n", lines: 4, clipped: false, startOffset: 10)
+        let evicted = LogTail.Snapshot(text: "c\nd\ne\n", lines: 3, clipped: false, startOffset: 14)
+        let inside = LogTail.Snapshot(text: "\nd\n", lines: 2, clipped: true, startOffset: 15)
+        let past = LogTail.Snapshot(text: "x\n", lines: 1, clipped: false, startOffset: 40)
+
+        #expect(LogTail.shift(from: old, stamp: stamp(size: 16), to: old, stamp: stamp(size: 16)) == LogTail.Shift())
+        #expect(LogTail.shift(from: old, stamp: stamp(size: 16), to: appended, stamp: stamp(size: 18)) == LogTail.Shift())
+        #expect(LogTail.shift(from: old, stamp: stamp(size: 16), to: evicted, stamp: stamp(size: 20)) == LogTail.Shift(dropped: 2))
+        #expect(LogTail.shift(from: old, stamp: stamp(size: 16), to: inside, stamp: stamp(size: 20)) == LogTail.Shift(dropped: 2, cut: true))
+        #expect(LogTail.shift(from: old, stamp: stamp(size: 16), to: past, stamp: stamp(size: 42)) == LogTail.Shift(dropped: 3))
+    }
+
+    @Test func aShiftCountsCRLFAndALoneCRAsOneBreakEach() {
+        let lone = LogTail.Snapshot(text: "a\rb\nc\n", lines: 2, clipped: false, startOffset: 0)
+        let crlf = LogTail.Snapshot(text: "a\r\nb\n", lines: 2, clipped: false, startOffset: 0)
+        let progress = LogTail.Snapshot(text: "a\rb\rc", lines: 1, clipped: false, startOffset: 0)
+        let after = { (start: Int) in LogTail.Snapshot(text: "z\n", lines: 1, clipped: false, startOffset: start) }
+
+        #expect(LogTail.shift(from: lone, stamp: stamp(size: 6), to: after(2), stamp: stamp(size: 8)) == LogTail.Shift(dropped: 1))
+        #expect(LogTail.shift(from: crlf, stamp: stamp(size: 5), to: after(3), stamp: stamp(size: 7)) == LogTail.Shift(dropped: 1))
+        #expect(LogTail.shift(from: crlf, stamp: stamp(size: 5), to: after(2), stamp: stamp(size: 7)) == LogTail.Shift(dropped: 0, cut: true))
+        #expect(LogTail.shift(from: progress, stamp: stamp(size: 5), to: after(9), stamp: stamp(size: 11)) == LogTail.Shift(dropped: 3))
+    }
+
+    @Test func aShiftCallsAnotherFileOrAShrunkOneAReplacement() {
+        let old = LogTail.Snapshot(text: "a\nb\n", lines: 2, clipped: false, startOffset: 10)
+        let new = LogTail.Snapshot(text: "c\n", lines: 1, clipped: false, startOffset: 0)
+        let later = LogTail.Snapshot(text: "b\nc\n", lines: 2, clipped: false, startOffset: 12)
+
+        #expect(LogTail.shift(from: old, stamp: stamp(size: 14), to: later, stamp: stamp(inode: 8, size: 16)) == LogTail.Shift(replaced: true))
+        #expect(LogTail.shift(from: old, stamp: stamp(size: 14), to: new, stamp: stamp(size: 2)) == LogTail.Shift(replaced: true))
+        #expect(LogTail.shift(from: old, stamp: nil, to: later, stamp: stamp(size: 16)) == LogTail.Shift(replaced: true))
+    }
 }

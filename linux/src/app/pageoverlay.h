@@ -11,13 +11,17 @@ class QLabel;
 class QToolButton;
 class QWebEngineProfile;
 class QWebEngineView;
+class PageScheme;
 class PolicyPage;
+class TextPageHost;
 
 class PageOverlay : public QWidget
 {
     Q_OBJECT
 public:
-    // source {"kind":"file","path","cwd"?} | {"kind":"url","url"}; flags {navigation,javascript,chromeless,persistent,browse};
+    // source {"kind":"file","path","cwd"?} | {"kind":"url","url"} | {"kind":"image|markdown|text|document","path"}, a built
+    // page, with what the open check found: a markdown page's link grant "links", a text page's "line", "log",
+    // "language" and "diff"; flags {navigation,javascript,chromeless,persistent,browse};
     // theme: the terminal's {background, foreground, dark, palette}, which every page reads and a file page wears
     PageOverlay(const QJsonObject &source, const QJsonObject &flags, const QString &pageID, const QJsonObject &theme, QWidget *parent = nullptr);
     ~PageOverlay() override;
@@ -32,6 +36,9 @@ public:
     bool navigate(const QString &to, QString *error); // back | forward | browser | finder
     QString pendingPrompt() const { return m_promptUrl.toString(); }
     void answerPrompt(bool open);
+    void applyTheme(const QJsonObject &theme); // a page Elis styles wears it and redraws; any other gets it at its next load
+    // session.overlay.search|follow|wrap|changes|files on a text page, the action as the dispatcher shaped it
+    bool textCommand(const QJsonObject &action, const QString &sessionId, QJsonObject *result, QString *error);
 
     static double zoom(); // the one app-wide factor every page shows at
     static void setZoom(double factor);
@@ -51,9 +58,14 @@ Q_SIGNALS:
 protected:
     bool eventFilter(QObject *watched, QEvent *event) override;
     void hideEvent(QHideEvent *event) override;
+    void showEvent(QShowEvent *event) override;
 
 private:
     friend class PolicyPage;
+    void showBuilt(const QByteArray &html);
+    void reloadShown(); // what the page shows now, leaving its prompt and focus alone
+    void installTheme(const QJsonObject &theme);
+    QString kind() const { return m_source.value("kind").toString(); }
     bool decide(const QUrl &url, const QString &target, bool userActivated);
     void ask(const QUrl &url);
     void fail(const QString &error);
@@ -69,6 +81,10 @@ private:
     QWebEngineProfile *m_profile = nullptr;
     PolicyPage *m_page = nullptr;
     QWebEngineView *m_view = nullptr;
+    PageScheme *m_scheme = nullptr; // a built page's documents
+    TextPageHost *m_text = nullptr;
+    QJsonObject m_theme;
+    int m_build = 0; // bumped by every build, so a slow one cannot replace a newer one
     QWidget *m_strip = nullptr, *m_errorPanel = nullptr, *m_prompt = nullptr;
     QLabel *m_identity = nullptr, *m_title = nullptr, *m_error = nullptr, *m_promptText = nullptr;
     QToolButton *m_back = nullptr, *m_forward = nullptr;

@@ -253,6 +253,8 @@ static QString overlayPageError(QJsonObject *args)
     for (const QString &key : keys)
         if (args->contains(key))
             checked.insert(key, args->value(key));
+    args->remove("page"); // only the check names a page, never the caller
+    args->remove("pageLog");
     char *raw = elis_overlay_page_arguments(QJsonDocument(checked).toJson(QJsonDocument::Compact).constData());
     const QJsonObject reply = QJsonDocument::fromJson(raw ? QByteArray(raw) : QByteArray()).object();
     elis_free(raw);
@@ -261,9 +263,25 @@ static QString overlayPageError(QJsonObject *args)
     const QJsonObject page = reply.value("page").toObject();
     if (page.isEmpty())
         return {};
-    if (const QString kind = page.value("kind").toString(); kind != QLatin1String("file") && kind != QLatin1String("url"))
-        return QStringLiteral("session.overlay.open: --%1 pages are not ported to Elis yet").arg(kind);
     args->insert("page", page);
+    if (reply.contains("log"))
+        args->insert("pageLog", reply.value("log"));
+    return {};
+}
+
+// session.overlay.search|follow|wrap|changes|files by ElisCore's check, ahead of the pane: the action lands in args
+static QString textPageError(const QString &cmd, QJsonObject *args)
+{
+    QJsonObject checked;
+    for (const char *key : {"text", "to", "mode"})
+        if (args->contains(QLatin1String(key)))
+            checked.insert(QLatin1String(key), args->value(QLatin1String(key)));
+    char *raw = elis_overlay_text_action(QJsonDocument(QJsonObject{{"cmd", cmd}, {"args", checked}}).toJson(QJsonDocument::Compact).constData());
+    const QJsonObject reply = QJsonDocument::fromJson(raw ? QByteArray(raw) : QByteArray()).object();
+    elis_free(raw);
+    if (!reply.value("ok").toBool())
+        return reply.value("error").toString(QStringLiteral("the text page check gave no answer"));
+    args->insert("action", reply.value("action"));
     return {};
 }
 #endif
@@ -283,6 +301,11 @@ QString overlayArgsError(const QString &cmd, QJsonObject *args)
     }
     if (cmd == QLatin1String("session.overlay.submit") && !a.value("value").isString())
         return QStringLiteral("session.overlay.submit requires a value");
+    static const QStringList textPage{"session.overlay.search", "session.overlay.follow", "session.overlay.wrap", "session.overlay.changes",
+                                      "session.overlay.files"};
+    if (textPage.contains(cmd))
+        if (QString e = textPageError(cmd, args); !e.isEmpty())
+            return e;
 #endif
     if (a.contains("pane")) {
         static const QStringList left{"left", "primary", "top"}, right{"right", "split", "bottom"};
@@ -702,6 +725,8 @@ QJsonObject dispatch(Store &store, Terminals &terminals, const QJsonObject &requ
         QJsonObject result{{"id", id}};
         if (!terminals.appCommand(cmd, id, a, &result, &error))
             return fail(error);
+        if (result.value("deferred").toBool()) // a text page answers its step later (deferReply)
+            return {{"deferred", true}};
         if (a.value("follow").toBool())
             store.select(id);
         return ok(result);

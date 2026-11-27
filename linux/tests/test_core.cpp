@@ -1099,7 +1099,20 @@ private Q_SLOTS:
                  QStringLiteral("session.overlay.open: --chromeless with --url requires a loopback host: 127.0.0.1, ::1 or localhost"));
         QCOMPARE(error("session.overlay.open", {{"html", "/a.html"}, {"browse", true}}), QStringLiteral("session.overlay.open: --browse requires --url"));
         QCOMPARE(error("session.overlay.open", {{"navigation", true}}), QStringLiteral("session.overlay.open: --navigation requires --html, --url or --markdown"));
-        QCOMPARE(error("session.overlay.open", {{"image", "/a.png"}}), QStringLiteral("session.overlay.open: --image pages are not ported to Elis yet"));
+        QCOMPARE(error("session.overlay.open", {{"line", 3}}), QStringLiteral("session.overlay.open: --line requires --text"));
+        QCOMPARE(error("session.overlay.open", {{"textFile", "/a.log"}, {"tail", 0}}), QStringLiteral("session.overlay.open: --tail must be 1...100000"));
+        QVERIFY(call(s, t, "session.overlay.open", id, {{"image", "/a/../b.png"}})["ok"].toBool());
+        QCOMPARE(t.appArgs["page"].toObject(), (QJsonObject{{"kind", "image"}, {"path", "/b.png"}}));
+        QVERIFY(call(s, t, "session.overlay.open", id, {{"textFile", "/a.log"}, {"followFile", true}})["ok"].toBool());
+        QCOMPARE(t.appArgs["pageLog"].toObject(), (QJsonObject{{"tail", 5000}, {"follow", true}}));
+        // only ElisCore's check names a page: one the caller sends is dropped
+        QVERIFY(call(s, t, "session.overlay.open", id, {{"command", "top"}, {"page", QJsonObject{{"kind", "document"}, {"path", "/x.html"}}}})["ok"].toBool());
+        QVERIFY(!t.appArgs.contains("page"));
+        QCOMPARE(error("session.overlay.search", {}), QStringLiteral("session.overlay.search needs text, --next, --prev or --close"));
+        QCOMPARE(error("session.overlay.follow", {{"mode", "up"}}), QStringLiteral("invalid overlay follow mode: up"));
+        QCOMPARE(error("session.overlay.changes", {}), QStringLiteral("session.overlay.changes requires to next or prev"));
+        QVERIFY(call(s, t, "session.overlay.search", id, {{"text", "needle"}})["ok"].toBool());
+        QCOMPARE(t.appArgs["action"].toObject(), (QJsonObject{{"kind", "search"}, {"search", "query"}, {"query", "needle"}}));
         QCOMPARE(error("session.overlay.open", {{"url", "https://example.org"}, {"browse", true}, {"chromeless", true}}),
                  QStringLiteral("session.overlay.open: --chromeless cannot be combined with --browse"));
         QCOMPARE(error("session.overlay.open", {{"html", "/a.html"}, {"persistent", true}}), QStringLiteral("session.overlay.open: --persistent requires --url"));
@@ -2208,15 +2221,28 @@ private Q_SLOTS:
         QCOMPARE(call(s, t, "msg.read")["error"].toString(), QStringLiteral("msg.read requires an identity: --as SESSION:PANE-ID"));
     }
 
+    void aDeferredReplyIsTheFirstAnswer()
+    {
+        const auto reply = deferReply(QStringLiteral("late"));
+        const std::function<QJsonObject()> job = takeDeferred();
+        QVERIFY(job);
+        reply({{"ok", true}});
+        reply({{"ok", false}});
+        QCOMPARE(job()["ok"].toBool(), true);
+    }
+
     void absentFeaturesAndArgumentRules()
     {
         Store s;
         FakeTerminals t;
         const QString id = call(s, t, "session.new")["result"]["id"].toString();
-        for (const char *cmd : {"zmx.list", "quick.type", "session.scratch", "session.background", "surface.cursor", "config.reload",
-                                "session.restart", "session.page", "session.overlay.follow", "session.overlay.search", "session.overlay.changes",
-                                "session.overlay.files", "session.overlay.wrap"})
-            QVERIFY2(call(s, t, cmd, id)["error"].toString().startsWith(QLatin1String(cmd) + QStringLiteral(" is not supported on this platform (")), cmd);
+        QStringList absent{"zmx.list", "quick.type", "session.scratch", "session.background", "surface.cursor", "config.reload",
+                           "session.restart", "session.page"};
+#ifndef ELIS_HAS_WEBENGINE
+        absent << "session.overlay.follow" << "session.overlay.search" << "session.overlay.changes" << "session.overlay.files" << "session.overlay.wrap";
+#endif
+        for (const QString &cmd : std::as_const(absent))
+            QVERIFY2(call(s, t, cmd, id)["error"].toString().startsWith(cmd + QStringLiteral(" is not supported on this platform (")), qPrintable(cmd));
         QVERIFY(unsupportedReason(QStringLiteral("session.overlay.copy")).isEmpty());
         QVERIFY(call(s, t, "no.such")["error"].toString().startsWith(QStringLiteral("unknown command")));
         QCOMPARE(pickArgsError({}), QStringLiteral("pick.open requires items"));

@@ -8,8 +8,8 @@ Elis is a Qt6/KDE Frameworks 6 port of [agterm](https://github.com/umputun/agter
 [NaikSoftware/elis](https://github.com/NaikSoftware/elis), which adds the file panel, agent logos and launchers,
 remembered workspace folders and more on top of upstream. It follows Elis's model, keys (translated to Linux
 conventions), config files, agent-status hooks and `elisctl` wire protocol, so agents and scripts written for Elis
-work here. It is an independent project: report bugs here, not upstream. Not ported yet: markdown, image and text pages,
-the page bridge, page sessions and companions, overlay-opened terminal links and remote sessions.
+work here. It is an independent project: report bugs here, not upstream. Not ported yet: the page bridge, page sessions and
+companions, overlay-opened terminal links and remote sessions.
 
 Each terminal is a Konsole KPart, so Konsole's profiles, colour schemes, scrollback, search and copy/paste work as
 in Konsole.
@@ -27,7 +27,7 @@ The first build of it takes a few minutes; it installs to `lib/elis` beside the 
 The Swift `elisctl` helper's phone relay links the system OpenSSL, libsystemd and zlib: building needs `libssl-dev`,
 `libsystemd-dev` and `zlib1g-dev`, running it `libssl3` and the `openssl` command, which makes the relay's certificate.
 Its Bluetooth link needs BlueZ (`bluetoothd`) and an adapter that can advertise.
-Page overlays (`session overlay open --html|--url`) need Qt WebEngine (`qt6-webengine-dev`); a build without it refuses
+Page overlays (`session overlay open --html|--url|--markdown|--image|--text`) need Qt WebEngine (`qt6-webengine-dev`); a build without it refuses
 them, and `-DELIS_WEBENGINE=OFF` leaves it out even when it is installed.
 Live sessions run under the Mac's patched zmx, which the build makes from source with zig 0.16, git and `shasum`
 (`macos/scripts/setup.sh --zmx-only`, network on the first build) and installs it to `libexec/elis`, off PATH. Unpack

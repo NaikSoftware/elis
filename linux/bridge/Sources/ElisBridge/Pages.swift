@@ -2,14 +2,15 @@ import ElisCore
 import Foundation
 
 // Page overlays: ElisCore's source check, navigation policy, identity, theme, zoom and outcomes. A page travels as
-// {"source":{"kind":"file","path","cwd"?}|{"kind":"url","url"},"flags":{navigation,javascript,chromeless,persistent,
-// browse}}, the fields HtmlOverlay keeps.
+// {"source":{"kind":"file","path","cwd"?}|{"kind":"url","url"}|{"kind":"image|markdown|text|document","path","line"?},
+// "flags":{navigation,javascript,chromeless,persistent,browse},"id"?,"links"?}, the fields HtmlOverlay keeps.
 
-private struct PageSource: Codable {
+struct PageSource: Codable {
     let kind: String
     var path: String?
     var cwd: String?
     var url: String?
+    var line: Int?
 
     init(_ source: HtmlSource) {
         switch source {
@@ -17,7 +18,7 @@ private struct PageSource: Codable {
         case .url(let url): kind = "url"; self.url = url.absoluteString
         case .image(let path): kind = "image"; self.path = path
         case .markdown(let path): kind = "markdown"; self.path = path
-        case .text(let path, _): kind = "text"; self.path = path
+        case .text(let path, let line): kind = "text"; self.path = path; self.line = line
         case .document(let path): kind = "document"; self.path = path
         case .replica, .unreadable: kind = "unsupported"
         }
@@ -27,6 +28,10 @@ private struct PageSource: Codable {
         switch kind {
         case "file": return path.map { .file(path: $0, grantRoot: cwd) }
         case "url": return url.flatMap(HtmlSource.webURL).map { .url($0) }
+        case "image": return path.map { .image(path: $0) }
+        case "markdown": return path.map { .markdown(path: $0) }
+        case "text": return path.map { .text(path: $0, line: line) }
+        case "document": return path.map { .document(path: $0) }
         default: return nil
         }
     }
@@ -45,6 +50,9 @@ private struct PageRequest: Decodable {
     var flags: PageFlags?
     var page: String?
     var action: Action?
+    /// id and links are a markdown page's own: its scheme address names the id, and its links stay in the grant.
+    var id: String?
+    var links: MarkdownLinkGrant?
 
     struct Action: Decodable {
         let url: String
@@ -56,13 +64,14 @@ private struct PageRequest: Decodable {
         guard let source = source.source else { return nil }
         var overlay = HtmlOverlay(source: source, navigation: flags?.navigation ?? false, javascript: flags?.javascript ?? false,
                                   chromeless: flags?.chromeless ?? false, persistent: flags?.persistent ?? false,
-                                  browse: flags?.browse ?? false)
+                                  browse: flags?.browse ?? false, id: id.flatMap(UUID.init(uuidString:)) ?? UUID(),
+                                  markdownLinks: links)
         if let page { overlay.current = HtmlPageInfo(page: page, title: nil, canGoBack: false, canGoForward: false) }
         return overlay
     }
 }
 
-private func decode<T: Decodable>(_ type: T.Type, _ json: UnsafePointer<CChar>) -> T? {
+func decode<T: Decodable>(_ type: T.Type, _ json: UnsafePointer<CChar>) -> T? {
     try? JSONDecoder().decode(type, from: Data(String(cString: json).utf8))
 }
 
@@ -72,11 +81,14 @@ public func elisOverlayPageArguments(_ argsJSON: UnsafePointer<CChar>) -> Unsafe
     struct Checked: Encodable {
         var ok = true
         let page: PageSource?
+        /// log is a text page's tail and follow, as the Mac's dispatcher reads them.
+        let log: TextLog?
     }
     guard let args = decode(ControlArgs.self, argsJSON) else { return encoded(Refusal(error: "invalid arguments")) }
     let checked = ControlDispatcher.overlayPage(command: args.command ?? "", args: args)
     if let error = checked.error { return encoded(Refusal(error: error)) }
-    return encoded(Checked(page: checked.page.map(PageSource.init)))
+    let log = checked.page?.textPath == nil ? nil : ControlDispatcher.textLog(args)
+    return encoded(Checked(page: checked.page.map(PageSource.init), log: log))
 }
 
 /// One frame navigation judged by `HtmlNavigationPolicy`: {"decision":"allow|openExternal|cancel"}. A request that does
