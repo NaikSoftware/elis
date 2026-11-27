@@ -266,6 +266,7 @@ void MainWindow::previewTheme(const QString &name)
     m_previewTheme = name;
     for (KParts::ReadOnlyPart *part : parts())
         applyAppearance(part);
+    refreshPageThemes();
 }
 
 void MainWindow::selectTheme()
@@ -511,6 +512,7 @@ void MainWindow::applySettings()
         m_appliedAppearance = look;
         for (KParts::ReadOnlyPart *part : parts())
             applyAppearance(part);
+        refreshPageThemes();
     }
     if (property("elisConfigDir").isValid() && property("elisConfigDir").toString() != configDir())
         loadConfig(); // a new config directory reloads both files

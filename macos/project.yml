@@ -55,7 +55,6 @@ targets:
           - "Resources/terminfo"
           - "Resources/zmx"
           - "Resources/hud"
-          - "Resources/markdown"
           - "Resources/file-icons"
           # committed SOURCE for elis's own bundled theme(s); setup.sh stages it
           # into Resources/ghostty/themes (above), so the source dir itself must not
@@ -92,9 +91,10 @@ targets:
       - path: Elis/Resources/hud
         type: folder
         buildPhase: resources
-      # The markdown page renderer and stylesheet, with the vendored libraries' LICENSE files, which a group
-      # would drop for having no extension. Lands at Contents/Resources/markdown; MarkdownAssets reads it.
-      - path: Elis/Resources/markdown
+      # The markdown and text page renderers and stylesheets, shared with the Linux app, with the vendored libraries'
+      # LICENSE files, which a group would drop for having no extension. Lands at Contents/Resources/markdown;
+      # MarkdownAssets reads it.
+      - path: ../shared/page-assets/markdown
         type: folder
         buildPhase: resources
       # Atom file-icons TTF fonts with their LICENSE texts. Lands at Contents/Resources/file-icons;

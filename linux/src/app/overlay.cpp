@@ -4,6 +4,7 @@
 #include "konsoleprivate.h"
 #ifdef ELIS_HAS_WEBENGINE
 #include "elis_bridge.h"
+#include "pagecontent.h"
 #include "pageoverlay.h"
 #endif
 #include "store.h"
@@ -296,6 +297,21 @@ bool MainWindow::openOverlay(const QString &id, const QString &pane, const QStri
 }
 
 #ifdef ELIS_HAS_WEBENGINE
+// the strip on a painted frame reads in the theme's text colour, or in black or white on a --background-color
+static void paintPageFrame(QWidget *frame, const QColor &back, QColor text)
+{
+    if (!text.isValid())
+        text = back.lightness() < 128 ? Qt::white : Qt::black;
+    QPalette pal = frame->palette();
+    pal.setColor(QPalette::Window, back);
+    pal.setColor(QPalette::Button, back.lightness() < 128 ? back.lighter(140) : back.darker(110)); // under ButtonText
+    for (QPalette::ColorRole role : {QPalette::WindowText, QPalette::ButtonText, QPalette::Text})
+        pal.setColor(role, text);
+    text.setAlphaF(0.6);
+    pal.setColor(QPalette::PlaceholderText, text);
+    frame->setPalette(pal);
+}
+
 bool MainWindow::openPage(const QString &id, const QString &pane, const QJsonObject &args, QJsonObject *result, QString *error)
 {
     const Panes p = m_panes.value(id);
@@ -303,8 +319,16 @@ bool MainWindow::openPage(const QString &id, const QString &pane, const QJsonObj
     const QString key = slotKey(id, pane);
     if (!p.view || !s)
         return *error = QStringLiteral("session has no terminal"), false;
+    if (m_overlays.value(key).hidden)
+        return *error = QStringLiteral("overlay hidden"), false;
+    // the file a built page shows is judged before the slot, as the Mac's openSessionOverlay reads it first
+    QJsonObject source = args.value("page").toObject();
+    const QJsonObject checked = bridgeReply(elis_page_open_check(
+        compactJson({{"source", source}, {"navigation", args.value("navigation").toBool()}, {"log", args.value("pageLog")}}).constData()));
+    if (!checked.value("ok").toBool())
+        return *error = checked.value("error").toString(), false;
     if (m_overlays.contains(key))
-        return *error = m_overlays.value(key).hidden ? QStringLiteral("overlay hidden") : pane.isEmpty() ? QStringLiteral("overlay already open") : QStringLiteral("pane overlay already open"), false;
+        return *error = pane.isEmpty() ? QStringLiteral("overlay already open") : QStringLiteral("pane overlay already open"), false;
     QWidget *under = pane.isEmpty() ? p.view : paneWidget(id, pane);
     if (!under || (pane == QLatin1String("right") && !s->splitVisible))
         return *error = QStringLiteral("pane not visible"), false;
@@ -330,18 +354,35 @@ bool MainWindow::openPage(const QString &id, const QString &pane, const QJsonObj
     // a file page draws no canvas: the frame paints --background-color or the terminal's behind it, as the Mac's panel
     const QJsonObject theme = terminalTheme();
     QString paint = ov.sizePercent > 0 ? args.value("color").toString() : QString();
-    if (paint.isEmpty() && args.value("page").toObject().value("kind").toString() == QLatin1String("file"))
+    ov.themedFrame = paint.isEmpty() && source.value("kind").toString() != QLatin1String("url");
+    if (ov.themedFrame)
         paint = theme.value("background").toString();
-    if (!paint.isEmpty()) {
-        QPalette pal = frame->palette();
-        pal.setColor(QPalette::Window, QColor(paint));
-        frame->setPalette(pal);
-    }
+    if (!paint.isEmpty())
+        paintPageFrame(frame, QColor(paint), ov.themedFrame ? QColor(theme.value("foreground").toString()) : QColor());
     PageOverlay::setZoom(m_store.settings.htmlOverlayZoom);
-    const QJsonObject flags{{"navigation", args.value("navigation").toBool()},
+    if (const QJsonObject pixels = checked.value("pixels").toObject(); !pixels.isEmpty() && pane.isEmpty() && !ov.sizePercent && !ov.width && !ov.height) {
+        // an unsized picture opens at its own size: one image pixel per display pixel, inside the session's area
+        const QJsonObject points = bridgeReply(elis_image_points(compactJson({{"width", pixels.value("width")},
+                                                                              {"height", pixels.value("height")},
+                                                                              {"scale", p.view->devicePixelRatioF()},
+                                                                              {"zoom", PageOverlay::zoom()},
+                                                                              {"bounds", QJsonObject{{"width", p.view->width()}, {"height", p.view->height()}}}})
+                                                                     .constData()));
+        ov.sizePercent = points.value("percent").toInt();
+        ov.width = points.value("width").toDouble();
+        ov.height = points.value("height").toDouble();
+        box->setContentsMargins(1, 1, 1, 1);
+        frame->setFrameShape(QFrame::StyledPanel);
+    }
+    for (const char *found : {"links", "language", "diff"})
+        if (checked.contains(QLatin1String(found)))
+            source.insert(QLatin1String(found), checked.value(QLatin1String(found)));
+    if (args.contains("pageLog"))
+        source.insert("log", args.value("pageLog"));
+    const QJsonObject flags{{"navigation", checked.value("navigation").toBool()}, // a markdown page without a link grant has none
                             {"javascript", args.value("javascript").toBool()},
                             {"chromeless", ov.chromeless}};
-    auto *page = new PageOverlay(args.value("page").toObject(), flags, pageID, theme, frame);
+    auto *page = new PageOverlay(source, flags, pageID, theme, frame);
     box->addWidget(page);
     ov.page = page;
     ov.frame = frame;
@@ -371,6 +412,21 @@ bool MainWindow::openPage(const QString &id, const QString &pane, const QJsonObj
     return true;
 }
 #endif
+
+void MainWindow::refreshPageThemes()
+{
+#ifdef ELIS_HAS_WEBENGINE
+    const QJsonObject theme = terminalTheme();
+    for (const Overlay &ov : std::as_const(m_overlays)) {
+        auto *page = static_cast<PageOverlay *>(ov.page.data());
+        if (!page)
+            continue;
+        if (ov.themedFrame)
+            paintPageFrame(ov.frame, QColor(theme.value("background").toString()), QColor(theme.value("foreground").toString()));
+        page->applyTheme(theme);
+    }
+#endif
+}
 
 void MainWindow::overlayExited(const QString &key, KParts::ReadOnlyPart *part)
 {
@@ -471,13 +527,18 @@ bool MainWindow::overlayCommand(const QString &cmd, const QString &id, const QJs
         return true;
     }
 #ifdef ELIS_HAS_WEBENGINE
-    if (cmd == QLatin1String("session.overlay.reload") || cmd == QLatin1String("session.overlay.navigate") || cmd == QLatin1String("session.overlay.submit")) {
+    static const QStringList textPage{"session.overlay.search", "session.overlay.follow", "session.overlay.wrap", "session.overlay.changes",
+                                      "session.overlay.files"}; // the dispatcher shaped their action
+    if (cmd == QLatin1String("session.overlay.reload") || cmd == QLatin1String("session.overlay.navigate") || cmd == QLatin1String("session.overlay.submit")
+        || textPage.contains(cmd)) {
         const Overlay ov = m_overlays.value(key);
         if (!ov.frame)
             return *error = QStringLiteral("no overlay"), false;
         auto *page = static_cast<PageOverlay *>(ov.page.data());
         if (!page)
             return *error = QStringLiteral("the overlay is not an html page"), false;
+        if (textPage.contains(cmd))
+            return page->textCommand(args.value("action").toObject(), id, result, error);
         if (cmd == QLatin1String("session.overlay.reload")) {
             page->reload(args.value("current").toBool());
             return true;

@@ -4,7 +4,7 @@
 
 class QMenu;
 
-QString bundled(const QString &name); // agent-status | skill/elis; "" when not shipped
+QString bundled(const QString &name); // agent-status | skill/elis | markdown; "" when not shipped
 Install::Report runInstaller(const QString &which, const QString &home); // agent-hooks | cli | skill under home, unattended
 QByteArray extrasFingerprint(); // changes with the shipped hooks and skill and with the binary's path
 QString extrasStamp();          // the fingerprint of the last unattended install of all three

@@ -1,5 +1,7 @@
 #include "pageoverlay.h"
 #include "elis_bridge.h"
+#include "pagecontent.h"
+#include "textpage.h"
 
 #include <algorithm>
 
@@ -16,6 +18,7 @@
 #include <QLabel>
 #include <QMimeData>
 #include <QPushButton>
+#include <QShortcut>
 #include <QTimer>
 #include <QToolButton>
 #include <QVBoxLayout>
@@ -49,6 +52,18 @@ static QByteArray compact(const QJsonObject &o)
 static double s_zoom = 1;
 static QList<QPointer<PageOverlay>> s_pages;
 
+// a page Elis builds from a file named by untrusted output, loaded from its own scheme with no file grant or bridge
+static bool built(const QString &kind)
+{
+    return kind == QLatin1String("image") || kind == QLatin1String("markdown") || kind == QLatin1String("text") || kind == QLatin1String("document");
+}
+
+// a page Elis shows from a file wears the theme as its default look, the Mac's `styled`
+static bool styled(const QString &kind)
+{
+    return built(kind) ? kind != QLatin1String("image") : kind == QLatin1String("file");
+}
+
 // Every navigation the page or the user starts goes to ElisCore's policy; dialogs, file pickers and popups never open.
 class PolicyPage : public QWebEnginePage
 {
@@ -63,8 +78,10 @@ public:
 protected:
     bool acceptNavigationRequest(const QUrl &url, NavigationType type, bool isMainFrame) override
     {
-        // the text a grantless file page shows is a data: document only loadOriginal and its own history reach
-        if (isMainFrame && url.scheme() == QLatin1String("data") && (ownLoad || type == NavigationTypeReload || type == NavigationTypeBackForward)) {
+        // the text a grantless file page shows is a data: document, and a built page's its scheme's root: only
+        // loadOriginal and its own history reach them
+        const bool own = url.scheme() == QLatin1String("data") || url == PageScheme::url(m_owner->m_pageID);
+        if (isMainFrame && own && (ownLoad || type == NavigationTypeReload || type == NavigationTypeBackForward)) {
             ownLoad = false;
             return true;
         }
@@ -96,6 +113,10 @@ public:
     }
     void interceptRequest(QWebEngineUrlRequestInfo &info) override
     {
+        // a built page reads nothing but what its scheme answers: a clicked HTML file's links and pictures resolve
+        // there, and its policy alone would not stop a prefetch or a link hint
+        if (built(m_source.value("kind").toString()))
+            return info.block(info.requestUrl().scheme() != QLatin1String("elis-page") && info.requestUrl().scheme() != QLatin1String("data"));
         if (info.requestUrl().scheme() != QLatin1String("file"))
             return;
         const QJsonObject request{{"source", m_source},
@@ -138,22 +159,40 @@ PageOverlay::PageOverlay(const QJsonObject &source, const QJsonObject &flags, co
     });
 
     const bool file = source.value("kind").toString() == QLatin1String("file");
-    QJsonObject themed = theme;
-    themed.insert("themed", file);
-    QWebEngineScript script;
-    script.setName(QStringLiteral("elis-theme"));
-    // Chromium runs a document-creation script before the root element exists, which WebKit's has; the shared
-    // script prepends to it, so it waits for the root here
-    script.setSourceCode(QStringLiteral("(() => { const run = () => { %1 }; if (document.documentElement) run(); else new MutationObserver("
-                                        "(_, o) => { if (document.documentElement) { o.disconnect(); run(); } }).observe(document, {childList: true}); })();")
-                             .arg(bridge(elis_html_theme_script(compact(themed).constData())).value("script").toString()));
-    script.setInjectionPoint(QWebEngineScript::DocumentCreation);
-    script.setWorldId(QWebEngineScript::ApplicationWorld);
-    m_page->scripts().insert(script);
+    installTheme(theme);
     // no canvas: the frame paints the theme behind it, so an authored body background still fills the canvas.
     // An opaque colour would not do: under the theme's color-scheme Chromium swaps it for its own dark canvas.
-    if (file)
+    if (styled(kind()) || kind() == QLatin1String("image"))
         m_page->setBackgroundColor(Qt::transparent);
+    if (built(kind())) {
+        settings->setAttribute(QWebEngineSettings::DnsPrefetchEnabled, false);
+        m_scheme = new PageScheme(pageID, source.value("links").toObject(), m_profile);
+        m_profile->installUrlSchemeHandler("elis-page", m_scheme);
+        m_textLoaded = !source.contains("links"); // a link page shows real addresses; every other built page its file
+    }
+    if (kind() == QLatin1String("markdown")) {
+        QWebEngineScript renderer;
+        renderer.setName(QStringLiteral("elis-markdown"));
+        renderer.setSourceCode(markdownAssets().value("script").toString());
+        renderer.setInjectionPoint(QWebEngineScript::DocumentReady);
+        renderer.setWorldId(QWebEngineScript::ApplicationWorld);
+        m_page->scripts().insert(renderer);
+    }
+    if (kind() == QLatin1String("text")) {
+        m_text = new TextPageHost(m_page, source, [this](const QByteArray &html) { showBuilt(html); }, [this](const QString &e) { fail(e); }, this);
+        connect(m_text, &TextPageHost::changed, this, &PageOverlay::changed);
+        auto *find = new QShortcut(QKeySequence(Qt::CTRL | Qt::Key_F), this, this, [this] {
+            m_view->setFocus();
+            m_text->focusSearch();
+        });
+        find->setContext(Qt::WidgetWithChildrenShortcut);
+        // the app's find chord too, as Ctrl+Shift+F finds in a terminal
+        find = new QShortcut(QKeySequence(Qt::CTRL | Qt::SHIFT | Qt::Key_F), this, this, [this] {
+            m_view->setFocus();
+            m_text->focusSearch();
+        });
+        find->setContext(Qt::WidgetWithChildrenShortcut);
+    }
 
     m_view = new QWebEngineView(this);
     m_view->setPage(m_page);
@@ -206,10 +245,11 @@ PageOverlay::PageOverlay(const QJsonObject &source, const QJsonObject &flags, co
             m_back = button(QStringLiteral("elisPageBack"), QStringLiteral("go-previous"), tr("Back"), go(QStringLiteral("back")));
             m_forward = button(QStringLiteral("elisPageForward"), QStringLiteral("go-next"), tr("Forward"), go(QStringLiteral("forward")));
             button(QStringLiteral("elisPageReload"), QStringLiteral("view-refresh"), tr("Reload"), [this] { reload(true); });
-            button(QStringLiteral("elisPageBrowser"), QStringLiteral("internet-web-browser"), tr("Open in Browser"), go(QStringLiteral("browser")));
+            if (file || kind() == QLatin1String("url")) // a built page hands nothing on
+                button(QStringLiteral("elisPageBrowser"), QStringLiteral("internet-web-browser"), tr("Open in Browser"), go(QStringLiteral("browser")));
             if (file)
                 button(QStringLiteral("elisPageFolder"), QStringLiteral("folder-open"), tr("Show in Folder"), go(QStringLiteral("finder")));
-            else
+            else if (kind() == QLatin1String("url"))
                 button(QStringLiteral("elisPageCopy"), QStringLiteral("edit-copy"), tr("Copy Link"),
                        [this] { QApplication::clipboard()->setText(browserUrl().toString()); });
         }
@@ -310,6 +350,8 @@ PageOverlay::PageOverlay(const QJsonObject &source, const QJsonObject &flags, co
 PageOverlay::~PageOverlay()
 {
     s_pages.removeAll(this);
+    if (m_text)
+        m_text->stop();
     // the page before its profile, which Qt refuses to release while a page still uses it
     m_view->setPage(nullptr);
     delete m_page;
@@ -321,6 +363,26 @@ void PageOverlay::loadOriginal()
     m_failed = false;
     m_shown.clear();
     const QString path = m_source.value("path").toString();
+    if (built(kind())) { // read and built off the GUI thread, as the Mac's loadBuilt
+        const int build = ++m_build;
+        if (m_source.contains("links"))
+            return m_page->load(PageScheme::url(m_pageID, m_source.value("links").toObject().value("path").toString()));
+        if (m_text)
+            return m_text->loadDocument(true);
+        const QByteArray request = compactJson({{"path", path}, {"style", markdownAssets().value("style")}});
+        offThread(
+            this,
+            [k = kind(), request] {
+                return bridgeReply(k == QLatin1String("markdown") ? elis_markdown_page(request.constData())
+                                   : k == QLatin1String("image")  ? elis_image_page(request.constData())
+                                                                  : elis_document_page(request.constData()));
+            },
+            [this, build](const QJsonObject &page) {
+                if (build == m_build)
+                    page.contains("html") ? showBuilt(page.value("html").toString().toUtf8()) : fail(page.value("error").toString());
+            });
+        return;
+    }
     if (m_source.value("kind").toString() == QLatin1String("url")) {
         m_page->load(QUrl(m_source.value("url").toString()));
     } else if (m_source.contains("cwd")) {
@@ -344,6 +406,65 @@ void PageOverlay::loadOriginal()
     }
 }
 
+void PageOverlay::showBuilt(const QByteArray &html)
+{
+    m_scheme->setDocument(html);
+    m_loadPending = true;
+    m_page->ownLoad = true;
+    m_page->load(PageScheme::url(m_pageID));
+}
+
+void PageOverlay::installTheme(const QJsonObject &theme)
+{
+    m_theme = theme;
+    QJsonObject themed = theme;
+    themed.insert("themed", styled(kind()));
+    for (const QWebEngineScript &old : m_page->scripts().find(QStringLiteral("elis-theme")))
+        m_page->scripts().remove(old);
+    QWebEngineScript script;
+    script.setName(QStringLiteral("elis-theme"));
+    // Chromium runs a document-creation script before the root element exists, which WebKit's has; the shared
+    // script prepends to it, so it waits for the root here
+    script.setSourceCode(QStringLiteral("(() => { const run = () => { %1 }; if (document.documentElement) run(); else new MutationObserver("
+                                        "(_, o) => { if (document.documentElement) { o.disconnect(); run(); } }).observe(document, {childList: true}); })();")
+                             .arg(bridge(elis_html_theme_script(compact(themed).constData())).value("script").toString()));
+    script.setInjectionPoint(QWebEngineScript::DocumentCreation);
+    script.setWorldId(QWebEngineScript::ApplicationWorld);
+    m_page->scripts().insert(script);
+}
+
+void PageOverlay::applyTheme(const QJsonObject &theme)
+{
+    if (theme == m_theme)
+        return;
+    // nothing runs in the live document: script the app evaluates there would hand the page a user gesture
+    installTheme(theme);
+    if (m_text)
+        return m_text->loadDocument(false);
+    if (styled(kind()))
+        reloadShown();
+}
+
+bool PageOverlay::textCommand(const QJsonObject &action, const QString &sessionId, QJsonObject *result, QString *error)
+{
+    if (m_text)
+        return m_text->command(action, sessionId, result, error);
+    static const QJsonObject failures = bridge(elis_text_page_constants());
+    const QString k = action.value("kind").toString();
+    *error = failures.value(k == QLatin1String("follow")                                  ? "notLog"
+                            : k == QLatin1String("changes") || k == QLatin1String("files") ? "notDiff"
+                                                                                           : "notText")
+                 .toString();
+    return false;
+}
+
+void PageOverlay::showEvent(QShowEvent *event)
+{
+    if (m_text)
+        m_text->setOnScreen(true);
+    QWidget::showEvent(event);
+}
+
 void PageOverlay::fail(const QString &error)
 {
     m_failed = true;
@@ -359,8 +480,18 @@ bool PageOverlay::decide(const QUrl &url, const QString &target, bool userActiva
 {
     const QJsonObject request{{"source", m_source},
                               {"flags", m_flags},
+                              {"id", m_pageID},
+                              {"links", m_source.value("links")}, // null without a grant
                               {"action", QJsonObject{{"url", url.toString(QUrl::FullyEncoded)}, {"target", target}, {"userActivated", userActivated}}}};
-    const QString decision = bridge(elis_html_navigation_decide(compact(request).constData())).value("decision").toString();
+    QString decision = bridge(elis_html_navigation_decide(compact(request).constData())).value("decision").toString();
+    // the policy's link check is lexical; the canonical file is judged here too, since Chromium would replace the shown
+    // document with an error page where WebKit keeps it
+    if (decision == QLatin1String("allow") && url.scheme() == QLatin1String("elis-page") && m_source.contains("links")
+        && bridge(elis_markdown_linked_document(compact({{"path", url.path(QUrl::FullyDecoded)}, {"links", m_source.value("links")}}).constData()))
+               .value("path")
+               .toString()
+               .isEmpty())
+        decision = QStringLiteral("cancel");
     if (decision == QLatin1String("openExternal"))
         ask(url);
     if (decision != QLatin1String("allow") && target == QLatin1String("mainFrame") && !userActivated && m_loadPending) {
@@ -402,6 +533,8 @@ void PageOverlay::answerPrompt(bool open)
 
 void PageOverlay::hideEvent(QHideEvent *event)
 {
+    if (m_text)
+        m_text->setOnScreen(false); // a log out of sight reads nothing
     if (!m_promptUrl.isEmpty()) { // hiding ends the prompt without opening and without silencing the page
         m_promptUrl.clear();
         m_prompt->hide();
@@ -452,12 +585,14 @@ QUrl PageOverlay::pageUrl() const
     if (m_textLoaded || m_page->url().scheme() == QLatin1String("data") || m_page->url().isEmpty())
         return m_source.value("kind").toString() == QLatin1String("url") ? QUrl(m_source.value("url").toString())
                                                                          : QUrl::fromLocalFile(m_source.value("path").toString());
+    if (m_page->url().scheme() == QLatin1String("elis-page")) // a markdown link page's file
+        return QUrl::fromLocalFile(m_page->url().path(QUrl::FullyDecoded));
     return m_page->url();
 }
 
 QUrl PageOverlay::browserUrl() const
 {
-    if (m_source.value("kind").toString() == QLatin1String("file"))
+    if (kind() != QLatin1String("url"))
         return QUrl::fromLocalFile(m_source.value("path").toString()); // the original file, as the Mac opens it
     const QUrl now = pageUrl();
     return now.scheme().startsWith(QLatin1String("http")) ? now : QUrl(m_source.value("url").toString());
@@ -467,7 +602,9 @@ QString PageOverlay::identity() const
 {
     QJsonObject request{{"source", m_source}, {"flags", m_flags}};
     if (!m_shown.isEmpty() && !m_textLoaded)
-        request.insert("page", m_shown.isLocalFile() ? m_shown.toLocalFile() : m_shown.toString());
+        request.insert("page", m_shown.isLocalFile()                          ? m_shown.toLocalFile()
+                               : m_shown.scheme() == QLatin1String("elis-page") ? m_shown.path(QUrl::FullyDecoded)
+                                                                                : m_shown.toString());
     return bridge(elis_html_identity(compact(request).constData())).value("identity").toString();
 }
 
@@ -499,6 +636,10 @@ QJsonObject PageOverlay::readBack() const
         node.insert("file", m_source.value("path"));
         if (m_source.contains("cwd"))
             node.insert("cwd", m_source.value("cwd"));
+    } else if (m_text) {
+        node.insert("text", m_text->readBack());
+    } else if (built(kind())) {
+        node.insert(kind(), m_source.value("path")); // image | markdown | document
     } else {
         node.insert("url", m_source.value("url"));
     }
@@ -529,19 +670,28 @@ void PageOverlay::reload(bool current)
 {
     if (!m_promptUrl.isEmpty())
         answerPrompt(false);
-    if (current && !m_textLoaded && !m_failed && !m_page->url().isEmpty()) {
+    current ? reloadShown() : loadOriginal();
+    syncStrip();
+}
+
+void PageOverlay::reloadShown()
+{
+    // before a first commit there is nothing to reload, so the source is loaded again instead
+    if (!m_textLoaded && !m_failed && !m_page->url().isEmpty()) {
         m_loadPending = true;
         m_page->triggerAction(QWebEnginePage::Reload);
     } else {
         loadOriginal();
     }
-    syncStrip();
 }
 
 bool PageOverlay::navigate(const QString &to, QString *error)
 {
     const bool file = m_source.value("kind").toString() == QLatin1String("file");
     auto open = openExternally ? openExternally : [](const QUrl &u) { QDesktopServices::openUrl(u); };
+    if (to == QLatin1String("browser") || to == QLatin1String("finder"))
+        if (const QJsonValue refused = bridge(elis_page_navigate_refusal(compact({{"kind", kind()}, {"to", to}}).constData())).value("error"); refused.isString())
+            return *error = refused.toString(), false;
     if (to == QLatin1String("back") || to == QLatin1String("forward")) {
         const bool back = to == QLatin1String("back");
         if (!(back ? m_page->history()->canGoBack() : m_page->history()->canGoForward()))
