@@ -30,10 +30,10 @@ class PartBridge;
 namespace KParts { class ReadOnlyPart; }
 
 QWidget *terminalDisplay(KParts::ReadOnlyPart *part); // the part's Konsole::TerminalDisplay
-int shellPid(KParts::ReadOnlyPart *part);              // the pane's shell, a Live pane's daemon shell included
 void retirePart(KParts::ReadOnlyPart *part); // drops a part whose pane lives on in another one
 void zoomFontTo(QWidget *display, double points);
 Qt::KeyboardModifiers linkClickModifiers(Qt::KeyboardModifiers modifiers, bool tracking, bool release);
+QString konsoleFileLink(QString text); // a Konsole file hotspot's text as a path with an optional :line[:column]
 
 class MainWindow : public QMainWindow, public Terminals
 {
@@ -141,7 +141,7 @@ private:
     };
     // links.cpp: a left press or release on a terminal display, its modifiers as Konsole will see them; returns them
     // with the link chord taken out when Elis opens the link itself
-    Qt::KeyboardModifiers linkClick(QWidget *display, QMouseEvent *mouse, Qt::KeyboardModifiers effective, bool tracking, bool promoted);
+    Qt::KeyboardModifiers linkClick(QWidget *display, QMouseEvent *mouse, Qt::KeyboardModifiers effective, bool tracking);
     void followLink(const QString &id, const QJsonObject &route); // elis_link_route's answer, carried out
     bool releaseHiddenClickedPage(const QString &id);
     QHash<QString, Overlay> m_overlays;   // "<session>|session|left|right" -> the running cover

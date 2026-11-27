@@ -194,8 +194,9 @@ bool underlineFiles(QObject *session, QObject *part)
     if (!profile.d)
         return false;
     update(controller, profile);
-    // shortcut: the reference profileOf took is kept, one small Profile per pane, since releasing it means
-    // writing into Konsole's class layout; upgrade if the part grows a filter API
+    // shortcut: leaks the reference profileOf took, one Profile per terminal part (panes and program overlays): Konsole
+    // exports nothing that releases it (a Ptr passed by value is released by the caller), and the inline release would
+    // write into its class layout; upgrade if the part grows a filter API
     return true;
 }
 }

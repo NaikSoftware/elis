@@ -73,6 +73,7 @@ private func json(_ value: [String: Any]) -> String {
         #expect(routed["sizePercent"] as? Int == 75)
         #expect(call(elisLinkRoute(json(base.merging(["modifiers": ["command", "shift"]]) { $1 })))["route"] as? String == "browser")
         #expect(call(elisLinkRoute(json(base.merging(["origin": "overlay"]) { $1 })))["route"] as? String == "browser")
+        #expect(call(elisLinkRoute(json(base.merging(["raw": "irc://irc.example.org/elis"]) { $1 })))["route"] as? String == "ignore")
     }
 
     @Test func localFilesRouteByKindAndTheRevealChordReveals() throws {

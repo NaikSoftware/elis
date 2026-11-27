@@ -11,10 +11,9 @@
 #include <kde_terminal_interface.h>
 
 #include <QDesktopServices>
-#include <QDir>
-#include <QFileInfo>
 #include <QJsonArray>
 #include <QMouseEvent>
+#include <QRegularExpression>
 #include <QTimer>
 
 // a file route's page and the open check it takes: {source, navigation, log?}; empty for any other route
@@ -32,7 +31,23 @@ static QJsonObject fileCheck(const QJsonObject &route)
     return check;
 }
 
-Qt::KeyboardModifiers MainWindow::linkClick(QWidget *display, QMouseEvent *mouse, Qt::KeyboardModifiers effective, bool tracking, bool promoted)
+QString konsoleFileLink(QString text)
+{
+    // as Konsole's FileFilter and FileFilterHotSpot read it: quotes and a ctest "[" off, then path(123)] or
+    // path:123[:45][:text] as path:line[:column], which LinkPolicy splits as libghostty's links
+    if (text.size() > 1 && text.startsWith(QLatin1Char('\'')) && text.endsWith(QLatin1Char('\'')))
+        text = text.mid(1, text.size() - 2);
+    if (text.startsWith(QLatin1String("[/")))
+        text.remove(0, 1);
+    static const QRegularExpression suffix(QStringLiteral(R"([:\(](\d+)(?:\)\])?(?::(\d+):?|:[^\d]*)?$)"));
+    if (const QRegularExpressionMatch m = suffix.match(text); m.hasMatch())
+        return text.left(m.capturedStart(0)) + QLatin1Char(':') + m.captured(1) + (m.captured(2).isEmpty() ? QString() : QLatin1Char(':') + m.captured(2));
+    if (text.endsWith(QLatin1Char(':')))
+        text.chop(1);
+    return text;
+}
+
+Qt::KeyboardModifiers MainWindow::linkClick(QWidget *display, QMouseEvent *mouse, Qt::KeyboardModifiers effective, bool tracking)
 {
     const bool release = mouse->type() == QEvent::MouseButtonRelease;
     // Konsole starts a drag on an Alt press over a link, and Ctrl+Alt is its column selection: the reveal chord keeps neither
@@ -48,8 +63,6 @@ Qt::KeyboardModifiers MainWindow::linkClick(QWidget *display, QMouseEvent *mouse
     const QString raw = KonsolePrivate::linkAt(display, mouse->position().toPoint(), !tracking, &type);
     if (raw.isEmpty()) // none here, or an escape-sequence link Konsole opens itself
         return effective;
-    if (promoted && type == KonsolePrivate::File)
-        return effective & ~Qt::ControlModifier; // a plain click opens web links only, or every click on ls output would
     QString id;
     KParts::ReadOnlyPart *clicked = nullptr;
     bool overlay = false;
@@ -72,8 +85,7 @@ Qt::KeyboardModifiers MainWindow::linkClick(QWidget *display, QMouseEvent *mouse
     else if (type == KonsolePrivate::EMailAddress)
         link.prepend(QLatin1String("mailto:"));
     else if (type == KonsolePrivate::File) {
-        if (link.size() > 1 && link.startsWith(QLatin1Char('\'')) && link.endsWith(QLatin1Char('\'')))
-            link = link.mid(1, link.size() - 2);
+        link = konsoleFileLink(link);
         // Konsole underlines a relative name only when it is in the pane's folder, as libghostty resolves one
         if (!link.startsWith(QLatin1Char('/')) && !link.startsWith(QLatin1Char('~')))
             link = cwd + QLatin1Char('/') + link;
@@ -90,7 +102,15 @@ Qt::KeyboardModifiers MainWindow::linkClick(QWidget *display, QMouseEvent *mouse
                                             {"cwd", overlay ? QString() : cwd},
                                             {"modifiers", mods},
                                             {"captured", tracking}});
-    // the route may stat the files a link can name, and a file page reads its file, so both run off the GUI thread
+    if (type != KonsolePrivate::File) {
+        // a web link names no file to stat: routed now, so a link Elis does not follow stays Konsole's
+        const QJsonObject route = bridgeReply(elis_link_route(request.constData()));
+        if (const QString kind = route.value("route").toString(); kind == QLatin1String("ignore") || kind == QLatin1String("session"))
+            return effective;
+        QTimer::singleShot(0, this, [this, id, route] { followLink(id, route); });
+        return effective & ~Qt::ControlModifier;
+    }
+    // a file's route stats the files it may name, and its page reads it, so both run off the GUI thread
     offThread(this,
               [request] {
                   QJsonObject route = bridgeReply(elis_link_route(request.constData()));
@@ -117,7 +137,7 @@ void MainWindow::followLink(const QString &id, const QJsonObject &route)
     auto open = PageOverlay::openExternally ? PageOverlay::openExternally : [](const QUrl &u) { QDesktopServices::openUrl(u); };
     const QString kind = route.value("route").toString(), path = route.value("path").toString();
     const QUrl url(route.value("url").toString());
-    auto reveal = [&] { open(QUrl::fromLocalFile(QFileInfo(path).absolutePath())); };
+    auto reveal = [&] { PageOverlay::reveal(path); };
     if (kind == QLatin1String("browser"))
         return open(url);
     if (kind == QLatin1String("reveal"))

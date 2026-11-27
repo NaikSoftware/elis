@@ -718,16 +718,24 @@ private Q_SLOTS:
     void linkClicksOpenOnce()
     {
         const auto ctrl = Qt::ControlModifier, shift = Qt::ShiftModifier, none = Qt::NoModifier;
-        // at a prompt a plain click opens the link on release; the press stays plain so selection is unchanged
-        QCOMPARE(linkClickModifiers(none, false, true), ctrl);
-        QCOMPARE(linkClickModifiers(none, false, false), none);
+        QCOMPARE(linkClickModifiers(none, false, true), none);
         QCOMPARE(linkClickModifiers(ctrl, false, true), ctrl);
         QCOMPARE(linkClickModifiers(shift, false, true), shift);
-        // a program tracking the mouse never sees a Ctrl+click, so only Konsole opens the link; other clicks stay its own
-        QCOMPARE(linkClickModifiers(ctrl, true, false), ctrl | shift);
-        QCOMPARE(linkClickModifiers(ctrl, true, true), ctrl | shift);
+        // under mouse capture a Ctrl+click is the program's, and Ctrl+Shift the link click
+        QCOMPARE(linkClickModifiers(ctrl, true, false), ctrl);
+        QCOMPARE(linkClickModifiers(ctrl, true, true), none);
+        QCOMPARE(linkClickModifiers(ctrl | shift, true, true), ctrl | shift);
+        QCOMPARE(linkClickModifiers(ctrl | Qt::AltModifier, true, true), Qt::AltModifier);
         QCOMPARE(linkClickModifiers(none, true, true), none);
-        QCOMPARE(linkClickModifiers(ctrl | Qt::AltModifier, true, true), ctrl | Qt::AltModifier);
+#ifdef ELIS_HAS_WEBENGINE
+        QCOMPARE(konsoleFileLink("main.swift:12:"), QStringLiteral("main.swift:12"));
+        QCOMPARE(konsoleFileLink("main.cpp:12:5:"), QStringLiteral("main.cpp:12:5"));
+        QCOMPARE(konsoleFileLink("src/x.go:7:void"), QStringLiteral("src/x.go:7"));
+        QCOMPARE(konsoleFileLink("[/w/test.cpp(204)]"), QStringLiteral("/w/test.cpp:204"));
+        QCOMPARE(konsoleFileLink("'a b.md'"), QStringLiteral("a b.md"));
+        QCOMPARE(konsoleFileLink("notes.md:"), QStringLiteral("notes.md"));
+        QCOMPARE(konsoleFileLink("notes.md"), QStringLiteral("notes.md"));
+#endif
     }
 
     // the config dir follows ELIS_STATE_DIR (set by ctest), so nothing here touches ~/.config
@@ -1679,7 +1687,7 @@ private Q_SLOTS:
         QCOMPARE(net.hits, 0);
     }
 
-    // the cell of a link hotspot reading `text` printed at a line start, found by asking Konsole along the first columns
+    // the cell of a link hotspot starting with `text` printed at a line start, found by asking Konsole along the first columns
     static QPoint linkCell(QWidget *display, const QString &text)
     {
         QPoint found(-1, -1);
@@ -1687,7 +1695,7 @@ private Q_SLOTS:
             for (int y = 2; y < display->height(); y += 4)
                 for (int x = 12; x < 60; x += 8) {
                     int type = 0;
-                    if (KonsolePrivate::linkAt(display, {x, y}, true, &type) == text)
+                    if (KonsolePrivate::linkAt(display, {x, y}, true, &type).startsWith(text))
                         return found = QPoint(x, y), true;
                 }
             return false;
@@ -1710,13 +1718,16 @@ private Q_SLOTS:
         WebServer site;
         site.routes["/"] = WebServer::html("<title>Site</title>");
         QList<QUrl> external;
+        QStringList revealed;
         PageOverlay::openExternally = [&](const QUrl &u) { external << u; };
-        auto cleanup = qScopeGuard([] { PageOverlay::openExternally = nullptr; });
+        PageOverlay::revealExternally = [&](const QString &path) { revealed << path; };
+        auto cleanup = qScopeGuard([] { PageOverlay::openExternally = nullptr, PageOverlay::revealExternally = nullptr; });
         QTemporaryDir root(QStringLiteral("/tmp/elis-link-XXXXXX"));
-        QFile notes(root.filePath("notes.md"));
-        QVERIFY(notes.open(QIODevice::WriteOnly));
-        notes.write("# Notes\n");
-        notes.close();
+        for (const char *name : {"notes.md", "main.swift"}) {
+            QFile f(root.filePath(QLatin1String(name)));
+            QVERIFY(f.open(QIODevice::WriteOnly));
+            f.write("one\ntwo\n");
+        }
         PageWindow p(dir.filePath("links.json"));
         QVERIFY(QTest::qWaitForWindowActive(&p.w));
         QWidget *term = display(p.w);
@@ -1727,7 +1738,10 @@ private Q_SLOTS:
         const QPoint web = linkCell(term, site.url());
         QVERIFY2(web.x() >= 0, "Konsole shows no link hotspot for the URL");
 
-        QCOMPARE(clickLink(term, web, Qt::NoModifier) & Qt::ControlModifier, Qt::NoModifier);
+        QCOMPARE(clickLink(term, web, Qt::NoModifier), Qt::NoModifier);
+        QTest::qWait(300);
+        QVERIFY(external.isEmpty());
+        QCOMPARE(clickLink(term, web, Qt::ControlModifier) & Qt::ControlModifier, Qt::NoModifier);
         QTRY_COMPARE(external, QList<QUrl>{QUrl(site.url())});
         QVERIFY(!p.w.sessionExtras(p.id).contains("htmlOverlays"));
 
@@ -1757,8 +1771,17 @@ private Q_SLOTS:
         QVERIFY(p.page()["clicked"].toBool());
         QCOMPARE(p.w.sessionExtras(p.id)["overlaySizePercent"].toInt(), 75);
         clickLink(term, md, Qt::ControlModifier | Qt::AltModifier);
-        QTRY_COMPARE(external.size(), 3);
-        QCOMPARE(external.last(), QUrl::fromLocalFile(root.path()));
+        QTRY_COMPARE(revealed, QStringList{path});
+
+        QVERIFY(!p.run("session.overlay.close").contains("error"));
+        const QString code = root.filePath("main.swift");
+        p.w.type(p.id, "left", QStringLiteral("clear && echo %1:2:\n").arg(code), &e);
+        QTRY_VERIFY_WITH_TIMEOUT(p.w.text(p.id, "left", false, &e).startsWith(code), 10000);
+        const QPoint line = linkCell(term, code + ":2");
+        QVERIFY2(line.x() >= 0, "Konsole shows no link hotspot for the file and line");
+        clickLink(term, line, Qt::ControlModifier);
+        QTRY_COMPARE(p.page()["text"].toObject()["file"].toString(), code);
+        QCOMPARE(p.page()["text"].toObject()["line"].toInt(), 2);
     }
 
     void aPageRowShowsItsPageAndClosesLikeASession()

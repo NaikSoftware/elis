@@ -917,6 +917,7 @@ private Q_SLOTS:
         QCOMPARE(call(s, t, "session.type", row, {{"text", "x"}})["error"].toString(), QStringLiteral("session.type: not available on a page session"));
         QCOMPARE(call(s, t, "session.overlay.resize", row, {{"sizePercent", 50}})["error"].toString(),
                  QStringLiteral("session.overlay.resize: not available on a page session"));
+        QCOMPARE(call(s, t, "session.attach", row)["error"].toString(), QStringLiteral("session.attach: not available on a page session"));
         QVERIFY(call(s, t, "session.rename", row, {{"name", "docs"}})["ok"].toBool());
         QVERIFY(call(s, t, "session.type", a, {{"text", "x"}})["ok"].toBool());
 

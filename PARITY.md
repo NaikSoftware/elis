@@ -61,11 +61,10 @@ Commands for these answer `<cmd> is not supported on this platform (<reason>)` o
 - Ctrl+Shift+W closes the HUD or the overlay in front before it leaves terminal zoom, which hides only the chrome
   around them; ⌘W leaves zoom first.
   For the same reason a clicked link opens in its session's page under terminal zoom, where the Mac sends it to the browser.
-- Terminal link clicks: a plain click at a prompt opens a web link, and Ctrl+click is ⌘-click; Ctrl+Shift+click is ⌘⇧
-  (the browser), Ctrl+Alt+click is ⌘⌥ (reveal), and under mouse capture Ctrl+click and Ctrl+Alt+Shift+click.
-  Reveal opens the folder in the file manager without selecting the file. File paths are links whatever the Konsole
-  profile's Underline files and Open links by direct click say; a relative name is a link only once Konsole has seen
-  the pane's folder.
+- Terminal link clicks take Ctrl where the Mac takes ⌘ (Ctrl+click, Ctrl+Shift+click, Ctrl+Alt+click, and under
+  mouse capture each with Shift), and a Ctrl+click without Shift under capture is the program's alone.
+  File paths are links whatever the Konsole profile's Underline files and Open links by direct click say; a relative
+  name is a link only once Konsole has seen the pane's folder.
   Escape-sequence (OSC 8) links stay Konsole's and open in the system's handler.
 - `session search` drives Konsole's search bar.
 - `tree` surfaces carry no per-pane status or `pendingMessages`.

@@ -37,10 +37,10 @@ An elis-server host is not this app: SKILL.md's "Remote windows and elis-server"
 - The `pane.focused`, `pane.scratch` and `remote.*` event kinds are accepted and never fire.
 - `keymap.conf`: `--repeat` is accepted with a diagnostic and not honoured; `global-hotkey` is skipped.
 - On Wayland `window move` is refused and `window list` omits `x`/`y`.
-- Terminal links: a plain click at a prompt opens a web link, Ctrl+click any link; Ctrl+Shift+click (⌘⇧) sends it to
-  the browser and Ctrl+Alt+click (⌘⌥) opens the folder holding a file. Under mouse capture Ctrl+click is the link
-  click and Ctrl+Alt+Shift+click reveals. File paths are links whatever the Konsole profile says. An escape-sequence
-  (OSC 8) link opens in the system's handler, never in a page. A link opens in its session's page under terminal zoom,
+- Terminal links take Ctrl where the Mac takes ⌘: Ctrl+click opens, Ctrl+Shift+click sends to the browser,
+  Ctrl+Alt+click shows the file in the file manager, and under mouse capture each adds Shift. A plain click never opens
+  a link. File paths are links whatever the Konsole profile says. An escape-sequence (OSC 8) link opens in the system's
+  handler, never in a page. A link opens in its session's page under terminal zoom,
   which hides only the chrome.
 - The phone: Settings ▸ Connect a Phone…, or `elisctl mobile serve [--port N] [--bind ADDR] [--host NAME]`, which
   runs the Mac's relay (Term, direct input, Fit to phone, Chat, Bluetooth through BlueZ; pages are refused) and prints

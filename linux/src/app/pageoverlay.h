@@ -50,8 +50,11 @@ public:
     static QString persistentStoreFailure();
     static bool clearPersistentStore(const QString &target, const QJsonObject &args, QString *error); // browser.clear
     static void releasePersistentStore(); // at quit, after every page and before WebEngine shuts down
-    // where Open in Browser and Show in Folder go; tests replace it
+    // where Open in Browser goes; tests replace it
     static inline std::function<void(const QUrl &)> openExternally;
+    // shows a file or folder selected in the file manager, as Finder's reveal (Show in Folder, a clicked path's reveal)
+    static void reveal(const QString &path);
+    static inline std::function<void(const QString &)> revealExternally; // tests replace it
 
 Q_SIGNALS:
     void closeRequested(); // the strip's close button or the page's window.close()

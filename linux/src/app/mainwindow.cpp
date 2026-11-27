@@ -216,7 +216,7 @@ private:
 
 // A live pane's shell runs under its zmx daemon, behind the attach client Konsole started; Konsole sees only the
 // client. Its `elisZmx` property is the pane identity the daemon is named by.
-int shellPid(KParts::ReadOnlyPart *part)
+static int shellPid(KParts::ReadOnlyPart *part)
 {
     auto *t = qobject_cast<TerminalInterface *>(part);
     if (!t)
@@ -294,15 +294,14 @@ QWidget *terminalDisplay(KParts::ReadOnlyPart *part)
     return nullptr;
 }
 
-// Konsole opens a link on a Ctrl+click release, but also reports that click to a program tracking the mouse, which may
-// open the link too. There, Shift keeps a Ctrl+click from the program, so Konsole opens it once; at a prompt a plain click opens it.
-// shortcut: without Qt WebEngine (links.cpp), a profile with UnderlineFilesEnabled makes a plain click open files too,
-// like Konsole's own direct-click option
+// Ctrl+click opens a link, the Mac's ⌘-click, and a plain click never does. Konsole opens a link on a Ctrl+click release
+// but also reports that click to a program tracking the mouse: there the link click takes Shift too (Konsole's bypass, the
+// Mac's ⌘⇧), and a Ctrl+click without it is the program's alone, released without Ctrl so Konsole opens nothing.
 Qt::KeyboardModifiers linkClickModifiers(Qt::KeyboardModifiers modifiers, bool tracking, bool release)
 {
-    if (tracking)
-        return modifiers == Qt::ControlModifier ? modifiers | Qt::ShiftModifier : modifiers;
-    return release && modifiers == Qt::NoModifier ? Qt::ControlModifier : modifiers;
+    if (tracking && release && (modifiers & Qt::ControlModifier) && !(modifiers & Qt::ShiftModifier))
+        return modifiers & ~Qt::ControlModifier;
+    return modifiers;
 }
 
 // The part exposes no font API and its zoom actions live only in Konsole's main window, so this drives
@@ -2295,7 +2294,7 @@ bool MainWindow::eventFilter(QObject *watched, QEvent *event)
         if (ok && mouse->button() == Qt::LeftButton) {
             Qt::KeyboardModifiers mods = linkClickModifiers(mouse->modifiers(), tracking, event->type() == QEvent::MouseButtonRelease);
 #ifdef ELIS_HAS_WEBENGINE
-            mods = linkClick(static_cast<QWidget *>(watched), mouse, mods, tracking, mouse->modifiers() == Qt::NoModifier);
+            mods = linkClick(static_cast<QWidget *>(watched), mouse, mods, tracking);
 #endif
             mouse->setModifiers(mods);
         }

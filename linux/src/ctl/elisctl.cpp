@@ -665,18 +665,19 @@ int main(int argc, char **argv)
     if (cmd == QLatin1String("session.overlay") && !pos.isEmpty())
         cmd += QLatin1Char('.') + pos.takeFirst();
     if (cmd == QLatin1String("session.overlay.open") && (opt.contains(QStringLiteral("page")) || opt.contains(QStringLiteral("companion")))) {
-        const bool companion = opt.contains(QStringLiteral("companion"));
-        const QString flag = companion ? QStringLiteral("--companion") : QStringLiteral("--page");
-        if (companion && opt.contains(QStringLiteral("page"))) // the Mac CLI's checks, ahead of the socket
+        if (opt.contains(QStringLiteral("companion")) && opt.contains(QStringLiteral("page"))) // the Mac CLI's checks, ahead of the socket
             return die(QStringLiteral("--page cannot be combined with --companion"));
+        cmd = opt.contains(QStringLiteral("companion")) ? QStringLiteral("session.companion.page") : QStringLiteral("session.page");
+    }
+    const bool pageRow = cmd == QLatin1String("session.page") || cmd == QLatin1String("session.companion.page");
+    if (pageRow) {
+        const QString flag = cmd == QLatin1String("session.page") ? QStringLiteral("--page") : QStringLiteral("--companion");
         if (!opt.contains(QStringLiteral("html")) && !opt.contains(QStringLiteral("url")))
             return die(QStringLiteral("%1 requires --html or --url").arg(flag));
         for (const char *sized : {"pane", "size-percent", "width", "height"})
             if (opt.contains(QLatin1String(sized)))
                 return die(QStringLiteral("%1 is full size: it takes no --pane, --size-percent, --width or --height").arg(flag));
-        cmd = companion ? QStringLiteral("session.companion.page") : QStringLiteral("session.page");
     }
-    const bool pageRow = cmd == QLatin1String("session.page") || cmd == QLatin1String("session.companion.page");
     if (cmd == QLatin1String("session.hud"))
         cmd += QStringList{"open", "update", "close"}.contains(pos.value(0)) ? QLatin1Char('.') + pos.takeFirst() : QStringLiteral(".open");
     if (cmd == QLatin1String("session.split") && pos.value(0) == QLatin1String("close"))
