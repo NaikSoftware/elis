@@ -1790,6 +1790,13 @@ private Q_SLOTS:
         };
         QCOMPARE(onRow("session.overlay.hide")["error"].toString(), QStringLiteral("no overlay"));
         QCOMPARE(onRow("session.overlay.show")["text"].toString(), QStringLiteral("shown"));
+        for (const char *name : {"toggle_split", "toggle_horizontal_split", "swap_panes", "close_split", "focus_left_pane", "focus_right_pane",
+                                 "increase_font_size", "reset_font_size", "duplicate_companion", "restore_terminal_size", "toggle_overlay",
+                                 "toggle_terminal_zoom", "toggle_terminal_zoom"})
+            p.w.namedAction(QLatin1String(name))->trigger();
+        QVERIFY(!p.store.session(row)->hasSplit);
+        QCOMPARE(p.store.companionsOf(row), QStringList());
+        QCOMPARE(page()["state"].toString(), QStringLiteral("loaded"));
 
         QPointer<PageOverlay> shown = p.w.findChild<PageOverlay *>();
         QTest::mouseClick(shown->findChild<QToolButton *>(QStringLiteral("elisPageClose")), Qt::LeftButton);
@@ -1804,6 +1811,26 @@ private Q_SLOTS:
         QCOMPARE(pageOutcome(pageID)["outcome"].toString(), QStringLiteral("dismissed"));
         QVERIFY(p.store.session(p.store.reopenClosed()));
         QTRY_COMPARE_WITH_TIMEOUT(page()["state"].toString(), QStringLiteral("loaded"), 30000);
+
+        QJsonObject saved = p.store.toJson();
+        QJsonArray workspaces = saved["workspaces"].toArray();
+        QJsonObject w0 = workspaces[0].toObject();
+        QJsonArray sessions = w0["sessions"].toArray();
+        QJsonObject odd = sessions[1].toObject();
+        odd.insert("page", 42);
+        sessions[1] = odd;
+        w0.insert("sessions", sessions);
+        workspaces[0] = w0;
+        saved.insert("workspaces", workspaces);
+        saved.insert("selected", p.id);
+        Store restored;
+        restored.fromJson(saved);
+        MainWindow again(restored, dir.filePath("unreadable.json"));
+        again.restore({});
+        const QJsonObject failed = again.sessionExtras(odd["id"].toString())["htmlOverlays"].toArray().first().toObject();
+        QCOMPARE(failed["state"].toString(), QStringLiteral("failed"));
+        QCOMPARE(failed["error"].toString(), QStringLiteral("the saved page names no file or http(s) URL this version can open"));
+        QVERIFY(!failed.contains("file") && !failed.contains("url"));
     }
 
     static QString writePage(const QTemporaryDir &root, const QByteArray &html)

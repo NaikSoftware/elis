@@ -296,7 +296,8 @@ QWidget *terminalDisplay(KParts::ReadOnlyPart *part)
 
 // Konsole opens a link on a Ctrl+click release, but also reports that click to a program tracking the mouse, which may
 // open the link too. There, Shift keeps a Ctrl+click from the program, so Konsole opens it once; at a prompt a plain click opens it.
-// shortcut: a profile with UnderlineFilesEnabled makes a plain click open files too, like Konsole's own direct-click option
+// shortcut: without Qt WebEngine (links.cpp), a profile with UnderlineFilesEnabled makes a plain click open files too,
+// like Konsole's own direct-click option
 Qt::KeyboardModifiers linkClickModifiers(Qt::KeyboardModifiers modifiers, bool tracking, bool release)
 {
     if (tracking)

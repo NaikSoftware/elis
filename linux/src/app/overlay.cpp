@@ -449,7 +449,7 @@ bool MainWindow::addPageRow(bool companion, const QString &anchorId, const QJson
         return *error = opened.value("error").toString(), false;
     if (flags.value("persistent").toBool())
         if (const QString failure = PageOverlay::persistentStoreFailure(); !failure.isEmpty())
-            return *error = QStringLiteral("session.overlay.open: %1").arg(failure), false;
+            return *error = QStringLiteral("%1: %2").arg(companion ? QStringLiteral("session.companion.page") : QStringLiteral("session.page"), failure), false;
     QJsonObject page{{"source", source}, {"flags", flags}};
     if (checked.value("color").isString())
         page.insert("color", checked.value("color"));

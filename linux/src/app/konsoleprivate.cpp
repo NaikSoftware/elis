@@ -1,6 +1,5 @@
 #include "konsoleprivate.h"
 
-#include <QAtomicInt>
 #include <QHash>
 #include <QMetaObject>
 #include <QPointer>
@@ -171,7 +170,7 @@ QString linkAt(QWidget *display, const QPoint &pos, bool edge, int *type)
 
 bool underlineFiles(QObject *session, QObject *part)
 {
-    // a Profile::Ptr returned by value: one pointer, and Profile's vtable puts QSharedData's count right after it
+    // a Profile::Ptr returned by value: one pointer whose destructor would release a reference
     struct ProfilePtr {
         void *d = nullptr;
         ~ProfilePtr() {}
@@ -188,13 +187,15 @@ bool underlineFiles(QObject *session, QObject *part)
         return false;
     // the session's own override profile, as OSC 50 makes one; the filters are rebuilt only for a profile Konsole saves,
     // so the controller is asked to read them again
-    QMetaObject::invokeMethod(session, "profileChangeCommandReceived", Q_ARG(QString, QStringLiteral("UnderlineFilesEnabled=true")));
+    // a direct click would let Konsole open the link Elis opens too
+    QMetaObject::invokeMethod(session, "profileChangeCommandReceived",
+                              Q_ARG(QString, QStringLiteral("UnderlineFilesEnabled=true;OpenLinksByDirectClickEnabled=false")));
     ProfilePtr profile = profileOf(instance(), session);
     if (!profile.d)
         return false;
     update(controller, profile);
-    // the session manager still holds the profile, so the count never reaches zero here
-    reinterpret_cast<QAtomicInt *>(static_cast<char *>(profile.d) + sizeof(void *))->deref();
+    // shortcut: the reference profileOf took is kept, one small Profile per pane, since releasing it means
+    // writing into Konsole's class layout; upgrade if the part grows a filter API
     return true;
 }
 }

@@ -91,6 +91,10 @@ cmake --install build && kbuildsycoca6 --noincremental
   floating with `--size-percent`, or one split pane with `--pane`); it closes when the program exits and
   `overlay result` (or `--block`) returns the status. Ctrl+Alt+Shift+J hides and shows them. `session hud` puts a
   passive message panel over a session that stays typable; keymap `--error-hud` commands report failures in one.
+- Pages: `--html`, `--url`, `--markdown`, `--image` and `--text` pages over a session, or with `--page` / `--companion`
+  as a sidebar row of their own, saved and restored like any session. With Settings ▸ General ▸ Sessions ▸ Open links in
+  set to an overlay, a clicked web link opens in the session's page; a clicked markdown, picture, text or HTML file
+  opens as its page in every mode.
 
 ## Beyond Elis
 

@@ -28,6 +28,7 @@ enum { File = 1, Link = 2, EMailAddress = 3, EscapedUrl = 5 };
 // the link hotspot under a display point (edge as the view's own mouse handlers pass it): its text as printed, with
 // *type its HotSpot::Type; empty with *type set for a hotspot whose text cannot be read, *type 0 for none
 QString linkAt(QWidget *display, const QPoint &pos, bool edge, int *type);
-// turns on the part's file-path links (the profile's Underline files) for this session alone; false when a symbol is missing
+// for this session alone: file paths are links (Underline files) and a link opens only on the click Elis reads (no direct
+// click); false when a symbol is missing
 bool underlineFiles(QObject *session, QObject *part);
 }
