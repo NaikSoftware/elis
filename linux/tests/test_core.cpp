@@ -892,6 +892,69 @@ private Q_SLOTS:
         QVERIFY(!s.session(c1) && !s.session(c2));
     }
 
+    void pageRowsKeepTheMacsSnapshotAndRefuseTerminalCommands()
+    {
+        Store s;
+        FakeTerminals t;
+        const QString ws = s.addWorkspace("w");
+        const QString a = s.addSession(ws, {}, QDir::tempPath()), companion = s.addCompanion(a, {}, {}), after = s.addSession(ws, {}, {});
+        const QJsonObject mac{{"url", "http://localhost:3000/"}, {"browse", true}, {"persistent", true}}; // the Mac leaves false flags out
+        const QString row = s.addPageRow(companion, false, mac, {});
+        QStringList order;
+        for (const auto &x : s.workspace(ws)->sessions)
+            order << x.id;
+        QCOMPARE(order, QStringList({a, companion, row, after}));
+        QCOMPARE(s.session(row)->parentId, QString());
+        QCOMPARE(s.session(row)->displayName(), QStringLiteral("http://localhost:3000"));
+        QCOMPARE(s.session(row)->cwd, QDir::tempPath());
+        const QString pageCompanion = s.addPageRow(row, true, {{"file", "/srv/site/index.html"}, {"grantRoot", "/srv/site"}}, {});
+        QCOMPARE(s.session(pageCompanion)->parentId, row);
+        QCOMPARE(s.session(pageCompanion)->displayName(), QStringLiteral("index.html"));
+
+        const QJsonArray nodes = call(s, t, "tree")["result"]["tree"]["workspaces"][0]["sessions"].toArray();
+        QCOMPARE(nodes[2]["content"].toString(), QStringLiteral("page"));
+        QVERIFY(!nodes[0].toObject().contains("content"));
+        QCOMPARE(call(s, t, "session.type", row, {{"text", "x"}})["error"].toString(), QStringLiteral("session.type: not available on a page session"));
+        QCOMPARE(call(s, t, "session.overlay.resize", row, {{"sizePercent", 50}})["error"].toString(),
+                 QStringLiteral("session.overlay.resize: not available on a page session"));
+        QCOMPARE(call(s, t, "session.attach", row)["error"].toString(), QStringLiteral("session.attach: not available on a page session"));
+        QVERIFY(call(s, t, "session.rename", row, {{"name", "docs"}})["ok"].toBool());
+        QVERIFY(call(s, t, "session.type", a, {{"text", "x"}})["ok"].toBool());
+
+        Store back;
+        QJsonObject saved = s.toJson();
+        QCOMPARE(saved["workspaces"][0]["sessions"][2]["page"].toObject(), mac);
+        QJsonArray sessions = saved["workspaces"][0]["sessions"].toArray();
+        QJsonObject odd = sessions[3].toObject();
+        odd.insert("page", 42);
+        odd.insert("paneId", "stale");
+        sessions[3] = odd;
+        QJsonArray wsArray = saved["workspaces"].toArray();
+        QJsonObject w0 = wsArray[0].toObject();
+        w0.insert("sessions", sessions);
+        wsArray[0] = w0;
+        saved.insert("workspaces", wsArray);
+        back.fromJson(saved);
+        QCOMPARE(back.session(row)->page, mac);
+        QCOMPARE(back.session(row)->name, QStringLiteral("docs"));
+        const QString odd3 = odd.value("id").toString();
+        QCOMPARE(back.session(odd3)->page.value("unreadable").toString(), QStringLiteral("the saved page names no file or http(s) URL this version can open"));
+        QVERIFY(back.session(odd3)->paneId.isEmpty());
+
+        back.removeSession(row);
+        QCOMPARE(back.closed.first().page, mac);
+        QCOMPARE(back.session(back.reopenClosed())->page, mac);
+#ifdef ELIS_HAS_WEBENGINE
+        QCOMPARE(call(s, t, "session.page", a, {{"markdownFile", "/a.md"}})["error"].toString(), QStringLiteral("a page session needs --html or --url"));
+        QCOMPARE(call(s, t, "session.companion.page", a, {{"url", "https://x.test"}, {"width", 12.5}, {"sizePercent", 50}})["error"].toString(),
+                 QStringLiteral("a page companion is full size: it takes no --pane, --size-percent, --width or --height"));
+        QVERIFY(call(s, t, "session.page", a, {{"url", "https://x.test"}, {"browse", true}})["ok"].toBool());
+        QCOMPARE(t.appCmd, QStringLiteral("session.page"));
+        QCOMPARE(t.appArgs.value("page").toObject().value("url").toString(), QStringLiteral("https://x.test"));
+        QVERIFY(t.appArgs.value("flags").toObject().value("browse").toBool());
+#endif
+    }
+
     void tintIsAColourThatPersists()
     {
         Store s;
@@ -2237,8 +2300,9 @@ private Q_SLOTS:
         FakeTerminals t;
         const QString id = call(s, t, "session.new")["result"]["id"].toString();
         QStringList absent{"zmx.list", "quick.type", "session.scratch", "session.background", "surface.cursor", "config.reload",
-                           "session.restart", "session.page"};
+                           "session.restart"};
 #ifndef ELIS_HAS_WEBENGINE
+        absent << "session.page" << "session.companion.page";
         absent << "session.overlay.follow" << "session.overlay.search" << "session.overlay.changes" << "session.overlay.files" << "session.overlay.wrap";
 #endif
         for (const QString &cmd : std::as_const(absent))

@@ -28,11 +28,9 @@ Commands for these answer `<cmd> is not supported on this platform (<reason>)` o
 (`unsupportedReason` in `linux/src/core/commands.cpp`).
 
 - Quick terminal and scratch terminal.
-- Remote sessions: attaching another Mac's session, remote windows, elis-server hosts, remote overlay jobs.
-- Web content beyond `--html`, `--url`, `--markdown`, `--image` and `--text` page overlays: page sessions, page
-  companions, and terminal links opened in a session overlay, a clicked HTML file's page included:
-  Linux keeps the Open links in setting and `browser links`, and links open in the system browser.
-  Without Qt WebEngine, `browser …` is not supported either.
+- Remote sessions: attaching another Mac's session, remote windows, elis-server hosts, remote overlay jobs,
+  a remote parent's page companion (`session companion page attach`).
+- Without Qt WebEngine: every page (overlays, page sessions and companions, link pages) and `browser …`.
   Pages never show on the phone.
 - The `zmx …` commands, Reset Live Sessions, `session restart` and `session lead`
   (a covered Live pane takes the lead back with a key).
@@ -62,6 +60,12 @@ Commands for these answer `<cmd> is not supported on this platform (<reason>)` o
   instead of showing.
 - Ctrl+Shift+W closes the HUD or the overlay in front before it leaves terminal zoom, which hides only the chrome
   around them; ⌘W leaves zoom first.
+  For the same reason a clicked link opens in its session's page under terminal zoom, where the Mac sends it to the browser.
+- Terminal link clicks take Ctrl where the Mac takes ⌘ (Ctrl+click, Ctrl+Shift+click, Ctrl+Alt+click, and under
+  mouse capture each with Shift), and a Ctrl+click without Shift under capture is the program's alone.
+  File paths are links whatever the Konsole profile's Underline files and Open links by direct click say; a relative
+  name is a link only once Konsole has seen the pane's folder.
+  Escape-sequence (OSC 8) links stay Konsole's and open in the system's handler.
 - `session search` drives Konsole's search bar.
 - `tree` surfaces carry no per-pane status or `pendingMessages`.
 - `msg send --all` reaches the addressed window only.

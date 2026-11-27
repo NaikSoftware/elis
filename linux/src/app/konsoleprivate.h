@@ -1,5 +1,6 @@
 #pragma once
 
+#include <QPoint>
 #include <QSize>
 #include <QString>
 
@@ -13,6 +14,10 @@ QObject *emulation(QObject *session);
 // the whole history plus the screen, paged through the view (display) and scrolled back; empty on failure
 QString scrollback(QObject *session, QWidget *display, bool *ok);
 QString selectedText(QObject *session);
+bool hasSelection(QObject *session); // any selection on the screen, a blank one too
+// for the release being delivered: Konsole opens no link while the screen holds a selection, so one cell is selected
+// until the event loop turns; false when a selection was there already or a symbol is missing
+bool holdLinks(QObject *session);
 // the emulation's grid, columns x rows (what the program sees); invalid when the symbol is missing
 QSize gridSize(QObject *session);
 // gives the emulation the size its shown views have again (Session::updateTerminalSize); false when the symbol is missing
@@ -22,4 +27,12 @@ bool usesMouseTracking(QWidget *display, bool *ok);
 // the view's background alpha, 0..1 (Konsole takes it from the colour scheme); -1 when the symbol is missing
 double terminalOpacity(QWidget *display);
 void setTerminalOpacity(QWidget *display, double opacity);
+// Konsole::HotSpot::Type values linkAt reports
+enum { File = 1, Link = 2, EMailAddress = 3, EscapedUrl = 5 };
+// the link hotspot under a display point (edge as the view's own mouse handlers pass it): its text as printed, with
+// *type its HotSpot::Type; empty with *type set for a hotspot whose text cannot be read, *type 0 for none
+QString linkAt(QWidget *display, const QPoint &pos, bool edge, int *type);
+// for this session alone: file paths are links (Underline files) and a link opens only on the click Elis reads (no direct
+// click); false when a symbol is missing
+bool underlineFiles(QObject *session, QObject *part);
 }

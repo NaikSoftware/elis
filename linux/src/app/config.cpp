@@ -544,6 +544,8 @@ bool MainWindow::appCommand(const QString &cmd, const QString &sessionId, const 
 #ifdef ELIS_HAS_WEBENGINE
     if (cmd == QLatin1String("browser.clear"))
         return PageOverlay::clearPersistentStore(sessionId, args, error);
+    if (cmd == QLatin1String("session.page") || cmd == QLatin1String("session.companion.page"))
+        return addPageRow(cmd == QLatin1String("session.companion.page"), sessionId, args, result, error);
 #endif
     bool handled = false;
     if (const bool done = uiCommand(cmd, sessionId, args, result, error, &handled); handled)

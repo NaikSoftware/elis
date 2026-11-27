@@ -47,11 +47,22 @@ extension ControlDispatcher {
         case options(ControlSessionOverlayOpenOptions)
         case rejected(ControlResponse)
 
-        static func reject(_ error: String) -> PageRowParse { .rejected(ControlResponse(ok: false, error: error)) }
+        nonisolated static func reject(_ error: String) -> PageRowParse { .rejected(ControlResponse(ok: false, error: error)) }
+    }
+
+    /// pageRowCheck is `pageRowOptions` for a host without this dispatcher (the Linux bridge): the options, or the
+    /// refusal text. `page` names `session.page`, else `session.companion.page`.
+    nonisolated public static func pageRowCheck(_ args: ControlArgs?, page: Bool) -> (options: ControlSessionOverlayOpenOptions?, error: String?) {
+        let parsed = page ? pageRowOptions(args, row: "page session", needsPage: OverlayHtmlError.pageSessionNeedsPage)
+            : pageRowOptions(args, row: "page companion", needsPage: OverlayHtmlError.companionNeedsPage)
+        switch parsed {
+        case .rejected(let response): return (nil, response.error ?? "invalid arguments")
+        case .options(let options): return (options, nil)
+        }
     }
 
     // a page row's page is the row, so it is always full size and session-wide
-    static func pageRowOptions(_ args: ControlArgs?, row: String, needsPage: String) -> PageRowParse {
+    nonisolated static func pageRowOptions(_ args: ControlArgs?, row: String, needsPage: String) -> PageRowParse {
         let page: HtmlSource
         switch overlayContent(command: args?.command ?? "", args: args) {
         case .rejected(let response): return .rejected(response)

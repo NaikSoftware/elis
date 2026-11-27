@@ -40,6 +40,13 @@ static QJsonObject sessionNode(const Session &s, const QString &selected)
                     s.tint);
 }
 
+static QJsonObject withContent(QJsonObject node, const Session &s)
+{
+    if (!s.page.isEmpty())
+        node.insert("content", "page");
+    return node;
+}
+
 static QJsonObject withContext(QJsonObject node, const Session &s, const Store &store)
 {
     if (!s.agentSessionId.isEmpty())
@@ -102,6 +109,11 @@ QStringList dashboardCells(Store &store, const QStringList &targets, bool mru, Q
         const QString id = store.resolveSession(target, &e);
         if (id.isEmpty() || (pane == QLatin1String("right") && !store.session(id)->hasSplit)) {
             dropped << (id.isEmpty() ? e : QStringLiteral("%1 has no split").arg(target));
+            continue;
+        }
+        if (!store.session(id)->page.isEmpty()) { // a page row has no terminal to show
+            if (!mru)
+                dropped << QStringLiteral("%1 is a page session").arg(target);
             continue;
         }
         QStringList panes{pane.isEmpty() ? QStringLiteral("left") : pane};
@@ -255,6 +267,8 @@ static QString overlayPageError(QJsonObject *args)
             checked.insert(key, args->value(key));
     args->remove("page"); // only the check names a page, never the caller
     args->remove("pageLog");
+    for (const char *internal : {"clicked", "checked", "row"}) // a terminal click's and a page row's own
+        args->remove(QLatin1String(internal));
     char *raw = elis_overlay_page_arguments(QJsonDocument(checked).toJson(QJsonDocument::Compact).constData());
     const QJsonObject reply = QJsonDocument::fromJson(raw ? QByteArray(raw) : QByteArray()).object();
     elis_free(raw);
@@ -424,7 +438,7 @@ static QJsonObject tree(Store &store, const Terminals &terminals)
     for (const auto &w : store.workspaces) {
         QJsonArray ss;
         for (const auto &s : w.sessions)
-            ss << merged(withContext(withRestore(sessionNode(s, store.selected), s), s, store), terminals.sessionExtras(s.id));
+            ss << merged(withContext(withRestore(withContent(sessionNode(s, store.selected), s), s), s, store), terminals.sessionExtras(s.id));
         QJsonObject node = withTint({{"id", w.id}, {"name", w.name}, {"rememberedFolder", w.folder}, {"active", w.id == activeWs}, {"sessions", ss}}, w.tint);
         if (!w.projectFolder.isEmpty())
             node.insert("projectFolder", w.projectFolder);
@@ -518,6 +532,10 @@ QString duplicateAsCompanion(Store &store, Terminals &terminals, const QString &
         *error = QStringLiteral("no such session");
         return {};
     }
+    if (!source->page.isEmpty()) {
+        *error = QStringLiteral("a page session has no terminal to duplicate");
+        return {};
+    }
     PanePlan left, right;
     if (!terminals.panePlan(id, QStringLiteral("main"), &left, error)
         || (source->hasSplit && !terminals.panePlan(id, QStringLiteral("right"), &right, error)))
@@ -550,11 +568,49 @@ QJsonObject dispatch(Store &store, Terminals &terminals, const QJsonObject &requ
             t.insert(it.key(), it.value());
         return ok({{"tree", t}});
     }
+    // ElisCore's PageSessionRefusal, which reads only these fields: the rest could fail its decoding
+    QJsonObject judged{{"cmd", cmd}, {"args", QJsonObject{{"full", args.value("full")}, {"style", args.value("style")}, {"mode", args.value("mode")}}}};
+    if (request.contains("target"))
+        judged.insert("target", target);
+    const bool judge = (cmd.startsWith(QLatin1String("session.")) && cmd != QLatin1String("session.overlay.result")) // --block polls it
+                       || cmd.startsWith(QLatin1String("surface.")) || cmd == QLatin1String("ask.open");
+    if (const QJsonObject r = judge ? Store::bridge(elis_page_session_refusal, judged) : QJsonObject(); r.value("refused").toBool()) {
+        QString ignored;
+        const Session *s = store.session(store.resolveSession(r.value("target").toString(), &ignored));
+        if (s && !s->page.isEmpty())
+            return fail(r.value("error").toString());
+    }
     bool handled = false;
     if (QJsonObject r = moreCommands(store, terminals, cmd, target, args, &handled); handled)
         return r;
     if (const QString why = unsupportedReason(cmd); !why.isEmpty())
         return fail(why);
+#ifdef ELIS_HAS_WEBENGINE
+    if (cmd == QLatin1String("session.page") || cmd == QLatin1String("session.companion.page")) {
+        // ElisCore's page-row check reads the page source, the full-size rule and the colour; point sizes only by presence
+        static const QStringList keys{"command", "html", "url", "image", "markdownFile", "textFile", "cwd", "wait", "line", "tail", "followFile",
+                                      "navigation", "javascript", "chromeless", "persistent", "browse", "pane", "sizePercent", "color", "follow"};
+        QJsonObject checked;
+        for (const QString &key : keys)
+            if (args.contains(key))
+                checked.insert(key, args.value(key));
+        for (const char *key : {"width", "height"})
+            if (args.contains(QLatin1String(key)))
+                checked.insert(QLatin1String(key), 1);
+        const QJsonObject row = Store::bridge(elis_page_row_arguments, {{"page", cmd == QLatin1String("session.page")}, {"args", checked}});
+        if (!row.value("ok").toBool())
+            return fail(row.value("error").toString(QStringLiteral("the page check gave no answer")));
+        const QString anchor = store.resolveSession(target, &error);
+        if (anchor.isEmpty())
+            return fail(error);
+        QJsonObject result;
+        if (!terminals.appCommand(cmd, anchor, row, &result, &error))
+            return fail(error);
+        if (row.value("follow").toBool())
+            store.select(result.value("id").toString());
+        return ok(result);
+    }
+#endif
     if (cmd == QLatin1String("session.companion.new")) {
         for (const char *k : {"workspace", "workspaceName", "after", "before"})
             if (args.contains(QLatin1String(k)))
@@ -839,7 +895,7 @@ QJsonObject dispatch(Store &store, Terminals &terminals, const QJsonObject &requ
             if (!terminals.type(id, pane, args.value("text").toString(), &error))
                 return fail(error);
         } else if (cmd == QLatin1String("session.get")) {
-            QJsonObject node = merged(withContext(withRestore(sessionNode(*store.session(id), store.selected), *store.session(id)), *store.session(id), store),
+            QJsonObject node = merged(withContext(withRestore(withContent(sessionNode(*store.session(id), store.selected), *store.session(id)), *store.session(id)), *store.session(id), store),
                                       terminals.sessionExtras(id));
             node.insert("workspace", store.workspaceOf(id)->id);
             const QJsonObject live = terminals.info(id);

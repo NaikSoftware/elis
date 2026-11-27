@@ -122,8 +122,8 @@ void drawGlyph(QPainter *p, const QRectF &r, const QString &name, const QColor &
 
 void drawLauncher(QPainter *p, const QRectF &r, const QString &id, const QColor &c)
 {
-    if (id.isEmpty() || id == QLatin1String("terminal"))
-        drawGlyph(p, r, QStringLiteral("session-terminal"), c);
+    if (id.isEmpty() || id == QLatin1String("terminal") || id == QLatin1String("page"))
+        drawGlyph(p, r, id == QLatin1String("page") ? QStringLiteral("session-page") : QStringLiteral("session-terminal"), c);
     else
         drawSvg(p, r, QStringLiteral(":/launchers/%1.svg").arg(id), c);
 }
@@ -805,7 +805,7 @@ void Sidebar::rebuild()
         item->setData(0, Kind, SessionRow);
         item->setData(0, Status, s.status);
         item->setData(0, Blink, s.blink);
-        item->setData(0, Agent, s.agent);
+        item->setData(0, Agent, s.page.isEmpty() ? s.agent : QStringLiteral("page")); // a page row shows a page, never an agent
         item->setData(0, Flagged, s.flagged);
         item->setData(0, Unseen, s.unseen);
         item->setData(0, Busy, s.busy);

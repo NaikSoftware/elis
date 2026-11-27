@@ -130,6 +130,12 @@ char *elis_text_log_shift(const char *json);           // {old?,oldStamp?,new?,n
 char *elis_overlay_text_action(const char *json);      // {cmd,args} -> {"ok":true,"action"} or the Mac's refusal
 char *elis_text_page_constants(void);                  // {maxQuery, the text-page refusal texts}
 char *elis_page_navigate_refusal(const char *json);    // {kind,to} -> {"error"?}
+// page rows and link clicks (Sources/ElisBridge/PageRows.swift)
+char *elis_page_row_arguments(const char *json);   // {page,args} -> {ok,page,flags,color?,follow} or the Mac's refusal
+char *elis_page_snapshot_read(const char *json);   // {page:<saved value>} -> {row:{source,flags,color?},saved} | {} for a terminal
+char *elis_page_snapshot_write(const char *json);  // {source,flags,color?} -> {saved: PageSnapshot | null}
+char *elis_page_session_refusal(const char *json); // a request -> {refused,target?,error?}
+char *elis_link_route(const char *json);           // {raw,mode,origin,session,cwd?,modifiers,captured} -> {route,…}; stats files
 // The page bridge (Sources/ElisBridge/Pages.swift): its scripts, and a page's message as the socket's request
 char *elis_html_bridge_scripts(const char *handler);                       // {adapter,helper}
 char *elis_html_bridge_request(const char *message, const char *placeJSON); // place {session,window?,pane?} -> {"request"} or refusal

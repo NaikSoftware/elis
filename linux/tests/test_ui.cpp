@@ -55,6 +55,7 @@
 #include "smoothwheel.h"
 #include "phone.h"
 #include <QClipboard>
+#include <QDBusConnection>
 #include <QComboBox>
 #include <QTcpServer>
 #include "paneleadcover.h"
@@ -715,20 +716,18 @@ private Q_SLOTS:
         qApp->removeEventFilter(&filter);
     }
 
-    void linkClicksOpenOnce()
+#ifdef ELIS_HAS_WEBENGINE
+    void fileLinksReadAsKonsoleReadsThem()
     {
-        const auto ctrl = Qt::ControlModifier, shift = Qt::ShiftModifier, none = Qt::NoModifier;
-        // at a prompt a plain click opens the link on release; the press stays plain so selection is unchanged
-        QCOMPARE(linkClickModifiers(none, false, true), ctrl);
-        QCOMPARE(linkClickModifiers(none, false, false), none);
-        QCOMPARE(linkClickModifiers(ctrl, false, true), ctrl);
-        QCOMPARE(linkClickModifiers(shift, false, true), shift);
-        // a program tracking the mouse never sees a Ctrl+click, so only Konsole opens the link; other clicks stay its own
-        QCOMPARE(linkClickModifiers(ctrl, true, false), ctrl | shift);
-        QCOMPARE(linkClickModifiers(ctrl, true, true), ctrl | shift);
-        QCOMPARE(linkClickModifiers(none, true, true), none);
-        QCOMPARE(linkClickModifiers(ctrl | Qt::AltModifier, true, true), ctrl | Qt::AltModifier);
+        QCOMPARE(konsoleFileLink("main.swift:12:"), QStringLiteral("main.swift:12"));
+        QCOMPARE(konsoleFileLink("main.cpp:12:5:"), QStringLiteral("main.cpp:12:5"));
+        QCOMPARE(konsoleFileLink("src/x.go:7:void"), QStringLiteral("src/x.go:7"));
+        QCOMPARE(konsoleFileLink("[/w/test.cpp(204)]"), QStringLiteral("/w/test.cpp:204"));
+        QCOMPARE(konsoleFileLink("'a b.md'"), QStringLiteral("a b.md"));
+        QCOMPARE(konsoleFileLink("notes.md:"), QStringLiteral("notes.md"));
+        QCOMPARE(konsoleFileLink("notes.md"), QStringLiteral("notes.md"));
     }
+#endif
 
     // the config dir follows ELIS_STATE_DIR (set by ctest), so nothing here touches ~/.config
     static QString writeConfig(const QString &name, const QString &text)
@@ -1677,6 +1676,202 @@ private Q_SLOTS:
         QTRY_COMPARE(p.overlay()->pendingPrompt(), net.url("/z")); // a web link still asks before it leaves
         QTest::qWait(1000);
         QCOMPARE(net.hits, 0);
+    }
+
+    // the cell of a link hotspot starting with `text` printed at a line start, found by asking Konsole along the first columns
+    static QPoint linkCell(QWidget *display, const QString &text)
+    {
+        QPoint found(-1, -1);
+        (void)QTest::qWaitFor([&] {
+            for (int y = 2; y < display->height(); y += 4)
+                for (int x = 12; x < 60; x += 8) {
+                    int type = 0;
+                    if (KonsolePrivate::linkAt(display, {x, y}, true, &type).startsWith(text))
+                        return found = QPoint(x, y), true;
+                }
+            return false;
+        }, 20000);
+        return found;
+    }
+
+    // sent by hand, so the modifiers the release leaves with are the ones Konsole's own link handler read
+    static Qt::KeyboardModifiers clickLink(QWidget *display, QPoint at, Qt::KeyboardModifiers mods)
+    {
+        QMouseEvent press(QEvent::MouseButtonPress, at, display->mapToGlobal(at), Qt::LeftButton, Qt::LeftButton, mods);
+        QApplication::sendEvent(display, &press);
+        QMouseEvent release(QEvent::MouseButtonRelease, at, display->mapToGlobal(at), Qt::LeftButton, Qt::NoButton, mods);
+        QApplication::sendEvent(display, &release);
+        return release.modifiers();
+    }
+
+    void aClickedTerminalLinkOpensWhereTheSettingSays()
+    {
+        WebServer site;
+        site.routes["/"] = WebServer::html("<title>Site</title>");
+        QList<QUrl> external;
+        QStringList revealed;
+        PageOverlay::openExternally = [&](const QUrl &u) { external << u; };
+        PageOverlay::revealExternally = [&](const QString &path) { revealed << path; };
+        auto cleanup = qScopeGuard([] { PageOverlay::openExternally = nullptr, PageOverlay::revealExternally = nullptr; });
+        QTemporaryDir root(QStringLiteral("/tmp/elis-link-XXXXXX"));
+        for (const char *name : {"notes.md", "main.swift"}) {
+            QFile f(root.filePath(QLatin1String(name)));
+            QVERIFY(f.open(QIODevice::WriteOnly));
+            f.write("one\ntwo\n");
+        }
+        PageWindow p(dir.filePath("links.json"));
+        QVERIFY(QTest::qWaitForWindowActive(&p.w));
+        QWidget *term = display(p.w);
+        QVERIFY(term);
+        QString e;
+        p.w.type(p.id, "left", QStringLiteral("clear; echo %1\n").arg(site.url()), &e);
+        QTRY_VERIFY_WITH_TIMEOUT(p.w.text(p.id, "left", false, &e).startsWith(site.url()), 10000);
+        const QPoint web = linkCell(term, site.url());
+        QVERIFY2(web.x() >= 0, "Konsole shows no link hotspot for the URL");
+
+        QCOMPARE(clickLink(term, web, Qt::NoModifier), Qt::NoModifier);
+        QTest::qWait(300);
+        QVERIFY(external.isEmpty());
+        QCOMPARE(clickLink(term, web, Qt::ControlModifier) & Qt::ControlModifier, Qt::NoModifier);
+        QTRY_COMPARE(external, QList<QUrl>{QUrl(site.url())});
+        QVERIFY(!p.w.sessionExtras(p.id).contains("htmlOverlays"));
+
+        // under mouse capture a Ctrl+click is the program's, untouched, and Konsole opens nothing for it
+        const int pid = p.w.info(p.id)["pid"].toInt();
+        QObject *konsole = nullptr;
+        for (int n = 1; n < 4096 && !konsole; ++n)
+            if (QObject *o = QDBusConnection::sessionBus().objectRegisteredAt(QStringLiteral("/Sessions/%1").arg(n))) {
+                int sessionPid = -1;
+                if (QMetaObject::invokeMethod(o, "processId", Q_RETURN_ARG(int, sessionPid)) && sessionPid == pid)
+                    konsole = o;
+            }
+        QVERIFY(konsole);
+        bool ok = false;
+        QVERIFY(KonsolePrivate::holdLinks(konsole)); // or the click below would let Konsole open a real browser
+        QVERIFY(KonsolePrivate::hasSelection(konsole));
+        QTRY_VERIFY(!KonsolePrivate::hasSelection(konsole));
+        p.w.type(p.id, "left", QStringLiteral("printf '\\033[?1000h'\n"), &e);
+        QTRY_VERIFY(KonsolePrivate::usesMouseTracking(term, &ok));
+        int type = 0;
+        KonsolePrivate::linkAt(term, web, false, &type);
+        QCOMPARE(type, int(KonsolePrivate::Link));
+        QCOMPARE(clickLink(term, web, Qt::ControlModifier), Qt::ControlModifier);
+        QVERIFY(KonsolePrivate::hasSelection(konsole));
+        QTRY_VERIFY(!KonsolePrivate::hasSelection(konsole));
+        QCOMPARE(clickLink(term, web, Qt::ControlModifier | Qt::ShiftModifier) & Qt::ControlModifier, Qt::NoModifier);
+        QTRY_COMPARE(external.size(), 2);
+        p.w.type(p.id, "left", QStringLiteral("\x15printf '\\033[?1000l'\n"), &e); // the program's reports were typed at the prompt
+        QTRY_VERIFY(!KonsolePrivate::usesMouseTracking(term, &ok));
+
+        p.store.settings.linkOpenMode = QStringLiteral("overlay75");
+        QCOMPARE(clickLink(term, web, Qt::ControlModifier) & Qt::ControlModifier, Qt::NoModifier);
+        QTRY_VERIFY(p.w.sessionExtras(p.id).contains("htmlOverlays"));
+        QCOMPARE(p.page()["url"].toString(), site.url());
+        for (const char *flag : {"browse", "javascript", "persistent", "navigation", "clicked"})
+            QVERIFY2(p.page()[QLatin1String(flag)].toBool(), flag);
+        QCOMPARE(p.w.sessionExtras(p.id)["overlaySizePercent"].toInt(), 75);
+        QCOMPARE(external.size(), 2);
+
+        clickLink(term, web, Qt::ControlModifier | Qt::ShiftModifier);
+        QTRY_COMPARE(external.size(), 3);
+        QVERIFY(!p.run("session.overlay.hide").contains("error"));
+        // absolute and short: Konsole links a relative name only in the folder it last polled the pane in
+        const QString path = root.filePath("notes.md");
+        p.w.type(p.id, "left", QStringLiteral("clear && echo %1\n").arg(path), &e);
+        QTRY_VERIFY_WITH_TIMEOUT(p.w.text(p.id, "left", false, &e).startsWith(path), 10000);
+        const QPoint md = linkCell(term, path);
+        QVERIFY2(md.x() >= 0, "Konsole shows no link hotspot for the file");
+        QCOMPARE(clickLink(term, md, Qt::NoModifier) & Qt::ControlModifier, Qt::NoModifier);
+        QTest::qWait(300);
+        QCOMPARE(p.page()["url"].toString(), site.url());
+        clickLink(term, md, Qt::ControlModifier);
+        QTRY_COMPARE(p.page()["markdown"].toString(), root.filePath("notes.md"));
+        QVERIFY(p.page()["clicked"].toBool());
+        QCOMPARE(p.w.sessionExtras(p.id)["overlaySizePercent"].toInt(), 75);
+        clickLink(term, md, Qt::ControlModifier | Qt::AltModifier);
+        QTRY_COMPARE(revealed, QStringList{path});
+
+        QVERIFY(!p.run("session.overlay.close").contains("error"));
+        const QString code = root.filePath("main.swift");
+        p.w.type(p.id, "left", QStringLiteral("clear && echo %1:2:\n").arg(code), &e);
+        QTRY_VERIFY_WITH_TIMEOUT(p.w.text(p.id, "left", false, &e).startsWith(code), 10000);
+        const QPoint line = linkCell(term, code + ":2");
+        QVERIFY2(line.x() >= 0, "Konsole shows no link hotspot for the file and line");
+        clickLink(term, line, Qt::ControlModifier);
+        QTRY_COMPARE(p.page()["text"].toObject()["file"].toString(), code);
+        QCOMPARE(p.page()["text"].toObject()["line"].toInt(), 2);
+    }
+
+    void aPageRowShowsItsPageAndClosesLikeASession()
+    {
+        QTemporaryDir root;
+        QFile f(root.filePath("index.html"));
+        QVERIFY(f.open(QIODevice::WriteOnly));
+        f.write("<title>Row</title><script>elis.request('session.rename', {args: {name: 'bridged'}})</script>");
+        f.close();
+        PageWindow p(dir.filePath("pagerow.json"));
+        QVERIFY(QTest::qWaitForWindowActive(&p.w));
+        const QJsonObject reply = dispatch(p.store, p.w, {{"cmd", "session.page"}, {"target", p.id},
+                                                           {"args", QJsonObject{{"html", f.fileName()}, {"javascript", true}, {"follow", true}}}});
+        QVERIFY2(reply["ok"].toBool(), qPrintable(QJsonDocument(reply).toJson()));
+        const QString row = reply["result"]["id"].toString(), pageID = reply["result"]["pageID"].toString();
+        QVERIFY(!pageID.isEmpty());
+        QCOMPARE(p.store.selected, row);
+        QCOMPARE(p.store.session(row)->displayName(), QStringLiteral("index.html"));
+        auto page = [&] { return p.w.sessionExtras(row)["htmlOverlays"].toArray().first().toObject(); };
+        QTRY_COMPARE_WITH_TIMEOUT(page()["state"].toString(), QStringLiteral("loaded"), 30000);
+        QCOMPARE(page()["id"].toString(), pageID);
+        QVERIFY(!p.w.sessionExtras(row).contains("overlaySizePercent"));
+        QVERIFY(p.w.sessionExtras(row)["surfaces"].toArray().isEmpty());
+        QTRY_COMPARE(p.store.session(row)->name, QStringLiteral("bridged"));
+        auto onRow = [&](const QString &cmd) {
+            QJsonObject result;
+            QString error;
+            return p.w.appCommand(cmd, row, {}, &result, &error) ? result : QJsonObject{{"error", error}};
+        };
+        QCOMPARE(onRow("session.overlay.hide")["error"].toString(), QStringLiteral("no overlay"));
+        QCOMPARE(onRow("session.overlay.show")["text"].toString(), QStringLiteral("shown"));
+        for (const char *name : {"toggle_split", "toggle_horizontal_split", "swap_panes", "close_split", "focus_left_pane", "focus_right_pane",
+                                 "increase_font_size", "reset_font_size", "duplicate_companion", "restore_terminal_size", "toggle_overlay",
+                                 "toggle_terminal_zoom", "toggle_terminal_zoom"})
+            p.w.namedAction(QLatin1String(name))->trigger();
+        QVERIFY(!p.store.session(row)->hasSplit);
+        QCOMPARE(p.store.companionsOf(row), QStringList());
+        QCOMPARE(page()["state"].toString(), QStringLiteral("loaded"));
+
+        QPointer<PageOverlay> shown = p.w.findChild<PageOverlay *>();
+        QTest::mouseClick(shown->findChild<QToolButton *>(QStringLiteral("elisPageClose")), Qt::LeftButton);
+        QTRY_VERIFY(!p.store.session(row));
+        QVERIFY(p.store.undoClose());
+        QCOMPARE(p.store.session(row)->page["file"].toString(), f.fileName());
+        QCOMPARE(page()["id"].toString(), pageID);
+        QVERIFY(shown);
+
+        QVERIFY(!onRow("session.overlay.close").contains("error"));
+        QVERIFY(!p.store.session(row));
+        QCOMPARE(pageOutcome(pageID)["outcome"].toString(), QStringLiteral("dismissed"));
+        QVERIFY(p.store.session(p.store.reopenClosed()));
+        QTRY_COMPARE_WITH_TIMEOUT(page()["state"].toString(), QStringLiteral("loaded"), 30000);
+
+        QJsonObject saved = p.store.toJson();
+        QJsonArray workspaces = saved["workspaces"].toArray();
+        QJsonObject w0 = workspaces[0].toObject();
+        QJsonArray sessions = w0["sessions"].toArray();
+        QJsonObject odd = sessions[1].toObject();
+        odd.insert("page", 42);
+        sessions[1] = odd;
+        w0.insert("sessions", sessions);
+        workspaces[0] = w0;
+        saved.insert("workspaces", workspaces);
+        saved.insert("selected", p.id);
+        Store restored;
+        restored.fromJson(saved);
+        MainWindow again(restored, dir.filePath("unreadable.json"));
+        again.restore({});
+        const QJsonObject failed = again.sessionExtras(odd["id"].toString())["htmlOverlays"].toArray().first().toObject();
+        QCOMPARE(failed["state"].toString(), QStringLiteral("failed"));
+        QCOMPARE(failed["error"].toString(), QStringLiteral("the saved page names no file or http(s) URL this version can open"));
+        QVERIFY(!failed.contains("file") && !failed.contains("url"));
     }
 
     static QString writePage(const QTemporaryDir &root, const QByteArray &html)

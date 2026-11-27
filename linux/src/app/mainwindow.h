@@ -17,6 +17,7 @@ class QFrame;
 class QKeyEvent;
 class QLabel;
 class QMenu;
+class QMouseEvent;
 class QSplitter;
 class QStackedLayout;
 class QStackedWidget;
@@ -31,7 +32,7 @@ namespace KParts { class ReadOnlyPart; }
 QWidget *terminalDisplay(KParts::ReadOnlyPart *part); // the part's Konsole::TerminalDisplay
 void retirePart(KParts::ReadOnlyPart *part); // drops a part whose pane lives on in another one
 void zoomFontTo(QWidget *display, double points);
-Qt::KeyboardModifiers linkClickModifiers(Qt::KeyboardModifiers modifiers, bool tracking, bool release);
+QString konsoleFileLink(QString text); // a Konsole file hotspot's text as a path with an optional :line[:column]
 
 class MainWindow : public QMainWindow, public Terminals
 {
@@ -134,13 +135,24 @@ private:
         int sizePercent = 0; // 0 = full
         double width = 0, height = 0; // points overriding the percent per axis
         bool hidden = false;
+        bool clicked = false; // a terminal link click opened the page; a later click may replace it while it is hidden
         std::function<void()> onClose;
     };
+    // links.cpp: a left press or release on a terminal display, its modifiers as Konsole will see them; returns them
+    // with the link chord taken out when Elis opens the link itself
+    Qt::KeyboardModifiers linkClick(QWidget *display, QMouseEvent *mouse, Qt::KeyboardModifiers effective, bool tracking);
+    void followLink(const QString &id, const QJsonObject &route); // elis_link_route's answer, carried out
+    // the pane or program-overlay part showing a terminal display, with its session and whether it is an overlay's
+    KParts::ReadOnlyPart *partOf(QWidget *display, QString *id = nullptr, bool *overlay = nullptr) const;
+    bool releaseHiddenClickedPage(const QString &id);
     QHash<QString, Overlay> m_overlays;   // "<session>|session|left|right" -> the running cover
     QHash<QString, int> m_overlayResults; // same key -> the exit status of the last program that closed there
     QHash<QString, QPointer<QWidget>> m_huds;
     bool overlayCommand(const QString &cmd, const QString &id, const QJsonObject &args, QJsonObject *result, QString *error);
     bool openPage(const QString &id, const QString &pane, const QJsonObject &args, QJsonObject *result, QString *error);
+    // session.page / session.companion.page next to anchorId, checked as {page, flags, color}; the row is a Session::page
+    bool addPageRow(bool companion, const QString &anchorId, const QJsonObject &checked, QJsonObject *result, QString *error);
+    void showPageRow(const QString &id); // a page row's view: its page full size in the session slot, never a shell
     void refreshPageThemes(); // every open page and its frame take the current terminal theme
     // a file page's bridge message, run from the slot the page holds now; reply gets its result or error once
     void pageRequest(QWidget *page, const QJsonObject &body, const std::function<void(const QJsonValue &, const QString &)> &reply);

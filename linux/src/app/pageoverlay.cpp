@@ -8,6 +8,9 @@
 
 #include <QApplication>
 #include <QClipboard>
+#include <QDBusConnection>
+#include <QDBusConnectionInterface>
+#include <QDBusMessage>
 #include <QDesktopServices>
 #include <QDir>
 #include <QDragEnterEvent>
@@ -411,6 +414,8 @@ void PageOverlay::loadOriginal()
 {
     if (!m_storeFailure.isEmpty())
         return fail(QStringLiteral("session.overlay.open: %1").arg(m_storeFailure));
+    if (kind() == QLatin1String("unreadable")) // a saved page row this build cannot use loads nothing
+        return fail(m_source.value("reason").toString());
     m_loadPending = true;
     m_failed = false;
     m_originalPending = true;
@@ -784,7 +789,7 @@ QJsonObject PageOverlay::readBack() const
         node.insert("text", m_text->readBack());
     } else if (built(kind())) {
         node.insert(kind(), m_source.value("path")); // image | markdown | document
-    } else {
+    } else if (kind() != QLatin1String("unreadable")) {
         node.insert("url", m_source.value("url"));
     }
     node.insert("state", m_state);
@@ -829,6 +834,22 @@ void PageOverlay::reloadShown()
     }
 }
 
+void PageOverlay::reveal(const QString &path)
+{
+    if (revealExternally)
+        return revealExternally(path);
+    const QFileInfo info(path);
+    static const QString manager = QStringLiteral("org.freedesktop.FileManager1");
+    const QDBusConnectionInterface *bus = QDBusConnection::sessionBus().interface();
+    if (bus && (bus->isServiceRegistered(manager).value() || bus->activatableServiceNames().value().contains(manager))) {
+        QDBusMessage show = QDBusMessage::createMethodCall(manager, QStringLiteral("/org/freedesktop/FileManager1"), manager, QStringLiteral("ShowItems"));
+        show << QStringList{QUrl::fromLocalFile(info.absoluteFilePath()).toString()} << QString();
+        QDBusConnection::sessionBus().asyncCall(show);
+        return;
+    }
+    (openExternally ? openExternally : [](const QUrl &u) { QDesktopServices::openUrl(u); })(QUrl::fromLocalFile(info.absolutePath()));
+}
+
 bool PageOverlay::navigate(const QString &to, QString *error)
 {
     const bool file = m_source.value("kind").toString() == QLatin1String("file");
@@ -850,7 +871,7 @@ bool PageOverlay::navigate(const QString &to, QString *error)
     if (to == QLatin1String("finder")) {
         if (!file)
             return *error = QStringLiteral("show in Finder requires a file page"), false;
-        open(QUrl::fromLocalFile(QFileInfo(pageUrl().toLocalFile()).absolutePath()));
+        reveal(pageUrl().toLocalFile());
         return true;
     }
     return *error = QStringLiteral("session.overlay.navigate requires back, forward, browser or finder"), false;

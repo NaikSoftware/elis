@@ -294,15 +294,6 @@ QWidget *terminalDisplay(KParts::ReadOnlyPart *part)
     return nullptr;
 }
 
-// Konsole opens a link on a Ctrl+click release, but also reports that click to a program tracking the mouse, which may
-// open the link too. There, Shift keeps a Ctrl+click from the program, so Konsole opens it once; at a prompt a plain click opens it.
-// shortcut: a profile with UnderlineFilesEnabled makes a plain click open files too, like Konsole's own direct-click option
-Qt::KeyboardModifiers linkClickModifiers(Qt::KeyboardModifiers modifiers, bool tracking, bool release)
-{
-    if (tracking)
-        return modifiers == Qt::ControlModifier ? modifiers | Qt::ShiftModifier : modifiers;
-    return release && modifiers == Qt::NoModifier ? Qt::ControlModifier : modifiers;
-}
 
 // The part exposes no font API and its zoom actions live only in Konsole's main window, so this drives
 // the display's own Ctrl+wheel zoom, one point per notch.
@@ -832,7 +823,7 @@ void MainWindow::createMenus()
     auto sessionRow = [sessionDetail](const Session &s, const QString &ws, std::function<void()> run) {
         const QString st = s.status == QLatin1String("idle") ? QString() : s.status;
         return Palette::Item{s.displayName(), sessionDetail(s), std::move(run), true, {}, s.id,
-                             s.agent.isEmpty() ? QStringLiteral("terminal") : s.agent, ws, st, !st.isEmpty() && s.blink, true};
+                             !s.page.isEmpty() ? QStringLiteral("page") : s.agent.isEmpty() ? QStringLiteral("terminal") : s.agent, ws, st, !st.isEmpty() && s.blink, true};
     };
     auto sessionItems = [this, sessionDetail](bool byRecency) {
         QList<Palette::Item> items;
@@ -1129,6 +1120,11 @@ KParts::ReadOnlyPart *MainWindow::spawnPart(const QString &id, const QString &pa
         display->setProperty("elisProfileFont", display->font());
         display->setProperty("elisBaseFont", display->font().pointSizeF());
     }
+#ifdef ELIS_HAS_WEBENGINE
+    // Konsole links file paths only when the profile asks; the Mac always does, and links.cpp opens them as pages
+    if (QObject *ks = sessionOf(part))
+        KonsolePrivate::underlineFiles(ks, part);
+#endif
     applyAppearance(part);
     watchTerminalNotifications(part, bridge);
     stripPartShortcuts();
@@ -1154,6 +1150,8 @@ void MainWindow::stripPartShortcuts()
 void MainWindow::createTerminal(const QString &id)
 {
     const Session *s = m_store.session(id);
+    if (!s->page.isEmpty())
+        return showPageRow(id);
     Panes p;
     p.view = new QWidget;
     p.layers = new QStackedLayout(p.view);
@@ -1749,7 +1747,7 @@ void MainWindow::showSelected()
     m_context->setText(s ? s->context : QString());
     // the workspace breadcrumb always shows; the Session name and Session context toggles gate their parts
     const Settings &st = m_store.settings;
-    static_cast<SessionPill *>(m_pill)->set(s ? s->agent : QString(), s ? m_store.workspaceOf(s->id)->name.trimmed() : QString(),
+    static_cast<SessionPill *>(m_pill)->set(s ? (s->page.isEmpty() ? s->agent : QStringLiteral("page")) : QString(), s ? m_store.workspaceOf(s->id)->name.trimmed() : QString(),
                                             !st.shows(QStringLiteral("sessionName")) ? QString() : s ? name : QStringLiteral("Elis"),
                                             s && st.shows(QStringLiteral("sessionContext")) ? s->context : QString(),
                                             m_actions.value(QStringLiteral("session_palette"))->shortcut().toString(QKeySequence::NativeText));
@@ -2263,6 +2261,25 @@ void MainWindow::closeEvent(QCloseEvent *event)
         library->windowClosed(this, event->spontaneous());
 }
 
+KParts::ReadOnlyPart *MainWindow::partOf(QWidget *display, QString *id, bool *overlay) const
+{
+    QString found;
+    bool over = false;
+    KParts::ReadOnlyPart *part = nullptr;
+    for (auto it = m_panes.cbegin(); it != m_panes.cend() && !part; ++it)
+        for (KParts::ReadOnlyPart *p : {it->main, it->right})
+            if (p && p->widget()->isAncestorOf(display))
+                part = p, found = it.key();
+    for (auto it = m_overlays.cbegin(); it != m_overlays.cend() && !part; ++it)
+        if (it->part && it->part->widget()->isAncestorOf(display))
+            part = it->part, found = it.key().section(QLatin1Char('|'), 0, 0), over = true;
+    if (id)
+        *id = found;
+    if (overlay)
+        *overlay = over;
+    return part;
+}
+
 bool MainWindow::eventFilter(QObject *watched, QEvent *event)
 {
     if (event->type() == QEvent::MouseButtonDblClick && watched->property("elisSession").isValid()) {
@@ -2279,12 +2296,26 @@ bool MainWindow::eventFilter(QObject *watched, QEvent *event)
         KonsolePrivate::setTerminalOpacity(static_cast<QWidget *>(watched), 1 - qBound(0.0, m_store.settings.windowTransparency, 90.0) / 100);
     if (dashboardEvent(watched, event))
         return true;
-    if ((event->type() == QEvent::MouseButtonPress || event->type() == QEvent::MouseButtonRelease) && watched->inherits("Konsole::TerminalDisplay")) {
+    if ((event->type() == QEvent::MouseButtonPress || event->type() == QEvent::MouseButtonRelease) && watched->inherits("Konsole::TerminalDisplay")
+        && static_cast<QWidget *>(watched)->window() == this) { // the app-wide filter of every window sees it: once
         auto *mouse = static_cast<QMouseEvent *>(event);
         bool ok = false;
         const bool tracking = KonsolePrivate::usesMouseTracking(static_cast<QWidget *>(watched), &ok);
-        if (ok && mouse->button() == Qt::LeftButton)
-            mouse->setModifiers(linkClickModifiers(mouse->modifiers(), tracking, event->type() == QEvent::MouseButtonRelease));
+        auto *display = static_cast<QWidget *>(watched);
+        if (ok && mouse->button() == Qt::LeftButton && tracking && !(mouse->modifiers() & Qt::ShiftModifier)) {
+            // a click the program captures is the program's, untouched; Konsole would still open a link on its Ctrl release
+            if (event->type() == QEvent::MouseButtonRelease && (mouse->modifiers() & Qt::ControlModifier)) {
+                int type = 0;
+                KonsolePrivate::linkAt(display, mouse->position().toPoint(), false, &type);
+                if (QObject *ks = type ? sessionOf(partOf(display)) : nullptr)
+                    KonsolePrivate::holdLinks(ks);
+            }
+        }
+#ifdef ELIS_HAS_WEBENGINE
+        else if (ok && mouse->button() == Qt::LeftButton) {
+            mouse->setModifiers(linkClick(display, mouse, mouse->modifiers(), tracking));
+        }
+#endif
     }
     if (event->type() == QEvent::FocusIn && watched->isWidgetType())
         for (auto it = m_panes.begin(); it != m_panes.end(); ++it)

@@ -11,6 +11,8 @@ struct PageSource: Codable {
     var cwd: String?
     var url: String?
     var line: Int?
+    /// reason is an unreadable saved page row's failure.
+    var reason: String?
 
     init(_ source: HtmlSource) {
         switch source {
@@ -20,7 +22,8 @@ struct PageSource: Codable {
         case .markdown(let path): kind = "markdown"; self.path = path
         case .text(let path, let line): kind = "text"; self.path = path; self.line = line
         case .document(let path): kind = "document"; self.path = path
-        case .replica, .unreadable: kind = "unsupported"
+        case .unreadable(let reason): kind = "unreadable"; self.reason = reason
+        case .replica: kind = "unsupported"
         }
     }
 
@@ -32,6 +35,7 @@ struct PageSource: Codable {
         case "markdown": return path.map { .markdown(path: $0) }
         case "text": return path.map { .text(path: $0, line: line) }
         case "document": return path.map { .document(path: $0) }
+        case "unreadable": return reason.map { .unreadable(reason: $0) }
         default: return nil
         }
     }
