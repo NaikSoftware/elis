@@ -55,6 +55,7 @@
 #include "smoothwheel.h"
 #include "phone.h"
 #include <QClipboard>
+#include <QDBusConnection>
 #include <QComboBox>
 #include <QTcpServer>
 #include "paneleadcover.h"
@@ -715,19 +716,9 @@ private Q_SLOTS:
         qApp->removeEventFilter(&filter);
     }
 
-    void linkClicksOpenOnce()
-    {
-        const auto ctrl = Qt::ControlModifier, shift = Qt::ShiftModifier, none = Qt::NoModifier;
-        QCOMPARE(linkClickModifiers(none, false, true), none);
-        QCOMPARE(linkClickModifiers(ctrl, false, true), ctrl);
-        QCOMPARE(linkClickModifiers(shift, false, true), shift);
-        // under mouse capture a Ctrl+click is the program's, and Ctrl+Shift the link click
-        QCOMPARE(linkClickModifiers(ctrl, true, false), ctrl);
-        QCOMPARE(linkClickModifiers(ctrl, true, true), none);
-        QCOMPARE(linkClickModifiers(ctrl | shift, true, true), ctrl | shift);
-        QCOMPARE(linkClickModifiers(ctrl | Qt::AltModifier, true, true), Qt::AltModifier);
-        QCOMPARE(linkClickModifiers(none, true, true), none);
 #ifdef ELIS_HAS_WEBENGINE
+    void fileLinksReadAsKonsoleReadsThem()
+    {
         QCOMPARE(konsoleFileLink("main.swift:12:"), QStringLiteral("main.swift:12"));
         QCOMPARE(konsoleFileLink("main.cpp:12:5:"), QStringLiteral("main.cpp:12:5"));
         QCOMPARE(konsoleFileLink("src/x.go:7:void"), QStringLiteral("src/x.go:7"));
@@ -735,8 +726,8 @@ private Q_SLOTS:
         QCOMPARE(konsoleFileLink("'a b.md'"), QStringLiteral("a b.md"));
         QCOMPARE(konsoleFileLink("notes.md:"), QStringLiteral("notes.md"));
         QCOMPARE(konsoleFileLink("notes.md"), QStringLiteral("notes.md"));
-#endif
     }
+#endif
 
     // the config dir follows ELIS_STATE_DIR (set by ctest), so nothing here touches ~/.config
     static QString writeConfig(const QString &name, const QString &text)
@@ -1745,6 +1736,33 @@ private Q_SLOTS:
         QTRY_COMPARE(external, QList<QUrl>{QUrl(site.url())});
         QVERIFY(!p.w.sessionExtras(p.id).contains("htmlOverlays"));
 
+        // under mouse capture a Ctrl+click is the program's, untouched, and Konsole opens nothing for it
+        const int pid = p.w.info(p.id)["pid"].toInt();
+        QObject *konsole = nullptr;
+        for (int n = 1; n < 4096 && !konsole; ++n)
+            if (QObject *o = QDBusConnection::sessionBus().objectRegisteredAt(QStringLiteral("/Sessions/%1").arg(n))) {
+                int sessionPid = -1;
+                if (QMetaObject::invokeMethod(o, "processId", Q_RETURN_ARG(int, sessionPid)) && sessionPid == pid)
+                    konsole = o;
+            }
+        QVERIFY(konsole);
+        bool ok = false;
+        QVERIFY(KonsolePrivate::holdLinks(konsole)); // or the click below would let Konsole open a real browser
+        QVERIFY(KonsolePrivate::hasSelection(konsole));
+        QTRY_VERIFY(!KonsolePrivate::hasSelection(konsole));
+        p.w.type(p.id, "left", QStringLiteral("printf '\\033[?1000h'\n"), &e);
+        QTRY_VERIFY(KonsolePrivate::usesMouseTracking(term, &ok));
+        int type = 0;
+        KonsolePrivate::linkAt(term, web, false, &type);
+        QCOMPARE(type, int(KonsolePrivate::Link));
+        QCOMPARE(clickLink(term, web, Qt::ControlModifier), Qt::ControlModifier);
+        QVERIFY(KonsolePrivate::hasSelection(konsole));
+        QTRY_VERIFY(!KonsolePrivate::hasSelection(konsole));
+        QCOMPARE(clickLink(term, web, Qt::ControlModifier | Qt::ShiftModifier) & Qt::ControlModifier, Qt::NoModifier);
+        QTRY_COMPARE(external.size(), 2);
+        p.w.type(p.id, "left", QStringLiteral("\x15printf '\\033[?1000l'\n"), &e); // the program's reports were typed at the prompt
+        QTRY_VERIFY(!KonsolePrivate::usesMouseTracking(term, &ok));
+
         p.store.settings.linkOpenMode = QStringLiteral("overlay75");
         QCOMPARE(clickLink(term, web, Qt::ControlModifier) & Qt::ControlModifier, Qt::NoModifier);
         QTRY_VERIFY(p.w.sessionExtras(p.id).contains("htmlOverlays"));
@@ -1752,10 +1770,10 @@ private Q_SLOTS:
         for (const char *flag : {"browse", "javascript", "persistent", "navigation", "clicked"})
             QVERIFY2(p.page()[QLatin1String(flag)].toBool(), flag);
         QCOMPARE(p.w.sessionExtras(p.id)["overlaySizePercent"].toInt(), 75);
-        QCOMPARE(external.size(), 1);
+        QCOMPARE(external.size(), 2);
 
         clickLink(term, web, Qt::ControlModifier | Qt::ShiftModifier);
-        QTRY_COMPARE(external.size(), 2);
+        QTRY_COMPARE(external.size(), 3);
         QVERIFY(!p.run("session.overlay.hide").contains("error"));
         // absolute and short: Konsole links a relative name only in the folder it last polled the pane in
         const QString path = root.filePath("notes.md");

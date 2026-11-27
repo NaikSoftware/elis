@@ -64,15 +64,8 @@ Qt::KeyboardModifiers MainWindow::linkClick(QWidget *display, QMouseEvent *mouse
     if (raw.isEmpty()) // none here, or an escape-sequence link Konsole opens itself
         return effective;
     QString id;
-    KParts::ReadOnlyPart *clicked = nullptr;
     bool overlay = false;
-    for (auto it = m_panes.cbegin(); it != m_panes.cend() && !clicked; ++it)
-        for (KParts::ReadOnlyPart *part : {it->main, it->right})
-            if (part && part->widget()->isAncestorOf(display))
-                id = it.key(), clicked = part;
-    for (auto it = m_overlays.cbegin(); it != m_overlays.cend() && !clicked; ++it)
-        if (it->part && it->part->widget()->isAncestorOf(display))
-            id = it.key().section(QLatin1Char('|'), 0, 0), clicked = it->part, overlay = true;
+    KParts::ReadOnlyPart *clicked = partOf(display, &id, &overlay);
     if (!clicked || !m_store.session(id))
         return effective;
     if (QObject *ks = sessionOf(clicked); ks && !KonsolePrivate::selectedText(ks).isEmpty())

@@ -32,7 +32,6 @@ namespace KParts { class ReadOnlyPart; }
 QWidget *terminalDisplay(KParts::ReadOnlyPart *part); // the part's Konsole::TerminalDisplay
 void retirePart(KParts::ReadOnlyPart *part); // drops a part whose pane lives on in another one
 void zoomFontTo(QWidget *display, double points);
-Qt::KeyboardModifiers linkClickModifiers(Qt::KeyboardModifiers modifiers, bool tracking, bool release);
 QString konsoleFileLink(QString text); // a Konsole file hotspot's text as a path with an optional :line[:column]
 
 class MainWindow : public QMainWindow, public Terminals
@@ -143,6 +142,8 @@ private:
     // with the link chord taken out when Elis opens the link itself
     Qt::KeyboardModifiers linkClick(QWidget *display, QMouseEvent *mouse, Qt::KeyboardModifiers effective, bool tracking);
     void followLink(const QString &id, const QJsonObject &route); // elis_link_route's answer, carried out
+    // the pane or program-overlay part showing a terminal display, with its session and whether it is an overlay's
+    KParts::ReadOnlyPart *partOf(QWidget *display, QString *id = nullptr, bool *overlay = nullptr) const;
     bool releaseHiddenClickedPage(const QString &id);
     QHash<QString, Overlay> m_overlays;   // "<session>|session|left|right" -> the running cover
     QHash<QString, int> m_overlayResults; // same key -> the exit status of the last program that closed there

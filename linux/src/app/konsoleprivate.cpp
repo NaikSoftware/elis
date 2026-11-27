@@ -7,6 +7,7 @@
 #include <QSharedPointer>
 #include <QSize>
 #include <QStringList>
+#include <QTimer>
 #include <QWidget>
 
 #include <dlfcn.h>
@@ -106,6 +107,30 @@ QString selectedText(QObject *session)
     QObject *w = ownWindow(session);
     auto text = fn<QString (*)(const QObject *, int)>(w, "_ZNK7Konsole12ScreenWindow12selectedTextE6QFlagsINS_6Screen14DecodingOptionEE");
     return w && text ? text(w, 0x2 | 0x8) /* PreserveLineBreaks | TrimTrailingWhitespace */ : QString();
+}
+
+bool hasSelection(QObject *session)
+{
+    QObject *w = ownWindow(session);
+    auto screenOf = fn<void *(*)(const QObject *)>(w, "_ZNK7Konsole12ScreenWindow6screenEv");
+    auto has = fn<bool (*)(const void *)>(w, "_ZNK7Konsole6Screen12hasSelectionEv");
+    void *screen = w && screenOf ? screenOf(w) : nullptr;
+    return screen && has && has(screen);
+}
+
+bool holdLinks(QObject *session)
+{
+    // Konsole's release handler skips its links while the screen holds a selection; one cell is selected for that pass
+    QObject *w = ownWindow(session);
+    auto start = fn<void (*)(QObject *, int, int, bool)>(w, "_ZN7Konsole12ScreenWindow17setSelectionStartEiib");
+    auto end = fn<void (*)(QObject *, int, int, bool)>(w, "_ZN7Konsole12ScreenWindow15setSelectionEndEiib");
+    auto clear = fn<void (*)(QObject *)>(w, "_ZN7Konsole12ScreenWindow14clearSelectionEv");
+    if (!w || !start || !end || !clear || hasSelection(session))
+        return false;
+    start(w, 0, 0, false);
+    end(w, 0, 0, false);
+    QTimer::singleShot(0, w, [w, clear] { clear(w); });
+    return true;
 }
 
 bool usesMouseTracking(QWidget *display, bool *ok)

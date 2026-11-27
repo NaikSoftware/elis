@@ -294,15 +294,6 @@ QWidget *terminalDisplay(KParts::ReadOnlyPart *part)
     return nullptr;
 }
 
-// Ctrl+click opens a link, the Mac's ⌘-click, and a plain click never does. Konsole opens a link on a Ctrl+click release
-// but also reports that click to a program tracking the mouse: there the link click takes Shift too (Konsole's bypass, the
-// Mac's ⌘⇧), and a Ctrl+click without it is the program's alone, released without Ctrl so Konsole opens nothing.
-Qt::KeyboardModifiers linkClickModifiers(Qt::KeyboardModifiers modifiers, bool tracking, bool release)
-{
-    if (tracking && release && (modifiers & Qt::ControlModifier) && !(modifiers & Qt::ShiftModifier))
-        return modifiers & ~Qt::ControlModifier;
-    return modifiers;
-}
 
 // The part exposes no font API and its zoom actions live only in Konsole's main window, so this drives
 // the display's own Ctrl+wheel zoom, one point per notch.
@@ -2270,6 +2261,25 @@ void MainWindow::closeEvent(QCloseEvent *event)
         library->windowClosed(this, event->spontaneous());
 }
 
+KParts::ReadOnlyPart *MainWindow::partOf(QWidget *display, QString *id, bool *overlay) const
+{
+    QString found;
+    bool over = false;
+    KParts::ReadOnlyPart *part = nullptr;
+    for (auto it = m_panes.cbegin(); it != m_panes.cend() && !part; ++it)
+        for (KParts::ReadOnlyPart *p : {it->main, it->right})
+            if (p && p->widget()->isAncestorOf(display))
+                part = p, found = it.key();
+    for (auto it = m_overlays.cbegin(); it != m_overlays.cend() && !part; ++it)
+        if (it->part && it->part->widget()->isAncestorOf(display))
+            part = it->part, found = it.key().section(QLatin1Char('|'), 0, 0), over = true;
+    if (id)
+        *id = found;
+    if (overlay)
+        *overlay = over;
+    return part;
+}
+
 bool MainWindow::eventFilter(QObject *watched, QEvent *event)
 {
     if (event->type() == QEvent::MouseButtonDblClick && watched->property("elisSession").isValid()) {
@@ -2291,13 +2301,21 @@ bool MainWindow::eventFilter(QObject *watched, QEvent *event)
         auto *mouse = static_cast<QMouseEvent *>(event);
         bool ok = false;
         const bool tracking = KonsolePrivate::usesMouseTracking(static_cast<QWidget *>(watched), &ok);
-        if (ok && mouse->button() == Qt::LeftButton) {
-            Qt::KeyboardModifiers mods = linkClickModifiers(mouse->modifiers(), tracking, event->type() == QEvent::MouseButtonRelease);
-#ifdef ELIS_HAS_WEBENGINE
-            mods = linkClick(static_cast<QWidget *>(watched), mouse, mods, tracking);
-#endif
-            mouse->setModifiers(mods);
+        auto *display = static_cast<QWidget *>(watched);
+        if (ok && mouse->button() == Qt::LeftButton && tracking && !(mouse->modifiers() & Qt::ShiftModifier)) {
+            // a click the program captures is the program's, untouched; Konsole would still open a link on its Ctrl release
+            if (event->type() == QEvent::MouseButtonRelease && (mouse->modifiers() & Qt::ControlModifier)) {
+                int type = 0;
+                KonsolePrivate::linkAt(display, mouse->position().toPoint(), false, &type);
+                if (QObject *ks = type ? sessionOf(partOf(display)) : nullptr)
+                    KonsolePrivate::holdLinks(ks);
+            }
         }
+#ifdef ELIS_HAS_WEBENGINE
+        else if (ok && mouse->button() == Qt::LeftButton) {
+            mouse->setModifiers(linkClick(display, mouse, mouse->modifiers(), tracking));
+        }
+#endif
     }
     if (event->type() == QEvent::FocusIn && watched->isWidgetType())
         for (auto it = m_panes.begin(); it != m_panes.end(); ++it)
