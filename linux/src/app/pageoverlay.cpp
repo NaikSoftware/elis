@@ -487,6 +487,7 @@ void PageOverlay::installTheme(const QJsonObject &theme)
 
 // The page world cannot reach the channel, which serves the application world alone, so with --js its requests and
 // replies cross as DOM events carrying JSON. Only the main frame relays them: a frame gets the Mac's refusal at once.
+// A same-origin frame can still call the page's own elis (top.elis), which counts as the page, as on the phone.
 static const char *s_pageWorld = R"JS(
 if (window !== window.top) {
   window.webkit = { messageHandlers: { elis: { postMessage: () => Promise.reject(new Error("requests from frames are refused")) } } };

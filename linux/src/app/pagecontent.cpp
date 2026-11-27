@@ -124,9 +124,11 @@ PageMessages::PageMessages(QWebEnginePage *page, const QStringList &handlers, Re
   const waiting = new Map();
   let host = null;
   let sent = 0;
+  // every document of the page shares the one channel and hears every answer, so ids carry this document's own tag
+  const tag = Math.random().toString(36).slice(2) + Date.now().toString(36);
   const handler = (name) => ({
     postMessage: (body) => new Promise((resolve, reject) => {
-      const id = ++sent;
+      const id = `${tag}:${++sent}`;
       waiting.set(id, { resolve, reject });
       host ? host.post(name, body, id) : queue.push([name, body, id]);
     }),
@@ -152,7 +154,7 @@ PageMessages::PageMessages(QWebEnginePage *page, const QStringList &handlers, Re
     page->scripts().insert(script);
 }
 
-void PageMessages::post(const QString &handler, const QJsonObject &body, int id)
+void PageMessages::post(const QString &handler, const QJsonObject &body, const QString &id)
 {
     if (!m_handlers.contains(handler))
         return;

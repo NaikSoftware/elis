@@ -452,13 +452,18 @@ void MainWindow::pageRequest(QWidget *page, const QJsonObject &body, const std::
         place.insert("pane", pane);
     if (!windowId.isEmpty())
         place.insert("window", windowId);
+    // an empty error would settle the page's promise as a success
+    auto refuse = [reply](const QJsonObject &o) {
+        const QString error = o.value("error").toString();
+        reply({}, error.isEmpty() ? QStringLiteral("request failed") : error);
+    };
     const QJsonObject built = bridgeReply(elis_html_bridge_request(compactJson(body).constData(), compactJson(place).constData()));
     if (!built.contains("request"))
-        return reply({}, built.value("error").toString());
+        return refuse(built);
     const QJsonObject request = built.value("request").toObject();
-    answer(this, library ? library->dispatch(request) : ::dispatch(m_store, *this, request), [reply](const QJsonObject &response) {
+    answer(this, library ? library->dispatch(request) : ::dispatch(m_store, *this, request), [reply, refuse](const QJsonObject &response) {
         if (!response.value("ok").toBool())
-            return reply({}, response.value("error").toString(QStringLiteral("request failed")));
+            return refuse(response);
         reply(response.value("result").toObject(), {});
     });
 }

@@ -41,7 +41,7 @@ TextPageHost::TextPageHost(QWebEnginePage *page, const QJsonObject &source, std:
     m_log = !log.isEmpty();
     m_tail = log.value("tail").toInt();
     m_following = log.value("follow").toBool();
-    m_messages = new PageMessages(page, {QStringLiteral("elisTextPage")}, 
+    m_messages = new PageMessages(page, {QStringLiteral("elisTextPage")},
                                   [this](const QString &, const QJsonObject &body, const PageMessages::Reply &reply) {
                                       receive(body);
                                       reply({}, {}); // text.js waits on no reply, so its promise settles at once

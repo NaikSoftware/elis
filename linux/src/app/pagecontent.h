@@ -45,10 +45,10 @@ public:
     using Reply = std::function<void(const QJsonValue &result, const QString &error)>;
     using Receive = std::function<void(const QString &handler, const QJsonObject &body, const Reply &reply)>;
     PageMessages(QWebEnginePage *page, const QStringList &handlers, Receive receive, QObject *parent);
-    Q_INVOKABLE void post(const QString &handler, const QJsonObject &body, int id);
+    Q_INVOKABLE void post(const QString &handler, const QJsonObject &body, const QString &id);
 
 Q_SIGNALS:
-    void answered(int id, const QString &result, const QString &error); // result: a one-element JSON array, which keeps {} an object
+    void answered(const QString &id, const QString &result, const QString &error); // result: a one-element JSON array, which keeps {} an object
 
 private:
     QStringList m_handlers;
