@@ -815,6 +815,8 @@ int main(int argc, char **argv)
                 return die(QStringLiteral("text cannot be combined with --next, --prev or --close"));
             if (steps == 0 && pos.isEmpty())
                 return die(QStringLiteral("give text, --next, --prev or --close"));
+            if (steps == 0 && arg.isEmpty())
+                return die(QStringLiteral("text must not be empty"));
             if (steps == 0)
                 args.insert("text", arg);
             else

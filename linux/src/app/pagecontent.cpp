@@ -46,7 +46,9 @@ const QJsonObject &markdownAssets()
 
 void offThread(QObject *guard, std::function<QJsonObject()> job, std::function<void(const QJsonObject &)> done)
 {
-    QThreadPool::globalInstance()->start([alive = QPointer<QObject>(guard), job = std::move(job), done = std::move(done)] {
+    // not the global pool, where a deferred control reply can wait on the GUI
+    static QThreadPool pool;
+    pool.start([alive = QPointer<QObject>(guard), job = std::move(job), done = std::move(done)] {
         const QJsonObject result = job();
         QMetaObject::invokeMethod(qApp, [alive, done, result] {
             if (alive)
@@ -75,7 +77,7 @@ static void answer(QWebEngineUrlRequestJob *job, const QByteArray &html)
 {
     auto *body = new QBuffer(job);
     body->setData(html);
-    job->reply(QByteArrayLiteral("text/html"), body);
+    job->reply(QByteArrayLiteral("text/html;charset=utf-8"), body); // a clicked file need not declare it
 }
 
 void PageScheme::requestStarted(QWebEngineUrlRequestJob *job)
@@ -98,7 +100,7 @@ void PageScheme::requestStarted(QWebEngineUrlRequestJob *job)
             if (built.contains("html"))
                 answer(job, built.value("html").toString().toUtf8());
             else
-                job->fail(QWebEngineUrlRequestJob::RequestFailed); // the page keeps the document it shows
+                job->fail(QWebEngineUrlRequestJob::RequestFailed); // Chromium shows its error page, where WebKit keeps the shown one
         });
 }
 

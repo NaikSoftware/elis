@@ -1450,7 +1450,7 @@ private Q_SLOTS:
         const QString file = root.filePath(QStringLiteral("clicked.html"));
         QFile f(file);
         QVERIFY(f.open(QIODevice::WriteOnly));
-        f.write(QStringLiteral("<!doctype html><title>Doc</title><p id=p>hi</p><img src='%1'><link rel=prefetch href='%2'>"
+        f.write(QStringLiteral("<!doctype html><title>Doc</title><p id=p>café</p><img src='%1'><link rel=prefetch href='%2'>"
                                "<link rel=stylesheet href='%2'><iframe src='%2'></iframe><img src='other.png'><a id=away href='%3'>away</a>")
                     .arg(net.url("/x.png"), net.url("/y"), net.url("/z"))
                     .toUtf8());
@@ -1460,7 +1460,7 @@ private Q_SLOTS:
         QTRY_COMPARE_WITH_TIMEOUT(p.page()["state"].toString(), QStringLiteral("loaded"), 30000);
         QCOMPARE(p.page()["document"].toString(), file);
         QTRY_COMPARE(p.page()["title"].toString(), QStringLiteral("Doc"));
-        QCOMPARE(evaluate(p.overlay(), "document.getElementById('p').textContent").toString(), QStringLiteral("hi"));
+        QCOMPARE(evaluate(p.overlay(), "document.getElementById('p').textContent").toString(), QStringLiteral("café")); // UTF-8 with no charset of its own
         QCOMPARE(p.run("session.overlay.navigate", {{"to", "browser"}})["error"].toString(), QStringLiteral("a clicked html page opens only in its overlay"));
         p.overlay()->view()->page()->runJavaScript(QStringLiteral("document.getElementById('away').click()"), QWebEngineScript::ApplicationWorld);
         QTRY_COMPARE(p.overlay()->pendingPrompt(), net.url("/z")); // a web link still asks before it leaves
