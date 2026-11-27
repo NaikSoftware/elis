@@ -203,8 +203,9 @@ void main() {
     final p = _P(t, _g('dialog-bash-45'));
     await p.pump();
     await p.show('dialog-bash-45');
-    await t.drag(find.byKey(const Key('panelHandle')), const Offset(0, 200));
+    await t.fling(find.byKey(const Key('panelHandle')), const Offset(0, 200), 1500);
     await t.pump();
+    await t.pump(const Duration(milliseconds: 300));
     expect(p.panel, isFalse);
     expect(find.textContaining('Claude shows a panel'), findsOneWidget);
     expect(t.widget<TextField>(find.byKey(const Key('composer'))).enabled, isFalse);
@@ -213,6 +214,46 @@ void main() {
     await t.tap(find.byKey(const Key('panelOpen')));
     await t.pump();
     expect(p.panel, isTrue);
+    await t.pump(const Duration(milliseconds: 300));
+  });
+
+  testWidgets('panelFollowsDragAndSpringsBackWhenLetGoEarly', (t) async {
+    final p = _P(t, _g('dialog-bash-45'));
+    await p.pump();
+    await p.show('dialog-bash-45');
+    final top = t.getRect(find.byKey(const Key('panelSheet'))).top;
+    final g = await t.startGesture(t.getCenter(find.byKey(const Key('panelHandle'))));
+    await g.moveBy(const Offset(0, 50));
+    await g.moveBy(const Offset(0, 50));
+    await t.pump();
+    expect(t.getRect(find.byKey(const Key('panelSheet'))).top, moreOrLessEquals(top + 100, epsilon: 1));
+    await g.moveBy(const Offset(0, -60));
+    await t.pump();
+    expect(t.getRect(find.byKey(const Key('panelSheet'))).top, moreOrLessEquals(top + 40, epsilon: 1));
+    await t.pump(const Duration(seconds: 1)); // no fling
+    await g.up();
+    await t.pump();
+    await t.pump(const Duration(milliseconds: 300));
+    expect(p.panel, isTrue);
+    expect(t.getRect(find.byKey(const Key('panelSheet'))).top, top);
+  });
+
+  testWidgets('slowDragPastThresholdSlidesPanelDownAndOpenSlidesItBackUp', (t) async {
+    final p = _P(t, _g('dialog-bash-45'));
+    await p.pump();
+    await p.show('dialog-bash-45');
+    final rect = t.getRect(find.byKey(const Key('panelSheet')));
+    await t.timedDrag(find.byKey(const Key('panelHandle')), Offset(0, rect.height * 0.6), const Duration(seconds: 2));
+    await t.pump(const Duration(milliseconds: 16));
+    expect(p.panel, isTrue); // still sliding down
+    await t.pump(const Duration(milliseconds: 300));
+    expect(p.panel, isFalse);
+    await t.tap(find.byKey(const Key('panelOpen')));
+    await t.pump();
+    await t.pump(const Duration(milliseconds: 50));
+    expect(t.getRect(find.byKey(const Key('panelSheet'))).top, greaterThan(rect.top)); // sliding up
+    await t.pump(const Duration(milliseconds: 300));
+    expect(t.getRect(find.byKey(const Key('panelSheet'))).top, rect.top);
   });
 
   testWidgets('panelKeysBypassGate', (t) async {

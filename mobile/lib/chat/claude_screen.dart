@@ -1,5 +1,6 @@
 import 'dart:math';
 
+import '../screens/prompt.dart';
 import 'grid.dart';
 
 enum ClaudeMode { manual, acceptEdits, plan, auto, bypass }
@@ -64,8 +65,7 @@ class ClaudeScreen {
       for (var b = r + 2; b < n; b++) {
         if (!rule(b)) continue;
         final agy = next.startsWith('>');
-        // agy's box closes above its one footer row; a dialog below a prompt echo (`> …`) closes higher
-        if (!agy || [for (var f = b + 1; f < n; f++) g.text(f)].where((t) => t.trim().isNotEmpty).length <= 1) {
+        if (!agy || _agyInputBox(g, r, b)) {
           (top, bottom) = (r, b);
           s.agy = agy;
         }
@@ -100,7 +100,8 @@ class ClaudeScreen {
         s.mode = _modes.entries.where((e) => k.contains(e.key)).firstOrNull?.value;
         s.shells = int.tryParse(_shells.firstMatch(m)?.group(1) ?? '') ?? 0;
       }
-      s.busy = norm([for (var r = bottom + 1; r < n; r++) g.text(r)].join()).contains(s.agy ? 'esctocancel' : 'esctointerrupt');
+      final footer = norm([for (var r = bottom + 1; r < n; r++) g.text(r)].join()).toLowerCase();
+      s.busy = s.agy ? footer.contains('esctocancel') || footer.contains('pressuptoeditqueuedmessages') : footer.contains('esctointerrupt');
     }
     if (s.agy) {
       // agy's history and spinner rows follow none of Claude's markers below
@@ -183,5 +184,23 @@ class ClaudeScreen {
       b.add(g.text(i).trim());
     }
     return b.join(' ');
+  }
+
+  /// Tells agy's real input box from a prompt echo (`───\n> …`) followed later by a dialog's top rule.
+  static bool _agyInputBox(Grid g, int r, int b) {
+    // agy's prompt echo draws a 60-col divider while its input box rules span the full width
+    if (g.text(r).trim().length != g.text(b).trim().length) return false;
+    // on a coloured grid, a prompt echo's `>` is bold while the input box's `>` is not
+    if (g.colours && g.rows[r + 1].cells.isNotEmpty && g.rows[r + 1].cells.first.bold) return false;
+    var end = g.rows.length;
+    while (end > b + 1 && g.text(end - 1).trim().isEmpty) {
+      end--;
+    }
+    // below the box sit only background-task rows and the footer, packed directly under `b` with no blank gap or dialog
+    for (var f = b + 1; f < end; f++) {
+      final t = g.text(f).trim();
+      if (t.isEmpty || t.contains('↑/↓')) return false;
+    }
+    return promptOptions([for (var f = b + 1; f < end; f++) g.text(f)].join('\n')).isEmpty;
   }
 }
