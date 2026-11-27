@@ -442,7 +442,7 @@ void PageOverlay::applyTheme(const QJsonObject &theme)
     if (m_text)
         return m_text->loadDocument(false);
     if (styled(kind()))
-        reload(true);
+        reloadShown();
 }
 
 bool PageOverlay::textCommand(const QJsonObject &action, const QString &sessionId, QJsonObject *result, QString *error)
@@ -670,13 +670,19 @@ void PageOverlay::reload(bool current)
 {
     if (!m_promptUrl.isEmpty())
         answerPrompt(false);
-    if (current && !m_textLoaded && !m_failed && !m_page->url().isEmpty()) {
+    current ? reloadShown() : loadOriginal();
+    syncStrip();
+}
+
+void PageOverlay::reloadShown()
+{
+    // before a first commit there is nothing to reload, so the source is loaded again instead
+    if (!m_textLoaded && !m_failed && !m_page->url().isEmpty()) {
         m_loadPending = true;
         m_page->triggerAction(QWebEnginePage::Reload);
     } else {
         loadOriginal();
     }
-    syncStrip();
 }
 
 bool PageOverlay::navigate(const QString &to, QString *error)

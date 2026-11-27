@@ -239,7 +239,7 @@ struct MarkdownSite {
             f.open(QIODevice::WriteOnly);
             f.write(text);
         };
-        write(QStringLiteral("docs/a.md"), "# Title\n\n![dot](dot.png)\n\n[next](next.md) [out](../out.md) [alias](alias.md)\n");
+        write(QStringLiteral("docs/a.md"), "# Title\n\n![dot](dot.png)\n\n[next](next.md) [out](../out.md) [alias](alias.md) [web](https://example.org/)\n");
         write(QStringLiteral("docs/next.md"), "# Next\n");
         write(QStringLiteral("out.md"), "# Out\n");
         QFile::link(root.filePath(QStringLiteral("out.md")), root.filePath(QStringLiteral("docs/alias.md")));
@@ -1303,17 +1303,21 @@ private Q_SLOTS:
         QVERIFY(!p.run("session.overlay.navigate", {{"to", "back"}}).contains("error"));
         QTRY_COMPARE(p.page()["page"].toString(), a);
 
-        // a theme change redraws the page in the new colours
+        // a theme change redraws the page in the new colours, and leaves a pending prompt alone
+        p.click("web");
+        QTRY_COMPARE(p.overlay()->pendingPrompt(), QStringLiteral("https://example.org/"));
         const QString before = evaluate(p.overlay(), "getComputedStyle(document.documentElement).getPropertyValue('--elis-background')").toString();
         QVERIFY(!p.run("theme.set", {{"name", "BlackOnWhite"}}).contains("error"));
         QTRY_VERIFY(evaluate(p.overlay(), "getComputedStyle(document.documentElement).getPropertyValue('--elis-background')").toString() != before);
+        QCOMPARE(p.overlay()->pendingPrompt(), QStringLiteral("https://example.org/"));
+        p.overlay()->answerPrompt(false);
 
         // without a link grant a markdown page has no navigation to offer
         QVERIFY(!p.run("session.overlay.close").contains("error"));
         QVERIFY(!p.run("session.overlay.open", {{"page", QJsonObject{{"kind", "markdown"}, {"path", a}}}}).contains("error"));
         QTRY_COMPARE_WITH_TIMEOUT(p.page()["state"].toString(), QStringLiteral("loaded"), 30000);
         QVERIFY(!p.page().contains("navigation"));
-        QTRY_COMPARE(evaluate(p.overlay(), "[...document.links].length").toInt(), 0);
+        QTRY_COMPARE(evaluate(p.overlay(), "[...document.links].map(l => l.textContent).join()").toString(), QStringLiteral("web"));
     }
 
     void aMarkdownLinkOutsideTheRootIsNotServed()

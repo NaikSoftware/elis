@@ -59,6 +59,7 @@ protected:
 private:
     friend class PolicyPage;
     void showBuilt(const QByteArray &html);
+    void reloadShown(); // what the page shows now, leaving its prompt and focus alone
     void installTheme(const QJsonObject &theme);
     QString kind() const { return m_source.value("kind").toString(); }
     bool decide(const QUrl &url, const QString &target, bool userActivated);
