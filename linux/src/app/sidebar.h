@@ -132,7 +132,6 @@ private:
     bool m_assistantSelected = false;
     QModelIndex m_hovered;
     QString m_visitId; // the shown session pressed: a release on it acknowledges it, as selecting another does
-    QString m_pendingLaunchId; // an empty workspace clicked once: its launcher menu opens unless a double-click follows
     QString m_pressedId; // a session row pressed but not yet selected: shown on release, or dragged
     bool m_pressedCi = false; // that press was on its CI line: a release opens the CI panel and selects nothing
     QPoint m_pressPos;

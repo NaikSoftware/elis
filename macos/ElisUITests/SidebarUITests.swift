@@ -124,8 +124,6 @@ final class SidebarUITests: XCTestCase {
                       "workspace header should show the new name after rename")
     }
 
-    // the toggle is deferred by the double-click interval (so a rename double-click can cancel it), so the
-    // child session hides/returns a beat after the click rather than instantly.
     func testClickWorkspaceRowTogglesExpansion() throws {
         let ws = app.staticTexts["workspace 1"]
         XCTAssertTrue(ws.waitForExistence(timeout: 20), "workspace header should exist")
@@ -154,8 +152,6 @@ final class SidebarUITests: XCTestCase {
         XCTAssertTrue(ws.waitForExistence(timeout: 20), "workspace 1 should restore")
         XCTAssertTrue(pollSessionRowCount(1, timeout: 10), "the session row should be visible after relaunch")
 
-        // the toggle would have been deferred by the double-click interval, so poll past it for a collapse
-        // that must never come.
         ws.click()
         XCTAssertFalse(pollSessionRowCount(0, timeout: 3), "a row click must not collapse the workspace while the setting is off")
 
@@ -186,6 +182,17 @@ final class SidebarUITests: XCTestCase {
         let field = app.descendants(matching: .any).matching(identifier: "edit-field").firstMatch
         XCTAssertFalse(field.waitForExistence(timeout: 2), "an icon double-click must not start a rename")
         XCTAssertTrue(pollSessionRowCount(1, timeout: 5), "an icon double-click should leave the workspace expanded")
+    }
+
+    func testWorkspaceRowDoubleClickFoldsTwiceWithoutRename() throws {
+        let ws = app.staticTexts["workspace 1"]
+        XCTAssertTrue(ws.waitForExistence(timeout: 20), "seeded workspace should exist")
+        XCTAssertTrue(pollSessionRowCount(1, timeout: 10), "seeded session should be visible")
+
+        ws.doubleClick()
+        let field = app.descendants(matching: .any).matching(identifier: "edit-field").firstMatch
+        XCTAssertFalse(field.waitForExistence(timeout: 2), "a workspace row double-click must not start a rename")
+        XCTAssertTrue(pollSessionRowCount(1, timeout: 5), "a workspace row double-click should leave the workspace expanded")
     }
 
     private func workspaceIcon() -> XCUIElement {

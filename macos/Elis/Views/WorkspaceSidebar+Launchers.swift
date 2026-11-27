@@ -57,9 +57,6 @@ extension WorkspaceSidebar.Coordinator {
     }
 
     private func clickedWorkspace(_ sender: NSButton) -> UUID? {
-        // a click on a row button must not also flip the row's expansion
-        pendingRowToggle?.cancel()
-        pendingRowToggle = nil
         guard let outline = outlineView else { return nil }
         let row = outline.row(for: sender)
         guard row >= 0, let node = outline.item(atRow: row) as? SidebarNode, node.kind == .workspace else { return nil }

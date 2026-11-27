@@ -7,8 +7,8 @@ import AppKit
 extension WorkspaceSidebar.Coordinator {
     // MARK: - Context menu
 
-    /// handleSingleClick folds a workspace row: the icon at once, the rest of the row after the double-click
-    /// interval so a rename double-click never folds it. `action` never fires during a drag.
+    /// handleSingleClick folds a workspace row at once. A workspace row has no double-click rename, so nothing
+    /// defers the click; `action` never fires during a drag.
     @objc func handleSingleClick(_ sender: NSOutlineView) {
         let row = sender.clickedRow
         guard row >= 0, let node = sender.item(atRow: row) as? SidebarNode else { return }
@@ -17,58 +17,29 @@ extension WorkspaceSidebar.Coordinator {
         guard node.kind == .workspace else { return }
         // an empty workspace has nothing to fold, so a click anywhere on it opens the "+" launcher menu instead
         if node.children.isEmpty, let event = NSApp.currentEvent {
-            let point = sender.convert(event.locationInWindow, from: nil)
-            pendingRowToggle?.cancel()
-            let open = DispatchWorkItem { [weak self, weak node] in
-                guard let self, let node, let outline = self.outlineView else { return }
-                self.pendingRowToggle = nil
-                self.showLauncherMenu(for: node.id, at: point, in: outline)
-            }
-            pendingRowToggle = open
-            DispatchQueue.main.asyncAfter(deadline: .now() + NSEvent.doubleClickInterval, execute: open)
+            showLauncherMenu(for: node.id, at: sender.convert(event.locationInWindow, from: nil), in: sender)
             return
         }
-        if clickHitsWorkspaceIcon(sender, row: row) {
-            pendingRowToggle?.cancel()
-            pendingRowToggle = nil
-            toggleExpansion(of: node, in: sender)
-            return
-        }
+        if clickHitsWorkspaceIcon(sender, row: row) { return toggleExpansion(of: node, in: sender) }
         guard GhosttyApp.shared.workspaceRowClickExpands else { return }
         if let event = NSApp.currentEvent {
             let point = sender.convert(event.locationInWindow, from: nil)
             // clicking the disclosure triangle already toggles natively — ignore that region so we don't double-toggle.
             if point.x < sender.frameOfOutlineCell(atRow: row).maxX { return }
-            // clicking the inline "+" button is handled by the button itself — don't schedule the toggle.
+            // clicking the inline "+" button is handled by the button itself — don't toggle.
             if let cell = sender.view(atColumn: 0, row: row, makeIfNecessary: false) as? SidebarCellView,
                [cell.addButton, cell.repeatButton].contains(where: { btn in
                    btn.map { $0.convert($0.bounds, to: sender).contains(point) } ?? false
                }) { return }
         }
-        pendingRowToggle?.cancel()
-        // re-read the mirror when the deferred item fires: the setting can be turned off inside the
-        // deferral window, and nothing else cancels an already-scheduled toggle.
-        let toggle = DispatchWorkItem { [weak self, weak node] in
-            guard let self, let node, let outline = self.outlineView,
-                  GhosttyApp.shared.workspaceRowClickExpands else { return }
-            self.pendingRowToggle = nil
-            self.toggleExpansion(of: node, in: outline)
-        }
-        pendingRowToggle = toggle
-        DispatchQueue.main.asyncAfter(deadline: .now() + NSEvent.doubleClickInterval, execute: toggle)
+        toggleExpansion(of: node, in: sender)
     }
 
     @objc func handleDoubleClick(_ sender: NSOutlineView) {
-        // a double-click outside the icon is a rename: cancel the pending single-click toggle.
-        pendingRowToggle?.cancel()
-        pendingRowToggle = nil
         let row = sender.clickedRow
         guard row >= 0, let node = sender.item(atRow: row) as? SidebarNode, node.kind != .assistant else { return }
-        // the second click of an icon double-click arrives only here, so it toggles back as the triangle does.
-        if node.kind == .workspace, clickHitsWorkspaceIcon(sender, row: row) {
-            toggleExpansion(of: node, in: sender)
-            return
-        }
+        // the second click of a workspace double-click arrives only here, so it acts as a second single click
+        if node.kind == .workspace { return handleSingleClick(sender) }
         renameController.beginEditing(node: node)
     }
 
