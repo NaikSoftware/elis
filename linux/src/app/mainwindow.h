@@ -46,6 +46,9 @@ public:
     bool type(const QString &sessionId, const QString &pane, const QString &text, QString *error) override;
     // runs then once no plain pane has a paced Return still to send, so a control reply follows the Return as zmx's does
     static void whenTyped(QObject *context, const std::function<void()> &then);
+    // sends a dispatched request's response as the control socket does: a deferred one's job run on a worker, after
+    // whenTyped; nothing once context is gone
+    static void answer(QObject *context, const QJsonObject &response, const std::function<void(const QJsonObject &)> &send);
     QString text(const QString &sessionId, const QString &pane, bool scrollback, QString *error) override;
     QSize gridSize(const QString &sessionId, const QString &pane) override;
     bool setGrid(const QString &sessionId, const QString &pane, const QSize &grid, QString *error) override;
@@ -139,6 +142,8 @@ private:
     bool overlayCommand(const QString &cmd, const QString &id, const QJsonObject &args, QJsonObject *result, QString *error);
     bool openPage(const QString &id, const QString &pane, const QJsonObject &args, QJsonObject *result, QString *error);
     void refreshPageThemes(); // every open page and its frame take the current terminal theme
+    // a file page's bridge message, run from the slot the page holds now; reply gets its result or error once
+    void pageRequest(QWidget *page, const QJsonObject &body, const std::function<void(const QJsonValue &, const QString &)> &reply);
     QWidget *coverWidget(const QString &id) const; // what takes the keyboard: a shown page or program, else the main pane
     bool closeFrontCover(const QString &id);       // the HUD or shown session cover, else the focused pane's; false with none
     bool pageCovers(const QString &id, const QString &pane) const; // a shown page hides that pane's terminal

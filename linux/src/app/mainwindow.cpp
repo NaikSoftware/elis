@@ -67,6 +67,7 @@
 #include <QWindow>
 #include <QUuid>
 #include <QStatusBar>
+#include <QThreadPool>
 #include <QToolBar>
 #include <QToolButton>
 #include <QVBoxLayout>
@@ -1665,6 +1666,20 @@ void MainWindow::whenTyped(QObject *context, const std::function<void()> &then)
     if (s_returnsPending == 0)
         return then();
     QTimer::singleShot(1, context, [context, then] { whenTyped(context, then); });
+}
+
+void MainWindow::answer(QObject *context, const QJsonObject &response, const std::function<void(const QJsonObject &)> &send)
+{
+    const std::function<QJsonObject()> job = takeDeferred();
+    if (!response.value("deferred").toBool() || !job)
+        return whenTyped(context, [send, response] { send(response); });
+    QThreadPool::globalInstance()->start([job, send, alive = QPointer<QObject>(context)] {
+        const QJsonObject reply = job();
+        QMetaObject::invokeMethod(qApp, [send, alive, reply] {
+            if (alive)
+                send(reply);
+        });
+    });
 }
 
 QJsonObject MainWindow::info(const QString &sessionId)

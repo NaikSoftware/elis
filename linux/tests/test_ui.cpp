@@ -208,10 +208,10 @@ static QJsonObject pageOutcome(const QString &pageID)
 static const bool s_pageScheme = (registerPageScheme(), true);
 
 // the page's ApplicationWorld answer to script; shared, since an answer can land after the caller gave up
-static QVariant evaluate(PageOverlay *page, const QString &script)
+static QVariant evaluate(PageOverlay *page, const QString &script, quint32 world = QWebEngineScript::ApplicationWorld)
 {
     const auto answer = std::make_shared<std::optional<QVariant>>();
-    page->view()->page()->runJavaScript(script, QWebEngineScript::ApplicationWorld, [answer](const QVariant &v) { *answer = v; });
+    page->view()->page()->runJavaScript(script, world, [answer](const QVariant &v) { *answer = v; });
     QTest::qWaitFor([&] { return answer->has_value(); }, 10000);
     return answer->value_or(QVariant());
 }
@@ -1470,6 +1470,85 @@ private Q_SLOTS:
         QTRY_COMPARE(p.overlay()->pendingPrompt(), net.url("/z")); // a web link still asks before it leaves
         QTest::qWait(1000);
         QCOMPARE(net.hits, 0);
+    }
+
+    static QString writePage(const QTemporaryDir &root, const QByteArray &html)
+    {
+        const QString file = root.filePath(QStringLiteral("page.html"));
+        QFile f(file);
+        if (!f.open(QIODevice::WriteOnly))
+            return {};
+        f.write(html);
+        return file;
+    }
+
+    void dataElisAttributesWorkWithJsOff()
+    {
+        QTemporaryDir root;
+        const QString file = writePage(root, "<title>Tags</title><pre id=out></pre>"
+                                             "<button type=button id=rename data-elis=session.rename data-elis-args='{\"name\":\"tagged\"}' data-elis-into=#out>r</button>"
+                                             "<button type=button id=refused data-elis=zmx.reset data-elis-into=#out>z</button>"
+                                             "<form id=pick data-elis=session.overlay.submit><input name=value value=picked></form>");
+        PageWindow p(dir.filePath("tags.json"));
+        const QString pageID = p.run("session.overlay.open", {{"page", QJsonObject{{"kind", "file"}, {"path", file}}}})["pageID"].toString();
+        QTRY_COMPARE_WITH_TIMEOUT(p.page()["state"].toString(), QStringLiteral("loaded"), 30000);
+        QCOMPARE(p.page()["javascript"].toBool(), false);
+        QCOMPARE(evaluate(p.overlay(), "typeof window.elis", QWebEngineScript::MainWorld), QVariant()); // no page script runs
+
+        evaluate(p.overlay(), "document.getElementById('rename').click()");
+        QTRY_COMPARE(p.store.session(p.id)->name, QStringLiteral("tagged"));
+        QTRY_COMPARE(evaluate(p.overlay(), "document.getElementById('out').textContent").toString(), QStringLiteral("{\"id\":\"%1\"}").arg(p.id));
+        evaluate(p.overlay(), "document.getElementById('refused').click()");
+        QTRY_COMPARE(evaluate(p.overlay(), "document.getElementById('out').textContent").toString(), QStringLiteral("zmx.reset cannot be sent from a page"));
+
+        evaluate(p.overlay(), "document.getElementById('pick').requestSubmit()");
+        QTRY_VERIFY(!p.w.sessionExtras(p.id).contains("htmlOverlays")); // its own submit closed it, the reply going nowhere
+        QCOMPARE(pageOutcome(pageID), (QJsonObject{{"pageID", pageID}, {"outcome", "submitted"}, {"value", "picked"}}));
+    }
+
+    void elisRequestResolvesWithJs()
+    {
+        QTemporaryDir root;
+        const QString file = writePage(root, "<title>JS</title><script>(async () => {"
+                                             "  const renamed = await elis.request('session.rename', {args: {name: 'scripted'}});"
+                                             "  try { await elis.request('session.overlay.job.run'); }"
+                                             "  catch (e) { document.title = renamed.id + ' ' + e.message; }"
+                                             "})()</script>");
+        PageWindow p(dir.filePath("js.json"));
+        const QString pageID =
+            p.run("session.overlay.open", {{"page", QJsonObject{{"kind", "file"}, {"path", file}}}, {"javascript", true}})["pageID"].toString();
+        QTRY_COMPARE_WITH_TIMEOUT(p.page()["title"].toString(), p.id + QStringLiteral(" session.overlay.job.run cannot be sent from a page"), 30000);
+        QCOMPARE(p.store.session(p.id)->name, QStringLiteral("scripted"));
+        QCOMPARE(evaluate(p.overlay(), "typeof window.elis.request", QWebEngineScript::MainWorld).toString(), QStringLiteral("function"));
+
+        evaluate(p.overlay(), "window.close()", QWebEngineScript::MainWorld);
+        QTRY_VERIFY(!p.w.sessionExtras(p.id).contains("htmlOverlays"));
+        QCOMPARE(pageOutcome(pageID)["outcome"].toString(), QStringLiteral("dismissed"));
+
+        WebServer net;
+        net.routes["/"] = WebServer::html("<title>web</title>");
+        QVERIFY(!p.run("session.overlay.open", {{"page", QJsonObject{{"kind", "url"}, {"url", net.url()}}}, {"javascript", true}}).contains("error"));
+        QTRY_COMPARE_WITH_TIMEOUT(p.page()["state"].toString(), QStringLiteral("loaded"), 30000);
+        QCOMPARE(evaluate(p.overlay(), "typeof window.elis + '|' + typeof window.webkit", QWebEngineScript::MainWorld).toString(),
+                 QStringLiteral("undefined|undefined"));
+        QCOMPARE(evaluate(p.overlay(), "typeof window.webkit").toString(), QStringLiteral("undefined")); // a URL page gets no bridge
+    }
+
+    void aFrameCannotUseTheBridge()
+    {
+        QTemporaryDir root;
+        const QString file =
+            writePage(root, "<title>P</title><iframe srcdoc=\"<script>"
+                            "document.dispatchEvent(new CustomEvent('elis-bridge-request', {detail: JSON.stringify({id: 1, body: {cmd: 'session.rename', "
+                            "args: {name: 'forged'}}})}));"
+                            "window.webkit.messageHandlers.elis.postMessage({cmd: 'session.rename', args: {name: 'leaked'}})"
+                            ".then(() => { parent.document.title = 'leaked' }, e => { parent.document.title = 'refused:' + e.message })"
+                            "</script>\"></iframe>");
+        PageWindow p(dir.filePath("frame.json"));
+        QVERIFY(!p.run("session.overlay.open", {{"page", QJsonObject{{"kind", "file"}, {"path", file}}}, {"javascript", true}}).contains("error"));
+        QTRY_COMPARE_WITH_TIMEOUT(p.page()["title"].toString(), QStringLiteral("refused:requests from frames are refused"), 30000);
+        QTest::qWait(500);
+        QVERIFY(p.store.session(p.id)->name.isEmpty());
     }
 #endif
 

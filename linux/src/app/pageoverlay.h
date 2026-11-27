@@ -2,6 +2,8 @@
 
 // A page overlay (session.overlay.open --html/--url): a web view under an identity strip, every navigation judged by
 // ElisCore's HtmlNavigationPolicy through the bridge. Qt WebEngine only; the slot code in overlay.cpp owns placement.
+#include "pagecontent.h"
+
 #include <QJsonObject>
 #include <QPointer>
 #include <QUrl>
@@ -50,6 +52,8 @@ Q_SIGNALS:
     void closeRequested(); // the strip's close button or the page's window.close()
     void changed();        // load state, address, title or history moved
     void zoomChanged(double factor);
+    // a file page's message to the control API, from its data-elis tags or, with --js, elis.request; reply answers it once
+    void bridgeRequest(const QJsonObject &body, const PageMessages::Reply &reply);
 
 protected:
     bool eventFilter(QObject *watched, QEvent *event) override;
@@ -61,6 +65,7 @@ private:
     void showBuilt(const QByteArray &html);
     void reloadShown(); // what the page shows now, leaving its prompt and focus alone
     void installTheme(const QJsonObject &theme);
+    void installBridge();
     QString kind() const { return m_source.value("kind").toString(); }
     bool decide(const QUrl &url, const QString &target, bool userActivated);
     void ask(const QUrl &url);

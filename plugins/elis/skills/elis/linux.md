@@ -53,8 +53,8 @@ These answer `<cmd> is not supported on this platform (<reason>)`:
 - every `zmx …` command, remote sessions, `session lead` (a covered pane takes the lead with a key), `session restart`;
 - `session background`, `surface cursor`, `config reload`;
 - `browser …`: there is no built-in browser, and links open in the system browser;
-- page sessions (`session page`, `session overlay open --page`), page companions, `--browse`, `--persistent` and
-  the page bridge (`data-elis`, `elis.request`). `--html`, `--url`, `--markdown`, `--image` and `--text` pages
+- page sessions (`session page`, `session overlay open --page`), page companions, `--browse` and `--persistent`.
+  `--html`, `--url`, `--markdown`, `--image` and `--text` pages, the page bridge (`data-elis`, `elis.request`)
   and the text-page commands (`overlay follow|search|changes|files|wrap`) work in a build with Qt WebEngine, which
   refuses them without it; `--browse` and `--persistent` answer `--<flag> pages are not ported to Elis yet`, and a
   large `--html` file (percent-encoded text over 2 MB) needs `--cwd`.

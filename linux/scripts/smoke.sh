@@ -167,6 +167,12 @@ for w in json.load(sys.stdin)["result"]["tree"]["workspaces"]:
   rc=0; ctl session overlay open --html "$site/index.html" --block --target "$id" >/dev/null || rc=$?
   wait "$closer"
   [ "$rc" = 2 ] || fail "page --block exits 2 when the page closes unanswered ($rc)"
+  printf '<script>elis.request("session.overlay.submit", {args: {value: "bridged"}})</script>' >"$site/submits.html"
+  out=$(ctl session overlay open --html "$site/submits.html" --js --block --target "$id") || fail "a page submitting through its bridge exits 0"
+  [[ $out == *'"value":"bridged"'* ]] || fail "bridged submit outcome ($out)"
+  printf '<script>elis.request("session.overlay.close")</script>' >"$site/closes.html"
+  rc=0; ctl session overlay open --html "$site/closes.html" --js --block --target "$id" >/dev/null || rc=$?
+  [ "$rc" = 2 ] || fail "page --block exits 2 when its own bridge closes it ($rc)"
   printf 'one\ntwo needle\n' >"$site/notes.txt"
   (cd "$site" && ctl session overlay open --text notes.txt --line 2 --target "$id" >/dev/null)
   ctl tree --json | grep -q "\"file\":\"$site/notes.txt\"" || fail "text page path resolves against the caller"

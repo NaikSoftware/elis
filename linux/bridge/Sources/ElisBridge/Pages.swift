@@ -182,3 +182,33 @@ public func elisPageOutcomeResult(_ pageID: UnsafePointer<CChar>) -> UnsafeMutab
     }
     return encoded(MainActor.assumeIsolated { HtmlPageOutcomes.shared.response(for: id) })
 }
+
+/// The page bridge's scripts posting to the JavaScript expression `handler`: {"adapter","helper"}.
+@_cdecl("elis_html_bridge_scripts")
+public func elisHtmlBridgeScripts(_ handler: UnsafePointer<CChar>) -> UnsafeMutablePointer<CChar>? {
+    struct Scripts: Encodable { let adapter, helper: String }
+    let handler = String(cString: handler)
+    return encoded(Scripts(adapter: HtmlBridgeAdapter.script(handler: handler), helper: HtmlBridgeAdapter.helperScript(handler: handler)))
+}
+
+/// A page's message as the socket's request, what the page left out filled from where it sits:
+/// {"request":{cmd,target?,args?}} or {"ok":false,"error"}, from the message and {"session","window"?,"pane"?}.
+@_cdecl("elis_html_bridge_request")
+public func elisHtmlBridgeRequest(_ message: UnsafePointer<CChar>, _ placeJSON: UnsafePointer<CChar>) -> UnsafeMutablePointer<CChar>? {
+    struct Place: Decodable {
+        let session: String
+        var window: String?
+        var pane: String?
+    }
+    struct Built: Encodable { let request: ControlRequest }
+    guard let place = decode(Place.self, placeJSON) else { return encoded(Refusal(error: "invalid page")) }
+    // HtmlBridgePage names its session by UUID and a Linux id is not one, so a fresh stand-in marks where it goes
+    let standIn = UUID()
+    let page = HtmlBridgePage(window: place.window, session: standIn, pane: place.pane.flatMap(OverlayPane.init(rawValue:)))
+    switch HtmlBridge.request(from: Data(String(cString: message).utf8), page: page) {
+    case .failure(let refusal): return encoded(Refusal(error: refusal.message))
+    case .success(var request):
+        if request.target == standIn.uuidString { request.target = place.session }
+        return encoded(Built(request: request))
+    }
+}

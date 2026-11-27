@@ -28,7 +28,7 @@ Commands for these answer `<cmd> is not supported on this platform (<reason>)` o
 - Quick terminal and scratch terminal.
 - Remote sessions: attaching another Mac's session, remote windows, elis-server hosts, remote overlay jobs.
 - Web content beyond `--html`, `--url`, `--markdown`, `--image` and `--text` page overlays: page sessions, page
-  companions, `--browse` and `--persistent` pages, the page bridge, the built-in browser and links opened in a session
+  companions, `--browse` and `--persistent` pages, the built-in browser and links opened in a session
   overlay, a clicked HTML file's page included. Links open in the system browser.
   Pages never show on the phone.
 - The `zmx …` commands, Reset Live Sessions, `session restart` and `session lead`

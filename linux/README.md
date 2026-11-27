@@ -8,7 +8,7 @@ Elis is a Qt6/KDE Frameworks 6 port of [agterm](https://github.com/umputun/agter
 [NaikSoftware/elis](https://github.com/NaikSoftware/elis), which adds the file panel, agent logos and launchers,
 remembered workspace folders and more on top of upstream. It follows Elis's model, keys (translated to Linux
 conventions), config files, agent-status hooks and `elisctl` wire protocol, so agents and scripts written for Elis
-work here. It is an independent project: report bugs here, not upstream. Not ported yet: the page bridge, `--browse` and `--persistent` pages, page sessions and companions, `browser.*` and remote sessions.
+work here. It is an independent project: report bugs here, not upstream. Not ported yet: `--browse` and `--persistent` pages, page sessions and companions, `browser.*` and remote sessions.
 
 Each terminal is a Konsole KPart, so Konsole's profiles, colour schemes, scrollback, search and copy/paste work as
 in Konsole.

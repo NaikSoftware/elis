@@ -160,6 +160,8 @@ PageOverlay::PageOverlay(const QJsonObject &source, const QJsonObject &flags, co
 
     const bool file = source.value("kind").toString() == QLatin1String("file");
     installTheme(theme);
+    if (file) // only a page its author wrote drives the control API
+        installBridge();
     // no canvas: the frame paints the theme behind it, so an authored body background still fills the canvas.
     // An opaque colour would not do: under the theme's color-scheme Chromium swaps it for its own dark canvas.
     if (styled(kind()) || kind() == QLatin1String("image"))
@@ -431,6 +433,64 @@ void PageOverlay::installTheme(const QJsonObject &theme)
     script.setInjectionPoint(QWebEngineScript::DocumentCreation);
     script.setWorldId(QWebEngineScript::ApplicationWorld);
     m_page->scripts().insert(script);
+}
+
+// The page world cannot reach the channel, which serves the application world alone, so with --js its requests and
+// replies cross as DOM events carrying JSON. Only the main frame relays them: a frame gets the Mac's refusal at once.
+static const char *s_pageWorld = R"JS(
+if (window !== window.top) {
+  window.webkit = { messageHandlers: { elis: { postMessage: () => Promise.reject(new Error("requests from frames are refused")) } } };
+} else {
+  (() => {
+    const waiting = new Map();
+    let sent = 0;
+    document.addEventListener("elis-bridge-reply", (event) => {
+      const { id, result, error } = JSON.parse(event.detail);
+      const settle = waiting.get(id);
+      waiting.delete(id);
+      if (settle) error ? settle.reject(new Error(error)) : settle.resolve(result);
+    });
+    const postMessage = (body) => new Promise((resolve, reject) => {
+      const id = ++sent;
+      const detail = JSON.stringify({ id, body });
+      waiting.set(id, { resolve, reject });
+      document.dispatchEvent(new CustomEvent("elis-bridge-request", { detail }));
+    });
+    window.webkit = { messageHandlers: { elis: { postMessage } } };
+  })();
+  %1
+}
+)JS";
+
+static const char *s_relay = R"JS(
+document.addEventListener("elis-bridge-request", (event) => {
+  const { id, body } = JSON.parse(event.detail);
+  const answer = (result, error) => document.dispatchEvent(new CustomEvent("elis-bridge-reply", { detail: JSON.stringify({ id, result, error }) }));
+  window.webkit.messageHandlers.elis.postMessage(body).then((result) => answer(result, null), (error) => answer(null, error.message));
+});
+)JS";
+
+void PageOverlay::installBridge()
+{
+    new PageMessages(
+        m_page, {QStringLiteral("elis")},
+        [this](const QString &, const QJsonObject &body, const PageMessages::Reply &reply) { Q_EMIT bridgeRequest(body, reply); }, this);
+    const QJsonObject scripts = bridge(elis_html_bridge_scripts("window.webkit.messageHandlers.elis"));
+    auto add = [this](const QString &source, QWebEngineScript::InjectionPoint at, quint32 world, bool frames) {
+        QWebEngineScript script;
+        script.setName(QStringLiteral("elis-bridge"));
+        script.setSourceCode(source);
+        script.setInjectionPoint(at);
+        script.setWorldId(world);
+        script.setRunsOnSubFrames(frames);
+        m_page->scripts().insert(script);
+    };
+    // the tags work with the page's JavaScript off: the adapter runs in a world the page cannot reach
+    add(scripts.value("adapter").toString(), QWebEngineScript::DocumentReady, QWebEngineScript::ApplicationWorld, false);
+    if (!m_flags.value("javascript").toBool())
+        return;
+    add(QString::fromLatin1(s_relay), QWebEngineScript::DocumentCreation, QWebEngineScript::ApplicationWorld, false);
+    add(QString::fromLatin1(s_pageWorld).arg(scripts.value("helper").toString()), QWebEngineScript::DocumentCreation, QWebEngineScript::MainWorld, true);
 }
 
 void PageOverlay::applyTheme(const QJsonObject &theme)
