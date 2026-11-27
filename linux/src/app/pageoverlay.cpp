@@ -51,6 +51,15 @@ static double s_zoom = 1;
 static QList<QPointer<PageOverlay>> s_pages;
 static QPointer<QWebEngineProfile> s_persistent;
 static bool s_clearing = false; // the dropped store is still shutting down
+static QString s_clearedPath;   // its folder, swept again once it is down
+
+// a post routine added after WebEngine's own runs before it, so the store flushes while Chromium still runs
+static void releaseStore()
+{
+    delete s_persistent.data();
+    if (!s_clearedPath.isEmpty())
+        QDir(s_clearedPath).removeRecursively();
+}
 
 static QString persistentStoragePath(const QString &id)
 {
@@ -631,6 +640,8 @@ QString PageOverlay::persistentStoreFailure()
     if (id.isEmpty())
         return reply.value("error").toString(QStringLiteral("the browser profile gave no answer"));
     s_persistent = new QWebEngineProfile(id, qApp);
+    static const bool released = (qAddPostRoutine(releaseStore), true); // after the profile started WebEngine
+    Q_UNUSED(released);
     s_persistent->setPersistentStoragePath(persistentStoragePath(id));
     s_persistent->setCachePath(persistentStoragePath(id) + QStringLiteral("/cache"));
     return {};
@@ -661,9 +672,11 @@ bool PageOverlay::clearPersistentStore(const QString &target, const QJsonObject 
     // shortcut: Qt reports no end to a dropped store's shutdown, whose last writes (its prefs) land after the delete;
     // a fixed settle keeps a new store off the old one's files, and goes if Qt ever signals the release
     s_clearing = true;
+    s_clearedPath = path;
     QTimer::singleShot(2000, qApp, [path] {
         QDir(path).removeRecursively();
         s_clearing = false;
+        s_clearedPath.clear();
     });
     return true;
 }
