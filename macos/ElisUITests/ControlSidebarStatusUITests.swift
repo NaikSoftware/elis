@@ -1302,4 +1302,17 @@ final class ControlSidebarStatusUITests: ControlAPITestCase {
         }
         return false
     }
+
+    func testClickOnEmptyWorkspaceOpensLauncherMenu() throws {
+        XCTAssertTrue(app.staticTexts["session-row"].firstMatch.waitForExistence(timeout: 10), "seeded session row")
+        XCTAssertEqual(try sendCommand(#"{"cmd":"workspace.new","args":{"name":"empty"}}"#)["ok"] as? Bool, true,
+                       "workspace.new should succeed")
+        let row = app.staticTexts["empty"]
+        XCTAssertTrue(row.waitForExistence(timeout: 10), "the empty workspace row should show")
+
+        row.click()
+        XCTAssertTrue(app.menuItems["Terminal"].waitForExistence(timeout: 5), "the click should open the + launcher menu")
+        app.typeKey(.escape, modifierFlags: [])
+        XCTAssertTrue(pollSessionRowCount(1, timeout: 5), "dismissing the menu should add no session")
+    }
 }

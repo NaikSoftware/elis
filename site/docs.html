@@ -482,7 +482,7 @@ command &quot;Session here&quot; ctrl+a&gt;n elisctl session new --cwd &quot;$AG
 <li>A workspace can pin a project folder. A session a script starts with <code>session new --cwd DIR</code> and no other placement lands in the workspace whose folder is <code>DIR</code> or holds it, in any open window; the deepest pin wins. A new session in a workspace with a project folder opens there unless Settings sends new sessions home or to a fixed folder. On first launch, and from <strong>File ▸ Set Up Workspaces…</strong>, a guide offers one workspace per project folder it finds. Pin or clear a folder with <code>workspace folder</code>. Remote windows do not carry project folders yet.</li>
 <li>A session is named after its working directory's last folder. Renaming pins a name of your own; clearing it restores automatic naming. Rename inline by double-clicking a row's name.</li>
 <li>The four icons at the bottom of the sidebar add a workspace, add a session, and toggle the workspace filter and the flagged view.</li>
-<li>A click on a workspace's icon folds it at once.</li>
+<li>A click on a workspace's icon folds it at once. A click anywhere on an empty workspace opens the menu of its + instead, since there is nothing to fold.</li>
 <li>Hovering a session row shows an × in place of its badge and status that closes it, as Close Session does. A session with an active agent keeps its status instead.</li>
 <li><strong>Copy Name</strong> on a session or workspace row copies its name.</li>
 <li><strong>Duplicate Session</strong> in a session's context menu opens a fresh shell right after it, in the same workspace and its current directory. Only the directory carries over.</li>
@@ -1315,7 +1315,7 @@ s=$(elisctl zmx tree studio.local --json \
 <ul>
 <li>Mouse scroll speed and right-click to paste.</li>
 <li><strong>Open links in</strong>: the browser, or a session overlay at full size, 95%, 75% or 50%, for a ⌘-clicked web link (see <a href="#links">links</a>).</li>
-<li>Whether clicking a workspace row folds and unfolds it (on by default). The disclosure triangle, the row's icon and the row's right-click Collapse/Expand Workspace always do.</li>
+<li>Whether clicking a workspace row folds and unfolds it (on by default). The disclosure triangle, the row's icon and the row's right-click Collapse/Expand Workspace always do. A click on an empty workspace opens its + menu either way.</li>
 <li><strong>Flagged view layout</strong> for every window: a flat list with or without each row's workspace name, or a workspace tree. The tree shares each workspace's fold state with the ordinary tree.</li>
 <li>Where a new session opens: by default the workspace's project folder, else the current session's directory; or your home directory, or a folder you pick; and whether New Session adds it at the end of the workspace or right after the current session.</li>
 <li><strong>Restore mode</strong>: fresh shells, re-run commands, or Live sessions (<a href="#restore">Restore &amp; persistence</a>).</li>

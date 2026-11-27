@@ -1012,6 +1012,17 @@ void Sidebar::mousePressEvent(QMouseEvent *event)
             Q_EMIT repeatRequested(id);
             return;
         }
+        // an empty workspace has nothing to fold, so a click opens the "+" launcher menu, after the double-click
+        // interval so a rename double-click still wins
+        if (item->childCount() == 0) {
+            const QPoint at = event->globalPosition().toPoint();
+            m_pendingLaunchId = id;
+            QTimer::singleShot(QApplication::doubleClickInterval(), this, [this, id, at] {
+                if (std::exchange(m_pendingLaunchId, {}) == id)
+                    Q_EMIT launcherMenuRequested(id, at);
+            });
+            return QTreeWidget::mousePressEvent(event);
+        }
         // a click on the row folds or unfolds it, as elis's default does; with that off only the chevron does
         if (!m_store.settings.workspaceRowClickExpands && pos.x() > row.left() + 28)
             return QTreeWidget::mousePressEvent(event);
@@ -1063,6 +1074,7 @@ QItemSelectionModel::SelectionFlags Sidebar::selectionCommand(const QModelIndex 
 
 void Sidebar::mouseDoubleClickEvent(QMouseEvent *event)
 {
+    m_pendingLaunchId.clear();
     if (QTreeWidgetItem *item = itemAt(event->position().toPoint())) {
         if (item->data(0, Kind).toInt() == WorkspaceRow && (addButtonRect(titleRect(indexFromItem(item), visualItemRect(item))).contains(event->position().toPoint())
                                                          || repeatButtonRect(titleRect(indexFromItem(item), visualItemRect(item))).contains(event->position().toPoint())))
