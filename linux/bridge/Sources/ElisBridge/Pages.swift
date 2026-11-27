@@ -87,8 +87,7 @@ public func elisOverlayPageArguments(_ argsJSON: UnsafePointer<CChar>) -> Unsafe
     guard let args = decode(ControlArgs.self, argsJSON) else { return encoded(Refusal(error: "invalid arguments")) }
     let checked = ControlDispatcher.overlayPage(command: args.command ?? "", args: args)
     if let error = checked.error { return encoded(Refusal(error: error)) }
-    let log = checked.page?.textPath != nil && (args.tail != nil || args.followFile == true)
-        ? TextLog(tail: args.tail ?? TextPage.defaultTail, follow: args.followFile == true) : nil
+    let log = checked.page?.textPath == nil ? nil : ControlDispatcher.textLog(args)
     return encoded(Checked(page: checked.page.map(PageSource.init), log: log))
 }
 

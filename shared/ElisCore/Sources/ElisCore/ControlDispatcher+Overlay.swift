@@ -273,8 +273,8 @@ extension ControlDispatcher {
         return .page(.text(path: url.path, line: args?.line))
     }
 
-    // a validated text request's log options: a tail alone shows it once, follow-file follows it
-    private static func textLog(_ args: ControlArgs?) -> TextLog? {
+    /// textLog is a validated text request's log options, nil for none: a tail alone shows it once, follow-file follows it.
+    nonisolated public static func textLog(_ args: ControlArgs?) -> TextLog? {
         let follow = args?.followFile == true
         guard args?.tail != nil || follow else { return nil }
         return TextLog(tail: args?.tail ?? TextPage.defaultTail, follow: follow)

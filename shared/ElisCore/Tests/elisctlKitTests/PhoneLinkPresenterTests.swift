@@ -278,7 +278,7 @@ struct PhoneLinkPresenterTests {
         }
 
         /// The app bundle's renderer folder in this checkout.
-        static let markdown = URL(fileURLWithPath: #filePath).deletingLastPathComponent().appendingPathComponent("../../../../macos/Elis/Resources/markdown")
+        static let markdown = URL(fileURLWithPath: #filePath).deletingLastPathComponent().appendingPathComponent("../../../page-assets/markdown")
             .standardizedFileURL
 
         /// Phone DATA as page lines.

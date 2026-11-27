@@ -2,9 +2,9 @@ import ElisCore
 import Foundation
 
 // Markdown, image, text and document pages: the open check, the documents a page loads, a log page's reads and the
-// text-page commands, from ElisCore's builders and limits. The Mac's MarkdownProbe, ImageProbe, DocumentProbe and
-// LogFollower.shift live in its app target, on ImageIO and WebKit; these are their header-only twins. Nothing here
-// touches the main actor, so a host may call it from any thread.
+// text-page commands, from ElisCore's builders and limits. The Mac's MarkdownProbe, ImageProbe and DocumentProbe live
+// in its app target, on ImageIO; these are their header-only twins. Nothing here touches the main actor, so a host
+// may call it from any thread.
 
 /// A picture's bytes, type and oriented pixel size, read once through one descriptor.
 private func picture(path: String, maxBytes: Int) -> Result<(mimeType: String, data: Data, pixels: ImagePixels), ImageFile.Failure> {
@@ -281,8 +281,8 @@ public func elisTextLogRead(_ json: UnsafePointer<CChar>) -> UnsafeMutablePointe
     }
 }
 
-/// How the text a log push carries relates to what the page shows, the Mac's LogFollower.shift: {"dropped","cut",
-/// "replaced"}. Input {old?,oldStamp?,new?,newStamp?}, snapshots as `elis_text_log_read` gives them.
+/// How the text a log push carries relates to what the page shows, LogTail.shift: {"dropped","cut","replaced"}.
+/// Input {old?,oldStamp?,new?,newStamp?}, snapshots as `elis_text_log_read` gives them.
 @_cdecl("elis_text_log_shift")
 public func elisTextLogShift(_ json: UnsafePointer<CChar>) -> UnsafeMutablePointer<CChar>? {
     struct Request: Decodable {
@@ -291,28 +291,14 @@ public func elisTextLogShift(_ json: UnsafePointer<CChar>) -> UnsafeMutablePoint
         var new: LogSnapshot?
         var newStamp: String?
     }
-    struct Shift: Encodable {
-        var dropped = 0
-        var cut = false
-        var replaced = false
+    struct Shifted: Encodable {
+        let dropped: Int
+        let cut: Bool
+        let replaced: Bool
     }
     let request = decode(Request.self, json)
-    let (oldStamp, newStamp) = (stamp(request?.oldStamp), stamp(request?.newStamp))
-    guard let old = request?.old?.tail, let new = request?.new?.tail, old != new || oldStamp != newStamp else {
-        return encoded(Shift())
-    }
-    guard let oldStamp, let newStamp, oldStamp.device == newStamp.device, oldStamp.inode == newStamp.inode,
-          newStamp.size >= oldStamp.size, new.startOffset >= old.startOffset else { return encoded(Shift(replaced: true)) }
-    let bytes = Array(old.text.utf8)
-    let gone = min(new.startOffset - old.startOffset, bytes.count)
-    // LF, CRLF and a lone CR are each one break, as the page counts lines once it normalizes them
-    let loneCR = { (i: Int) in bytes[i] == 0x0D && (i + 1 == bytes.count || bytes[i + 1] != 0x0A) }
-    let breaks = { (end: Int) in (0..<end).reduce(0) { $0 + (bytes[$1] == 0x0A || loneCR($1) ? 1 : 0) } }
-    guard gone < bytes.count else {
-        let unterminated = bytes.last.map { $0 != 0x0A && $0 != 0x0D } ?? false
-        return encoded(Shift(dropped: breaks(bytes.count) + (unterminated ? 1 : 0)))
-    }
-    return encoded(Shift(dropped: breaks(gone), cut: gone > 0 && !(bytes[gone - 1] == 0x0A || loneCR(gone - 1))))
+    let shift = LogTail.shift(from: request?.old?.tail, stamp: stamp(request?.oldStamp), to: request?.new?.tail, stamp: stamp(request?.newStamp))
+    return encoded(Shifted(dropped: shift.dropped, cut: shift.cut, replaced: shift.replaced))
 }
 
 /// A text-page command's action from its arguments, `ControlDispatcher.textPageAction`: {"ok":true,"action":{kind,…}}
