@@ -167,9 +167,11 @@ for w in json.load(sys.stdin)["result"]["tree"]["workspaces"]:
   rc=0; ctl session overlay open --html "$site/index.html" --block --target "$id" >/dev/null || rc=$?
   wait "$closer"
   [ "$rc" = 2 ] || fail "page --block exits 2 when the page closes unanswered ($rc)"
-  printf '<script>elis.request("session.overlay.submit", {args: {value: "bridged"}})</script>' >"$site/submits.html"
+  # tree takes the page's window as args.window and window.select as its target
+  printf '<script>(async () => { let v = "bridged"; try { const r = await elis.request("tree"); if (!r.tree) v = "no tree";'\
+' await elis.request("window.select"); } catch (e) { v = e.message; } elis.request("session.overlay.submit", {args: {value: v}}); })()</script>' >"$site/submits.html"
   out=$(ctl session overlay open --html "$site/submits.html" --js --block --target "$id") || fail "a page submitting through its bridge exits 0"
-  [[ $out == *'"value":"bridged"'* ]] || fail "bridged submit outcome ($out)"
+  [[ $out == *'"value":"bridged"'* ]] || fail "bridged tree, window.select and submit ($out)"
   printf '<script>elis.request("session.overlay.close")</script>' >"$site/closes.html"
   rc=0; ctl session overlay open --html "$site/closes.html" --js --block --target "$id" >/dev/null || rc=$?
   [ "$rc" = 2 ] || fail "page --block exits 2 when its own bridge closes it ($rc)"
