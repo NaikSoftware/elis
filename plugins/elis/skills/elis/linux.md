@@ -52,8 +52,8 @@ These answer `<cmd> is not supported on this platform (<reason>)`:
 - quick terminal (`quick …`) and scratch terminal (`session scratch`);
 - every `zmx …` command, remote sessions, `session lead` (a covered pane takes the lead with a key), `session restart`;
 - `session background`, `surface cursor`, `config reload`;
-- page sessions (`session page`, `session overlay open --page`), page companions and the page bridge (`data-elis`,
-  `elis.request`). `--html`, `--url`, `--markdown`, `--image` and `--text` pages, the text-page commands
+- page sessions (`session page`, `session overlay open --page`) and page companions. `--html`, `--url`,
+  `--markdown`, `--image` and `--text` pages, the page bridge (`data-elis`, `elis.request`), the text-page commands
   (`overlay follow|search|changes|files|wrap`), `--browse`, `--persistent` and `browser clear|links` work in a build
   with Qt WebEngine, which refuses them without it; a large `--html` file (percent-encoded text over 2 MB) needs `--cwd`.
   `browser links` sets and reads the mode, but a clicked terminal link still opens in the system browser.

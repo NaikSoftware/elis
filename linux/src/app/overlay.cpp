@@ -2,6 +2,7 @@
 #include "mainwindow.h"
 #include "hooks.h"
 #include "konsoleprivate.h"
+#include "library.h"
 #ifdef ELIS_HAS_WEBENGINE
 #include "elis_bridge.h"
 #include "pagecontent.h"
@@ -395,6 +396,10 @@ bool MainWindow::openPage(const QString &id, const QString &pane, const QJsonObj
         if (m_overlays.value(key).page == page)
             closeOverlay(key);
     });
+    connect(page, &PageOverlay::bridgeRequest, this, [this, page](const QJsonObject &body, const PageMessages::Reply &reply) {
+        // later: the request may close the page, which must not go while its channel is mid-call
+        QTimer::singleShot(0, this, [this, page = QPointer<QWidget>(page), body, reply] { pageRequest(page, body, reply); });
+    });
     connect(page, &PageOverlay::changed, this, [this] { m_events->scheduleTreeChanged(); });
     connect(page, &PageOverlay::zoomChanged, this, [this](double factor) {
         if (m_store.settings.htmlOverlayZoom == (factor == 1 ? 0 : factor))
@@ -432,6 +437,37 @@ void MainWindow::refreshPageThemes()
     }
 #endif
 }
+
+#ifdef ELIS_HAS_WEBENGINE
+void MainWindow::pageRequest(QWidget *page, const QJsonObject &body, const std::function<void(const QJsonValue &, const QString &)> &reply)
+{
+    QString key;
+    for (auto it = m_overlays.cbegin(); it != m_overlays.cend() && page; ++it)
+        if (it->page == page)
+            key = it.key();
+    if (key.isEmpty())
+        return reply({}, QStringLiteral("page closed"));
+    QJsonObject place{{"session", key.section(QLatin1Char('|'), 0, 0)}};
+    if (const QString pane = key.section(QLatin1Char('|'), 1); pane != QLatin1String("session"))
+        place.insert("pane", pane);
+    if (!windowId.isEmpty())
+        place.insert("window", windowId);
+    // an empty error would settle the page's promise as a success
+    auto refuse = [reply](const QJsonObject &o) {
+        const QString error = o.value("error").toString();
+        reply({}, error.isEmpty() ? QStringLiteral("request failed") : error);
+    };
+    const QJsonObject built = bridgeReply(elis_html_bridge_request(compactJson(body).constData(), compactJson(place).constData()));
+    if (!built.contains("request"))
+        return refuse(built);
+    const QJsonObject request = built.value("request").toObject();
+    answer(this, library ? library->dispatch(request) : ::dispatch(m_store, *this, request), [reply, refuse](const QJsonObject &response) {
+        if (!response.value("ok").toBool())
+            return refuse(response);
+        reply(response.value("result").toObject(), {});
+    });
+}
+#endif
 
 void MainWindow::overlayExited(const QString &key, KParts::ReadOnlyPart *part)
 {

@@ -33,7 +33,6 @@
 #include <QPalette>
 #include <QPointer>
 #include <QSocketNotifier>
-#include <QThreadPool>
 #include <QTimer>
 
 #include <csignal>
@@ -110,16 +109,7 @@ static void serve(QLocalServer &server, WindowLibrary &library)
                     });
                 const QJsonObject response = doc.isObject() ? library.dispatch(doc.object())
                                                             : QJsonObject{{"ok", false}, {"error", QStringLiteral("bad request: %1").arg(err.errorString())}};
-                const std::function<QJsonObject()> job = takeDeferred();
-                if (!response.value("deferred").toBool() || !job)
-                    return MainWindow::whenTyped(socket, [send, socket, response] { send(socket, response); });
-                QThreadPool::globalInstance()->start([job, send, to = QPointer<QLocalSocket>(socket)] {
-                    const QJsonObject reply = job();
-                    QMetaObject::invokeMethod(qApp, [send, to, reply] {
-                        if (to)
-                            send(to, reply);
-                    });
-                });
+                MainWindow::answer(socket, response, [send, socket](const QJsonObject &r) { send(socket, r); });
             });
         }
     });

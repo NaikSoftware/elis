@@ -16,6 +16,9 @@
 #include <QWebEngineUrlRequestJob>
 #include <QWebEngineUrlScheme>
 
+#include <memory>
+#include <utility>
+
 static const QByteArray s_scheme = QByteArrayLiteral("elis-page"); // HtmlSource.replicaScheme
 
 QJsonObject bridgeReply(char *raw)
@@ -118,12 +121,27 @@ PageMessages::PageMessages(QWebEnginePage *page, const QStringList &handlers, Re
     const QString shim = QStringLiteral(R"JS(
 (() => {
   const queue = [];
+  const waiting = new Map();
   let host = null;
-  const handler = (name) => ({ postMessage: (body) => (host ? host.post(name, body) : queue.push([name, body])) });
+  let sent = 0;
+  // every document of the page shares the one channel and hears every answer, so ids carry this document's own tag
+  const tag = Math.random().toString(36).slice(2) + Date.now().toString(36);
+  const handler = (name) => ({
+    postMessage: (body) => new Promise((resolve, reject) => {
+      const id = `${tag}:${++sent}`;
+      waiting.set(id, { resolve, reject });
+      host ? host.post(name, body, id) : queue.push([name, body, id]);
+    }),
+  });
   window.webkit = { messageHandlers: Object.fromEntries(%1.map((name) => [name, handler(name)])) };
   new QWebChannel(qt.webChannelTransport, (channel) => {
     host = channel.objects.elisMessages;
-    for (const [name, body] of queue.splice(0)) host.post(name, body);
+    host.answered.connect((id, result, error) => {
+      const settle = waiting.get(id);
+      waiting.delete(id);
+      if (settle) error ? settle.reject(new Error(error)) : settle.resolve(JSON.parse(result)[0]);
+    });
+    for (const [name, body, id] of queue.splice(0)) host.post(name, body, id);
   });
 })();
 )JS")
@@ -136,8 +154,12 @@ PageMessages::PageMessages(QWebEnginePage *page, const QStringList &handlers, Re
     page->scripts().insert(script);
 }
 
-void PageMessages::post(const QString &handler, const QJsonObject &body)
+void PageMessages::post(const QString &handler, const QJsonObject &body, const QString &id)
 {
-    if (m_handlers.contains(handler))
-        m_receive(handler, body);
+    if (!m_handlers.contains(handler))
+        return;
+    m_receive(handler, body, [self = QPointer<PageMessages>(this), id, once = std::make_shared<bool>()](const QJsonValue &result, const QString &error) {
+        if (self && !std::exchange(*once, true))
+            Q_EMIT self->answered(id, QString::fromUtf8(QJsonDocument(QJsonArray{result}).toJson(QJsonDocument::Compact)), error);
+    });
 }

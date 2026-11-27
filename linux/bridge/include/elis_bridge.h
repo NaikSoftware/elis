@@ -130,6 +130,9 @@ char *elis_text_log_shift(const char *json);           // {old?,oldStamp?,new?,n
 char *elis_overlay_text_action(const char *json);      // {cmd,args} -> {"ok":true,"action"} or the Mac's refusal
 char *elis_text_page_constants(void);                  // {maxQuery, the text-page refusal texts}
 char *elis_page_navigate_refusal(const char *json);    // {kind,to} -> {"error"?}
+// The page bridge (Sources/ElisBridge/Pages.swift): its scripts, and a page's message as the socket's request
+char *elis_html_bridge_scripts(const char *handler);                       // {adapter,helper}
+char *elis_html_bridge_request(const char *message, const char *placeJSON); // place {session,window?,pane?} -> {"request"} or refusal
 // session progress (Sources/ElisBridge/Progress.swift); every result is JSON freed with elis_free
 char *elis_progress_parse(const char *text);    // 3/7, 40%, indeterminate, clear: {"ok":true,"progress":{…}|null} or {"ok":false,"error"}
 char *elis_progress_terminal(const char *body); // OSC 9 body "4;1;40": {"update":"clear"|"set","progress"?} or null

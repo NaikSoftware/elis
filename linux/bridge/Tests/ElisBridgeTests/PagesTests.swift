@@ -102,4 +102,39 @@ private func json(_ value: [String: Any]) -> String {
         #expect(call(elisPageOutcomeResult("nope"))["error"] as? String == OverlayHtmlError.invalidPageID)
         #expect(call(elisPageOutcomeResult(UUID().uuidString))["error"] as? String == OverlayHtmlError.unknownPage)
     }
+
+    @Test func bridgeScriptsAreTheSharedOnes() {
+        let scripts = call(elisHtmlBridgeScripts("window.webkit.messageHandlers.elis"))
+        #expect(scripts["adapter"] as? String == HtmlBridgeAdapter.script(handler: "window.webkit.messageHandlers.elis"))
+        #expect(scripts["helper"] as? String == HtmlBridgeAdapter.helperScript(handler: "window.webkit.messageHandlers.elis"))
+    }
+
+    private func bridged(_ message: [String: Any], pane: String? = nil) -> [String: Any] {
+        var place: [String: Any] = ["session": "a1b2c3d4e5f6", "window": "w1"]
+        if let pane { place["pane"] = pane }
+        return call(elisHtmlBridgeRequest(json(message), json(place)))
+    }
+
+    @Test func aBridgedRequestIsFilledFromThePage() {
+        let rename = bridged(["cmd": "session.rename", "args": ["name": "x"]])["request"] as? [String: Any]
+        #expect(rename?["target"] as? String == "a1b2c3d4e5f6")
+        #expect((rename?["args"] as? [String: Any])?["name"] as? String == "x")
+        let reload = bridged(["cmd": "session.overlay.reload"], pane: "right")["request"] as? [String: Any]
+        #expect(reload?["target"] as? String == "a1b2c3d4e5f6")
+        let reloadArgs = reload?["args"] as? [String: Any]
+        #expect(reloadArgs?["current"] as? Bool == true)
+        #expect(reloadArgs?["pane"] as? String == "right")
+        #expect((bridged(["cmd": "window.close"])["request"] as? [String: Any])?["target"] as? String == "w1")
+        let tree = bridged(["cmd": "tree"])["request"] as? [String: Any]
+        #expect((tree?["args"] as? [String: Any])?["window"] as? String == "w1")
+        #expect((bridged(["cmd": "session.select", "target": "ffff"])["request"] as? [String: Any])?["target"] as? String == "ffff")
+    }
+
+    @Test func refusedCommandsAreTheMacs() {
+        for cmd in ["zmx.present", "catalog.subscribe", "session.overlay.job.run", "session.overlay.page.serve", "zmx.reset",
+                    "session.companion.page.attach", "session.attach", "phone.status", "phone.enable", "session.upload"] {
+            #expect(bridged(["cmd": cmd])["error"] as? String == "\(cmd) cannot be sent from a page")
+        }
+        #expect((bridged(["cmd": "no.such"])["error"] as? String)?.hasPrefix("invalid request: ") == true)
+    }
 }

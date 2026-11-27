@@ -30,7 +30,7 @@ Commands for these answer `<cmd> is not supported on this platform (<reason>)` o
 - Quick terminal and scratch terminal.
 - Remote sessions: attaching another Mac's session, remote windows, elis-server hosts, remote overlay jobs.
 - Web content beyond `--html`, `--url`, `--markdown`, `--image` and `--text` page overlays: page sessions, page
-  companions, the page bridge, and terminal links opened in a session overlay, a clicked HTML file's page included:
+  companions, and terminal links opened in a session overlay, a clicked HTML file's page included:
   Linux keeps the Open links in setting and `browser links`, and links open in the system browser.
   Without Qt WebEngine, `browser …` is not supported either.
   Pages never show on the phone.
