@@ -178,6 +178,8 @@ for w in json.load(sys.stdin)["result"]["tree"]["workspaces"]:
   ctl tree --json | grep -q '"wrap":true' || fail "text page wrap read-back"
   err=$(ctl session overlay follow on --target "$id" 2>&1) && fail "follow on a plain text page"
   [[ $err == *'no log page'* ]] || fail "follow refusal ($err)"
+  err=$(ctl session overlay open --text "$site/notes.txt" --line two --target "$id" 2>&1) && fail "a line that is not a number"
+  [[ $err == *"The value 'two' is invalid for '--line <line>'"* ]] || fail "line parse error ($err)"
   ctl session overlay close --target "$id"
   printf '# Smoke\n' >"$site/readme.md"
   ctl session overlay open --markdown "$site/readme.md" --target "$id" >/dev/null

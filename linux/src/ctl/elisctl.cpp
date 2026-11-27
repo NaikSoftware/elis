@@ -798,8 +798,13 @@ int main(int argc, char **argv)
                 if (opt.contains(QLatin1String(from)))
                     args.insert(QLatin1String(to), callerPath(opt.value(QLatin1String(from))));
             for (const char *number : {"line", "tail"})
-                if (opt.contains(QLatin1String(number)))
-                    args.insert(QLatin1String(number), opt.value(QLatin1String(number)).toInt());
+                if (opt.contains(QLatin1String(number))) {
+                    bool ok = false;
+                    const int value = opt.value(QLatin1String(number)).toInt(&ok);
+                    if (!ok) // the Mac CLI's parse error
+                        return die(QStringLiteral("The value '%1' is invalid for '--%2 <%2>'").arg(opt.value(QLatin1String(number)), QLatin1String(number)));
+                    args.insert(QLatin1String(number), value);
+                }
             flag("follow-file", "followFile");
             if (opt.contains(QStringLiteral("markdown"))) // a flag for the HUD; with overlay open the file is the positional
                 args.insert("markdownFile", callerPath(arg));
