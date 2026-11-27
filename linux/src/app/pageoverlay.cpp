@@ -487,7 +487,9 @@ void PageOverlay::installTheme(const QJsonObject &theme)
 
 // The page world cannot reach the channel, which serves the application world alone, so with --js its requests and
 // replies cross as DOM events carrying JSON. Only the main frame relays them: a frame gets the Mac's refusal at once.
-// A same-origin frame can still call the page's own elis (top.elis), which counts as the page, as on the phone.
+// A same-origin frame can still call the page's own elis (top.elis), which counts as the page, as on the Mac and the phone.
+// document.open() erases every listener and empties the document, so both sides re-listen when the document's children
+// change; the relay takes a request by cancelling its event, and one left untaken is sent again a task later, then refused.
 static const char *s_pageWorld = R"JS(
 if (window !== window.top) {
   window.webkit = { messageHandlers: { elis: { postMessage: () => Promise.reject(new Error("requests from frames are refused")) } } };
@@ -495,17 +497,26 @@ if (window !== window.top) {
   (() => {
     const waiting = new Map();
     let sent = 0;
-    document.addEventListener("elis-bridge-reply", (event) => {
+    const take = (event) => {
       const { id, result, error } = JSON.parse(event.detail);
       const settle = waiting.get(id);
       waiting.delete(id);
       if (settle) error ? settle.reject(new Error(error)) : settle.resolve(result);
-    });
+    };
+    const listen = () => document.addEventListener("elis-bridge-reply", take);
+    listen();
+    new MutationObserver(listen).observe(document, { childList: true });
+    const send = (id, detail, retry) => {
+      listen();
+      if (!document.dispatchEvent(new CustomEvent("elis-bridge-request", { detail, cancelable: true }))) return;
+      if (retry) return setTimeout(() => send(id, detail, false), 0);
+      waiting.get(id)?.reject(new Error("the page bridge is unavailable"));
+      waiting.delete(id);
+    };
     const postMessage = (body) => new Promise((resolve, reject) => {
       const id = ++sent;
-      const detail = JSON.stringify({ id, body });
       waiting.set(id, { resolve, reject });
-      document.dispatchEvent(new CustomEvent("elis-bridge-request", { detail }));
+      send(id, JSON.stringify({ id, body }), true);
     });
     window.webkit = { messageHandlers: { elis: { postMessage } } };
   })();
@@ -514,11 +525,17 @@ if (window !== window.top) {
 )JS";
 
 static const char *s_relay = R"JS(
-document.addEventListener("elis-bridge-request", (event) => {
-  const { id, body } = JSON.parse(event.detail);
-  const answer = (result, error) => document.dispatchEvent(new CustomEvent("elis-bridge-reply", { detail: JSON.stringify({ id, result, error }) }));
-  window.webkit.messageHandlers.elis.postMessage(body).then((result) => answer(result, null), (error) => answer(null, error.message));
-});
+(() => {
+  const relay = (event) => {
+    event.preventDefault();
+    const { id, body } = JSON.parse(event.detail);
+    const answer = (result, error) => document.dispatchEvent(new CustomEvent("elis-bridge-reply", { detail: JSON.stringify({ id, result, error }) }));
+    window.webkit.messageHandlers.elis.postMessage(body).then((result) => answer(result, null), (error) => answer(null, error.message));
+  };
+  const listen = () => document.addEventListener("elis-bridge-request", relay);
+  listen();
+  new MutationObserver(listen).observe(document, { childList: true });
+})();
 )JS";
 
 void PageOverlay::installBridge()

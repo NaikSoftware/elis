@@ -167,6 +167,7 @@ struct AssistantHost {
 #include <future>
 #include <QWebEnginePage>
 #include <QWebEngineScript>
+#include <QWebEngineScriptCollection>
 #include <QWebEngineView>
 
 // one canned response per path on 127.0.0.1, so a test has two origins and no network
@@ -1699,7 +1700,9 @@ private Q_SLOTS:
         const QString pageID = p.run("session.overlay.open", {{"page", QJsonObject{{"kind", "file"}, {"path", file}}}})["pageID"].toString();
         QTRY_COMPARE_WITH_TIMEOUT(p.page()["state"].toString(), QStringLiteral("loaded"), 30000);
         QCOMPARE(p.page()["javascript"].toBool(), false);
-        QCOMPARE(evaluate(p.overlay(), "typeof window.elis", QWebEngineScript::MainWorld), QVariant()); // no page script runs
+        const QList<QWebEngineScript> bridge = p.overlay()->view()->page()->scripts().find(QStringLiteral("elis-bridge"));
+        QCOMPARE(bridge.size(), 1);
+        QCOMPARE(bridge.first().worldId(), quint32(QWebEngineScript::ApplicationWorld));
 
         evaluate(p.overlay(), "document.getElementById('rename').click()");
         QTRY_COMPARE(p.store.session(p.id)->name, QStringLiteral("tagged"));
@@ -1737,7 +1740,20 @@ private Q_SLOTS:
         QTRY_COMPARE_WITH_TIMEOUT(p.page()["state"].toString(), QStringLiteral("loaded"), 30000);
         QCOMPARE(evaluate(p.overlay(), "typeof window.elis + '|' + typeof window.webkit", QWebEngineScript::MainWorld).toString(),
                  QStringLiteral("undefined|undefined"));
-        QCOMPARE(evaluate(p.overlay(), "typeof window.webkit").toString(), QStringLiteral("undefined")); // a URL page gets no bridge
+        QCOMPARE(evaluate(p.overlay(), "typeof window.webkit").toString(), QStringLiteral("undefined"));
+    }
+
+    void elisRequestSurvivesDocumentOpen()
+    {
+        QTemporaryDir root;
+        const QString file = writePage(root, "<script>addEventListener('load', () => setTimeout(() => {"
+                                             "  document.open(); document.write('<title>opened</title>'); document.close();"
+                                             "  elis.request('tree').then(r => { document.title = r.tree ? 'answered' : 'empty' },"
+                                             "                            e => { document.title = 'refused:' + e.message });"
+                                             "}))</script>");
+        PageWindow p(dir.filePath("reopened.json"));
+        QVERIFY(!p.run("session.overlay.open", {{"page", QJsonObject{{"kind", "file"}, {"path", file}}}, {"javascript", true}}).contains("error"));
+        QTRY_COMPARE_WITH_TIMEOUT(p.page()["title"].toString(), QStringLiteral("answered"), 30000);
     }
 
     void aFrameCannotUseTheBridge()
@@ -1745,16 +1761,16 @@ private Q_SLOTS:
         QTemporaryDir root;
         const QString file =
             writePage(root, "<title>P</title><iframe srcdoc=\"<script>"
-                            "document.dispatchEvent(new CustomEvent('elis-bridge-request', {detail: JSON.stringify({id: 1, body: {cmd: 'session.rename', "
-                            "args: {name: 'forged'}}})}));"
                             "window.webkit.messageHandlers.elis.postMessage({cmd: 'session.rename', args: {name: 'leaked'}})"
-                            ".then(() => { parent.document.title = 'leaked' }, e => { parent.document.title = 'refused:' + e.message })"
+                            ".then(() => { parent.document.title = 'leaked' }, e => { parent.document.title = 'refused:' + e.message });"
+                            "parent.document.dispatchEvent(new CustomEvent('elis-bridge-request', {detail: JSON.stringify({id: 1, body: "
+                            "{cmd: 'session.rename', args: {name: 'framed'}}})}));"
                             "</script>\"></iframe>");
         PageWindow p(dir.filePath("frame.json"));
         QVERIFY(!p.run("session.overlay.open", {{"page", QJsonObject{{"kind", "file"}, {"path", file}}}, {"javascript", true}}).contains("error"));
         QTRY_COMPARE_WITH_TIMEOUT(p.page()["title"].toString(), QStringLiteral("refused:requests from frames are refused"), 30000);
-        QTest::qWait(500);
-        QVERIFY(p.store.session(p.id)->name.isEmpty());
+        // a same-origin frame reaching the page's own relay counts as the page
+        QTRY_COMPARE(p.store.session(p.id)->name, QStringLiteral("framed"));
     }
 #endif
 
