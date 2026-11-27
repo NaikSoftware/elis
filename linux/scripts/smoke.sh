@@ -194,6 +194,19 @@ for w in json.load(sys.stdin)["result"]["tree"]["workspaces"]:
   loaded
   ctl tree --json | grep -q "\"markdown\":\"$site/readme.md\"" || fail "markdown page read-back"
   ctl session overlay close --target "$id"
+  row=$(ctl session overlay open --html "$site/index.html" --page --target "$id") || fail "page session"
+  comp=$(ctl session overlay open --url http://127.0.0.1:9/ --companion --target "$row") || fail "page companion"
+  rows=$(ctl tree --json | python3 -I -c 'import json,sys
+for w in json.load(sys.stdin)["result"]["tree"]["workspaces"]:
+    for s in w["sessions"]:
+        if s.get("content") == "page": print(s["id"], s["parent"] or "-")')
+  [[ $rows == *"$row -"* && $rows == *"$comp $row"* ]] || fail "page rows read back ($rows)"
+  err=$(ctl session type x --target "$row" 2>&1) && fail "typing into a page row"
+  [[ $err == *'session.type: not available on a page session'* ]] || fail "page row refusal ($err)"
+  err=$(ctl session overlay open --html "$site/index.html" --page --pane left --target "$id" 2>&1) && fail "a page row with --pane"
+  [[ $err == *'--page is full size'* ]] || fail "page row size refusal ($err)"
+  ctl session overlay close --target "$row"
+  ctl tree --json | grep -q '"content":"page"' && fail "overlay close leaves the page row or its companion"
   ctl browser clear || fail "browser clear without a saved store"
   [ -e "$ELIS_STATE_DIR/browser-profile" ] && fail "browser clear created a profile"
   [ "$(ctl browser links)" = browser ] || fail "browser links default"
@@ -415,7 +428,7 @@ ctl tree | grep -q batch2 || fail "recent open by id"
 err=$(ctl zmx list 2>&1) && fail "zmx list answered"
 [[ $err == *'zmx.list is not supported on this platform'* ]] || fail "absent feature error"
 err=$(ctl session page --target "$id" 2>&1) && fail "session page answered"
-[[ $err == *'is not supported on this platform'* ]] || fail "session page absent feature error ($err)"
+[[ $err == *'is not supported on this platform'* || $err == *'session.overlay.open requires a command'* ]] || fail "session page error ($err)"
 err=$(ctl session overlay copy --target "$id" 2>&1) && fail "overlay copy without overlay"
 [[ $err == *'no overlay'* ]] || fail "overlay copy error ($err)"
 ctl session overlay open 'sleep 30' --target "$id"

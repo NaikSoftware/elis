@@ -39,9 +39,11 @@ QString unsupportedReason(const QString &cmd)
 #ifndef ELIS_HAS_WEBENGINE
         {"browser", "Elis has no built-in browser: links open in the system browser"},
 #endif
+#ifdef ELIS_HAS_WEBENGINE
+        {"session.companion.page.attach", "it attaches a page shown on another Mac, and Elis has no remote sessions"},
+#else
         {"session.page", "page sessions need Qt WebEngine, which Elis does not have"},
         {"session.companion.page", "page companions need Qt WebEngine, which Elis does not have"},
-#ifndef ELIS_HAS_WEBENGINE
         {"session.overlay.reload", "page overlays need Qt WebEngine, which Elis does not have"},
         {"session.overlay.navigate", "page overlays need Qt WebEngine, which Elis does not have"},
         {"session.overlay.submit", "page overlays need Qt WebEngine, which Elis does not have"},

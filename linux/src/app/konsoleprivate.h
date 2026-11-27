@@ -1,5 +1,6 @@
 #pragma once
 
+#include <QPoint>
 #include <QSize>
 #include <QString>
 
@@ -22,4 +23,11 @@ bool usesMouseTracking(QWidget *display, bool *ok);
 // the view's background alpha, 0..1 (Konsole takes it from the colour scheme); -1 when the symbol is missing
 double terminalOpacity(QWidget *display);
 void setTerminalOpacity(QWidget *display, double opacity);
+// Konsole::HotSpot::Type values linkAt reports
+enum { File = 1, Link = 2, EMailAddress = 3, EscapedUrl = 5 };
+// the link hotspot under a display point (edge as the view's own mouse handlers pass it): its text as printed, with
+// *type its HotSpot::Type; empty with *type set for a hotspot whose text cannot be read, *type 0 for none
+QString linkAt(QWidget *display, const QPoint &pos, bool edge, int *type);
+// turns on the part's file-path links (the profile's Underline files) for this session alone; false when a symbol is missing
+bool underlineFiles(QObject *session, QObject *part);
 }

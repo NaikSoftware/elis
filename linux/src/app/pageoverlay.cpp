@@ -411,6 +411,8 @@ void PageOverlay::loadOriginal()
 {
     if (!m_storeFailure.isEmpty())
         return fail(QStringLiteral("session.overlay.open: %1").arg(m_storeFailure));
+    if (kind() == QLatin1String("unreadable")) // a saved page row this build cannot use loads nothing
+        return fail(m_source.value("reason").toString());
     m_loadPending = true;
     m_failed = false;
     m_originalPending = true;
@@ -784,7 +786,7 @@ QJsonObject PageOverlay::readBack() const
         node.insert("text", m_text->readBack());
     } else if (built(kind())) {
         node.insert(kind(), m_source.value("path")); // image | markdown | document
-    } else {
+    } else if (kind() != QLatin1String("unreadable")) {
         node.insert("url", m_source.value("url"));
     }
     node.insert("state", m_state);

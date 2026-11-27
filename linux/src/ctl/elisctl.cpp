@@ -122,6 +122,8 @@ static const char *usage = R"(usage: elisctl <command> [args] [--target T] [--so
                                         a program over the session (full, floating, or one pane); closes when it exits
   session overlay open --html FILE [--cwd DIR] | --url URL [--browse] [--persistent] [--navigation] [--js] [--chromeless] [--block] ...
                                         a page over the session (needs Qt WebEngine); --block exits 0 answered, 2 closed
+  session overlay open --html FILE | --url URL --page | --companion [page flags] [--follow] [--block]
+                                        the page as a sidebar row of its own after the target's group, or as its companion
   browser links [browser|overlay|overlay95|overlay75|overlay50]   where a clicked web link opens; bare: reads
   browser clear                         remove every cookie and all site data the saved (--persistent) store holds
   session overlay open --markdown FILE [--navigation] | --image FILE | --text FILE [--line N | --tail N [--follow-file]]
@@ -162,8 +164,8 @@ static const char *usage = R"(usage: elisctl <command> [args] [--target T] [--so
   restore clear                         forget every captured command
   session restore <command> | --none | --clear [--pane left|right]   pin what this pane re-runs (rerun mode)
 
-Not in elis (the app answers "<cmd> is not supported on this platform"): zmx, session restart/lead/background/page,
-surface cursor, config reload, page companions, quick terminal, scratch terminal; browser without Qt WebEngine.
+Not in elis (the app answers "<cmd> is not supported on this platform"): zmx, session restart/lead/background,
+surface cursor, config reload, quick terminal, scratch terminal; pages and browser without Qt WebEngine.
 )";
 
 static QByteArray roundTrip(const QString &path, const QJsonObject &request, QString *error)
@@ -662,10 +664,19 @@ int main(int argc, char **argv)
         cmd = QStringLiteral("session.companion.duplicate");
     if (cmd == QLatin1String("session.overlay") && !pos.isEmpty())
         cmd += QLatin1Char('.') + pos.takeFirst();
-    if (cmd == QLatin1String("session.overlay.open") && opt.contains(QStringLiteral("page")))
-        cmd = QStringLiteral("session.page");
-    else if (cmd == QLatin1String("session.overlay.open") && opt.contains(QStringLiteral("companion")))
-        cmd = QStringLiteral("session.companion.page");
+    if (cmd == QLatin1String("session.overlay.open") && (opt.contains(QStringLiteral("page")) || opt.contains(QStringLiteral("companion")))) {
+        const bool companion = opt.contains(QStringLiteral("companion"));
+        const QString flag = companion ? QStringLiteral("--companion") : QStringLiteral("--page");
+        if (companion && opt.contains(QStringLiteral("page"))) // the Mac CLI's checks, ahead of the socket
+            return die(QStringLiteral("--page cannot be combined with --companion"));
+        if (!opt.contains(QStringLiteral("html")) && !opt.contains(QStringLiteral("url")))
+            return die(QStringLiteral("%1 requires --html or --url").arg(flag));
+        for (const char *sized : {"pane", "size-percent", "width", "height"})
+            if (opt.contains(QLatin1String(sized)))
+                return die(QStringLiteral("%1 is full size: it takes no --pane, --size-percent, --width or --height").arg(flag));
+        cmd = companion ? QStringLiteral("session.companion.page") : QStringLiteral("session.page");
+    }
+    const bool pageRow = cmd == QLatin1String("session.page") || cmd == QLatin1String("session.companion.page");
     if (cmd == QLatin1String("session.hud"))
         cmd += QStringList{"open", "update", "close"}.contains(pos.value(0)) ? QLatin1Char('.') + pos.takeFirst() : QStringLiteral(".open");
     if (cmd == QLatin1String("session.split") && pos.value(0) == QLatin1String("close"))
@@ -756,7 +767,7 @@ int main(int argc, char **argv)
     }
     if (cmd.endsWith(QLatin1String(".new")) && opt.contains(QStringLiteral("tint")))
         args.insert("tint", opt.value(QStringLiteral("tint")));
-    if (cmd.startsWith(QLatin1String("session.overlay.")) || cmd.startsWith(QLatin1String("session.hud."))) {
+    if (cmd.startsWith(QLatin1String("session.overlay.")) || cmd.startsWith(QLatin1String("session.hud.")) || pageRow) {
         copy("background-color", "color");
         copy("text-color", "textColor");
         copy("detail", "detail");
@@ -1165,7 +1176,7 @@ int main(int argc, char **argv)
     const QByteArray line = roundTrip(path, request, &error);
     if (line.isEmpty())
         return die(error);
-    if (cmd == QLatin1String("session.overlay.open") && opt.contains(QStringLiteral("block")))
+    if ((cmd == QLatin1String("session.overlay.open") || pageRow) && opt.contains(QStringLiteral("block")))
         if (const QJsonObject r = QJsonDocument::fromJson(line).object(); r.value("ok").toBool() && r["result"].toObject().contains("pageID"))
             return pageOutcome(r["result"]["pageID"].toString(), true);
     if ((cmd == QLatin1String("pick.result") || cmd == QLatin1String("ask.result")) && !opt.contains(QStringLiteral("json"))) {
@@ -1345,7 +1356,7 @@ int main(int argc, char **argv)
     } else if (result.contains("count") && cmd == QLatin1String("session.search")) {
         puts("ok");
     } else if (cmd.endsWith(QLatin1String(".new")) || cmd == QLatin1String("session.duplicate") || cmd == QLatin1String("session.companion.duplicate")
-               || cmd == QLatin1String("recent.open")) {
+               || cmd == QLatin1String("recent.open") || pageRow) {
         printf("%s\n", qPrintable(result["id"].toString()));
     }
     return 0;

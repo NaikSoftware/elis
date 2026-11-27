@@ -34,6 +34,7 @@ public:
     QWebEngineView *view() const { return m_view; }
     // ControlHtmlOverlayNode's page fields: source, state, error, page, title, history, flags, zoom, id
     QJsonObject readBack() const;
+    QString identity() const; // what the strip names: the file shown or the origin
     void reload(bool current);
     bool navigate(const QString &to, QString *error); // back | forward | browser | finder
     QString pendingPrompt() const { return m_promptUrl.toString(); }
@@ -79,7 +80,6 @@ private:
     bool syncShown();
     QUrl pageUrl() const;
     QUrl browserUrl() const;
-    QString identity() const;
 
     QJsonObject m_source, m_flags;
     QString m_pageID;

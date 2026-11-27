@@ -77,6 +77,10 @@ struct Session {
     // the row's progress fill, runtime only: session.progress's, else OSC 9;4's with the elisPaneId of the pane that sent it
     QJsonObject controlProgress, terminalProgress;
     QString terminalProgressPane;
+    // a page row's page as the Mac's PageSnapshot JSON (file or url, its flags); empty for a terminal. A page row runs
+    // no shell and has no pane identity. pageIdentity is what its strip names (file or origin), runtime only.
+    QJsonObject page;
+    QString pageIdentity;
 
     QString displayName() const;
 };
@@ -160,6 +164,7 @@ public:
         qint64 closedAt = 0; // ms since the epoch
         QString title;       // its display name at close
         QString resume;      // Session::resume, typed into the reopened shell
+        QJsonObject page;    // Session::page: a page row reopens as its page
     };
     QList<Closed> closed; // most recent first; Reopen Closed Item brings the shell back where it was
     // a close inside its undo grace: the sessions are out of the tree, their terminals still running
@@ -209,7 +214,10 @@ public:
     QString addWorkspace(const QString &name, bool collapsed = false, const QString &projectFolder = {}, bool reveal = false);
     // index -1 follows settings.newSessionPlacement
     QString addSession(const QString &workspaceId, const QString &name, const QString &cwd, const QString &command = {}, int index = -1,
-                       const QString &resume = {}, const QString &id = {}); // id: a reopened session keeps its own
+                       const QString &resume = {}, const QString &id = {}, // id: a reopened session keeps its own
+                       const QJsonObject &page = {});
+    // a page row showing `page` (Session::page): a companion of anchorId, or a top-level row right after its group
+    QString addPageRow(const QString &anchorId, bool companion, const QJsonObject &page, const QString &cwd);
     QString duplicateSession(const QString &id, const QString &cwd);
     // a companion of `parentId` (a companion target means its parent), after the parent's last companion
     QString addCompanion(const QString &parentId, const QString &name, const QString &cwd, const QString &command = {});

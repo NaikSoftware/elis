@@ -216,7 +216,7 @@ private:
 
 // A live pane's shell runs under its zmx daemon, behind the attach client Konsole started; Konsole sees only the
 // client. Its `elisZmx` property is the pane identity the daemon is named by.
-static int shellPid(KParts::ReadOnlyPart *part)
+int shellPid(KParts::ReadOnlyPart *part)
 {
     auto *t = qobject_cast<TerminalInterface *>(part);
     if (!t)
@@ -832,7 +832,7 @@ void MainWindow::createMenus()
     auto sessionRow = [sessionDetail](const Session &s, const QString &ws, std::function<void()> run) {
         const QString st = s.status == QLatin1String("idle") ? QString() : s.status;
         return Palette::Item{s.displayName(), sessionDetail(s), std::move(run), true, {}, s.id,
-                             s.agent.isEmpty() ? QStringLiteral("terminal") : s.agent, ws, st, !st.isEmpty() && s.blink, true};
+                             !s.page.isEmpty() ? QStringLiteral("page") : s.agent.isEmpty() ? QStringLiteral("terminal") : s.agent, ws, st, !st.isEmpty() && s.blink, true};
     };
     auto sessionItems = [this, sessionDetail](bool byRecency) {
         QList<Palette::Item> items;
@@ -1129,6 +1129,11 @@ KParts::ReadOnlyPart *MainWindow::spawnPart(const QString &id, const QString &pa
         display->setProperty("elisProfileFont", display->font());
         display->setProperty("elisBaseFont", display->font().pointSizeF());
     }
+#ifdef ELIS_HAS_WEBENGINE
+    // Konsole links file paths only when the profile asks; the Mac always does, and links.cpp opens them as pages
+    if (QObject *ks = sessionOf(part))
+        KonsolePrivate::underlineFiles(ks, part);
+#endif
     applyAppearance(part);
     watchTerminalNotifications(part, bridge);
     stripPartShortcuts();
@@ -1154,6 +1159,8 @@ void MainWindow::stripPartShortcuts()
 void MainWindow::createTerminal(const QString &id)
 {
     const Session *s = m_store.session(id);
+    if (!s->page.isEmpty())
+        return showPageRow(id);
     Panes p;
     p.view = new QWidget;
     p.layers = new QStackedLayout(p.view);
@@ -1749,7 +1756,7 @@ void MainWindow::showSelected()
     m_context->setText(s ? s->context : QString());
     // the workspace breadcrumb always shows; the Session name and Session context toggles gate their parts
     const Settings &st = m_store.settings;
-    static_cast<SessionPill *>(m_pill)->set(s ? s->agent : QString(), s ? m_store.workspaceOf(s->id)->name.trimmed() : QString(),
+    static_cast<SessionPill *>(m_pill)->set(s ? (s->page.isEmpty() ? s->agent : QStringLiteral("page")) : QString(), s ? m_store.workspaceOf(s->id)->name.trimmed() : QString(),
                                             !st.shows(QStringLiteral("sessionName")) ? QString() : s ? name : QStringLiteral("Elis"),
                                             s && st.shows(QStringLiteral("sessionContext")) ? s->context : QString(),
                                             m_actions.value(QStringLiteral("session_palette"))->shortcut().toString(QKeySequence::NativeText));
@@ -2279,12 +2286,18 @@ bool MainWindow::eventFilter(QObject *watched, QEvent *event)
         KonsolePrivate::setTerminalOpacity(static_cast<QWidget *>(watched), 1 - qBound(0.0, m_store.settings.windowTransparency, 90.0) / 100);
     if (dashboardEvent(watched, event))
         return true;
-    if ((event->type() == QEvent::MouseButtonPress || event->type() == QEvent::MouseButtonRelease) && watched->inherits("Konsole::TerminalDisplay")) {
+    if ((event->type() == QEvent::MouseButtonPress || event->type() == QEvent::MouseButtonRelease) && watched->inherits("Konsole::TerminalDisplay")
+        && static_cast<QWidget *>(watched)->window() == this) { // the app-wide filter of every window sees it: once
         auto *mouse = static_cast<QMouseEvent *>(event);
         bool ok = false;
         const bool tracking = KonsolePrivate::usesMouseTracking(static_cast<QWidget *>(watched), &ok);
-        if (ok && mouse->button() == Qt::LeftButton)
-            mouse->setModifiers(linkClickModifiers(mouse->modifiers(), tracking, event->type() == QEvent::MouseButtonRelease));
+        if (ok && mouse->button() == Qt::LeftButton) {
+            Qt::KeyboardModifiers mods = linkClickModifiers(mouse->modifiers(), tracking, event->type() == QEvent::MouseButtonRelease);
+#ifdef ELIS_HAS_WEBENGINE
+            mods = linkClick(static_cast<QWidget *>(watched), mouse, mods, tracking, mouse->modifiers() == Qt::NoModifier);
+#endif
+            mouse->setModifiers(mods);
+        }
     }
     if (event->type() == QEvent::FocusIn && watched->isWidgetType())
         for (auto it = m_panes.begin(); it != m_panes.end(); ++it)

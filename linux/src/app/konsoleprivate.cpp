@@ -1,9 +1,11 @@
 #include "konsoleprivate.h"
 
+#include <QAtomicInt>
 #include <QHash>
 #include <QMetaObject>
 #include <QPointer>
 #include <QScrollBar>
+#include <QSharedPointer>
 #include <QSize>
 #include <QStringList>
 #include <QWidget>
@@ -140,4 +142,59 @@ void setTerminalOpacity(QWidget *display, double opacity)
     }
 }
 
+QString linkAt(QWidget *display, const QPoint &pos, bool edge, int *type)
+{
+    *type = 0;
+    if (!display || !display->inherits("Konsole::TerminalDisplay"))
+        return {};
+    auto process = fn<void (*)(QObject *)>(display, "_ZN7Konsole15TerminalDisplay14processFiltersEv");
+    auto chainOf = fn<void *(*)(const QObject *)>(display, "_ZNK7Konsole15TerminalDisplay11filterChainEv");
+    auto cell = fn<std::pair<int, int> (*)(const QObject *, const QPoint &, bool)>(display, "_ZNK7Konsole15TerminalDisplay20getCharacterPositionERK6QPointb");
+    // QSharedPointer<HotSpot>: HotSpot's first base is QObject, so the pointer and the refcount block match
+    auto spotAt = fn<QSharedPointer<QObject> (*)(const void *, int, int)>(display, "_ZNK7Konsole11FilterChain9hotSpotAtEii");
+    auto kind = fn<int (*)(const QObject *)>(display, "_ZNK7Konsole7HotSpot4typeEv");
+    auto texts = fn<QStringList (*)(const QObject *)>(display, "_ZNK7Konsole19RegExpFilterHotSpot13capturedTextsEv");
+    if (!process || !chainOf || !cell || !spotAt || !kind || !texts)
+        return {};
+    process(display); // the press handler refreshes the hotspots, and this filter runs before it
+    const void *chain = chainOf(display);
+    const auto [line, column] = cell(display, pos, edge);
+    const QSharedPointer<QObject> spot = chain ? spotAt(chain, line, column) : QSharedPointer<QObject>();
+    if (!spot)
+        return {};
+    *type = kind(spot.data());
+    // File, Link, EMailAddress come from a regular expression; an escape-sequence link's address has no accessor
+    if (*type != File && *type != Link && *type != EMailAddress)
+        return {};
+    return texts(spot.data()).value(0);
+}
+
+bool underlineFiles(QObject *session, QObject *part)
+{
+    // a Profile::Ptr returned by value: one pointer, and Profile's vtable puts QSharedData's count right after it
+    struct ProfilePtr {
+        void *d = nullptr;
+        ~ProfilePtr() {}
+    };
+    auto instance = fn<QObject *(*)()>(session, "_ZN7Konsole14SessionManager8instanceEv");
+    auto profileOf = fn<ProfilePtr (*)(const QObject *, QObject *)>(session, "_ZNK7Konsole14SessionManager14sessionProfileEPNS_7SessionE");
+    auto update = fn<void (*)(QObject *, const ProfilePtr &)>(
+        session, "_ZN7Konsole17SessionController16updateFilterListERK28QExplicitlySharedDataPointerINS_7ProfileEE");
+    QObject *controller = nullptr;
+    for (QObject *o : part ? part->findChildren<QObject *>() : QList<QObject *>())
+        if (o->inherits("Konsole::SessionController"))
+            controller = o;
+    if (!instance || !profileOf || !update || !controller || !instance())
+        return false;
+    // the session's own override profile, as OSC 50 makes one; the filters are rebuilt only for a profile Konsole saves,
+    // so the controller is asked to read them again
+    QMetaObject::invokeMethod(session, "profileChangeCommandReceived", Q_ARG(QString, QStringLiteral("UnderlineFilesEnabled=true")));
+    ProfilePtr profile = profileOf(instance(), session);
+    if (!profile.d)
+        return false;
+    update(controller, profile);
+    // the session manager still holds the profile, so the count never reaches zero here
+    reinterpret_cast<QAtomicInt *>(static_cast<char *>(profile.d) + sizeof(void *))->deref();
+    return true;
+}
 }

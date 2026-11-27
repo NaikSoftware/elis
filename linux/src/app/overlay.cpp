@@ -22,6 +22,8 @@
 #include <QJsonArray>
 #include <QJsonDocument>
 #include <QLabel>
+#include <QSplitter>
+#include <QStackedLayout>
 #include <QStackedWidget>
 #include <QStatusBar>
 #include <QUuid>
@@ -207,7 +209,8 @@ bool MainWindow::closeFrontCover(const QString &id)
         });
         return true;
     };
-    if (const Overlay full = m_overlays.value(slotKey(id, {})); full.frame && !full.hidden)
+    const Session *s = m_store.session(id);
+    if (const Overlay full = m_overlays.value(slotKey(id, {})); full.frame && !full.hidden && s && s->page.isEmpty()) // a page row's page is the row
         return close(slotKey(id, {}));
     // a pane's overlay only while the keys are in that pane: the other pane's is not in front of the user
     const QWidget *focus = QApplication::focusWidget();
@@ -322,10 +325,16 @@ bool MainWindow::openPage(const QString &id, const QString &pane, const QJsonObj
         return *error = QStringLiteral("session has no terminal"), false;
     if (m_overlays.value(key).hidden)
         return *error = QStringLiteral("overlay hidden"), false;
+    // a page row's page is the row: no source check, a failed load is the row's failed state
+    const bool row = args.value("row").toBool();
     // the file a built page shows is judged before the slot, as the Mac's openSessionOverlay reads it first
     QJsonObject source = args.value("page").toObject();
-    const QJsonObject checked = bridgeReply(elis_page_open_check(
-        compactJson({{"source", source}, {"navigation", args.value("navigation").toBool()}, {"log", args.value("pageLog")}}).constData()));
+    const QJsonObject checked = row                     ? QJsonObject{{"ok", true}, {"navigation", args.value("navigation")}}
+                                : args.contains("checked") ? args.value("checked").toObject() // a click's, read off the GUI thread
+                                                           : bridgeReply(elis_page_open_check(compactJson({{"source", source},
+                                                                                    {"navigation", args.value("navigation").toBool()},
+                                                                                    {"log", args.value("pageLog")}})
+                                                                           .constData()));
     if (!checked.value("ok").toBool())
         return *error = checked.value("error").toString(), false;
     if (m_overlays.contains(key))
@@ -333,7 +342,7 @@ bool MainWindow::openPage(const QString &id, const QString &pane, const QJsonObj
     QWidget *under = pane.isEmpty() ? p.view : paneWidget(id, pane);
     if (!under || (pane == QLatin1String("right") && !s->splitVisible))
         return *error = QStringLiteral("pane not visible"), false;
-    if (args.value("persistent").toBool())
+    if (args.value("persistent").toBool() && !row)
         if (const QString failure = PageOverlay::persistentStoreFailure(); !failure.isEmpty())
             return *error = QStringLiteral("session.overlay.open: %1").arg(failure), false;
     if (pane.isEmpty())
@@ -348,6 +357,7 @@ bool MainWindow::openPage(const QString &id, const QString &pane, const QJsonObj
     ov.height = args.value("height").toDouble();
     ov.pageID = pageID;
     ov.chromeless = args.value("chromeless").toBool();
+    ov.clicked = args.value("clicked").toBool();
     auto *frame = new QFrame(p.view);
     frame->setObjectName(QStringLiteral("elisOverlay"));
     frame->setAutoFillBackground(true); // a page has no terminal to paint the whole cover, as a program's does
@@ -357,7 +367,7 @@ bool MainWindow::openPage(const QString &id, const QString &pane, const QJsonObj
         frame->setFrameShape(QFrame::StyledPanel);
     // a file page draws no canvas: the frame paints --background-color or the terminal's behind it, as the Mac's panel
     const QJsonObject theme = terminalTheme();
-    QString paint = ov.sizePercent > 0 ? args.value("color").toString() : QString();
+    QString paint = ov.sizePercent > 0 || row ? args.value("color").toString() : QString();
     ov.themedFrame = paint.isEmpty() && source.value("kind").toString() != QLatin1String("url");
     if (ov.themedFrame)
         paint = theme.value("background").toString();
@@ -392,15 +402,23 @@ bool MainWindow::openPage(const QString &id, const QString &pane, const QJsonObj
     box->addWidget(page);
     ov.page = page;
     ov.frame = frame;
-    connect(page, &PageOverlay::closeRequested, this, [this, key, page] {
-        if (m_overlays.value(key).page == page)
-            closeOverlay(key);
+    connect(page, &PageOverlay::closeRequested, this, [this, key, page, row, id] {
+        if (m_overlays.value(key).page != page)
+            return;
+        // the strip's X and window.close() close a page row like any session: its confirmation and undo
+        row ? closeSessions({id}) : closeOverlay(key);
+    });
+    connect(page, &PageOverlay::changed, this, [this, row, id, page] {
+        if (Session *s = m_store.session(id); row && s && s->pageIdentity != page->identity()) {
+            s->pageIdentity = page->identity(); // a browse page's row follows the origin it shows
+            Q_EMIT m_store.titleChanged(id);
+        }
+        m_events->scheduleTreeChanged();
     });
     connect(page, &PageOverlay::bridgeRequest, this, [this, page](const QJsonObject &body, const PageMessages::Reply &reply) {
         // later: the request may close the page, which must not go while its channel is mid-call
         QTimer::singleShot(0, this, [this, page = QPointer<QWidget>(page), body, reply] { pageRequest(page, body, reply); });
     });
-    connect(page, &PageOverlay::changed, this, [this] { m_events->scheduleTreeChanged(); });
     connect(page, &PageOverlay::zoomChanged, this, [this](double factor) {
         if (m_store.settings.htmlOverlayZoom == (factor == 1 ? 0 : factor))
             return;
@@ -421,7 +439,60 @@ bool MainWindow::openPage(const QString &id, const QString &pane, const QJsonObj
     syncChrome();
     return true;
 }
+
+bool MainWindow::addPageRow(bool companion, const QString &anchorId, const QJsonObject &checked, QJsonObject *result, QString *error)
+{
+    const QJsonObject source = checked.value("page").toObject(), flags = checked.value("flags").toObject();
+    // the open's own refusals come before the row exists
+    const QJsonObject opened = bridgeReply(elis_page_open_check(compactJson({{"source", source}, {"navigation", flags.value("navigation")}}).constData()));
+    if (!opened.value("ok").toBool())
+        return *error = opened.value("error").toString(), false;
+    if (flags.value("persistent").toBool())
+        if (const QString failure = PageOverlay::persistentStoreFailure(); !failure.isEmpty())
+            return *error = QStringLiteral("session.overlay.open: %1").arg(failure), false;
+    QJsonObject page{{"source", source}, {"flags", flags}};
+    if (checked.value("color").isString())
+        page.insert("color", checked.value("color"));
+    const QJsonObject saved = Store::bridge(elis_page_snapshot_write, page).value("saved").toObject();
+    const Session *anchor = m_store.session(anchorId);
+    if (saved.isEmpty() || !anchor)
+        return *error = QStringLiteral("a page row holds a file or a URL page"), false;
+    const QString live = liveCwd(anchorId);
+    const QString id = m_store.addPageRow(anchorId, companion, saved, live.isEmpty() ? anchor->cwd : live); // shows it at once
+    result->insert("id", id);
+    result->insert("pageID", m_overlays.value(slotKey(id, {})).pageID);
+    if (companion)
+        result->insert("parent", m_store.session(id)->parentId);
+    return true;
+}
 #endif
+
+void MainWindow::showPageRow(const QString &id)
+{
+    Panes p;
+    p.view = new QWidget;
+    p.layers = new QStackedLayout(p.view);
+    p.split = new QSplitter; // empty: no terminal ever goes in, but the layout code keeps one shape for every row
+    p.layers->addWidget(p.split);
+    m_panes.insert(id, p);
+    m_stack->addWidget(p.view);
+#ifdef ELIS_HAS_WEBENGINE
+    const QJsonObject row = Store::bridge(elis_page_snapshot_read, {{"page", m_store.session(id)->page}}).value("row").toObject();
+    QJsonObject args = row.value("flags").toObject();
+    args.insert("page", row.value("source"));
+    args.insert("row", true);
+    if (row.contains("color"))
+        args.insert("color", row.value("color"));
+    QJsonObject result;
+    QString error;
+    openPage(id, {}, args, &result, &error);
+#else
+    auto *missing = new QLabel(tr("Page sessions need Qt WebEngine, which this build lacks."), p.split);
+    missing->setAlignment(Qt::AlignCenter);
+    p.split->addWidget(missing);
+#endif
+    applyLayout(id);
+}
 
 void MainWindow::refreshPageThemes()
 {
@@ -560,8 +631,12 @@ bool MainWindow::overlayCommand(const QString &cmd, const QString &id, const QJs
         return openOverlay(id, pane, args.value("command").toString(), cwd, args.value("sizePercent").toInt(), args.value("width").toDouble(),
                            args.value("height").toDouble(), args.value("color").toString(), args.value("wait").toBool(), {}, error);
     }
+    const Session *session = m_store.session(id);
+    const bool pageRow = pane.isEmpty() && session && !session->page.isEmpty(); // the page and the row end together
     if (cmd == QLatin1String("session.overlay.close")) {
-        if (m_overlays.contains(key))
+        if (pageRow)
+            m_store.removeSession(id);
+        else if (m_overlays.contains(key))
             closeOverlay(key);
         else if (!(pane.isEmpty() && closeHud(id)))
             return *error = QStringLiteral("no overlay"), false;
@@ -589,7 +664,7 @@ bool MainWindow::overlayCommand(const QString &cmd, const QString &id, const QJs
         // the answer is recorded before the page closes, so the close's dismissal finds it settled
         char *raw = elis_page_outcome_submit(ov.pageID.toUtf8().constData(), args.value("value").toString().toUtf8().constData());
         elis_free(raw);
-        closeOverlay(key);
+        pageRow ? m_store.removeSession(id) : closeOverlay(key);
         return true;
     }
     if (const Overlay ov = m_overlays.value(key); ov.page) {
@@ -640,8 +715,10 @@ bool MainWindow::overlayCommand(const QString &cmd, const QString &id, const QJs
     if (cmd == QLatin1String("session.overlay.hide") || cmd == QLatin1String("session.overlay.show") || cmd == QLatin1String("session.overlay.toggle")) {
         QStringList keys;
         for (const QString &p : pane.isEmpty() ? QStringList{QString(), QStringLiteral("left"), QStringLiteral("right")} : QStringList{pane})
-            if (m_overlays.contains(slotKey(id, p)))
+            if (m_overlays.contains(slotKey(id, p)) && !(p.isEmpty() && pageRow)) // a page row's page is not a cover to hide
                 keys << slotKey(id, p);
+        if (keys.isEmpty() && pageRow && cmd == QLatin1String("session.overlay.show"))
+            return result->insert("text", QStringLiteral("shown")), true;
         if (keys.isEmpty())
             return *error = QStringLiteral("no overlay"), false;
         bool anyShown = false;
@@ -739,7 +816,7 @@ QJsonObject MainWindow::sessionExtras(const QString &id) const
     bool zmx = true;
     for (const QString &kind : {QStringLiteral("left"), QStringLiteral("right")}) {
         const bool right = kind == QLatin1String("right");
-        if (!s || (right && !s->hasSplit))
+        if (!s || !s->page.isEmpty() || (right && !s->hasSplit)) // a page row has no terminal
             continue;
         KParts::ReadOnlyPart *part = right ? p.right : p.main;
         const Overlay ov = m_overlays.value(slotKey(id, kind));
@@ -763,6 +840,8 @@ QJsonObject MainWindow::sessionExtras(const QString &id) const
                 node.insert("pane", pane);
             if (ov.hidden)
                 node.insert("hidden", true);
+            if (ov.clicked)
+                node.insert("clicked", true);
             pages << node;
         }
     if (!pages.isEmpty())
@@ -796,8 +875,10 @@ bool MainWindow::hasHideableOverlay(const QString &id, bool *anyShown) const
 {
     bool any = false;
     *anyShown = false;
+    const Session *s = const_cast<Store &>(m_store).session(id);
+    const bool row = s && !s->page.isEmpty(); // a page row's page is not a cover to hide
     for (const QString &pane : {QString(), QStringLiteral("left"), QStringLiteral("right")})
-        if (const Overlay ov = m_overlays.value(slotKey(id, pane)); ov.part || ov.page) {
+        if (const Overlay ov = m_overlays.value(slotKey(id, pane)); (ov.part || ov.page) && !(row && pane.isEmpty())) {
             any = true;
             *anyShown |= !ov.hidden;
         }

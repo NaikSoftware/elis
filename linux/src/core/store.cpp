@@ -80,6 +80,8 @@ QString Session::displayName() const
     // a pinned name, else the title its program set (or the command it runs), else the folder it is in
     if (!name.isEmpty())
         return name;
+    if (!page.isEmpty())
+        return pageIdentity.isEmpty() ? QStringLiteral("Page") : pageIdentity;
     if (!title.trimmed().isEmpty())
         return title.trimmed();
     if (QDir::cleanPath(cwd) == QDir::homePath())
@@ -292,8 +294,21 @@ QString Store::addWorkspace(const QString &name, bool isCollapsed, const QString
     return w.id;
 }
 
+// a page row's saved page, normalized as the Mac reads it (an undecodable one becomes its unreadable marker), with the
+// name its strip shows until the page says otherwise
+static void setPage(Session &s, const QJsonValue &saved)
+{
+    const QJsonObject read = Store::bridge(elis_page_snapshot_read, {{"page", saved}});
+    s.page = read.value("saved").toObject();
+    const QJsonObject row = read.value("row").toObject();
+    s.pageIdentity = s.page.isEmpty() ? QString()
+                                      : Store::bridge(elis_html_identity, {{"source", row.value("source")}, {"flags", row.value("flags")}})
+                                            .value("identity")
+                                            .toString();
+}
+
 QString Store::addSession(const QString &workspaceId, const QString &name, const QString &cwd, const QString &command, int index,
-                          const QString &resume, const QString &id)
+                          const QString &resume, const QString &id, const QJsonObject &page)
 {
     auto *w = workspace(workspaceId);
     if (!w)
@@ -304,6 +319,8 @@ QString Store::addSession(const QString &workspaceId, const QString &name, const
     s.name = name;
     s.command = command;
     s.resume = resume;
+    if (!page.isEmpty())
+        setPage(s, page);
     if (index < 0 && settings.newSessionPlacement == QLatin1String("afterCurrent"))
         if (const int at = indexIn(*w, selected); at >= 0)
             index = at + 1;
@@ -354,6 +371,27 @@ QString Store::addCompanion(const QString &parentId, const QString &name, const 
     return s.id;
 }
 
+QString Store::addPageRow(const QString &anchorId, bool companion, const QJsonObject &page, const QString &cwd)
+{
+    const Session *a = session(anchorId);
+    if (!a)
+        return {};
+    const QString root = a->parentId.isEmpty() ? anchorId : a->parentId;
+    auto *w = workspaceOf(root);
+    int at = indexIn(*w, root) + 1;
+    while (at < w->sessions.size() && w->sessions[at].parentId == root)
+        ++at;
+    Session s;
+    s.id = newId();
+    s.cwd = cwd.isEmpty() ? session(root)->cwd : cwd;
+    s.parentId = companion ? root : QString();
+    setPage(s, page);
+    w->sessions.insert(at, s); // a companion after the group's last, a page session right after the whole group
+    Q_EMIT sessionAdded(s.id);
+    Q_EMIT changed();
+    return s.id;
+}
+
 void Store::removeSession(const QString &id)
 {
     auto *w = workspaceOf(id);
@@ -363,7 +401,7 @@ void Store::removeSession(const QString &id)
         removeSession(c); // closing the parent closes the group
     const int i = indexIn(*w, id);
     const Session &gone = w->sessions[i];
-    closed.prepend({w->id, gone.name, gone.cwd, i, gone.id, QDateTime::currentMSecsSinceEpoch(), gone.displayName(), gone.resume});
+    closed.prepend({w->id, gone.name, gone.cwd, i, gone.id, QDateTime::currentMSecsSinceEpoch(), gone.displayName(), gone.resume, gone.page});
     if (closed.size() > 20)
         closed.removeLast();
     w->sessions.removeAt(i);
@@ -487,7 +525,7 @@ void Store::finalizePending(int serial)
             gone << Parked{c.workspace.id, k, c.workspace.sessions[k]};
         for (const Parked &p : std::as_const(gone)) {
             closed.prepend({p.workspaceId, p.session.name, p.session.cwd, p.index, p.session.id, QDateTime::currentMSecsSinceEpoch(),
-                            p.session.displayName(), p.session.resume});
+                            p.session.displayName(), p.session.resume, p.session.page});
             delete m_progressExpiry.take(p.session.id);
             Q_EMIT sessionRemoved(p.session.id);
         }
@@ -530,7 +568,7 @@ QString Store::reopenClosed(const QString &closedId)
     QString ws = c.workspaceId;
     if (!workspace(ws))
         ws = workspaces.isEmpty() ? addWorkspace(QStringLiteral("main")) : workspaces.first().id;
-    const QString id = addSession(ws, c.name, c.cwd, {}, c.index, c.resume, c.id);
+    const QString id = addSession(ws, c.name, c.cwd, {}, c.index, c.resume, c.id, c.page);
     select(id);
     return id;
 }
@@ -1162,7 +1200,7 @@ void Store::toggleSplit(const QString &id, const QString &axis)
 void Store::setSplit(const QString &id, bool hasSplit, bool visible, const QString &axis)
 {
     Session *s = session(id);
-    if (!s || (axis != QLatin1String("vertical") && axis != QLatin1String("horizontal")))
+    if (!s || !s->page.isEmpty() || (axis != QLatin1String("vertical") && axis != QLatin1String("horizontal")))
         return;
     s->hasSplit = hasSplit;
     s->splitVisible = hasSplit && visible;
@@ -1258,6 +1296,8 @@ QJsonObject Store::toJson() const
                 so.insert("paneId", s.paneId);
             if (s.hasSplit && !s.splitPaneId.isEmpty())
                 so.insert("splitPaneId", s.splitPaneId);
+            if (!s.page.isEmpty())
+                so.insert("page", s.page);
             ss << so;
         }
         QJsonObject wo{{"id", w.id}, {"name", w.name}, {"folder", w.folder}, {"sessions", ss}};
@@ -1268,9 +1308,13 @@ QJsonObject Store::toJson() const
         ws << wo;
     }
     QJsonArray cl;
-    for (const auto &c : closed)
-        cl << QJsonObject{{"id", c.id},       {"workspaceId", c.workspaceId}, {"name", c.name},     {"cwd", c.cwd},
-                          {"index", c.index}, {"closedAt", c.closedAt},       {"title", c.title}, {"resume", c.resume}};
+    for (const auto &c : closed) {
+        QJsonObject co{{"id", c.id},       {"workspaceId", c.workspaceId}, {"name", c.name},   {"cwd", c.cwd},
+                       {"index", c.index}, {"closedAt", c.closedAt},       {"title", c.title}, {"resume", c.resume}};
+        if (!c.page.isEmpty())
+            co.insert("page", c.page);
+        cl << co;
+    }
     const QJsonObject st = settings.toJson();
     return {{"version", 2},      {"closed", cl},      {"selected", selected}, {"recent", QJsonArray::fromStringList(recent)},
             {"settings", st},    {"workspaces", ws},     {"focusedWorkspaces", QJsonArray::fromStringList(focused)},
@@ -1318,6 +1362,11 @@ void Store::fromJson(const QJsonObject &o)
                 s.splitRestorePin = so.value("splitRestoreCommand").toString();
             s.paneId = so.value("paneId").toString();
             s.splitPaneId = s.hasSplit ? so.value("splitPaneId").toString() : QString();
+            if (so.contains("page") && !so.value("page").isNull()) { // a value that does not decode keeps the row a page
+                setPage(s, so.value("page"));
+                s.paneId.clear(), s.splitPaneId.clear(), s.hasSplit = s.splitVisible = false;
+                s.replay.clear(), s.splitReplay.clear();
+            }
             if (!s.id.isEmpty())
                 w.sessions << s;
         }
@@ -1328,7 +1377,7 @@ void Store::fromJson(const QJsonObject &o)
         const auto co = cv.toObject();
         if (!co.value("id").toString().isEmpty())
             closed << Closed{co.value("workspaceId").toString(), co.value("name").toString(), co.value("cwd").toString(), co.value("index").toInt(-1),
-                             co.value("id").toString(),          qint64(co.value("closedAt").toDouble()), co.value("title").toString(), co.value("resume").toString()};
+                             co.value("id").toString(),          qint64(co.value("closedAt").toDouble()), co.value("title").toString(), co.value("resume").toString(), co.value("page").toObject()};
     }
     settings = Settings::fromJson(o.value("settings").toObject());
     if (!std::exchange(m_loaded, true))

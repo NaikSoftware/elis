@@ -37,6 +37,11 @@ An elis-server host is not this app: SKILL.md's "Remote windows and elis-server"
 - The `pane.focused`, `pane.scratch` and `remote.*` event kinds are accepted and never fire.
 - `keymap.conf`: `--repeat` is accepted with a diagnostic and not honoured; `global-hotkey` is skipped.
 - On Wayland `window move` is refused and `window list` omits `x`/`y`.
+- Terminal links: a plain click at a prompt opens a web link, Ctrl+click any link; Ctrl+Shift+click (⌘⇧) sends it to
+  the browser and Ctrl+Alt+click (⌘⌥) opens the folder holding a file. Under mouse capture Ctrl+click is the link
+  click and Ctrl+Alt+Shift+click reveals. File paths are links whatever the Konsole profile says. An escape-sequence
+  (OSC 8) link opens in the system's handler, never in a page. A link opens in its session's page under terminal zoom,
+  which hides only the chrome.
 - The phone: Settings ▸ Connect a Phone…, or `elisctl mobile serve [--port N] [--bind ADDR] [--host NAME]`, which
   runs the Mac's relay (Term, direct input, Fit to phone, Chat, Bluetooth through BlueZ; pages are refused) and prints
   the pairing QR code and link; `mobile reset` replaces the token. `--no-bluetooth` turns Bluetooth off; stderr says
@@ -52,11 +57,10 @@ These answer `<cmd> is not supported on this platform (<reason>)`:
 - quick terminal (`quick …`) and scratch terminal (`session scratch`);
 - every `zmx …` command, remote sessions, `session lead` (a covered pane takes the lead with a key), `session restart`;
 - `session background`, `surface cursor`, `config reload`;
-- page sessions (`session page`, `session overlay open --page`) and page companions. `--html`, `--url`,
-  `--markdown`, `--image` and `--text` pages, the page bridge (`data-elis`, `elis.request`), the text-page commands
-  (`overlay follow|search|changes|files|wrap`), `--browse`, `--persistent` and `browser clear|links` work in a build
-  with Qt WebEngine, which refuses them without it; a large `--html` file (percent-encoded text over 2 MB) needs `--cwd`.
-  `browser links` sets and reads the mode, but a clicked terminal link still opens in the system browser.
+- `session companion page attach` (a page shown on another Mac); without Qt WebEngine also every page:
+  `--html`, `--url`, `--markdown`, `--image` and `--text` overlays, page sessions and companions
+  (`overlay open --page|--companion`), the page bridge, the text-page commands and `browser …`.
+  A large `--html` file (percent-encoded text over 2 MB) needs `--cwd`.
 
 Also absent from the CLI: `session wait` (use `events`), `clipboard set` (use `wl-copy`/`xclip`), `terminfo`,
 per-call status colour, shape, sound and pane, and
