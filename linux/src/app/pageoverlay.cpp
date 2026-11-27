@@ -53,20 +53,31 @@ static QByteArray compact(const QJsonObject &o)
 static double s_zoom = 1;
 static QList<QPointer<PageOverlay>> s_pages;
 static QPointer<QWebEngineProfile> s_persistent;
-static bool s_clearing = false; // the dropped store is still shutting down
-static QString s_clearedPath;   // its folder, swept again once it is down
+static QString s_storeRoot; // <state>/QtWebEngine/<profile id>, holding one numbered folder per clear
+static int s_generation = 0;
 
-// a post routine added after WebEngine's own runs before it, so the store flushes while Chromium still runs
-static void releaseStore()
+// Each clear moves the store to the next numbered folder: Qt reports no end to a dropped profile's shutdown, and its
+// late writes must never reach the store that replaces it. Every folder but the current one is stale.
+static int lastGeneration(const QString &root)
 {
-    delete s_persistent.data();
-    if (!s_clearedPath.isEmpty())
-        QDir(s_clearedPath).removeRecursively();
+    int last = 0;
+    for (const QString &name : QDir(root).entryList(QDir::Dirs | QDir::NoDotAndDotDot))
+        last = std::max(last, name.toInt());
+    return last;
 }
 
-static QString persistentStoragePath(const QString &id)
+static void sweepStale(const QString &root, int keep)
 {
-    return stateDir() + QStringLiteral("/QtWebEngine/") + id; // Qt's own default for the live state dir, isolated with it
+    for (const QString &name : QDir(root).entryList(QDir::Dirs | QDir::NoDotAndDotDot))
+        if (name != QString::number(keep))
+            QDir(root + QLatin1Char('/') + name).removeRecursively();
+}
+
+void PageOverlay::releasePersistentStore()
+{
+    delete s_persistent.data();
+    if (!s_storeRoot.isEmpty())
+        sweepStale(s_storeRoot, s_generation);
 }
 
 // Every navigation the page or the user starts goes to ElisCore's policy; dialogs, file pickers and popups never open.
@@ -297,6 +308,7 @@ PageOverlay::PageOverlay(const QJsonObject &source, const QJsonObject &flags, co
             if (!m_failed) {
                 m_state = QStringLiteral("loaded");
                 syncShown();
+                m_originalPending = false;
                 m_contentShown = true;
             }
             break;
@@ -355,6 +367,7 @@ void PageOverlay::loadOriginal()
         return fail(QStringLiteral("session.overlay.open: %1").arg(m_storeFailure));
     m_loadPending = true;
     m_failed = false;
+    m_originalPending = true;
     const QString path = m_source.value("path").toString();
     if (m_source.value("kind").toString() == QLatin1String("url")) {
         m_page->load(QUrl(m_source.value("url").toString()));
@@ -383,6 +396,8 @@ void PageOverlay::fail(const QString &error)
 {
     m_failed = true;
     m_loadPending = false;
+    if (std::exchange(m_originalPending, false))
+        m_shown.clear(); // a failed load of the source names the source, not the document before it
     m_state = QStringLiteral("failed");
     m_errorText = error;
     m_error->setText(error);
@@ -490,6 +505,7 @@ bool PageOverlay::syncShown()
     if (m_failed || now.isEmpty() || now == m_shown || now != m_page->history()->currentItem().url())
         return false;
     m_shown = now;
+    m_originalPending = false;
     return true;
 }
 
@@ -638,20 +654,30 @@ QString PageOverlay::persistentStoreFailure()
 {
     if (s_persistent)
         return {};
-    const QJsonObject reply = bridge(elis_browser_profile(compact({{"directory", stateDir()}, {"clearing", s_clearing}}).constData()));
+    const QJsonObject reply = bridge(elis_browser_profile(compact({{"directory", stateDir()}}).constData()));
     const QString id = reply.value("id").toString();
     if (id.isEmpty())
         return reply.value("error").toString(QStringLiteral("the browser profile gave no answer"));
-    const QString path = persistentStoragePath(id);
+    const QString root = stateDir() + QStringLiteral("/QtWebEngine/") + id;
+    const int generation = std::max(1, lastGeneration(root));
+    sweepStale(root, generation);
+    const QString path = root + QLatin1Char('/') + QString::number(generation);
+    // no parent: WindowLibrary releases it once every page is gone, while WebEngine still runs, never qApp after it
 #if QT_VERSION >= QT_VERSION_CHECK(6, 9, 0) // the named constructor makes Qt's default folders, outside the state dir
-    s_persistent = QWebEngineProfileBuilder().setPersistentStoragePath(path).setCachePath(path + QStringLiteral("/cache")).createProfile(id, qApp);
+    QWebEngineProfile *profile = QWebEngineProfileBuilder().setPersistentStoragePath(path).setCachePath(path + QStringLiteral("/cache")).createProfile(id);
 #else
-    s_persistent = new QWebEngineProfile(id, qApp);
-    s_persistent->setPersistentStoragePath(path);
-    s_persistent->setCachePath(path + QStringLiteral("/cache"));
+    QWebEngineProfile *profile = new QWebEngineProfile(id);
+    profile->setPersistentStoragePath(path);
+    profile->setCachePath(path + QStringLiteral("/cache"));
 #endif
-    static const bool released = (qAddPostRoutine(releaseStore), true); // after the profile started WebEngine
-    Q_UNUSED(released);
+    if (!profile || profile->isOffTheRecord()) {
+        delete profile;
+        // the bridge's own text for a store that cannot be built
+        return bridge(elis_browser_profile("{}")).value("error").toString();
+    }
+    s_persistent = profile;
+    s_storeRoot = root;
+    s_generation = generation;
     return {};
 }
 
@@ -659,7 +685,7 @@ bool PageOverlay::clearPersistentStore(const QString &target, const QJsonObject 
 {
     // an open page holds its login in memory and would write it back
     const auto open = std::ranges::count_if(s_pages, [](const QPointer<PageOverlay> &p) { return p && s_persistent && p->m_profile == s_persistent; });
-    QJsonObject request{{"directory", stateDir()}, {"openPages", qint64(open)}, {"clearing", s_clearing}};
+    QJsonObject request{{"directory", stateDir()}, {"openPages", qint64(open)}};
     if (!target.isEmpty())
         request.insert("target", target);
     if (args.contains("window"))
@@ -670,21 +696,12 @@ bool PageOverlay::clearPersistentStore(const QString &target, const QJsonObject 
     const QString id = reply.value("id").toString();
     if (id.isEmpty())
         return true; // no profile: nothing to remove, and none is created
-    // no page uses the store: drop it whole and let the next persistent page build an empty one under the same id
-    const bool live = s_persistent;
+    // no page uses the store: drop it, and the next persistent page builds an empty one in a new folder, same id
     delete s_persistent.data();
-    const QString path = persistentStoragePath(id);
-    QDir(path).removeRecursively();
-    if (!live)
-        return true;
-    // shortcut: Qt reports no end to a dropped store's shutdown, whose last writes (its prefs) land after the delete;
-    // a fixed settle keeps a new store off the old one's files, and goes if Qt ever signals the release
-    s_clearing = true;
-    s_clearedPath = path;
-    QTimer::singleShot(2000, qApp, [path] {
-        QDir(path).removeRecursively();
-        s_clearing = false;
-        s_clearedPath.clear();
-    });
+    const QString root = stateDir() + QStringLiteral("/QtWebEngine/") + id;
+    s_storeRoot = root;
+    s_generation = lastGeneration(root) + 1;
+    sweepStale(root, s_generation);
+    QDir().mkpath(root + QLatin1Char('/') + QString::number(s_generation)); // the next store's, past any late write
     return true;
 }

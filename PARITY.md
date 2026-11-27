@@ -19,7 +19,7 @@ flags, output fields and error texts live there.
 | Phone pairing | Elis ▸ Connect a Phone… | Settings ▸ Connect a Phone…; Bluetooth through BlueZ |
 | Attention | Dock badge, bounce and Dock menu | taskbar entry highlight, no Dock menu |
 | Keep awake | the display still sleeps and locks | the screen also stays on and unlocked |
-| Saved browser store (`--persistent`) | under `~/Library/WebKit`, by the profile id | `<state dir>/QtWebEngine/<id>`; for 2 s after `browser clear`, persistent opens and clears are refused `browser storage is being cleared` |
+| Saved browser store (`--persistent`) | under `~/Library/WebKit`, by the profile id | `<state dir>/QtWebEngine/<id>/<n>`; `browser clear` moves it to the next numbered folder |
 | Open links in | Settings ▸ General ▸ Mouse | Settings ▸ General ▸ Sessions |
 
 ## Mac only

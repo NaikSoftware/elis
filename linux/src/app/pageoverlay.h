@@ -39,6 +39,7 @@ public:
     // the saved store every --persistent page shares, built on first use: why it cannot be used, empty when it can
     static QString persistentStoreFailure();
     static bool clearPersistentStore(const QString &target, const QJsonObject &args, QString *error); // browser.clear
+    static void releasePersistentStore(); // at quit, after every page and before WebEngine shuts down
     // where Open in Browser and Show in Folder go; tests replace it
     static inline std::function<void(const QUrl &)> openExternally;
 
@@ -78,4 +79,5 @@ private:
     bool m_textLoaded = false; // a file page without a grant shows its text, not its URL
     bool m_loadPending = false, m_clickedLoad = false, m_silenced = false, m_failed = false;
     bool m_contentShown = false; // a load finished once: later loads keep that document on screen while they run
+    bool m_originalPending = false; // loadOriginal's load has neither committed nor failed
 };

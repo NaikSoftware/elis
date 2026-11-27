@@ -56,8 +56,7 @@ These answer `<cmd> is not supported on this platform (<reason>)`:
   (`overlay follow|search|changes|files|wrap`) and the page bridge (`data-elis`, `elis.request`).
   `--html` and `--url` pages, `--browse`, `--persistent` and `browser clear|links` work in a build with Qt
   WebEngine, which refuses them without it; a large `--html` file (percent-encoded text over 2 MB) needs `--cwd`.
-  `browser links` sets and reads the mode, but a clicked terminal link still opens in the system browser. For 2 s
-  after `browser clear`, a `--persistent` open or another clear answers `browser storage is being cleared`.
+  `browser links` sets and reads the mode, but a clicked terminal link still opens in the system browser.
   There is no inline image, rendered markdown or file-at-line view either: never pass `--image`, `--markdown` or
   `--text` to `overlay open`. Show a file by running a viewer as the overlay program (`less +N file`, `glow file`).
 

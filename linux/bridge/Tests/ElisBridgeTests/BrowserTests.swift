@@ -22,7 +22,7 @@ private func scratch() -> URL {
 @Suite struct BrowserTests {
     @Test func aMissingProfileIsCreatedOnceAndKept() throws {
         let dir = scratch()
-        #expect(call(elisBrowserClear(json(["directory": dir.path, "openPages": 0])))["id"] == nil) // a clear creates nothing
+        #expect(call(elisBrowserClear(json(["directory": dir.path, "openPages": 0])))["id"] == nil)
         #expect(!FileManager.default.fileExists(atPath: dir.appendingPathComponent("browser-profile").path))
         let id = try #require(call(elisBrowserProfile(json(["directory": dir.path])))["id"] as? String)
         #expect(UUID(uuidString: id) != nil)
@@ -45,6 +45,7 @@ private func scratch() -> URL {
         try FileManager.default.createDirectory(at: unreadable.appendingPathComponent("browser-profile"), withIntermediateDirectories: true)
         #expect(call(elisBrowserProfile(json(["directory": unreadable.path])))["error"] as? String
             == BrowserProfile.Failure.unreadable(unreadable.appendingPathComponent("browser-profile").path).description)
+        #expect(call(elisBrowserProfile(json([:])))["error"] as? String == OverlayHtmlError.persistentUnavailable)
     }
 
     @Test func clearRefusesWhileAPersistentPageIsOpenOrWhenTargeted() {
@@ -53,9 +54,6 @@ private func scratch() -> URL {
         #expect(call(elisBrowserClear(json(["directory": dir, "openPages": 2])))["error"] as? String == "browser.clear: 2 persistent pages still open")
         #expect(call(elisBrowserClear(json(["directory": dir, "openPages": 0, "target": "active"])))["error"] as? String
             == "browser.clear takes no target or --window")
-        #expect(call(elisBrowserClear(json(["directory": dir, "openPages": 0, "clearing": true])))["error"] as? String
-            == "browser.clear: browser storage is being cleared")
-        #expect(call(elisBrowserProfile(json(["directory": dir, "clearing": true])))["error"] as? String == BrowserClearError.clearing)
     }
 
     @Test func linksSetReadAndRefuse() {

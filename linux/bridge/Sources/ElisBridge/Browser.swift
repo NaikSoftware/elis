@@ -11,7 +11,6 @@ private struct BrowserRequest: Decodable {
     var current: String?
     var directory: String?
     var openPages: Int?
-    var clearing: Bool?
 }
 
 private struct ProfileID: Encodable {
@@ -30,11 +29,10 @@ private func scopeRefusal(_ request: BrowserRequest, _ cmd: String) -> UnsafeMut
 }
 
 /// The profile id of `directory`, created when its file is missing: {"ok":true,"id"}, or {"ok":false,"error"} for
-/// an unreadable or malformed file, which is left alone. Input {"directory","clearing"?}: a store being cleared refuses.
+/// an unreadable or malformed file, which is left alone. Input {"directory"}; without it, the Mac's unavailable-store refusal.
 @_cdecl("elis_browser_profile")
 public func elisBrowserProfile(_ json: UnsafePointer<CChar>) -> UnsafeMutablePointer<CChar>? {
     guard let request = request(json), let directory = request.directory else { return encoded(Refusal(error: OverlayHtmlError.persistentUnavailable)) }
-    if request.clearing == true { return encoded(Refusal(error: BrowserClearError.clearing)) }
     do {
         return encoded(ProfileID(id: try BrowserProfile(directory: URL(fileURLWithPath: directory)).identifier().uuidString))
     } catch {
@@ -43,12 +41,11 @@ public func elisBrowserProfile(_ json: UnsafePointer<CChar>) -> UnsafeMutablePoi
 }
 
 /// `browser.clear`'s decision: {"ok":true,"id"} names the store to empty, a null id meaning no profile exists and
-/// nothing is created; or the Mac's refusal. Input {"target"?,"window"?,"directory","openPages","clearing"?}.
+/// nothing is created; or the Mac's refusal. Input {"target"?,"window"?,"directory","openPages"}.
 @_cdecl("elis_browser_clear")
 public func elisBrowserClear(_ json: UnsafePointer<CChar>) -> UnsafeMutablePointer<CChar>? {
     guard let request = request(json), let directory = request.directory else { return encoded(Refusal(error: "invalid arguments")) }
     if let refusal = scopeRefusal(request, "browser.clear") { return refusal }
-    if request.clearing == true { return encoded(Refusal(error: "browser.clear: \(BrowserClearError.clearing)")) }
     if let open = request.openPages, open > 0 { return encoded(Refusal(error: "browser.clear: \(BrowserClearError.pagesOpen(open))")) }
     do {
         return encoded(ProfileID(id: try BrowserProfile(directory: URL(fileURLWithPath: directory)).existingIdentifier()?.uuidString))

@@ -187,8 +187,10 @@ struct WebServer : QTcpServer {
             while (QTcpSocket *c = nextPendingConnection())
                 connect(c, &QTcpSocket::readyRead, c, [this, c] {
                     const QString path = QString::fromLatin1(c->readAll().split(' ').value(1));
-                    if (held.contains(path))
-                        return waiting[path].append(c), void();
+                    if (held.contains(path)) {
+                        waiting[path].append(c);
+                        return;
+                    }
                     c->write(routes.value(path, "HTTP/1.1 404 Not Found\r\nContent-Length: 0\r\nConnection: close\r\n\r\n"));
                     c->disconnectFromHost();
                 });
@@ -1163,7 +1165,7 @@ private Q_SLOTS:
         QVERIFY(!run("session.overlay.open", {{"page", QJsonObject{{"kind", "url"}, {"url", a.url()}}}, {"browse", true}, {"navigation", true}}).contains("error"));
         QTRY_VERIFY_WITH_TIMEOUT(a.waiting.contains(QStringLiteral("/")), 30000);
         QTest::qWait(300);
-        names(a.url()); // the source until the first commit
+        names(a.url());
         a.held.clear();
         a.answer(QStringLiteral("/"), a.routes["/"]);
         QTRY_COMPARE_WITH_TIMEOUT(page()["state"].toString(), QStringLiteral("loaded"), 30000);
@@ -1171,15 +1173,15 @@ private Q_SLOTS:
         names(a.url());
         auto *overlay = w.findChild<PageOverlay *>();
         overlay->view()->page()->runJavaScript(QStringLiteral("document.getElementById('frag').click()"), QWebEngineScript::ApplicationWorld);
-        QTRY_COMPARE(page()["page"].toString(), a.url("/#x")); // a change on the shown origin is taken at once
+        QTRY_COMPARE(page()["page"].toString(), a.url("/#x"));
         names(a.url("/#x"));
         overlay->view()->page()->runJavaScript(QStringLiteral("document.getElementById('away').click()"), QWebEngineScript::ApplicationWorld);
         QTRY_VERIFY(b.waiting.contains(QStringLiteral("/slow")));
         QTest::qWait(300);
-        names(a.url("/#x")); // a pending load on another origin names nothing yet
+        names(a.url("/#x"));
         b.answer(QStringLiteral("/slow"), WebServer::streamed("<title>Slow</title><p>half"), false);
         QTRY_COMPARE_WITH_TIMEOUT(page()["page"].toString(), b.url("/slow"), 10000);
-        QCOMPARE(page()["state"].toString(), QStringLiteral("loading")); // committed, not finished
+        QCOMPARE(page()["state"].toString(), QStringLiteral("loading"));
         names(b.url("/slow"));
         b.answer(QStringLiteral("/slow"), "</p>");
         QTRY_COMPARE(page()["state"].toString(), QStringLiteral("loaded"));
@@ -1205,6 +1207,13 @@ private Q_SLOTS:
         b.answer(QStringLiteral("/slow"), WebServer::streamed("<title>Slow</title>"));
         QTRY_COMPARE_WITH_TIMEOUT(page()["page"].toString(), b.url("/slow"), 10000);
         names(b.url("/slow"));
+
+        // a reload of the source that fails
+        a.held.clear();
+        a.routes["/"] = QByteArray();
+        QVERIFY(!run("session.overlay.reload").contains("error"));
+        QTRY_COMPARE_WITH_TIMEOUT(page()["state"].toString(), QStringLiteral("failed"), 10000);
+        names(a.url());
         QVERIFY(!run("session.overlay.close").contains("error"));
     }
 
@@ -1245,14 +1254,14 @@ private Q_SLOTS:
         QFile::remove(profile); // ctest's state dir outlives a run
         QDir(stateDir() + QStringLiteral("/QtWebEngine")).removeRecursively();
         QVERIFY(clear().isEmpty());
-        QVERIFY(!QFile::exists(profile)); // nothing to clear creates nothing
+        QVERIFY(!QFile::exists(profile));
 
         QFile bad(profile);
         QVERIFY(bad.open(QIODevice::WriteOnly));
         bad.write("not a uuid\n");
         bad.close();
         QCOMPARE(open(true, "/"), QStringLiteral("session.overlay.open: browser profile is not a UUID: %1").arg(profile));
-        QVERIFY(!w.sessionExtras(id).contains("htmlOverlays")); // never an in-memory store instead
+        QVERIFY(!w.sessionExtras(id).contains("htmlOverlays"));
         QCOMPARE(clear(), QStringLiteral("browser.clear: browser profile is not a UUID: %1").arg(profile));
         QVERIFY(QFile::remove(profile));
 
@@ -1265,7 +1274,7 @@ private Q_SLOTS:
         idFile.close();
         QVERIFY(!QUuid::fromString(uuid).isNull());
         const QString storage = stateDir() + QStringLiteral("/QtWebEngine/") + uuid;
-        QVERIFY(QDir(storage).exists());
+        QVERIFY(QDir(storage + QStringLiteral("/1")).exists());
 #if QT_VERSION >= QT_VERSION_CHECK(6, 9, 0)
         QVERIFY(!QDir(QStandardPaths::writableLocation(QStandardPaths::AppDataLocation) + QStringLiteral("/QtWebEngine/") + uuid).exists());
 #endif
@@ -1276,20 +1285,19 @@ private Q_SLOTS:
 
         QVERIFY(open(false, "/plain").isEmpty());
         QTRY_COMPARE_WITH_TIMEOUT(page()["state"].toString(), QStringLiteral("loaded"), 30000);
-        QCOMPARE(held(), QStringLiteral("|null")); // a page of its own store
+        QCOMPARE(held(), QStringLiteral("|null"));
         QVERIFY(!run("session.overlay.close").contains("error"));
         QVERIFY(open(true, "/plain").isEmpty());
         QTRY_COMPARE_WITH_TIMEOUT(page()["state"].toString(), QStringLiteral("loaded"), 30000);
-        QCOMPARE(held(), QStringLiteral("k=v|v")); // the saved store, shared
+        QCOMPARE(held(), QStringLiteral("k=v|v"));
         QVERIFY(!run("session.overlay.close").contains("error"));
 
         QVERIFY(clear().isEmpty());
         QVERIFY(idFile.open(QIODevice::ReadOnly));
-        QCOMPARE(QString::fromUtf8(idFile.readAll()).trimmed(), uuid); // the store keeps its id
+        QCOMPARE(QString::fromUtf8(idFile.readAll()).trimmed(), uuid);
         idFile.close();
-        QCOMPARE(open(true, "/plain"), QStringLiteral("session.overlay.open: browser storage is being cleared"));
-        QCOMPARE(clear(), QStringLiteral("browser.clear: browser storage is being cleared"));
-        QVERIFY(QTest::qWaitFor([&] { return open(true, "/plain").isEmpty(); }, 5000));
+        QVERIFY(open(true, "/plain").isEmpty());
+        QVERIFY(QDir(storage + QStringLiteral("/2")).exists()); // past any late write of the dropped store's folder
         QTRY_COMPARE_WITH_TIMEOUT(page()["state"].toString(), QStringLiteral("loaded"), 30000);
         QCOMPARE(held(), QStringLiteral("|null"));
         QVERIFY(!run("session.overlay.close").contains("error"));
