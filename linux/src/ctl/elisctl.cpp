@@ -80,7 +80,7 @@ static const char *usage = R"(usage: elisctl <command> [args] [--target T] [--so
   session select-all
   session search [needle] [--next | --prev | --close]   Konsole's search bar; prints the match count
   surface zoom [show|hide|toggle] [--target active|surface:<session>:left|right]
-  session status <idle|active|completed|blocked> [--auto-reset] [--blink] [--if-idle]
+  session status <idle|active|completed|blocked> [--auto-reset] [--blink] [--if-idle] [--pane-id ID] [--cwd DIR]
   session progress <N/M|N%|indeterminate|clear>   fill the row; a status change into completed or idle clears it
   session go --to next|prev|first|last|next-attention|prev-attention
   sidebar [show|hide|toggle]
@@ -729,8 +729,10 @@ int main(int argc, char **argv)
         args.insert("name", arg);
     if (cmd.endsWith(QLatin1String(".rename")))
         args.insert("name", arg);
-    if (cmd == QLatin1String("session.status"))
+    if (cmd == QLatin1String("session.status")) {
         args.insert("status", arg);
+        copy("pane-id", "paneID");
+    }
     if (cmd == QLatin1String("session.progress"))
         args.insert("progress", arg);
     if (cmd.endsWith(QLatin1String(".tint"))) {

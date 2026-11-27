@@ -463,6 +463,26 @@ private Q_SLOTS:
         QVERIFY(!call(s, t, "session.status", b, {{"status", "bogus"}, {"ifIdle", true}})["ok"].toBool());
     }
 
+    void statusCwdLandsOnTheWritersPane()
+    {
+        Store s;
+        FakeTerminals t;
+        const QString a = s.addSession(s.addWorkspace("w"), "a", {});
+        Session *x = s.session(a);
+        x->paneId = "L", x->splitPaneId = "R", x->hasSplit = true;
+        QVERIFY(call(s, t, "session.status", a, {{"status", "active"}, {"cwd", "/repo/.claude/worktrees/w"}})["ok"].toBool());
+        QVERIFY(call(s, t, "session.status", a, {{"status", "active"}, {"pane", "right"}, {"cwd", "/r"}})["ok"].toBool());
+        // a promoted survivor keeps its baked `right`; its pane id names the slot it holds now
+        QVERIFY(call(s, t, "session.status", a, {{"status", "active"}, {"pane", "right"}, {"paneID", "L"}, {"cwd", "/l"}})["ok"].toBool());
+        QCOMPARE(x->agentCwd, (QHash<QString, QString>{{"L", "/l"}, {"R", "/r"}}));
+        QVERIFY(call(s, t, "session.status", a, {{"status", "active"}, {"ifIdle", true}, {"cwd", "/sub"}})["ok"].toBool());
+        QVERIFY(call(s, t, "session.status", a, {{"status", "active"}, {"pane", "scratch"}, {"cwd", "/sub"}})["ok"].toBool());
+        QCOMPARE(x->agentCwd.value("L"), QStringLiteral("/l"));
+        const QJsonObject relative = call(s, t, "session.status", a, {{"status", "idle"}, {"cwd", "repo"}});
+        QCOMPARE(relative["error"].toString(), QStringLiteral("cwd must be an absolute path"));
+        QCOMPARE(x->status, QStringLiteral("active"));
+    }
+
     void controlWinsOverTerminal()
     {
         Store s;

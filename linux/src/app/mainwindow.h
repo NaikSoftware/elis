@@ -247,6 +247,9 @@ private:
     void sampleAgents();
     TerminalInterface *terminal(const QString &id) const;
     QString liveCwd(const QString &id) const;
+    // the focused pane's agent's cwd (session.status --cwd), else `fallback`: what the CI line and file panel show
+    QString workingCwd(const Session &s, const QString &fallback) const;
+    QString panelRoot() const;
     void prime(QWidget *page, QWidget *pane = nullptr); // pane: mark that one terminal as sized, not the whole page
     QObject *konsoleSession(const QString &id);
 

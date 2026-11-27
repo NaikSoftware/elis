@@ -341,7 +341,7 @@ MainWindow::MainWindow(Store &store, const QString &statePath)
     : m_store(store), m_statePath(statePath)
 {
     m_tree = new Sidebar(store);
-    new CiLine(store, m_tree, this);
+    new CiLine(store, m_tree, [this](const Session &s) { return workingCwd(s, s.cwd); }, this);
 
     // footer: new workspace and new session on the left, the workspace filter and the flagged view on the right, as elis's sidebar bar
     auto footerButton = [](const QString &glyph, const QString &tip) {
@@ -1470,7 +1470,7 @@ bool MainWindow::filePanel(const QString &mode, int width, QString *)
     if (width > 0)
         m_filePanelWidth = qBound(160, width, 560); // elis's clamp
     applyFilePanelWidth();
-    m_filePanel->setRoot(liveCwd(m_store.selected));
+    m_filePanel->setRoot(panelRoot());
     m_saveTimer.start();
     return true;
 }
@@ -1498,6 +1498,17 @@ TerminalInterface *MainWindow::terminal(const QString &id) const
 {
     auto *part = m_panes.value(id).main;
     return part ? qobject_cast<TerminalInterface *>(part) : nullptr;
+}
+
+QString MainWindow::workingCwd(const Session &s, const QString &fallback) const
+{
+    return s.agentCwd.value(s.hasSplit && m_splitFocused.value(s.id) ? s.splitPaneId : s.paneId, fallback);
+}
+
+QString MainWindow::panelRoot() const
+{
+    const Session *s = m_store.session(m_store.selected);
+    return s ? workingCwd(*s, liveCwd(s->id)) : QString();
 }
 
 QString MainWindow::liveCwd(const QString &id) const
@@ -1692,7 +1703,7 @@ void MainWindow::showSelected()
     }
     m_shownId = m_store.selected;
     if (!m_filePanel->isHidden())
-        m_filePanel->setRoot(liveCwd(m_store.selected)); // no-op while the folder is unchanged
+        m_filePanel->setRoot(panelRoot()); // no-op while the folder is unchanged
     const QString name = s ? s->displayName() : QString();
     m_title->setText(name);
     m_context->setText(s ? s->context : QString());
@@ -1852,6 +1863,11 @@ void MainWindow::sampleAgents()
             if (!sample.agent.isEmpty() && (!pick || sample.pane == focused))
                 pick = &sample;
         m_store.setAgent(s->id, pick ? pick->agent : QString(), pick ? pick->pane : QString());
+        QStringList agentPanes;
+        for (const Sample &sample : samples)
+            if (!sample.agent.isEmpty())
+                agentPanes << (sample.pane == QLatin1String("right") ? s->splitPaneId : s->paneId);
+        s->agentCwd.removeIf([&](const auto &it) { return !agentPanes.contains(it.key()); }); // its agent exited
         if (pick && pick->agent == QLatin1String("claude")) { // kept after claude exits: reopening the closed session resumes it
             static const QString sessions = claudeHome(qEnvironmentVariable("CLAUDE_CONFIG_DIR"), QDir::homePath()) + QStringLiteral("/sessions");
             for (int pid : pick->group)
@@ -1903,7 +1919,7 @@ void MainWindow::sampleAgents()
         }
     }
     if (!m_filePanel->isHidden()) // a cd in the active session moves the file panel with it
-        m_filePanel->setRoot(liveCwd(m_store.selected));
+        m_filePanel->setRoot(panelRoot());
 }
 
 QString MainWindow::askName(const QString &title, bool *ok)
