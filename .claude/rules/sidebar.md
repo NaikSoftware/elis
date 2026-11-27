@@ -68,16 +68,14 @@ paths:
   is enabled.
 - Hover shows `session-close` on a session row in place of its badge and status glyph, except on an `.active`
   row, which keeps its glyph; it runs the menu's Close. No Interface toggle, by the owner's call.
-- A workspace-row click toggles expansion through the outline action, excluding the disclosure frame.
-  Defer by `NSEvent.doubleClickInterval` and cancel on double-click so rename does not flicker through a
-  toggle. This click routing is keep-in-sync exempt. `GhosttyApp.workspaceRowClickExpands` (default on)
-  gates the whole-row target only; the disclosure triangle toggles natively and stays unconditional.
-  The deferred item re-reads that mirror when it fires, so turning the setting off inside the deferral
-  window cancels the pending toggle.
-  The row icon acts like the triangle: a click toggles at once whatever the setting, and the second click of
-  a double-click arrives only as `doubleAction`, which toggles back instead of renaming.
+- A workspace-row click toggles expansion at once through the outline action, excluding the disclosure frame.
+  A workspace row has no double-click rename (owner, 2026-11-27): deferring the click to tell a rename from a fold
+  made every fold lag by the double-click interval. Rename goes through the row menu, File menu or `rename_workspace`.
+  The second click of a double-click arrives only as `doubleAction`, which runs the single-click path again, so a
+  double-click folds twice. This click routing is keep-in-sync exempt. `GhosttyApp.workspaceRowClickExpands`
+  (default on) gates the whole-row target only; the disclosure triangle and the row icon toggle whatever the setting.
   A click anywhere on a workspace row with no children, icon included and whatever the setting, opens the "+"
-  launcher menu at the click through the same deferred, double-click-cancelled item; the Linux sidebar matches.
+  launcher menu at the click; the Linux sidebar matches.
   Route the row-click toggle through `outline.animator()` so it animates
   like the triangle; a bare `expandItem`/`collapseItem` silently drops the animation. Do not gate that on
   Reduce Motion — both hit targets reach the same AppKit animation, so a gate would re-split them. Every

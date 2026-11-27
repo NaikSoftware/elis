@@ -177,9 +177,6 @@ struct WorkspaceSidebar: NSViewRepresentable {
         /// the visual `expandedWorkspaceIDs` but SKIP the persist write-back, so a view-only reveal never
         /// burns a persisted collapse. `expandAll`/`collapseOthers` set it too and persist once at the end.
         var suppressExpansionPersist = false
-        /// Scheduled single-click workspace toggle, deferred by the double-click interval so a rename
-        /// double-click can cancel it — else its first click flips the workspace open on the way into edit.
-        var pendingRowToggle: DispatchWorkItem?
         /// Scheduled spring-loaded workspace expand while a drag hovers over a collapsed workspace row.
         /// View-only like the selection reveal: opens the target for this drag without persisting expansion.
         var pendingSpringLoadedExpansion: (workspaceID: UUID, workItem: DispatchWorkItem)?
