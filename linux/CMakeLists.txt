@@ -137,7 +137,7 @@ add_dependencies(elisctl elis-swift-ctl)
 # shared with the Mac app; installed as share/elis/agent-status and share/elis/skill/elis
 set(ELIS_AGENT_STATUS ${CMAKE_SOURCE_DIR}/../shared/agent-status)
 set(ELIS_SKILL ${CMAKE_SOURCE_DIR}/../plugins/elis/skills/elis)
-set(ELIS_MARKDOWN ${CMAKE_SOURCE_DIR}/../macos/Elis/Resources/markdown) # the Mac's page renderers, as share/elis/markdown
+set(ELIS_MARKDOWN ${CMAKE_SOURCE_DIR}/../shared/page-assets/markdown) # the page renderers, as share/elis/markdown
 
 enable_testing()
 add_executable(test_core tests/test_core.cpp)
