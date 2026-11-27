@@ -297,6 +297,21 @@ bool MainWindow::openOverlay(const QString &id, const QString &pane, const QStri
 }
 
 #ifdef ELIS_HAS_WEBENGINE
+// the strip on a painted frame reads in the theme's text colour, or in black or white on a --background-color
+static void paintPageFrame(QWidget *frame, const QColor &back, QColor text)
+{
+    if (!text.isValid())
+        text = back.lightness() < 128 ? Qt::white : Qt::black;
+    QPalette pal = frame->palette();
+    pal.setColor(QPalette::Window, back);
+    pal.setColor(QPalette::Button, back.lightness() < 128 ? back.lighter(140) : back.darker(110)); // under ButtonText
+    for (QPalette::ColorRole role : {QPalette::WindowText, QPalette::ButtonText, QPalette::Text})
+        pal.setColor(role, text);
+    text.setAlphaF(0.6);
+    pal.setColor(QPalette::PlaceholderText, text);
+    frame->setPalette(pal);
+}
+
 bool MainWindow::openPage(const QString &id, const QString &pane, const QJsonObject &args, QJsonObject *result, QString *error)
 {
     const Panes p = m_panes.value(id);
@@ -342,11 +357,8 @@ bool MainWindow::openPage(const QString &id, const QString &pane, const QJsonObj
     ov.themedFrame = paint.isEmpty() && source.value("kind").toString() != QLatin1String("url");
     if (ov.themedFrame)
         paint = theme.value("background").toString();
-    if (!paint.isEmpty()) {
-        QPalette pal = frame->palette();
-        pal.setColor(QPalette::Window, QColor(paint));
-        frame->setPalette(pal);
-    }
+    if (!paint.isEmpty())
+        paintPageFrame(frame, QColor(paint), ov.themedFrame ? QColor(theme.value("foreground").toString()) : QColor());
     PageOverlay::setZoom(m_store.settings.htmlOverlayZoom);
     if (const QJsonObject pixels = checked.value("pixels").toObject(); !pixels.isEmpty() && pane.isEmpty() && !ov.sizePercent && !ov.width && !ov.height) {
         // an unsized picture opens at its own size: one image pixel per display pixel, inside the session's area
@@ -409,11 +421,8 @@ void MainWindow::refreshPageThemes()
         auto *page = static_cast<PageOverlay *>(ov.page.data());
         if (!page)
             continue;
-        if (ov.themedFrame) {
-            QPalette pal = ov.frame->palette();
-            pal.setColor(QPalette::Window, QColor(theme.value("background").toString()));
-            ov.frame->setPalette(pal);
-        }
+        if (ov.themedFrame)
+            paintPageFrame(ov.frame, QColor(theme.value("background").toString()), QColor(theme.value("foreground").toString()));
         page->applyTheme(theme);
     }
 #endif
