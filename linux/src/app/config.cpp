@@ -4,6 +4,9 @@
 #include "filepanel.h"
 #include "hooks.h"
 #include "palette.h"
+#ifdef ELIS_HAS_WEBENGINE
+#include "pageoverlay.h"
+#endif
 #include "paths.h"
 #include "sidebar.h"
 #include "store.h"
@@ -538,6 +541,10 @@ bool MainWindow::appCommand(const QString &cmd, const QString &sessionId, const 
         return overlayCommand(cmd, sessionId, args, result, error);
     if (cmd == QLatin1String("dashboard"))
         return dashboardCommand(args, result, error);
+#ifdef ELIS_HAS_WEBENGINE
+    if (cmd == QLatin1String("browser.clear"))
+        return PageOverlay::clearPersistentStore(sessionId, args, error);
+#endif
     bool handled = false;
     if (const bool done = uiCommand(cmd, sessionId, args, result, error, &handled); handled)
         return done;

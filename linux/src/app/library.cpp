@@ -8,6 +8,9 @@
 #include "detectedlaunchers.h"
 #include "zmx.h"
 #include "mainwindow.h"
+#ifdef ELIS_HAS_WEBENGINE
+#include "pageoverlay.h"
+#endif
 #include "store.h"
 
 #include <QApplication>
@@ -50,6 +53,9 @@ WindowLibrary::~WindowLibrary()
         delete e.window; // before its store: the window reads it while tearing down
         delete e.store;
     }
+#ifdef ELIS_HAS_WEBENGINE
+    PageOverlay::releasePersistentStore();
+#endif
 }
 
 QString WindowLibrary::path(const QString &id) const

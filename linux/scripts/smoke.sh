@@ -186,6 +186,21 @@ for w in json.load(sys.stdin)["result"]["tree"]["workspaces"]:
   loaded
   ctl tree --json | grep -q "\"markdown\":\"$site/readme.md\"" || fail "markdown page read-back"
   ctl session overlay close --target "$id"
+  ctl browser clear || fail "browser clear without a saved store"
+  [ -e "$ELIS_STATE_DIR/browser-profile" ] && fail "browser clear created a profile"
+  [ "$(ctl browser links)" = browser ] || fail "browser links default"
+  [ "$(ctl browser links overlay75)" = overlay75 ] || fail "browser links set"
+  ctl tree --json | grep -q '"linkOpenMode":"overlay75"' || fail "linkOpenMode read-back"
+  err=$(ctl browser links tab 2>&1) && fail "a bad link mode was taken"
+  [[ $err == *'invalid link mode: tab'* ]] || fail "link mode refusal ($err)"
+  ctl session overlay open --url http://127.0.0.1:9/ --browse --persistent --target "$id" >/dev/null
+  ctl tree --json | grep -q '"browse":true' || fail "browse read-back"
+  ctl tree --json | grep -q '"persistent":true' || fail "persistent read-back"
+  [ -e "$ELIS_STATE_DIR/browser-profile" ] || fail "a persistent page made no profile"
+  err=$(ctl browser clear 2>&1) && fail "browser clear with a persistent page open"
+  [[ $err == *'1 persistent page still open'* ]] || fail "browser clear refusal ($err)"
+  ctl session overlay close --target "$id"
+  ctl browser clear || fail "browser clear"
 else
   for ucmd in "session overlay follow on" "session overlay search x" "session overlay changes --next" "session overlay files --go 1" "session overlay wrap on"; do
     err=$(ctl $ucmd --target "$id" 2>&1) && fail "$ucmd answered"

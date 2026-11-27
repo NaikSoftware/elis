@@ -120,8 +120,10 @@ static const char *usage = R"(usage: elisctl <command> [args] [--target T] [--so
   session overlay open <command> [--cwd DIR] [--wait | --block] [--size-percent N [--width PT] [--height PT]]
                        [--background-color #rrggbb] [--follow] [--pane left|right]
                                         a program over the session (full, floating, or one pane); closes when it exits
-  session overlay open --html FILE [--cwd DIR] | --url URL [--navigation] [--js] [--chromeless] [--block] ...
+  session overlay open --html FILE [--cwd DIR] | --url URL [--browse] [--persistent] [--navigation] [--js] [--chromeless] [--block] ...
                                         a page over the session (needs Qt WebEngine); --block exits 0 answered, 2 closed
+  browser links [browser|overlay|overlay95|overlay75|overlay50]   where a clicked web link opens; bare: reads
+  browser clear                         remove every cookie and all site data the saved (--persistent) store holds
   session overlay open --markdown FILE [--navigation] | --image FILE | --text FILE [--line N | --tail N [--follow-file]]
                                         a rendered markdown file, a picture, or a source file or log, read-only
   session overlay search <text> | --next | --prev | --close    find in a text page; a step prints N of M
@@ -161,7 +163,7 @@ static const char *usage = R"(usage: elisctl <command> [args] [--target T] [--so
   session restore <command> | --none | --clear [--pane left|right]   pin what this pane re-runs (rerun mode)
 
 Not in elis (the app answers "<cmd> is not supported on this platform"): zmx, session restart/lead/background/page,
-surface cursor, config reload, browser, page companions, quick terminal, scratch terminal.
+surface cursor, config reload, page companions, quick terminal, scratch terminal; browser without Qt WebEngine.
 )";
 
 static QByteArray roundTrip(const QString &path, const QJsonObject &request, QString *error)
@@ -928,6 +930,8 @@ int main(int argc, char **argv)
         || cmd == QLatin1String("sidebar.density") || cmd == QLatin1String("sidebar") || cmd == QLatin1String("surface.zoom")
         || cmd == QLatin1String("settings.keep-awake"))
         args.insert("mode", arg.isEmpty() ? QStringLiteral("toggle") : arg);
+    if (cmd == QLatin1String("browser.links") && !arg.isEmpty()) // bare: reads
+        args.insert("mode", arg);
     if (cmd == QLatin1String("sidebar.width")) {
         bool number = false;
         const double w = arg.toDouble(&number);
