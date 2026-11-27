@@ -268,7 +268,7 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
           final all = m.sessions.toList();
           final needs = all.where((s) => s.needsYou).toList()..sort((a, b) => a.status == b.status ? 0 : (a.status == 'blocked' ? -1 : 1));
           // one ticker drives every running row; it sleeps while none is on screen, and stands still with animations off
-          if (!MediaQuery.disableAnimationsOf(context) && _shownRows(all).any((s) => s.status == 'active')) {
+          if (!MediaQuery.disableAnimationsOf(context) && _shownRows(all).any((s) => s.waves)) {
             if (!wave.isAnimating) wave.repeat();
           } else {
             wave.value = 0;
@@ -548,20 +548,20 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
       {required Color tint, required double indent, bool chevronSlot = false, bool hiddenBlocked = false, bool showWorkspace = false, bool last = false}) {
     final own = tintColor(s.tint);
     final t = own ?? tint;
-    final running = s.status == 'active';
+    final painted = s.waves || s.fill != null;
     final info = showWorkspace ? s.workspaceName : (s.context.isNotEmpty ? s.context : s.shortCwd);
     final hasCompanions = chevronSlot && (w?.sessions.any((c) => c.parent == s.id) ?? false);
     // the wave runs edge to edge, but the last row of a tinted card follows the card's corners (16 less its 4 padding)
-    final radius = !running ? BorderRadius.circular(12) : last ? const BorderRadius.vertical(bottom: Radius.circular(12)) : BorderRadius.zero;
+    final radius = !painted ? BorderRadius.circular(12) : last ? const BorderRadius.vertical(bottom: Radius.circular(12)) : BorderRadius.zero;
     // no selected-session highlight: a tap opens a new screen, so "current" means nothing in this list.
     // The wave sits under the Material and the tint is Ink, so neither hides the tap ripple.
     // its own layer, so a wave frame repaints this row and not the whole workspace group
     return RepaintBoundary(
      child: ClipRRect(
       borderRadius: radius,
-      clipBehavior: running && last ? Clip.antiAlias : Clip.none,
+      clipBehavior: painted && last ? Clip.antiAlias : Clip.none,
       child: CustomPaint(
-      painter: running ? _WavePainter(wave, t) : null,
+      painter: painted ? _RowPainter(wave, t, waves: s.waves, fill: s.fill) : null,
       child: Material(
         type: MaterialType.transparency,
         child: InkWell(
@@ -716,7 +716,6 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
   }
 }
 
-// elis's running-row wave: the tint, then the active blue, drifting one period (two row widths) every 4.8 s
 /// A closed session's row on its way out: it fades and drifts left, then the gap closes.
 class _Leave extends StatefulWidget {
   const _Leave({super.key, required this.child, required this.onDone});
@@ -760,13 +759,18 @@ class _LeaveState extends State<_Leave> with SingleTickerProviderStateMixin {
   }
 }
 
-class _WavePainter extends CustomPainter {
-  _WavePainter(this.phase, this.tint) : super(repaint: phase);
+// elis's progress fill, then its running-row wave: the tint, then the active blue, drifting one period (two row widths) every 4.8 s
+class _RowPainter extends CustomPainter {
+  _RowPainter(this.phase, this.tint, {required this.waves, this.fill}) : super(repaint: waves ? phase : null);
   final Animation<double> phase;
   final Color tint;
+  final bool waves;
+  final double? fill;
 
   @override
   void paint(Canvas canvas, Size size) {
+    if (fill case final f?) canvas.drawRect(Rect.fromLTWH(0, 0, size.width * f, size.height), Paint()..color = tint.withValues(alpha: 0.16));
+    if (!waves) return;
     final period = size.width * 2;
     final shader = LinearGradient(
       colors: [tint.withValues(alpha: 0.04), tint.withValues(alpha: 0.20), C.active.withValues(alpha: 0.16), tint.withValues(alpha: 0.04)],
@@ -777,5 +781,5 @@ class _WavePainter extends CustomPainter {
   }
 
   @override
-  bool shouldRepaint(_WavePainter old) => old.tint != tint || old.phase != phase;
+  bool shouldRepaint(_RowPainter old) => old.tint != tint || old.phase != phase || old.waves != waves || old.fill != fill;
 }

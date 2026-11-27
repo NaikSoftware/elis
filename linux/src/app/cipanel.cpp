@@ -13,8 +13,8 @@
 #include <QUrl>
 #include <QVBoxLayout>
 
-CiLine::CiLine(Store &store, Sidebar *sidebar, QObject *parent)
-    : QObject(parent), m_store(store), m_sidebar(sidebar)
+CiLine::CiLine(Store &store, Sidebar *sidebar, std::function<QString(const Session &)> workingCwd, QObject *parent)
+    : QObject(parent), m_store(store), m_sidebar(sidebar), m_workingCwd(std::move(workingCwd))
 {
     m_timer.setInterval(5000);
     connect(&m_timer, &QTimer::timeout, this, &CiLine::poll);
@@ -33,7 +33,7 @@ void CiLine::poll()
     QStringList ids, cwds;
     for (Session *s : m_store.allSessions()) {
         if (display == QLatin1String("always") || (display == QLatin1String("flagged") && s->flagged))
-            ids << s->id, cwds << s->cwd;
+            ids << s->id, cwds << m_workingCwd(*s);
         else
             m_store.setCi(s->id, {}, {});
     }

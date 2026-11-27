@@ -57,7 +57,9 @@ class Session {
               '${f['kind']}',
         },
         split = m['split'] == true,
-        collapsed = m['collapsed'] == true;
+        collapsed = m['collapsed'] == true,
+        progress = ((m['progress'] as Map?)?['fraction'] as num?)?.toDouble().clamp(0.0, 1.0),
+        indeterminate = m['progress'] is Map && (m['progress'] as Map)['fraction'] == null;
 
   final String liveAgent; // the tree's own `agent`; `agent` above also guesses from the foreground
   final String agentSessionId, agentPane, remoteHost;
@@ -68,6 +70,12 @@ class Session {
   final int unseen;
   final bool flagged, active, blink, hasSplit, split, collapsed;
   final Set<String> livePanes; // the panes (`left`, `right`) a zmx daemon backs: the phone can watch them as a terminal
+  final double? progress; // the tree's `progress.fraction`; null when none or indeterminate
+  final bool indeterminate;
+
+  // as on the desktop: a blocked row shows only its status, and an indeterminate progress runs the wave
+  double? get fill => status == 'blocked' ? null : progress;
+  bool get waves => status == 'active' || indeterminate && status != 'blocked';
 
   bool get needsYou => status == 'blocked' || status == 'completed';
   String get shortCwd => shortHome(cwd);

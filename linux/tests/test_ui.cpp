@@ -2,6 +2,7 @@
 #include "assistantrunner.h"
 #include "detectedlaunchers.h"
 #include "cipanel.h"
+#include "filepanel.h"
 #include "help.h"
 #include "hooks.h"
 #include "library.h"
@@ -1219,6 +1220,37 @@ private Q_SLOTS:
         QTRY_VERIFY(w.gridSize(a, "left") != QSize(40, 60));
         Q_EMIT menu->aboutToShow();
         QVERIFY(!restore->isEnabled());
+    }
+
+    void theFilePanelFollowsThePaneAgentsCwdUntilTheAgentLeaves()
+    {
+        const QByteArray shell = qgetenv("SHELL");
+        qputenv("SHELL", "/bin/sh");
+        auto restoreShell = qScopeGuard([shell] { qputenv("SHELL", shell); });
+        Store store;
+        MainWindow w(store, dir.filePath("agent-cwd.json"));
+        w.restore({});
+        const QString a = store.addSession(store.addWorkspace("w"), {}, dir.path());
+        store.select(a);
+        w.show();
+        const QString pane = store.session(a)->paneId;
+        QVERIFY(!pane.isEmpty());
+        QString error;
+        // a job of its own, as an agent started at the prompt: Konsole reports no foreground for the shell itself
+        QTRY_VERIFY_WITH_TIMEOUT(w.type(a, QStringLiteral("left"), QStringLiteral("bash -c 'exec -a claude sleep 5'\n"), &error), 4000);
+        QTRY_COMPARE_WITH_TIMEOUT(store.session(a)->agent, QStringLiteral("claude"), 4000);
+        const QString worktree = dir.filePath("worktree");
+        QVERIFY(QDir().mkpath(worktree));
+        store.session(a)->agentCwd.insert(pane, worktree);
+        QVERIFY(w.filePanel(QStringLiteral("show"), 0, &error));
+        auto *panel = w.findChild<FilePanel *>();
+        QVERIFY(panel);
+        QCOMPARE(panel->root(), worktree);
+        QTest::qWait(2500); // a sampler tick with the agent still running keeps it
+        QCOMPARE(panel->root(), worktree);
+        QTRY_VERIFY_WITH_TIMEOUT(store.session(a)->agent.isEmpty(), 30000); // Konsole reports the ended job seconds late
+        QVERIFY(store.session(a)->agentCwd.isEmpty());
+        QTRY_VERIFY(panel->root() != worktree);
     }
 
     void dashboardHostsTheLivePanesAndGivesThemBack()
@@ -2593,7 +2625,7 @@ private Q_SLOTS:
         store.addSession(ws, "c", {});
         store.select(b);
         Sidebar tree(store);
-        CiLine line(store, &tree, nullptr);
+        CiLine line(store, &tree, [](const Session &s) { return s.cwd; }, nullptr);
         QTest::qWait(300); // the first poll finds no repository and clears nothing
         const QJsonObject ci{{"branch", "main"}, {"sha", "abc1234"},
                              {"pr", QJsonObject{{"number", 56}, {"title", "Refactor"}, {"url", "https://github.com/o/r/pull/56"},

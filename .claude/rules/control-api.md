@@ -1830,12 +1830,14 @@ the spec `docs/superpowers/specs/2026-11-20-phone-chat-mode-design.md` owns the 
   Qt app through `elis_ci_statuses` on its thread pool. Any failure applies nil,
   so a stale line never outlives the fact. Remote rows are skipped; their origin polls. Read back `ci` from
   `effectiveCI`, omitted when nil; it is runtime-only and a change emits `tree.changed`.
-- `CIPoller` reads `Session.ciCwd`: the focused pane's `paneAgentCwd`, else `focusedCwd` on the same pane.
+- `CIPoller` and the file panel read `Session.workingCwd`: the focused pane's `paneAgentCwd`, else `focusedCwd` on the same pane.
   `session.status --cwd` writes it in `applyControlStatus` ahead of the block early return, so the Mac and
   elis-server adapters both record it; an `ifIdle` skip and `.scratch` drop it. It lives while that pane's
   agent sample shows an agent (`applyAgentSamples` clears it), never cleared by a status change, and follows
   pane swap, promotion and close. Deliberate read-back exemption: no `agentCwd` field, since a remote
   presentation frame would not carry it; `ci.branch` is the read-back.
+  Linux keys `Session::agentCwd` by pane id, which swap, promotion and respawn carry, and `sampleAgents`
+  drops every entry whose pane shows no agent; `MainWindow::workingCwd` feeds `CiLine` and the file panel.
 
 ## Message bus
 

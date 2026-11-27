@@ -46,6 +46,9 @@ struct Session {
     QString agent;   // launcher id of the coding agent in the foreground, "" for none; not persisted
     QString agentPane; // left | right: the pane `agent` runs in, "" with none; not persisted
     QString agentSessionId; // Claude Code's conversation id seen in the agent's pane; outlives claude, not persisted
+    // pane id -> the absolute cwd its agent reports with session.status --cwd (it follows EnterWorktree, the shell's
+    // does not), while that pane's sample shows an agent; the CI line and file panel read it, not persisted
+    QHash<QString, QString> agentCwd;
     bool busy = false; // a program other than the shell holds the main pane's foreground; not persisted
     QString command; // run instead of a shell at creation, not persisted
     QString splitCwd, splitCommand; // the same for the split pane's first spawn, not persisted

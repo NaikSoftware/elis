@@ -88,6 +88,9 @@ ctl session text --target "$id" --lines 5 | grep -q "MARK=$id" || fail "pane env
 ctl session status blocked --target "$id" --blink --pane main
 ctl tree | grep probe | grep -q blocked || fail "status not set"
 ctl session status bogus --target "$id" 2>/dev/null && fail "bogus status accepted"
+ctl session status blocked --target "$id" --pane left --pane-id x --cwd /tmp || fail "status --cwd from the hook"
+out=$(ctl session status blocked --target "$id" --cwd rel 2>&1) || true
+grep -q "absolute path" <<<"$out" || fail "relative status --cwd accepted"
 ELIS_SESSION_ID=$id ctl session get | grep -q '^pid' || fail "session get by env target"
 ctl session type "$root/../shared/agent-status/elis-claude-status.sh completed --auto-reset"$'
 ' --target "$id"

@@ -1,6 +1,6 @@
 # Elis Mobile
 
-The phone app for Elis (Flutter, Android): the session tree with status dots (pulsing while an agent works), a
+The phone app for Elis (Flutter, Android): the session tree with status dots (pulsing while an agent works) and progress fills, a
 session's screen in two modes, Chat (a Claude Code or Antigravity conversation drawn as a native chat from its transcript, with
 files attached from the phone: they upload to the session's host and the prompt names their paths) and Term
 (the terminal grid) with Fit to phone, on while the screen is open (gives the program the phone's columns and rows, so it redraws for the phone and
