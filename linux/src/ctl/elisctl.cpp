@@ -122,6 +122,11 @@ static const char *usage = R"(usage: elisctl <command> [args] [--target T] [--so
                                         a program over the session (full, floating, or one pane); closes when it exits
   session overlay open --html FILE [--cwd DIR] | --url URL [--navigation] [--js] [--chromeless] [--block] ...
                                         a page over the session (needs Qt WebEngine); --block exits 0 answered, 2 closed
+  session overlay open --markdown FILE [--navigation] | --image FILE | --text FILE [--line N | --tail N [--follow-file]]
+                                        a rendered markdown file, a picture, or a source file or log, read-only
+  session overlay search <text> | --next | --prev | --close    find in a text page; a step prints N of M
+  session overlay follow | wrap on|off|toggle                  follow a log page's end; wrap a text page's lines
+  session overlay changes --next|--prev | files --go N|PATH    step a diff page's changes, or show one of its files
   session overlay reload [--current] | navigate back|forward|browser|finder | submit <value> [--pane left|right]
   session overlay result --page ID      a page's outcome, after the page or its session is gone
   session overlay close | result | copy | text [--lines N] [--pane left|right]
@@ -156,7 +161,7 @@ static const char *usage = R"(usage: elisctl <command> [args] [--target T] [--so
   session restore <command> | --none | --clear [--pane left|right]   pin what this pane re-runs (rerun mode)
 
 Not in elis (the app answers "<cmd> is not supported on this platform"): zmx, session restart/lead/background/page,
-surface cursor, config reload, browser, page companions, text-page commands, quick terminal, scratch terminal.
+surface cursor, config reload, browser, page companions, quick terminal, scratch terminal.
 )";
 
 static QByteArray roundTrip(const QString &path, const QJsonObject &request, QString *error)
@@ -602,7 +607,7 @@ int main(int argc, char **argv)
     const QStringList flags{"json", "stdin", "all", "no-select", "create-workspace", "auto-reset", "blink", "if-idle", "undoable", "companion",
                             "wait", "block", "follow", "full", "markdown", "sticky", "no-frame", "spinner", "none", "clear", "mru", "auto-size", "close", "minimized",
                             "next", "prev", "allow-custom", "no-block", "multiple", "ack", "reset", "collapsed", "page",
-                            "browse", "navigation", "js", "chromeless", "persistent", "current"};
+                            "browse", "navigation", "js", "chromeless", "persistent", "current", "follow-file"};
     QStringList pos;
     QHash<QString, QString> opt;
     QHash<QString, QStringList> multi; // every value of a repeatable option, in order
@@ -789,12 +794,46 @@ int main(int argc, char **argv)
             if (opt.contains(QLatin1String(from)))
                 args.insert(QLatin1String(to), opt.value(QLatin1String(from)).toDouble());
         if (cmd == QLatin1String("session.overlay.open")) {
-            copy("image", "image");
-            copy("text", "textFile");
+            for (const auto &[from, to] : {std::pair{"image", "image"}, {"text", "textFile"}})
+                if (opt.contains(QLatin1String(from)))
+                    args.insert(QLatin1String(to), callerPath(opt.value(QLatin1String(from))));
+            for (const char *number : {"line", "tail"})
+                if (opt.contains(QLatin1String(number)))
+                    args.insert(QLatin1String(number), opt.value(QLatin1String(number)).toInt());
+            flag("follow-file", "followFile");
             if (opt.contains(QStringLiteral("markdown"))) // a flag for the HUD; with overlay open the file is the positional
-                args.insert("markdownFile", arg);
+                args.insert("markdownFile", callerPath(arg));
             else if (!arg.isEmpty())
                 args.insert("command", arg);
+        }
+        // the Mac CLI's checks, ahead of the socket
+        const int steps = int(opt.contains(QStringLiteral("next"))) + opt.contains(QStringLiteral("prev")) + opt.contains(QStringLiteral("close"));
+        if (cmd == QLatin1String("session.overlay.search")) {
+            if (steps > 1)
+                return die(QStringLiteral("--next, --prev and --close are mutually exclusive"));
+            if (steps == 1 && !pos.isEmpty())
+                return die(QStringLiteral("text cannot be combined with --next, --prev or --close"));
+            if (steps == 0 && pos.isEmpty())
+                return die(QStringLiteral("give text, --next, --prev or --close"));
+            if (steps == 0)
+                args.insert("text", arg);
+            else
+                args.insert("to", opt.contains(QStringLiteral("next")) ? "next" : opt.contains(QStringLiteral("prev")) ? "prev" : "close");
+        }
+        if (cmd == QLatin1String("session.overlay.follow") || cmd == QLatin1String("session.overlay.wrap")) {
+            if (!QStringList{"on", "off", "toggle"}.contains(arg))
+                return die(QStringLiteral("mode must be on, off or toggle"));
+            args.insert("mode", arg);
+        }
+        if (cmd == QLatin1String("session.overlay.changes")) {
+            if (opt.contains(QStringLiteral("next")) == opt.contains(QStringLiteral("prev")))
+                return die(QStringLiteral("give exactly one of --next or --prev"));
+            args.insert("to", opt.contains(QStringLiteral("next")) ? "next" : "prev");
+        }
+        if (cmd == QLatin1String("session.overlay.files")) {
+            if (opt.value(QStringLiteral("go")).isEmpty())
+                return die(QStringLiteral("--go needs a file number or path"));
+            args.insert("to", opt.value(QStringLiteral("go")));
         }
         if (cmd == QLatin1String("session.hud.open") || cmd == QLatin1String("session.hud.update")) {
             if (opt.contains(QStringLiteral("file"))) {

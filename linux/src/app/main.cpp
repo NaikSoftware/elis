@@ -10,6 +10,9 @@
 #include "smoothwheel.h"
 #include "store.h"
 #include "upload.h"
+#ifdef ELIS_HAS_WEBENGINE
+#include "pagecontent.h"
+#endif
 
 #include <KConfig>
 #include <KConfigGroup>
@@ -196,6 +199,9 @@ int main(int argc, char **argv)
 {
     if (argc > 1 && qstrcmp(argv[1], "--install") == 0)
         return installFromCommandLine(argc, argv);
+#ifdef ELIS_HAS_WEBENGINE
+    registerPageScheme();
+#endif
     QApplication app(argc, argv);
     app.installEventFilter(new SmoothWheel(&app));
     Accent::apply();

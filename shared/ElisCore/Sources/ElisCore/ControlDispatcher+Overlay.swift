@@ -301,82 +301,62 @@ extension ControlDispatcher {
         }
     }
 
-    /// dispatchSessionOverlaySearch takes exactly one of a query and a `to` step.
-    func dispatchSessionOverlaySearch(_ request: ControlRequest) async -> ControlResponse {
-        let search: TextSearchRequest
-        switch (request.args?.text, request.args?.to) {
-        case (nil, nil):
-            return ControlResponse(ok: false, error: OverlayHtmlError.searchRequest)
-        case (.some, .some):
-            return ControlResponse(ok: false, error: OverlayHtmlError.searchTextWithStep)
-        case (let text?, nil):
-            guard !text.isEmpty else { return ControlResponse(ok: false, error: "session.overlay.search: text must not be empty") }
-            search = .query(text)
-        case (nil, let to?):
-            switch to {
-            case "next": search = .next
-            case "prev": search = .previous
-            case "close": search = .close
-            default: return ControlResponse(ok: false, error: "invalid overlay search direction: \(to)")
+    /// textPageAction reads `session.overlay.search|follow|wrap|changes|files` arguments ahead of the pane, for this
+    /// dispatcher and for a host without it (the Linux bridge): the action, or the refusal text.
+    nonisolated public static func textPageAction(_ cmd: Command, args: ControlArgs?) -> (action: TextPageAction?, error: String?) {
+        let refuse = { (error: String) in (action: TextPageAction?.none, error: Optional(error)) }
+        switch cmd {
+        case .sessionOverlaySearch:
+            switch (args?.text, args?.to) {
+            case (nil, nil): return refuse(OverlayHtmlError.searchRequest)
+            case (.some, .some): return refuse(OverlayHtmlError.searchTextWithStep)
+            case (let text?, nil):
+                return text.isEmpty ? refuse("session.overlay.search: text must not be empty") : (.search(.query(text)), nil)
+            case (nil, let to?):
+                switch to {
+                case "next": return (.search(.next), nil)
+                case "prev": return (.search(.previous), nil)
+                case "close": return (.search(.close), nil)
+                default: return refuse("invalid overlay search direction: \(to)")
+                }
             }
-        }
-        switch parseOverlayPane(request.args?.pane) {
-        case .rejected(let response): return response
-        case .pane(let pane):
-            return await actions.searchSessionOverlay(request.target, window: request.args?.window, pane: pane, request: search)
-        }
-    }
-
-    /// dispatchSessionOverlayFollow takes an optional mode, toggle when absent.
-    func dispatchSessionOverlayFollow(_ request: ControlRequest) async -> ControlResponse {
-        guard let mode = ControlToggleMode.parse(request.args?.mode) else {
-            return ControlResponse(ok: false, error: "invalid overlay follow mode: \(request.args?.mode ?? "toggle")")
-        }
-        switch parseOverlayPane(request.args?.pane) {
-        case .rejected(let response): return response
-        case .pane(let pane):
-            return await actions.setSessionOverlayFollow(request.target, window: request.args?.window, pane: pane, mode: mode)
-        }
-    }
-
-    /// dispatchSessionOverlayWrap takes an optional mode, toggle when absent.
-    func dispatchSessionOverlayWrap(_ request: ControlRequest) async -> ControlResponse {
-        guard let mode = ControlToggleMode.parse(request.args?.mode) else {
-            return ControlResponse(ok: false, error: "invalid overlay wrap mode: \(request.args?.mode ?? "toggle")")
-        }
-        switch parseOverlayPane(request.args?.pane) {
-        case .rejected(let response): return response
-        case .pane(let pane):
-            return await actions.setSessionOverlayWrap(request.target, window: request.args?.window, pane: pane, mode: mode)
+        case .sessionOverlayFollow, .sessionOverlayWrap:
+            let name = cmd == .sessionOverlayFollow ? "follow" : "wrap"
+            guard let mode = ControlToggleMode.parse(args?.mode) else {
+                return refuse("invalid overlay \(name) mode: \(args?.mode ?? "toggle")")
+            }
+            return (cmd == .sessionOverlayFollow ? .follow(mode) : .wrap(mode), nil)
+        case .sessionOverlayChanges:
+            switch args?.to {
+            case "next": return (.changes(forward: true), nil)
+            case "prev": return (.changes(forward: false), nil)
+            case nil: return refuse("session.overlay.changes requires to next or prev")
+            case let to?: return refuse("invalid overlay changes direction: \(to)")
+            }
+        case .sessionOverlayFiles:
+            guard let to = args?.to, !to.isEmpty else { return refuse("session.overlay.files requires to, a file number or path") }
+            return (.files(to), nil)
+        default:
+            return refuse("\(cmd.rawValue) is not a text page command")
         }
     }
 
-    /// dispatchSessionOverlayChanges takes a required `to` of next or prev.
-    func dispatchSessionOverlayChanges(_ request: ControlRequest) async -> ControlResponse {
-        let forward: Bool
-        switch request.args?.to {
-        case "next": forward = true
-        case "prev": forward = false
-        case nil: return ControlResponse(ok: false, error: "session.overlay.changes requires to next or prev")
-        case let to?: return ControlResponse(ok: false, error: "invalid overlay changes direction: \(to)")
-        }
+    /// dispatchSessionOverlayTextPage runs a text-page command once `textPageAction` and the pane accept it.
+    func dispatchSessionOverlayTextPage(_ request: ControlRequest) async -> ControlResponse {
+        let parsed = Self.textPageAction(request.cmd, args: request.args)
+        guard let action = parsed.action else { return ControlResponse(ok: false, error: parsed.error) }
+        let pane: OverlayPane?
         switch parseOverlayPane(request.args?.pane) {
         case .rejected(let response): return response
-        case .pane(let pane):
-            return await actions.stepSessionOverlayChanges(request.target, window: request.args?.window, pane: pane,
-                                                           forward: forward)
+        case .pane(let parsed): pane = parsed
         }
-    }
-
-    /// dispatchSessionOverlayFiles takes a required `to`, a file's number from 1 or its path as the page shows it.
-    func dispatchSessionOverlayFiles(_ request: ControlRequest) async -> ControlResponse {
-        guard let to = request.args?.to, !to.isEmpty else {
-            return ControlResponse(ok: false, error: "session.overlay.files requires to, a file number or path")
-        }
-        switch parseOverlayPane(request.args?.pane) {
-        case .rejected(let response): return response
-        case .pane(let pane):
-            return await actions.goSessionOverlayFiles(request.target, window: request.args?.window, pane: pane, to: to)
+        let target = request.target, window = request.args?.window
+        switch action {
+        case .search(let search): return await actions.searchSessionOverlay(target, window: window, pane: pane, request: search)
+        case .follow(let mode): return await actions.setSessionOverlayFollow(target, window: window, pane: pane, mode: mode)
+        case .wrap(let mode): return await actions.setSessionOverlayWrap(target, window: window, pane: pane, mode: mode)
+        case .changes(let forward): return await actions.stepSessionOverlayChanges(target, window: window, pane: pane, forward: forward)
+        case .files(let to): return await actions.goSessionOverlayFiles(target, window: window, pane: pane, to: to)
         }
     }
 }

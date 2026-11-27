@@ -14,6 +14,8 @@
 #include <QDir>
 #include <algorithm>
 #include <cstdlib>
+#include <future>
+#include <mutex>
 #include <QJsonArray>
 #include <QRegularExpression>
 #include <QUuid>
@@ -41,12 +43,12 @@ QString unsupportedReason(const QString &cmd)
         {"session.overlay.reload", "page overlays need Qt WebEngine, which Elis does not have"},
         {"session.overlay.navigate", "page overlays need Qt WebEngine, which Elis does not have"},
         {"session.overlay.submit", "page overlays need Qt WebEngine, which Elis does not have"},
-#endif
         {"session.overlay.follow", "it acts on a text page, a page overlay, which needs Qt WebEngine"},
         {"session.overlay.search", "it acts on a text page, a page overlay, which needs Qt WebEngine"},
         {"session.overlay.changes", "it acts on a text page, a page overlay, which needs Qt WebEngine"},
         {"session.overlay.files", "it acts on a text page, a page overlay, which needs Qt WebEngine"},
         {"session.overlay.wrap", "it acts on a text page, a page overlay, which needs Qt WebEngine"},
+#endif
         {"session.overlay.job.run", "remote overlay jobs need a remote viewer, which Elis does not have"},
         {"session.overlay.page.serve", "page overlays need Qt WebEngine, which Elis does not have"},
         {"quick", "Elis has no quick terminal"},
@@ -69,6 +71,16 @@ static std::function<QJsonObject()> s_deferred;
 std::function<QJsonObject()> takeDeferred()
 {
     return std::exchange(s_deferred, nullptr);
+}
+
+std::function<void(const QJsonObject &)> deferReply(const QString &timeoutError)
+{
+    auto answer = std::make_shared<std::promise<QJsonObject>>();
+    auto once = std::make_shared<std::once_flag>();
+    s_deferred = [future = answer->get_future().share(), timeoutError] {
+        return future.wait_for(std::chrono::seconds(5)) == std::future_status::ready ? future.get() : fail(timeoutError);
+    };
+    return [answer, once](const QJsonObject &response) { std::call_once(*once, [&] { answer->set_value(response); }); };
 }
 
 // session.transcript: ElisCore checks the arguments before the target, as the Mac's dispatcher does, then the session's

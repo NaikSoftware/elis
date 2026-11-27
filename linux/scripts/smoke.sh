@@ -167,6 +167,28 @@ for w in json.load(sys.stdin)["result"]["tree"]["workspaces"]:
   rc=0; ctl session overlay open --html "$site/index.html" --block --target "$id" >/dev/null || rc=$?
   wait "$closer"
   [ "$rc" = 2 ] || fail "page --block exits 2 when the page closes unanswered ($rc)"
+  printf 'one\ntwo needle\n' >"$site/notes.txt"
+  (cd "$site" && ctl session overlay open --text notes.txt --line 2 --target "$id" >/dev/null)
+  ctl tree --json | grep -q "\"file\":\"$site/notes.txt\"" || fail "text page path resolves against the caller"
+  loaded
+  ctl session overlay search needle --target "$id"
+  for _ in $(seq 50); do out=$(ctl session overlay search --next --target "$id" 2>&1) && break; sleep 0.2; done
+  [ "$out" = "1 of 1" ] || fail "text page search step ($out)"
+  [ "$(ctl session overlay wrap on --target "$id")" = wrapped ] || fail "text page wraps"
+  ctl tree --json | grep -q '"wrap":true' || fail "text page wrap read-back"
+  err=$(ctl session overlay follow on --target "$id" 2>&1) && fail "follow on a plain text page"
+  [[ $err == *'no log page'* ]] || fail "follow refusal ($err)"
+  ctl session overlay close --target "$id"
+  printf '# Smoke\n' >"$site/readme.md"
+  ctl session overlay open --markdown "$site/readme.md" --target "$id" >/dev/null
+  loaded
+  ctl tree --json | grep -q "\"markdown\":\"$site/readme.md\"" || fail "markdown page read-back"
+  ctl session overlay close --target "$id"
+else
+  for ucmd in "session overlay follow on" "session overlay search x" "session overlay changes --next" "session overlay files --go 1" "session overlay wrap on"; do
+    err=$(ctl $ucmd --target "$id" 2>&1) && fail "$ucmd answered"
+    [[ $err == *'is not supported on this platform'* ]] || fail "$ucmd absent feature error ($err)"
+  done
 fi
 ctl session hud 'building' --position top --spinner --target "$id"
 ctl tree --json | grep -q '"position":"top-center"' || fail "hud read-back"
@@ -367,10 +389,8 @@ ctl recent open "$b2" >/dev/null
 ctl tree | grep -q batch2 || fail "recent open by id"
 err=$(ctl zmx list 2>&1) && fail "zmx list answered"
 [[ $err == *'zmx.list is not supported on this platform'* ]] || fail "absent feature error"
-for ucmd in "session page" "session overlay follow" "session overlay search" "session overlay changes" "session overlay files" "session overlay wrap"; do
-  err=$(ctl $ucmd --target "$id" 2>&1) && fail "$ucmd answered"
-  [[ $err == *'is not supported on this platform'* ]] || fail "$ucmd absent feature error ($err)"
-done
+err=$(ctl session page --target "$id" 2>&1) && fail "session page answered"
+[[ $err == *'is not supported on this platform'* ]] || fail "session page absent feature error ($err)"
 err=$(ctl session overlay copy --target "$id" 2>&1) && fail "overlay copy without overlay"
 [[ $err == *'no overlay'* ]] || fail "overlay copy error ($err)"
 ctl session overlay open 'sleep 30' --target "$id"

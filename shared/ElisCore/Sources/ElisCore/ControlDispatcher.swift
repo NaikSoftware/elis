@@ -450,16 +450,8 @@ public struct ControlDispatcher {
         case .sessionSearch:
             return await actions.searchSession(request.target, window: request.args?.window,
                                                text: request.args?.text, to: request.args?.to)
-        case .sessionOverlaySearch:
-            return await dispatchSessionOverlaySearch(request)
-        case .sessionOverlayChanges:
-            return await dispatchSessionOverlayChanges(request)
-        case .sessionOverlayFiles:
-            return await dispatchSessionOverlayFiles(request)
-        case .sessionOverlayFollow:
-            return await dispatchSessionOverlayFollow(request)
-        case .sessionOverlayWrap:
-            return await dispatchSessionOverlayWrap(request)
+        case .sessionOverlaySearch, .sessionOverlayChanges, .sessionOverlayFiles, .sessionOverlayFollow, .sessionOverlayWrap:
+            return await dispatchSessionOverlayTextPage(request)
         case .sessionOverlayOpen, .sessionOverlayClose, .sessionOverlayResize, .sessionOverlayReload,
              .sessionOverlayNavigate, .sessionOverlayResult, .sessionOverlaySubmit, .sessionOverlayCopy,
              .sessionOverlayText, .sessionOverlayHide, .sessionOverlayShow, .sessionOverlayToggle:

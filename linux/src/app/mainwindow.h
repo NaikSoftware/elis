@@ -126,6 +126,7 @@ private:
         QPointer<QWidget> page; // a PageOverlay in place of the part (pageoverlay.h)
         QString pageID;
         bool chromeless = false;
+        bool themedFrame = false; // a page's frame paints the terminal background behind it
         QString command, codeFile;
         int sizePercent = 0; // 0 = full
         double width = 0, height = 0; // points overriding the percent per axis
@@ -137,6 +138,7 @@ private:
     QHash<QString, QPointer<QWidget>> m_huds;
     bool overlayCommand(const QString &cmd, const QString &id, const QJsonObject &args, QJsonObject *result, QString *error);
     bool openPage(const QString &id, const QString &pane, const QJsonObject &args, QJsonObject *result, QString *error);
+    void refreshPageThemes(); // every open page and its frame take the current terminal theme
     QWidget *coverWidget(const QString &id) const; // what takes the keyboard: a shown page or program, else the main pane
     bool closeFrontCover(const QString &id);       // the HUD or shown session cover, else the focused pane's; false with none
     bool pageCovers(const QString &id, const QString &pane) const; // a shown page hides that pane's terminal

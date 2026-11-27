@@ -112,7 +112,7 @@ target_link_libraries(elis-ui PUBLIC elis-core Qt6::Widgets Qt6::DBus Qt6::Svg K
 set(ELIS_WEBENGINE AUTO CACHE STRING "Build page overlays with Qt WebEngine: AUTO, ON or OFF")
 set_property(CACHE ELIS_WEBENGINE PROPERTY STRINGS AUTO ON OFF)
 if(NOT ELIS_WEBENGINE STREQUAL "OFF")
-  find_package(Qt6 QUIET COMPONENTS WebEngineWidgets)
+  find_package(Qt6 QUIET COMPONENTS WebEngineWidgets WebChannel)
   if(ELIS_WEBENGINE STREQUAL "ON" AND NOT TARGET Qt6::WebEngineWidgets)
     message(FATAL_ERROR "ELIS_WEBENGINE=ON but Qt6WebEngineWidgets was not found: install qt6-webengine-dev")
   endif()
@@ -120,8 +120,8 @@ endif()
 if(NOT ELIS_WEBENGINE STREQUAL "OFF" AND TARGET Qt6::WebEngineWidgets)
   message(STATUS "Page overlays: on (Qt WebEngine)")
   target_compile_definitions(elis-core PUBLIC ELIS_HAS_WEBENGINE)
-  target_sources(elis-ui PRIVATE src/app/pageoverlay.cpp)
-  target_link_libraries(elis-ui PUBLIC Qt6::WebEngineWidgets)
+  target_sources(elis-ui PRIVATE src/app/pageoverlay.cpp src/app/pagecontent.cpp src/app/textpage.cpp)
+  target_link_libraries(elis-ui PUBLIC Qt6::WebEngineWidgets Qt6::WebChannel)
 else()
   message(STATUS "Page overlays: off (no Qt WebEngine)")
 endif()
@@ -137,6 +137,7 @@ add_dependencies(elisctl elis-swift-ctl)
 # shared with the Mac app; installed as share/elis/agent-status and share/elis/skill/elis
 set(ELIS_AGENT_STATUS ${CMAKE_SOURCE_DIR}/../shared/agent-status)
 set(ELIS_SKILL ${CMAKE_SOURCE_DIR}/../plugins/elis/skills/elis)
+set(ELIS_MARKDOWN ${CMAKE_SOURCE_DIR}/../macos/Elis/Resources/markdown) # the Mac's page renderers, as share/elis/markdown
 
 enable_testing()
 add_executable(test_core tests/test_core.cpp)
@@ -176,5 +177,7 @@ install(FILES ${CMAKE_CURRENT_BINARY_DIR}/elis.desktop DESTINATION ${CMAKE_INSTA
 install(DIRECTORY resources/icons/ DESTINATION ${CMAKE_INSTALL_DATADIR}/icons)
 install(DIRECTORY ${ELIS_AGENT_STATUS} USE_SOURCE_PERMISSIONS DESTINATION ${CMAKE_INSTALL_DATADIR}/elis)
 install(DIRECTORY ${ELIS_SKILL} USE_SOURCE_PERMISSIONS DESTINATION ${CMAKE_INSTALL_DATADIR}/elis/skill)
+install(DIRECTORY ${ELIS_MARKDOWN} DESTINATION ${CMAKE_INSTALL_DATADIR}/elis)
 # a build-tree run finds the shipped agent-status package and skill in the source tree
-target_compile_definitions(elis-ui PRIVATE ELIS_SOURCE_AGENT_STATUS="${ELIS_AGENT_STATUS}" ELIS_SOURCE_SKILL="${ELIS_SKILL}")
+target_compile_definitions(elis-ui PRIVATE ELIS_SOURCE_AGENT_STATUS="${ELIS_AGENT_STATUS}" ELIS_SOURCE_SKILL="${ELIS_SKILL}"
+  ELIS_SOURCE_MARKDOWN="${ELIS_MARKDOWN}")
